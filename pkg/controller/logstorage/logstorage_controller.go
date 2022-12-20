@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
+
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"k8s.io/client-go/kubernetes"
@@ -106,6 +108,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: esmetrics.ElasticsearchMetricsPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
+		{Name: linseed.PolicyName, Namespace: render.ElasticsearchNamespace},
 	})
 
 	return add(mgr, c)
@@ -179,6 +182,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		render.TigeraElasticsearchGatewaySecret, render.TigeraKibanaCertSecret,
 		render.OIDCSecretName, render.DexObjectName, esmetrics.ElasticsearchMetricsServerTLSSecret,
+		render.TigeraLinseedSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
@@ -211,6 +215,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+	}
+
+	if err := utils.AddServiceWatch(c, linseed.ServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -615,6 +623,19 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			variant,
 			pullSecrets,
 			esAdminUserSecret,
+			hdler,
+			reqLogger,
+			ctx,
+			certificateManager,
+		)
+		if err != nil || !proceed {
+			return result, err
+		}
+
+		result, proceed, err = r.createLinseed(
+			install,
+			variant,
+			pullSecrets,
 			hdler,
 			reqLogger,
 			ctx,

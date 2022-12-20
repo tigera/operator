@@ -137,7 +137,9 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				return err
 			}
 
-			if err := c.client.Create(ctx, obj); err != nil {
+			// Do the Create() with the merged object so that we preserve external labels/annotations.
+			resetMetadataForCreate(mobj)
+			if err := c.client.Create(ctx, mobj); err != nil {
 				return err
 			}
 			return nil
@@ -152,8 +154,10 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 					logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
 					return err
 				}
-				obj.SetResourceVersion("")
-				if err := c.client.Create(ctx, obj); err != nil {
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err := c.client.Create(ctx, mobj); err != nil {
 					return err
 				}
 				return nil
@@ -169,7 +173,10 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 					logCtx.WithValues("key", key).Error(err, "Failed to delete Service for recreation.")
 					return err
 				}
-				if err := c.client.Create(ctx, obj); err != nil {
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err := c.client.Create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreatae service.", "obj", obj)
 					return err
 				}
@@ -182,6 +189,12 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 		}
 	}
 	return nil
+}
+
+func resetMetadataForCreate(obj client.Object) {
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	obj.SetCreationTimestamp(metav1.Time{})
 }
 
 func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {

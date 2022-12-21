@@ -285,6 +285,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentLinseed,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 	}

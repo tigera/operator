@@ -272,6 +272,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		Name:           secretName,
 		PrivateKeyPEM:  keyPEM,
 		CertificatePEM: certPEM,
+		OriginalSecret: secret,
 	}, x509Cert, nil
 
 }

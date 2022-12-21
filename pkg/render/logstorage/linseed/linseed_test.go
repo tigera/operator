@@ -103,6 +103,16 @@ var _ = Describe("Linseed rendering tests", func() {
 			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 			Expect(err).NotTo(HaveOccurred())
 			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
+			kp, bundle := getTLS(installation)
+			cfg = &Config{
+				Installation: installation,
+				PullSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				KeyPair:       kp,
+				TrustedBundle: bundle,
+				ClusterDomain: clusterDomain,
+			}
 
 			component := Linseed(cfg)
 

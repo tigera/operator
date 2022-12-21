@@ -8,7 +8,7 @@
   "spec": {
     "order": 1,
     "tier": "allow-tigera",
-    "selector": "k8s-app == 'linseed'",
+    "selector": "k8s-app == 'tigera-linseed'",
     "types": [
       "Ingress",
       "Egress"

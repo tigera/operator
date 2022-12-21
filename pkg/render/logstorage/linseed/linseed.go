@@ -43,12 +43,13 @@ import (
 )
 
 const (
-	DeploymentName             = "linseed"
-	ServiceAccountName         = "linseed"
-	RoleName                   = "linseed"
-	ServiceName                = "linseed"
+	DeploymentName             = "tigera-linseed"
+	ServiceAccountName         = "tigera-linseed"
+	RoleName                   = "tigera-linseed"
+	ServiceName                = "tigera-linseed"
 	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
-	PortName                   = "https"
+	PortName                   = "tigera-linseed"
+	TargetPort                 = 8444
 	Port                       = 443
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
@@ -173,7 +174,7 @@ func (e linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 
 func (e linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
-		{Name: "LINSEED_LOG_LEVEL", Value: "Info"},
+		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 
 		// Configuration for linseed API.
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
@@ -226,7 +227,7 @@ func (e linseed) linseedDeployment() *appsv1.Deployment {
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/health",
-								Port:   intstr.FromInt(Port),
+								Port:   intstr.FromInt(TargetPort),
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
@@ -237,7 +238,7 @@ func (e linseed) linseedDeployment() *appsv1.Deployment {
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/health",
-								Port:   intstr.FromInt(Port),
+								Port:   intstr.FromInt(TargetPort),
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
@@ -294,8 +295,8 @@ func (e linseed) linseedService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       PortName,
-					Port:       int32(Port),
-					TargetPort: intstr.FromInt(Port),
+					Port:       Port,
+					TargetPort: intstr.FromInt(TargetPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},

@@ -254,8 +254,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 		}
 	}
 
-	// TODO: Check namespace labels
-
 	// Check deployment
 	deployment := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 	Expect(deployment).NotTo(BeNil())

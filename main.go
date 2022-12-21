@@ -25,6 +25,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ghodss/yaml"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -76,7 +80,7 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", goruntime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", goruntime.GOOS, goruntime.GOARCH))
 	// TODO: Add this back if we can
-	//log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
+	// log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
 func main() {
@@ -122,9 +126,9 @@ func main() {
 	}
 	if printImages != "" {
 		if strings.ToLower(printImages) == "list" {
-			cmpnts := components.CalicoComponents
-			cmpnts = append(cmpnts, components.EnterpriseComponents...)
-			cmpnts = append(cmpnts, components.CommonComponents...)
+			cmpnts := components.CalicoImages
+			cmpnts = append(cmpnts, components.EnterpriseImages...)
+			cmpnts = append(cmpnts, components.CommonImages...)
 
 			for _, x := range cmpnts {
 				ref, _ := components.GetReference(x, "", "", "", nil)
@@ -180,6 +184,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	policySelector, err := labels.Parse(fmt.Sprintf("projectcalico.org/tier == %s", networkpolicy.TigeraComponentTierName))
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
 	// Because we only run this as a job that is set up by the operator, it should not be
 	// launched except by an operator that is the active operator. So we do not need to
 	// check that we're the active operator before running the AWS SG setup.
@@ -219,6 +229,18 @@ func main() {
 		LeaseDuration: ptr.DurationToPtr(60 * time.Second),
 		RenewDeadline: ptr.DurationToPtr(40 * time.Second),
 		RetryPeriod:   ptr.DurationToPtr(8 * time.Second),
+		// NetworkPolicy is served through the Tigera API Server, which currently restricts List and Watch
+		// operations on NetworkPolicy to a single tier only, specified via label or field selector. If no
+		// selector is specified, List and Watch return policies from the 'default' tier. The manager cache
+		// must therefore apply a selector to specify the tier that the operator currently reconciles policy
+		// within so that it can receive the expected resources for List and Watch. If the operator needs to
+		// reconcile policy within multiple tiers, the API Server should be updated to serve policy from all
+		// tiers that the user is authorized for.
+		NewCache: cache.BuilderWithOptions(cache.Options{
+			SelectorsByObject: cache.SelectorsByObject{
+				&v3.NetworkPolicy{}: {Label: policySelector},
+			},
+		}),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -238,6 +260,16 @@ func main() {
 		os.Exit(1)
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
+
+	// Determine if PodSecurityPolicies are supported. PSPs were removed in
+	// Kubernetes v1.25. We can remove this check once the operator not longer
+	// supports Kubernetes < v1.25.0.
+	usePSP, err := utils.SupportsPodSecurityPolicies(clientset)
+	if err != nil {
+		setupLog.Error(err, "Failed to discover PodSecurityPolicy availability")
+		os.Exit(1)
+	}
+	setupLog.WithValues("supported", usePSP).Info("Checking if PodSecurityPolicies are supported by the cluster")
 
 	// Determine if we need to start the TSEE specific controllers.
 	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
@@ -280,6 +312,7 @@ func main() {
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
+		UsePSP:              usePSP,
 		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
@@ -299,7 +332,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }
 
 // setKubernetesServiceEnv configured the environment with the location of the Kubernetes API

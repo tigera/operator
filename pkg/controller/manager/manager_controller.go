@@ -19,6 +19,21 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -33,20 +48,9 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	corev1 "k8s.io/api/core/v1"
-
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_manager")
@@ -59,10 +63,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
 	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -78,11 +83,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+		{Name: render.ManagerPolicyName, Namespace: render.ManagerNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ManagerNamespace},
+	})
+
 	return add(mgr, controller, opts.ElasticExternal)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileManager{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -91,10 +102,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		elasticExternal: opts.ElasticExternal,
+		tierWatchReady:  tierWatchReady,
+		usePSP:          opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
-
 }
 
 // add adds watches for resources that are available at startup
@@ -120,10 +132,9 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 	// Watch the given secrets in each both the manager and operator namespaces
 	for _, namespace := range []string{common.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
+			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
+			render.ManagerInternalTLSSecretName, monitor.PrometheusTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -205,6 +216,8 @@ type ReconcileManager struct {
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	elasticExternal bool
+	tierWatchReady  *utils.ReadyFlag
+	usePSP          bool
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -247,6 +260,24 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, nil
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for allow-tigera tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {
@@ -295,19 +326,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedSecretNames := []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName}
+	trustedSecretNames := []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, relasticsearch.PublicCertSecret}
 
 	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
 	complianceCR, err := compliance.GetCompliance(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error querying compliance", err.Error())
+		r.status.SetDegraded(string(operatorv1.ResourceReadError), fmt.Sprintf("Error querying compliance: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 
 	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
 		if complianceCR.Status.State != operatorv1.TigeraStatusReady {
-			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", complianceCR.Status.State))
+			r.status.SetDegraded(string(operatorv1.ResourceNotReady), "Compliance is not ready")
 			return reconcile.Result{}, nil
 		}
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
@@ -382,13 +413,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: common.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
-		reqLogger.Error(err, "Failed to read Kibana public cert secret")
-		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Error reading ManagementCluster")
@@ -413,6 +437,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTrafficSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
+		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
+		fillDefaults(managementCluster)
+
+		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+		if err := r.client.Patch(ctx, managementCluster, preDefaultPatchFrom); err != nil {
+			r.status.SetDegraded(string(operatorv1.ResourceUpdateError), err.Error())
+			return reconcile.Result{}, err
+		}
+
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
 		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
@@ -488,27 +522,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		replicas = &mcmReplicas
 	}
 
-	tenantId := ""
-	if r.elasticExternal {
-		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
-				r.status.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
-				return reconcile.Result{}, nil
-			}
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Unable to read cloud config map", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		tenantId = cloudConfig.TenantId()
-	}
-
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
-		KibanaSecrets:           []*corev1.Secret{kibanaPublicCertSecret},
 		TrustedCertBundle:       trustedBundle,
 		ESClusterConfig:         esClusterConfig,
 		TLSKeyPair:              tlsSecret,
@@ -523,8 +539,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Replicas:                replicas,
 		Compliance:              complianceCR,
 		ComplianceLicenseActive: complianceLicenseFeatureActive,
-		TenantID:                tenantId,
 		CloudResources:          mcr,
+		UsePSP:                  r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -571,4 +587,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func fillDefaults(mc *operatorv1.ManagementCluster) {
+	if mc.Spec.TLS == nil {
+		mc.Spec.TLS = &operatorv1.TLS{}
+	}
+	if mc.Spec.TLS.SecretName == "" {
+		mc.Spec.TLS.SecretName = render.VoltronTunnelSecretName
+	}
 }

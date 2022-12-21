@@ -13,6 +13,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -37,10 +38,15 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		}{
 			// In addition to default resources, extra resource voltron image assurance secret is expected.
 			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.ManagerPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: rcimageassurance.ImageAssuranceSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
@@ -69,11 +75,9 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		Expect(esProxy.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
-		Expect(len(esProxy.VolumeMounts)).To(Equal(2))
+		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
-		Expect(esProxy.VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
 
 		// In addition to default volumes, deployment should have extra volume for image assurance secret
 		Expect(dpSpec.Volumes).To(ContainElement(

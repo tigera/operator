@@ -24,23 +24,6 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/cloudconfig"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	rsecret "github.com/tigera/operator/pkg/render/common/secret"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/test"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -50,6 +33,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/test"
+
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 )
 
 var _ = Describe("Manager controller tests", func() {
@@ -118,6 +120,7 @@ var _ = Describe("Manager controller tests", func() {
 				status:          mockStatus,
 				clusterDomain:   clusterDomain,
 				licenseAPIReady: &utils.ReadyFlag{},
+				tierWatchReady:  &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -125,6 +128,9 @@ var _ = Describe("Manager controller tests", func() {
 				Status: operatorv1.APIServerStatus{
 					State: operatorv1.TigeraStatusReady,
 				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{
+				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -160,17 +166,26 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      relasticsearch.PublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
+			certificateManager, err := certificatemanager.Create(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.ComplianceServerCertSecret)))
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,
@@ -186,8 +201,9 @@ var _ = Describe("Manager controller tests", func() {
 			}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
-			// mark that the watch for license key was successful
+			// Mark that watches were successful.
 			r.licenseAPIReady.MarkAsReady()
+			r.tierWatchReady.MarkAsReady()
 		})
 
 		It("should reconcile if user supplied a manager TLS cert", func() {
@@ -311,6 +327,7 @@ var _ = Describe("Manager controller tests", func() {
 				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				licenseAPIReady: &utils.ReadyFlag{},
+				tierWatchReady:  &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -318,6 +335,9 @@ var _ = Describe("Manager controller tests", func() {
 				Status: operatorv1.APIServerStatus{
 					State: operatorv1.TigeraStatusReady,
 				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{
+				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
 			})).NotTo(HaveOccurred())
 			licenseKey = &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -358,18 +378,28 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
 
+			certificateManager, err := certificatemanager.Create(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      relasticsearch.PublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.ComplianceServerCertSecret)))
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
+
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,
@@ -384,84 +414,116 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 
-			// mark that the watch for license key was successful
+			// Mark that watches were successful.
 			r.licenseAPIReady.MarkAsReady()
+			r.tierWatchReady.MarkAsReady()
 		})
-		It("should use builtin images", func() {
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
 
-			d := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-manager",
-					Namespace: render.ManagerNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-			mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
-			Expect(mgr).ToNot(BeNil())
-			Expect(mgr.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentManager.Image,
-					components.ComponentManager.Version)))
-			esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-			Expect(esproxy).ToNot(BeNil())
-			Expect(esproxy.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:tesla-%s",
-					components.ComponentEsProxy.Image,
-					components.ComponentEsProxy.Version)))
-			vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
-			Expect(vltrn).ToNot(BeNil())
-			Expect(vltrn.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentManagerProxy.Image,
-					components.ComponentManagerProxy.Version)))
-		})
-		It("should use images from imageset", func() {
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-			Expect(c.Create(ctx, &operatorv1.ImageSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
-						{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
-						{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
+		Context("image reconciliation", func() {
+			It("should use builtin images", func() {
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				d := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: render.ManagerNamespace,
 					},
-				},
-			})).ToNot(HaveOccurred())
+				}
+				Expect(test.GetResource(c, &d)).To(BeNil())
+				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+				mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+				Expect(mgr).ToNot(BeNil())
+				Expect(mgr.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentManager.Image,
+						components.ComponentManager.Version)))
+				esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
+				Expect(esproxy).ToNot(BeNil())
+				Expect(esproxy.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:tesla-%s",
+						components.ComponentEsProxy.Image,
+						components.ComponentEsProxy.Version)))
+				vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
+				Expect(vltrn).ToNot(BeNil())
+				Expect(vltrn.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentManagerProxy.Image,
+						components.ComponentManagerProxy.Version)))
+			})
+			It("should use images from imageset", func() {
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+				Expect(c.Create(ctx, &operatorv1.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+					Spec: operatorv1.ImageSetSpec{
+						Images: []operatorv1.Image{
+							{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
+							{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
+							{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
+						},
+					},
+				})).ToNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			d := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-manager",
-					Namespace: render.ManagerNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-			mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
-			Expect(mgr).ToNot(BeNil())
-			Expect(mgr.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentManager.Image,
-					"sha256:cnxmanagerhash")))
-			esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-			Expect(esproxy).ToNot(BeNil())
-			Expect(esproxy.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentEsProxy.Image,
-					"sha256:esproxyhash")))
-			vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
-			Expect(vltrn).ToNot(BeNil())
-			Expect(vltrn.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentManagerProxy.Image,
-					"sha256:voltronhash")))
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				d := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: render.ManagerNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &d)).To(BeNil())
+				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+				mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+				Expect(mgr).ToNot(BeNil())
+				Expect(mgr.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentManager.Image,
+						"sha256:cnxmanagerhash")))
+				esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
+				Expect(esproxy).ToNot(BeNil())
+				Expect(esproxy.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentEsProxy.Image,
+						"sha256:esproxyhash")))
+				vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
+				Expect(vltrn).ToNot(BeNil())
+				Expect(vltrn.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentManagerProxy.Image,
+						"sha256:voltronhash")))
+			})
+		})
+
+		Context("allow-tigera reconciliation", func() {
+			var readyFlag *utils.ReadyFlag
+			BeforeEach(func() {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+
+				readyFlag = &utils.ReadyFlag{}
+				readyFlag.MarkAsReady()
+				r = ReconcileManager{
+					client:          c,
+					scheme:          scheme,
+					provider:        operatorv1.ProviderNone,
+					status:          mockStatus,
+					licenseAPIReady: readyFlag,
+					tierWatchReady:  readyFlag,
+				}
+			})
+
+			It("should wait if allow-tigera tier is unavailable", func() {
+				utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+			})
+
+			It("should wait if tier watch is not ready", func() {
+				r.tierWatchReady = &utils.ReadyFlag{}
+				utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+			})
 		})
 
 		Context("compliance reconciliation", func() {
@@ -483,7 +545,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(c.Update(ctx, compliance)).NotTo(HaveOccurred())
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", "Compliance is not ready", "compliance status: ").Return()
+				mockStatus.On("SetDegraded", "ResourceNotReady", "Compliance is not ready").Return()
 				r.status = mockStatus
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})

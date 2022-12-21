@@ -1,0 +1,52 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.tigera-prometheus-api",
+    "namespace": "tigera-prometheus"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "k8s-app == 'tigera-prometheus-api'",
+    "types": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "ports": [
+            9095
+          ]
+        }
+      }
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'tigera-prometheus'",
+          "selector": "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')",
+          "ports": [
+            9095
+          ]
+        }
+      }
+    ]
+  }
+}

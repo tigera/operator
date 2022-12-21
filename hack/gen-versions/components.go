@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,12 +31,14 @@ var defaultImages = map[string]string{
 	"calicoctl":                  "calico/ctl",
 	"flannel":                    "coreos/flannel",
 	"flexvol":                    "calico/pod2daemon-flexvol",
+	"calico/csi":                 "calico/csi",
+	"csi-node-driver-registrar":  "calico/node-driver-registrar",
 	"typha":                      "calico/typha",
-	"eck-elasticsearch":          "tigera/elasticsearch",
-	"eck-elasticsearch-operator": "tigera/eck-operator",
-	"eck-kibana":                 "tigera/kibana",
-	"coreos-prometheus":          "tigera/prometheus",
-	"coreos-alertmanager":        "tigera/alertmanager",
+	"eck-elasticsearch":          "unused/image",
+	"eck-elasticsearch-operator": "unused/image",
+	"eck-kibana":                 "unused/image",
+	"coreos-prometheus":          "unused/image",
+	"coreos-alertmanager":        "unused/image",
 	"guardian":                   "tigera/guardian",
 	"tigera-cni":                 "tigera/cni",
 	"key-cert-provisioner":       "tigera/key-cert-provisioner",
@@ -52,7 +54,6 @@ var ignoredImages = map[string]struct{}{
 	"busybox":           {},
 	"calico/api":        {},
 	"libcalico-go":      {},
-	"csi-driver":        {},
 	"calico/windows":    {},
 }
 

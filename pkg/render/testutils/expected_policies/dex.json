@@ -1,0 +1,140 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.allow-tigera-dex",
+    "namespace": "tigera-dex"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "k8s-app == 'tigera-dex'",
+    "types": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-manager'",
+          "namespaceSelector": "name == 'tigera-manager'"
+        },
+        "destination": {
+          "ports": [
+            5556
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-secure-es-gateway'",
+          "namespaceSelector": "name == 'tigera-elasticsearch'"
+        },
+        "destination": {
+          "ports": [
+            5556
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            5556
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'compliance-server'",
+          "namespaceSelector": "name == 'tigera-compliance'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            5556
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-packetcapture'",
+          "namespaceSelector": "name == 'tigera-packetcapture'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            5556
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')",
+          "namespaceSelector": "name == 'tigera-prometheus'"
+        }
+      }
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'default'",
+          "selector": "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
+          "ports": [
+            443,
+            6443,
+            12388
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "ports": [
+            443,
+            6443,
+            389,
+            636
+          ],
+          "nets": [
+            "0.0.0.0/0"
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "ports": [
+            443,
+            6443,
+            389,
+            636
+          ],
+          "nets": [
+            "::/0"
+          ]
+        }
+      }
+    ]
+  }
+}

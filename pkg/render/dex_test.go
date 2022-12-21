@@ -20,26 +20,34 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 )
 
 var _ = Describe("dex rendering tests", func() {
 	const clusterName = "svc.cluster.local"
+
+	expectedDexPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/dex.json")
+	expectedDexOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/dex_ocp.json")
+
 	Context("dex is configured for oidc", func() {
 
 		const (
@@ -129,6 +137,8 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
+				{render.DexPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
 				{render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Service"},
@@ -155,6 +165,15 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(1001))
 			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
 			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+			Expect(d.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(BeEquivalentTo(
+				&corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			))
+			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(BeEquivalentTo(
+				corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				}))
 		})
 
 		DescribeTable("should render the cluster name properly in the validator", func(clusterDomain string) {
@@ -181,7 +200,7 @@ var _ = Describe("dex rendering tests", func() {
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 		})
 
 		It("should render all resources for a certificate management", func() {
@@ -198,6 +217,8 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
+				{render.DexPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
 				{render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Service"},
@@ -240,5 +261,33 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-dex", "tigera-dex")))
 		})
+
+		Context("allow-tigera rendering", func() {
+			policyName := types.NamespacedName{Name: "allow-tigera.allow-tigera-dex", Namespace: "tigera-dex"}
+
+			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+				if scenario.ManagedCluster {
+					return nil
+				}
+
+				return testutils.SelectPolicyByProvider(scenario, expectedDexPolicy, expectedDexOpenshiftPolicy)
+			}
+
+			DescribeTable("should render allow-tigera policy",
+				func(scenario testutils.AllowTigeraScenario) {
+					cfg.Openshift = scenario.Openshift
+					component := render.Dex(cfg)
+					resources, _ := component.Objects()
+
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				},
+				// Dex only renders in the presence of an Authentication CR, therefore does not have a config option for managed clusters.
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			)
+		})
+
 	})
 })

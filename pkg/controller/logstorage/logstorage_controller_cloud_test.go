@@ -8,14 +8,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/imageassurance"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
+	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
-	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -26,13 +28,15 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -71,6 +75,7 @@ var _ = Describe("LogStorage controller", func() {
 	var (
 		cli                client.Client
 		mockStatus         *status.MockStatus
+		readyFlag          *utils.ReadyFlag
 		scheme             *runtime.Scheme
 		ctx                context.Context
 		certificateManager certificatemanager.CertificateManager
@@ -84,7 +89,7 @@ var _ = Describe("LogStorage controller", func() {
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
@@ -93,14 +98,18 @@ var _ = Describe("LogStorage controller", func() {
 		certificateManager, err = certificatemanager.Create(cli, nil, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		kibanaTLS, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		cloudCreateESAccessSecret(cli, ctx)
+
+		Expect(cli.Create(ctx, &v3.Tier{
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+		})).NotTo(HaveOccurred())
 
 		mockServer = cloudMockEsServer()
+		readyFlag = &utils.ReadyFlag{}
+		readyFlag.MarkAsReady()
 	})
 	AfterEach(func() {
 		mockServer.Close()
@@ -146,11 +155,10 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("AddDaemonsets", mock.Anything)
 				mockStatus.On("AddDeployments", mock.Anything)
 				mockStatus.On("AddStatefulSets", mock.Anything)
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
-
-				cloudCreateESAccessSecret(cli, ctx)
 			})
 			It("sets cloud enabled controllers and env variables on kube controllers", func() {
 				mockElasticsearchServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +193,7 @@ var _ = Describe("LogStorage controller", func() {
 				})).ShouldNot(HaveOccurred())
 
 				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator,
-					dns.DefaultClusterDomain, false, mockElasticsearchServer)
+					dns.DefaultClusterDomain, readyFlag, false, mockElasticsearchServer)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -197,6 +205,10 @@ var _ = Describe("LogStorage controller", func() {
 				By("asserting the finalizers have been set on the LogStorage CR")
 				ls := &operatorv1.LogStorage{}
 				Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
+				Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
+				Expect(ls.Spec.StorageClassName).To(Equal(storageClassName))
+
+				Expect(cli.Get(ctx, eckOperatorObjKey, &appsv1.StatefulSet{})).ShouldNot(HaveOccurred())
 
 				// Update ES and KB statuses to running (ECK would normally do this).
 				es := &esv1.Elasticsearch{}
@@ -213,15 +225,12 @@ var _ = Describe("LogStorage controller", func() {
 
 				By("confirming kibana certs are created")
 				secret := &corev1.Secret{}
+				Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
+				test.VerifyCert(secret, kbInternalDNSNames...)
 
 				// Create public ES and KB secrets (ECK would normally do this).
 				Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
-				esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
-				Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
-
-				Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
-				kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
-				Expect(cli.Create(ctx, kbPublicSecret)).ShouldNot(HaveOccurred())
+				test.VerifyCert(secret, kbInternalDNSNames...)
 
 				// Create admin ES user (ECK would normally do this).
 				esAdminUserSecret := &corev1.Secret{
@@ -235,10 +244,6 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-				// Create internal kibana secret (ECK would normally do this).
-				kbInternalSecret := createPubSecret(render.KibanaInternalCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
-				Expect(cli.Create(ctx, kbInternalSecret)).ShouldNot(HaveOccurred())
-
 				mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
@@ -246,6 +251,9 @@ var _ = Describe("LogStorage controller", func() {
 				// Expect to be waiting for curator secret.
 				Expect(result).Should(Equal(reconcile.Result{}))
 				Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+				mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 				mockStatus.On("ClearDegraded")
@@ -299,11 +307,10 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("AddDaemonsets", mock.Anything)
 				mockStatus.On("AddDeployments", mock.Anything)
 				mockStatus.On("AddStatefulSets", mock.Anything)
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
-
-				cloudCreateESAccessSecret(cli, ctx)
 			})
 			It("test LogStorage reconciles successfully", func() {
 				Expect(cli.Create(ctx, &operatorv1.LogStorage{
@@ -318,7 +325,7 @@ var _ = Describe("LogStorage controller", func() {
 					},
 				})).ShouldNot(HaveOccurred())
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, true, mockServer)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag, true, mockServer)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				esAdminUserSecret := &corev1.Secret{
@@ -332,10 +339,16 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-				esInterncalCertSecret := createPubSecret(relasticsearch.InternalCertSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
+				esInterncalCertSecret, err := secret.CreateTLSSecret(nil,
+					"tigera-secure-es-http-certs-public", common.OperatorNamespace(),
+					"tls.key", "tls.crt", rmeta.DefaultCertificateDuration, nil)
+				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, esInterncalCertSecret)).ShouldNot(HaveOccurred())
 
-				kbInterncalCertSecret := createPubSecret(render.KibanaInternalCertSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
+				kbInterncalCertSecret, err := secret.CreateTLSSecret(nil,
+					"tigera-secure-kb-http-certs-public", common.OperatorNamespace(),
+					"tls.key", "tls.crt", rmeta.DefaultCertificateDuration, nil)
+				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, kbInterncalCertSecret)).ShouldNot(HaveOccurred())
 
 				externalCertsSecret := createPubSecret(esgateway.ExternalCertsSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
@@ -404,7 +417,7 @@ var _ = Describe("LogStorage controller", func() {
 				ms.Start()
 				defer ms.Close()
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, true, ms)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag, true, ms)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				esAdminUserSecret := &corev1.Secret{
@@ -418,10 +431,16 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-				esInterncalCertSecret := createPubSecret(relasticsearch.InternalCertSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
+				esInterncalCertSecret, err := secret.CreateTLSSecret(nil,
+					"tigera-secure-es-http-certs-public", common.OperatorNamespace(),
+					"tls.key", "tls.crt", rmeta.DefaultCertificateDuration, nil)
+				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, esInterncalCertSecret)).ShouldNot(HaveOccurred())
 
-				kbInterncalCertSecret := createPubSecret(render.KibanaInternalCertSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
+				kbInterncalCertSecret, err := secret.CreateTLSSecret(nil,
+					"tigera-secure-kb-http-certs-public", common.OperatorNamespace(),
+					"tls.key", "tls.crt", rmeta.DefaultCertificateDuration, nil)
+				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, kbInterncalCertSecret)).ShouldNot(HaveOccurred())
 
 				externalCertsSecret := createPubSecret(esgateway.ExternalCertsSecret, common.OperatorNamespace(), []byte{}, "tls.crt")

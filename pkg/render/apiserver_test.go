@@ -21,15 +21,24 @@ import (
 	"fmt"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
 	"github.com/onsi/gomega/gstruct"
 
 	"github.com/openshift/library-go/pkg/crypto"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -42,21 +51,17 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	netv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
+	apiServerPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/apiserver.json")
+	apiServerPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/apiserver_ocp.json")
 	var (
 		instance           *operatorv1.InstallationSpec
+		apiserver          *operatorv1.APIServerSpec
 		managementCluster  = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 		replicas           int32
 		cfg                *render.APIServerConfiguration
@@ -72,6 +77,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.TigeraSecureEnterprise,
 		}
+		apiserver = &operatorv1.APIServerSpec{}
 		dnsNames = dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -81,12 +87,15 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
-		tunnelKeyPair, err = certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), []string{""}, "")
+		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).NotTo(HaveOccurred())
+		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 		replicas = 2
+
 		cfg = &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
+			APIServer:          apiserver,
 			Openshift:          openshift,
 			TLSKeyPair:         kp,
 		}
@@ -175,9 +184,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
-		Expect(len(d.Labels)).To(Equal(2))
+		Expect(len(d.Labels)).To(Equal(1))
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
@@ -186,17 +194,16 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		Expect(d.Spec.Template.Name).To(Equal("tigera-apiserver"))
 		Expect(d.Spec.Template.Namespace).To(Equal("tigera-system"))
-		Expect(len(d.Spec.Template.Labels)).To(Equal(2))
+		Expect(len(d.Spec.Template.Labels)).To(Equal(1))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateControlPlane))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
-		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
+		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
 		))
@@ -232,7 +239,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
-		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(6))
 
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Name).To(Equal("LOGLEVEL"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("info"))
@@ -240,12 +247,30 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Name).To(Equal("DATASTORE_TYPE"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Value).To(Equal("kubernetes"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Name).To(Equal("LISTEN_ADDR"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Value).To(Equal(":8080"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].Name).To(Equal("TLS_CERT"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].Value).To(Equal("/tigera-apiserver-certs/tls.crt"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Name).To(Equal("TLS_KEY"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Value).To(Equal("/tigera-apiserver-certs/tls.key"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Name).To(Equal("FIPS_MODE_ENABLED"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Value).To(Equal("false"))
 
 		// Expect the SECURITY_GROUP env variables to not be set
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
-		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts).To(BeEmpty())
+		Expect(len(d.Spec.Template.Spec.Containers[1].VolumeMounts)).To(Equal(1))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath).To(Equal("/tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].ReadOnly).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].SubPath).To(Equal(""))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPropagation).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].SubPathExpr).To(Equal(""))
+
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("8080"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
@@ -267,9 +292,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(*d.Spec.Template.Spec.Volumes[1].HostPath.Type).To(BeEquivalentTo("DirectoryOrCreate"))
 		Expect(d.Spec.Template.Spec.Volumes[2].Name).To(Equal("tigera-audit-policy"))
 		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Name).To(Equal("tigera-audit-policy"))
+		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Items).To(HaveLen(1))
 		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Items[0].Key).To(Equal("config"))
 		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
-		Expect(len(d.Spec.Template.Spec.Volumes[2].ConfigMap.Items)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
@@ -280,10 +305,38 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		clusterRoleBinding := rtest.GetResource(resources, "tigera-extension-apiserver-auth-access", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef.Name).To(Equal("tigera-extension-apiserver-auth-access"))
 
+		svc := rtest.GetResource(resources, "tigera-api", "tigera-system", "", "v1", "Service").(*corev1.Service)
+		Expect(svc.GetObjectMeta().GetLabels()).To(HaveLen(1))
+		Expect(svc.GetObjectMeta().GetLabels()).To(HaveKeyWithValue("k8s-app", "tigera-api"))
 	},
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
+
+	It("should render the env variable for queryserver and arg for apiserver when FIPS is enabled", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Args).To(ContainElement("--tls-max-version=VersionTLS12"))
+		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
+	})
 
 	It("should render an API server with custom configuration", func() {
 		expectedResources := []struct {
@@ -455,6 +508,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
@@ -471,7 +526,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, tol)))
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
@@ -669,11 +724,12 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		By("Validating the newly created tunnel secret")
-		tunnelCASecret, err := certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), nil, "")
+		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).ToNot(HaveOccurred())
+		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		validateTunnelSecret(tunnelCASecret.Secret(""))
+		validateTunnelSecret(tunnelSecret)
 
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
@@ -761,6 +817,23 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
 
+	It("should render an API server with signed ca bundles enabled", func() {
+		cfg.ManagementCluster = managementCluster
+		cfg.TunnelCASecret = tunnelKeyPair
+		cfg.ManagementCluster.Spec.TLS = &operatorv1.TLS{
+			SecretName: render.ManagerTLSSecretName,
+		}
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
+		Expect(dep).ToNot(BeNil())
+
+		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement("--managementClusterCAType=Public"))
+	})
+
 	It("should add an init container if certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
 		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
@@ -817,7 +890,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		deploy, ok := dep.(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal("tigera-apiserver-certs-key-cert-provisioner"))
+		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
 
@@ -844,6 +917,231 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-apiserver", "tigera-system")))
+	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.Openshift = scenario.Openshift
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+
+				component := render.APIServerPolicy(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := testutils.SelectPolicyByProvider(scenario, apiServerPolicy, apiServerPolicyForOCP)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
+
+	Context("With APIServer Deployment overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle APIServerDeployment overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							Containers: []operatorv1.APIServerDeploymentContainer{
+								{
+									Name:      "calico-apiserver",
+									Resources: &rr1,
+								},
+								{
+									Name:      "tigera-queryserver",
+									Resources: &rr2,
+								},
+							},
+							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
+								{
+									Name:      "calico-apiserver-certs-key-cert-provisioner",
+									Resources: &rr2,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+			// Enable certificate management.
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create and add the TLS keypair so the initContainer is rendered.
+			dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+			kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			cfg.TLSKeyPair = kp
+
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+
+			// API server has apiserver: true label
+			Expect(d.Labels).To(HaveLen(2))
+			Expect(d.Labels["apiserver"]).To(Equal("true"))
+			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// deployment such as "k8s-app=calico-apiserver". But the APIServer
+			// deployment object produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(d.Spec.Template.Labels).To(HaveLen(2))
+			Expect(d.Spec.Template.Labels["apiserver"]).To(Equal("true"))
+			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 2 template-level annotations
+			// - 1 added by the operator by default
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-apiserver-certs"))
+			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+			Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
+			Expect(d.Spec.Template.Spec.Containers[1].Resources).To(Equal(rr2))
+
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
+			Expect(d.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(rr2))
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override a ControlPlaneNodeSelector when specified", func() {
+			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+						},
+					},
+				},
+			}
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			// nodeSelectors are merged
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+		})
+
+		It("should override ControlPlaneTolerations when specified", func() {
+			cfg.Installation.ControlPlaneTolerations = rmeta.TolerateControlPlane
+
+			tol := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							Tolerations: []corev1.Toleration{tol},
+						},
+					},
+				},
+			}
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
 	})
 })
 
@@ -895,7 +1193,7 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	Expect(err).ShouldNot(HaveOccurred())
 
 	opts := x509.VerifyOptions{
-		DNSName: render.VoltronDnsName,
+		DNSName: "voltron",
 		Roots:   roots,
 	}
 
@@ -903,13 +1201,12 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	Expect(err).ShouldNot(HaveOccurred())
 
 	opts = x509.VerifyOptions{
-		DNSName:     render.VoltronDnsName,
+		DNSName:     "voltron",
 		Roots:       x509.NewCertPool(),
 		CurrentTime: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays+1),
 	}
 	_, err = newCert.Verify(opts)
 	Expect(err).Should(HaveOccurred())
-
 }
 
 var (
@@ -1130,6 +1427,7 @@ var (
 
 var _ = Describe("API server rendering tests (Calico)", func() {
 	var instance *operatorv1.InstallationSpec
+	var apiserver *operatorv1.APIServerSpec
 	var replicas int32
 	var cfg *render.APIServerConfiguration
 	var certificateManager certificatemanager.CertificateManager
@@ -1141,6 +1439,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.Calico,
 		}
+		apiserver = &operatorv1.APIServerSpec{}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -1154,6 +1453,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		cfg = &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
+			APIServer:          apiserver,
 			Openshift:          openshift,
 			TLSKeyPair:         kp,
 		}
@@ -1213,9 +1513,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal("calico-apiserver"))
-		Expect(len(d.Labels)).To(Equal(2))
+		Expect(len(d.Labels)).To(Equal(1))
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "calico-apiserver"))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
@@ -1224,13 +1523,12 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		Expect(d.Spec.Template.Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Namespace).To(Equal("calico-apiserver"))
-		Expect(len(d.Spec.Template.Labels)).To(Equal(2))
+		Expect(len(d.Spec.Template.Labels)).To(Equal(1))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "calico-apiserver"))
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("calico-apiserver"))
 
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateControlPlane))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(1))
@@ -1327,6 +1625,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
@@ -1342,7 +1641,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, tol)))
 	})
 
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {
@@ -1422,5 +1721,196 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", "calico-apiserver")))
+	})
+
+	Context("With APIServer Deployment overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle APIServerDeployment overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							Containers: []operatorv1.APIServerDeploymentContainer{
+								{
+									Name:      "calico-apiserver",
+									Resources: &rr1,
+								},
+							},
+							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
+								{
+									Name:      "calico-apiserver-certs-key-cert-provisioner",
+									Resources: &rr2,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+			// Enable certificate management.
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create and add the TLS keypair so the initContainer is rendered.
+			dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+			kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			cfg.TLSKeyPair = kp
+
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+
+			// API server has apiserver: true label
+			Expect(d.Labels).To(HaveLen(2))
+			Expect(d.Labels["apiserver"]).To(Equal("true"))
+			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// deployment such as "k8s-app=calico-apiserver". But the APIServer
+			// deployment object produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(d.Spec.Template.Labels).To(HaveLen(2))
+			Expect(d.Spec.Template.Labels["apiserver"]).To(Equal("true"))
+			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 2 template-level annotations
+			// - 1 added by the operator by default
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/calico-apiserver-certs"))
+			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
+			Expect(d.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(rr2))
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override a ControlPlaneNodeSelector when specified", func() {
+			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+						},
+					},
+				},
+			}
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			// nodeSelectors are merged
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+		})
+
+		It("should override ControlPlaneTolerations when specified", func() {
+			cfg.Installation.ControlPlaneTolerations = rmeta.TolerateControlPlane
+
+			tol := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							Tolerations: []corev1.Toleration{tol},
+						},
+					},
+				},
+			}
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
 	})
 })

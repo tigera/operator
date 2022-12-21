@@ -64,13 +64,11 @@ var (
 {{ with index .Components "eck-elasticsearch" }}
 	ComponentEckElasticsearch = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "eck-kibana" }}
 	ComponentEckKibana = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "elastic-tsee-installer" }}
@@ -85,10 +83,15 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with .Components.elasticsearch }}
+	ComponentElasticsearchFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-operator" }}
@@ -175,7 +178,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "packetcapture-api" }}
+{{ with index .Components "packetcapture" }}
 	ComponentPacketCapture = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
@@ -202,7 +205,6 @@ var (
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "prometheus" }}
@@ -220,7 +222,6 @@ var (
 {{ with index .Components "coreos-alertmanager" }}
 	ComponentCoreOSAlertmanager = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "alertmanager" }}
@@ -256,6 +257,12 @@ var (
 {{ with index .Components "tigera-cni" }}
 	ComponentTigeraCNI = component{
 		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "tigera-cni" }}
+	ComponentTigeraCNIFIPS = component{
+		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
@@ -307,7 +314,9 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-	EnterpriseComponents = []component{
+	// Only components that correspond directly to images should be included in this list,
+	// Components that are only for providing a version should be left out of this list.
+	EnterpriseImages = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
 		ComponentComplianceController,
@@ -315,11 +324,9 @@ var (
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
 		ComponentDeepPacketInspection,
-		ComponentEckElasticsearch,
-		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentECKElasticsearchOperator,
+		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
@@ -336,16 +343,15 @@ var (
 		ComponentPacketCapture,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
-		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
-		ComponentCoreOSAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
+		ComponentTigeraCNIFIPS,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

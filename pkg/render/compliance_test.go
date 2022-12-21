@@ -17,7 +17,11 @@ package render_test
 import (
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/testutils"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -35,6 +39,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -45,6 +50,13 @@ var _ = Describe("compliance rendering tests", func() {
 	clusterDomain := dns.DefaultClusterDomain
 	var cfg *render.ComplianceConfiguration
 	var cli client.Client
+
+	expectedCompliancePolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_unmanaged.json")
+	expectedCompliancePolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_managed.json")
+	expectedCompliancePolicyForUnmanagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_unmanaged_ocp.json")
+	expectedCompliancePolicyForManagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_managed_ocp.json")
+	expectedComplianceServerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance-server.json")
+	expectedComplianceServerPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance-server_ocp.json")
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -66,12 +78,36 @@ var _ = Describe("compliance rendering tests", func() {
 			ClusterDomain:              clusterDomain,
 			TrustedBundle:              bundle,
 			TenantID:                   "tenant_id",
+			UsePSP:                     true,
 		}
+	})
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
+
+	It("should render the env variable for queryserver when FIPS is enabled", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
-
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
@@ -84,6 +120,8 @@ var _ = Describe("compliance rendering tests", func() {
 				kind    string
 			}{
 				{ns, "", "", "v1", "Namespace"},
+				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -108,6 +146,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
@@ -128,6 +167,11 @@ var _ = Describe("compliance rendering tests", func() {
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
+
+			// Check the namespace.
+			namespace := rtest.GetResource(resources, "tigera-compliance", "", "", "v1", "Namespace").(*corev1.Namespace)
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 			clusterRole := rtest.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -182,6 +226,8 @@ var _ = Describe("compliance rendering tests", func() {
 				kind    string
 			}{
 				{ns, "", "", "v1", "Namespace"},
+				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -206,6 +252,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
@@ -241,13 +288,11 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.cluster"},
 			))
-			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
+			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/tigera-compliance-server-tls"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
 
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 				corev1.EnvVar{Name: "ELASTIC_INDEX_MIDFIX", Value: "tenant_id"},
@@ -256,13 +301,11 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).ShouldNot(ContainElements(
 				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.cluster"},
 			))
-			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(3))
+			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
 			clusterRole := rtest.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -309,6 +352,8 @@ var _ = Describe("compliance rendering tests", func() {
 				kind    string
 			}{
 				{ns, "", "", "v1", "Namespace"},
+				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -369,7 +414,7 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Describe("node selection & affinity", func() {
-		var renderCompliance = func(i *operatorv1.InstallationSpec) (server, controller, snapshotter *appsv1.Deployment, reporter *corev1.PodTemplate, benchmarker *appsv1.DaemonSet) {
+		renderCompliance := func(i *operatorv1.InstallationSpec) (server, controller, snapshotter *appsv1.Deployment, reporter *corev1.PodTemplate, benchmarker *appsv1.DaemonSet) {
 			cfg.Installation = i
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -391,10 +436,10 @@ var _ = Describe("compliance rendering tests", func() {
 			dpComplianceServer, dpComplianceController, complianceSnapshotter, complianceReporter, complianceBenchmarker := renderCompliance(&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			})
-			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
-			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
-			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
-			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
+			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rmeta.TolerateAll))
 		})
 
@@ -430,6 +475,8 @@ var _ = Describe("compliance rendering tests", func() {
 				kind    string
 			}{
 				{ns, "", "", "v1", "Namespace"},
+				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -454,6 +501,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
@@ -477,14 +525,13 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Context("Render Benchmarker", func() {
-
 		It("should render benchmarker properly for non GKE environments", func() {
 			cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
-			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			dsBenchMarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
 
 			Expect(len(volumeMounts)).To(Equal(6))
@@ -499,8 +546,8 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
 			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
 			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
-			Expect(volumeMounts[5].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(volumeMounts[5].MountPath).To(Equal("/etc/ssl/elastic/"))
+			Expect(volumeMounts[5].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+			Expect(volumeMounts[5].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 		})
 
 		It("should render benchmarker properly for GKE environments", func() {
@@ -509,7 +556,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
-			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			dsBenchMarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
 
 			Expect(len(volumeMounts)).To(Equal(7))
@@ -524,11 +571,57 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
 			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
 			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
-			Expect(volumeMounts[5].Name).To(Equal("home-kubernetes"))
-			Expect(volumeMounts[5].MountPath).To(Equal("/home/kubernetes"))
-			Expect(volumeMounts[6].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(volumeMounts[6].MountPath).To(Equal("/etc/ssl/elastic/"))
+			Expect(volumeMounts[5].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+			Expect(volumeMounts[5].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+			Expect(volumeMounts[6].Name).To(Equal("home-kubernetes"))
+			Expect(volumeMounts[6].MountPath).To(Equal("/home/kubernetes"))
 		})
 	})
 
+	Context("allow-tigera rendering", func() {
+		policyNames := []types.NamespacedName{
+			{Name: "allow-tigera.compliance-access", Namespace: "tigera-compliance"},
+			{Name: "allow-tigera.compliance-server", Namespace: "tigera-compliance"},
+		}
+
+		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			if policyName.Name == "allow-tigera.compliance-access" {
+				return testutils.SelectPolicyByClusterTypeAndProvider(
+					scenario,
+					expectedCompliancePolicyForUnmanaged,
+					expectedCompliancePolicyForUnmanagedOpenshift,
+					expectedCompliancePolicyForManaged,
+					expectedCompliancePolicyForManagedOpenshift,
+				)
+			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.compliance-server" {
+				return testutils.SelectPolicyByProvider(scenario, expectedComplianceServerPolicy, expectedComplianceServerPolicyForOpenshift)
+			}
+
+			return nil
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.Openshift = scenario.Openshift
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+				component, err := render.Compliance(cfg)
+				Expect(err).ShouldNot(HaveOccurred())
+				resources, _ := component.Objects()
+
+				for _, policyName := range policyNames {
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(policyName, scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				}
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
 })

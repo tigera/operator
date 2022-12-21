@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,6 +55,8 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(certV1.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		client = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		sm = New(client, "test-component", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
@@ -183,6 +186,211 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 
+		Context("when pod is failed", func() {
+			var gen int64
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1pod",
+						Labels: map[string]string{
+							"dp1Key": "dp1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodFailed,
+					},
+				})).NotTo(HaveOccurred())
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DS1pod",
+						Labels: map[string]string{
+							"ds1Key": "ds1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodFailed,
+					},
+				})).NotTo(HaveOccurred())
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "SS1pod",
+						Labels: map[string]string{
+							"ss1Key": "ss1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodFailed,
+					},
+				})).NotTo(HaveOccurred())
+				gen = 5
+			})
+			It("should not degrade when daemonset has the proper pod counts", func() {
+				sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DS1",
+						Generation: gen,
+					},
+					Spec: appsv1.DaemonSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ds1Key": "ds1Value"},
+						},
+					},
+					Status: appsv1.DaemonSetStatus{
+						ObservedGeneration:     gen,
+						CurrentNumberScheduled: replicas,
+						NumberMisscheduled:     0,
+						DesiredNumberScheduled: replicas,
+						NumberReady:            replicas,
+						UpdatedNumberScheduled: replicas,
+						NumberAvailable:        replicas,
+						NumberUnavailable:      0,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeFalse())
+			})
+			It("should degrade when the daemonsetdoes not have the correct pod counts", func() {
+				sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DS1",
+						Generation: gen,
+					},
+					Spec: appsv1.DaemonSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ds1Key": "ds1Value"},
+						},
+					},
+					Status: appsv1.DaemonSetStatus{
+						ObservedGeneration:     gen,
+						CurrentNumberScheduled: replicas,
+						NumberMisscheduled:     0,
+						DesiredNumberScheduled: replicas,
+						NumberReady:            0, // correct value should be `replicas`
+						UpdatedNumberScheduled: replicas,
+						NumberAvailable:        replicas,
+						NumberUnavailable:      0,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+			})
+			It("should not degrade when deployment has the pod counts", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DP1",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"dp1Key": "dp1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 0,
+						AvailableReplicas:   replicas,
+						ReadyReplicas:       replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeFalse())
+			})
+			It("should degrade when the deployment does not have the correct pod counts", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DP1",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"dp1Key": "dp1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 0,
+						AvailableReplicas:   0, // correct value should be `replicas`
+						ReadyReplicas:       replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+			})
+			It("should not degrade when statefulset has the proper pod counts", func() {
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "SS1",
+						Generation: gen,
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ss1Key": "ss1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.StatefulSetStatus{
+						ObservedGeneration: gen,
+						Replicas:           replicas,
+						ReadyReplicas:      replicas,
+						CurrentReplicas:    replicas,
+						UpdatedReplicas:    replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeFalse())
+			})
+			It("should degrade when the deployment does not have the correct pod counts", func() {
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "SS1",
+						Generation: gen,
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ss1Key": "ss1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.StatefulSetStatus{
+						ObservedGeneration: gen,
+						Replicas:           replicas,
+						ReadyReplicas:      0, // correct value should be `replicas`
+						CurrentReplicas:    replicas,
+						UpdatedReplicas:    replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+			})
+		})
+
 		It("Should handle basic state changes", func() {
 			// We expect no state to be "True" at boot.
 			Expect(sm.IsAvailable()).To(BeFalse())
@@ -235,19 +443,19 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.IsProgressing()).To(BeFalse())
 		})
 
-		It("should generate correct degraded reasons", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+		It("should prioritize explicit degraded reason over pod failure", func() {
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
-			Expect(sm.degradedReason()).To(Equal("Some pods are failing"))
-			sm.explicitDegradedReason = "Controller set us degraded"
-			Expect(sm.degradedReason()).To(Equal("Controller set us degraded; Some pods are failing"))
+			Expect(sm.degradedReason()).To(Equal("PodFailure"))
+			sm.SetDegraded("ControllerSetUsDegraded", "error message")
+			Expect(sm.degradedReason()).To(Equal("ControllerSetUsDegraded"))
 		})
 
 		It("should generate correct degraded messages", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
-			sm.explicitDegradedMsg = "Controller set us degraded"
+			sm.SetDegraded("ControllerSetUsDegraded", "Controller set us degraded")
 			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
 		})
 
@@ -485,4 +693,25 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 	})
+	DescribeTable("test sanitizeReason",
+		func(source, expected string) {
+			Expect(sanitizeReason(source)).To(Equal(expected))
+		},
+		Entry("Compliance example", "Error querying compliance", "Error_querying_compliance"),
+		Entry("tigera tier example with dash", "Waiting for allow-tigera tier to be created", "Waiting_for_allow_tigera_tier_to_be_created"),
+		Entry("ES example reason with comma",
+			"Elasticsearch cluster configuration is not available, waiting for it to become available",
+			"Elasticsearch_cluster_configuration_is_not_available,_waiting_for_it_to_become_available"),
+		Entry("Example reason with slash",
+			"failed to retrieve / validate  ",
+			"failed_to_retrieve___validate"),
+		Entry("Example reason with period",
+			"Failed to process the authentication CR.", "Failed_to_process_the_authentication_CR"),
+		Entry("Example with period",
+			"Failed to process the authentication CR.", "Failed_to_process_the_authentication_CR"),
+		Entry("Strip beginning invalid characters", ".+5_reason", "reason"),
+		Entry("Strip ending invalid characters", "reason1,:.,:", "reason1"),
+		Entry("sanitize on string that shouldn't be modifed",
+			string(operator.ResourceValidationError), string(operator.ResourceValidationError)),
+	)
 })

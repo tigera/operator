@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	"github.com/stretchr/testify/mock"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -48,6 +48,7 @@ var _ = Describe("Monitor controller tests", func() {
 	var mockStatus *status.MockStatus
 	var r ReconcileMonitor
 	var scheme *runtime.Scheme
+	var installation *operatorv1.Installation
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -79,10 +80,11 @@ var _ = Describe("Monitor controller tests", func() {
 			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			prometheusReady: &utils.ReadyFlag{},
+			tierWatchReady:  &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
-		Expect(cli.Create(ctx, &operatorv1.Installation{
+		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
 			},
@@ -94,7 +96,8 @@ var _ = Describe("Monitor controller tests", func() {
 				Variant:  operatorv1.TigeraSecureEnterprise,
 				Registry: "some.registry.org/",
 			},
-		})).To(BeNil())
+		}
+		Expect(cli.Create(ctx, installation)).To(BeNil())
 
 		// Apply the Monitor CR to the fake cluster.
 		Expect(cli.Create(ctx, &operatorv1.Monitor{
@@ -102,9 +105,11 @@ var _ = Describe("Monitor controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		})).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 
-		// Mark that the watch for prometheus resources was successful
+		// Mark that watches were successful.
 		r.prometheusReady.MarkAsReady()
+		r.tierWatchReady.MarkAsReady()
 	})
 
 	Context("controller reconciliation", func() {
@@ -136,6 +141,46 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+		})
+
+		It("should render allow-tigera policy when tier and policy watch are ready", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(6))
+			Expect(policies.Items[0].Name).To(Equal("allow-tigera.calico-node-alertmanager"))
+			Expect(policies.Items[1].Name).To(Equal("allow-tigera.calico-node-alertmanager-mesh"))
+			Expect(policies.Items[2].Name).To(Equal("allow-tigera.default-deny"))
+			Expect(policies.Items[3].Name).To(Equal("allow-tigera.prometheus"))
+			Expect(policies.Items[4].Name).To(Equal("allow-tigera.prometheus-operator"))
+			Expect(policies.Items[5].Name).To(Equal("allow-tigera.tigera-prometheus-api"))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should degrade and wait if tier is ready but tier watch is not ready", func() {
+			r.tierWatchReady = &utils.ReadyFlag{}
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			r.status = mockStatus
+
+			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
 		})
 	})
 

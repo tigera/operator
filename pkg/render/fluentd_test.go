@@ -16,8 +16,9 @@ package render_test
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -27,16 +28,22 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var esConfigMap *relasticsearch.ClusterConfig
 	var cfg *render.FluentdConfiguration
+
+	expectedFluentdPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_unmanaged.json")
+	expectedFluentdPolicyForUnmanagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_unmanaged_ocp.json")
+	expectedFluentdPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_managed.json")
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -59,6 +66,19 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 			MetricsServerTLS: metricsSecret,
 			TrustedBundle:    certificateManager.CreateTrustedBundle(),
+			UsePSP:           true,
+		}
+	})
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := render.Fluentd(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 
@@ -71,6 +91,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -92,6 +113,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			i++
 		}
 
+		// Check the namespace.
+		ns := rtest.GetResource(resources, "tigera-fluentd", "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
@@ -104,7 +130,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			corev1.EnvVar{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
-			corev1.EnvVar{Name: "NODENAME",
+			corev1.EnvVar{
+				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
@@ -150,6 +177,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				Namespace: render.PacketCaptureNamespace,
 			},
 		}))
+
+		// The metrics service should have the correct configuration.
+		ms := rtest.GetResource(resources, render.FluentdMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
 	It("should render with a resource quota for provider GKE", func() {
@@ -172,6 +203,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
@@ -180,7 +212,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
-		cfg.TrustedBundle = nil
 		cfg.MetricsServerTLS = nil
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
@@ -276,6 +307,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "log-collector-s3-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -327,7 +359,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}
@@ -341,6 +374,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -376,7 +410,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -404,7 +438,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}
@@ -413,7 +448,90 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "spec.nodeName",
-				}},
+				},
+			},
+		}))
+	})
+	It("should render with Syslog configuration with TLS and user's corporate CA", func() {
+		cfg.UseSyslogCertificate = true
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		var volnames []string
+		for _, vol := range ds.Spec.Template.Spec.Volumes {
+			volnames = append(volnames, vol.Name)
+		}
+		Expect(volnames).To(ContainElement("tigera-ca-bundle"))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envs).To(ContainElements([]corev1.EnvVar{
+			{Name: "SYSLOG_HOST", Value: "1.2.3.4", ValueFrom: nil},
+			{Name: "SYSLOG_PORT", Value: "80", ValueFrom: nil},
+			{Name: "SYSLOG_PROTOCOL", Value: "tcp", ValueFrom: nil},
+			{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s", ValueFrom: nil},
+			{Name: "SYSLOG_PACKET_SIZE", Value: "180", ValueFrom: nil},
+			{Name: "SYSLOG_DNS_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_FLOW_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_TLS", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_VERIFY_MODE", Value: "1", ValueFrom: nil},
+			{Name: "SYSLOG_CA_FILE", Value: cfg.TrustedBundle.MountPath(), ValueFrom: nil},
+		}))
+	})
+	It("should render with Syslog configuration with TLS and Internet CA", func() {
+		cfg.UseSyslogCertificate = false
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envs).To(ContainElements([]corev1.EnvVar{
+			{Name: "SYSLOG_HOST", Value: "1.2.3.4", ValueFrom: nil},
+			{Name: "SYSLOG_PORT", Value: "80", ValueFrom: nil},
+			{Name: "SYSLOG_PROTOCOL", Value: "tcp", ValueFrom: nil},
+			{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s", ValueFrom: nil},
+			{Name: "SYSLOG_PACKET_SIZE", Value: "180", ValueFrom: nil},
+			{Name: "SYSLOG_DNS_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_FLOW_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_TLS", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_VERIFY_MODE", Value: "1", ValueFrom: nil},
+			{Name: "SYSLOG_CA_FILE", Value: render.SysLogPublicCAPath, ValueFrom: nil},
 		}))
 	})
 
@@ -436,6 +554,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "logcollector-splunk-public-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
@@ -461,7 +580,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(5))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
 
 		var volnames []string
 		for _, vol := range ds.Spec.Template.Spec.Volumes {
@@ -497,7 +616,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}
@@ -521,6 +641,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -574,7 +695,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}
@@ -593,6 +715,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "fluentd-filters", ns: "tigera-fluentd", group: "", version: "v1", kind: "ConfigMap"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -632,6 +755,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -689,5 +813,39 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		fetchIntervalVal := "900"
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fetchIntervalVal}))
+	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.allow-fluentd-node", Namespace: "tigera-fluentd"}
+
+		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			if scenario.ManagedCluster {
+				return expectedFluentdPolicyForManaged
+			} else {
+				return testutils.SelectPolicyByProvider(scenario, expectedFluentdPolicyForUnmanaged, expectedFluentdPolicyForUnmanagedOpenshift)
+			}
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				if scenario.Openshift {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+				} else {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+				}
+				cfg.ManagedCluster = scenario.ManagedCluster
+
+				component := render.Fluentd(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := getExpectedPolicy(scenario)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
 	})
 })

@@ -17,19 +17,26 @@
 package render
 
 import (
+	"net"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -40,15 +47,34 @@ const (
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
 	GuardianDeploymentName         = GuardianName
+	GuardianPodSecurityPolicyName  = GuardianName
 	GuardianServiceName            = "tigera-guardian"
 	GuardianVolumeName             = "tigera-guardian-certs"
 	GuardianSecretName             = "tigera-managed-cluster-connection"
+	GuardianTargetPort             = 8080
+	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 )
+
+var GuardianEntityRule = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
+var GuardianSourceEntityRule = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
+var GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
 
 func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{
 		cfg: cfg,
 	}
+}
+
+func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
+	guardianAccessPolicy, err := guardianAllowTigeraPolicy(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewPassthrough(
+		guardianAccessPolicy,
+		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
+	), nil
 }
 
 // GuardianConfiguration contains all the config information needed to render the component.
@@ -59,6 +85,10 @@ type GuardianConfiguration struct {
 	Installation      *operatorv1.InstallationSpec
 	TunnelSecret      *corev1.Secret
 	TrustedCertBundle certificatemanagement.TrustedBundle
+	TunnelCAType      operatorv1.CAType
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type GuardianComponent struct {
@@ -81,8 +111,9 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 	}
+
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),
@@ -93,12 +124,19 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
 		// Add tigera-manager service account for impersonation
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(),
 		managerClusterRole(false, true, c.cfg.Openshift),
 		managerClusterRoleBinding(),
+		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
+		managerClusterWideTigeraLayer(),
+		managerClusterWideDefaultView(),
 	)
+
+	if !c.cfg.Openshift && c.cfg.UsePSP {
+		objs = append(objs, c.podsecuritypolicy())
+	}
 
 	return objs, nil
 }
@@ -148,19 +186,41 @@ func (c *GuardianComponent) serviceAccount() client.Object {
 	}
 }
 
+func (c *GuardianComponent) podsecuritypolicy() client.Object {
+	psp := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName(GuardianPodSecurityPolicyName)
+	psp.Spec.Privileged = false
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyMustRunAsNonRoot
+
+	return psp
+}
+
 func (c *GuardianComponent) clusterRole() client.Object {
+	policyRules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"users", "groups", "serviceaccounts"},
+			Verbs:     []string{"impersonate"},
+		},
+	}
+
+	if !c.cfg.Openshift && c.cfg.UsePSP {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		policyRules = append(policyRules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{GuardianPodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: GuardianClusterRoleName,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"users", "groups", "serviceaccounts"},
-				Verbs:     []string{"impersonate"},
-			},
-		},
+		Rules: policyRules,
 	}
 }
 
@@ -191,19 +251,11 @@ func (c *GuardianComponent) deployment() client.Object {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GuardianDeploymentName,
-			Namespace: GuardianNamespace,
-			Labels: map[string]string{
-				"k8s-app": GuardianName,
-			},
+			Name:        GuardianDeploymentName,
+			Namespace:   GuardianNamespace,
 			Annotations: c.annotations(),
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": GuardianName,
-				},
-			},
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
@@ -212,14 +264,11 @@ func (c *GuardianComponent) deployment() client.Object {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      GuardianDeploymentName,
 					Namespace: ManagerNamespace,
-					Labels: map[string]string{
-						"k8s-app": GuardianName,
-					},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),
@@ -244,6 +293,18 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
+	// UID 1001 is used in the guardian Dockerfile.
+	securityContext := securitycontext.NewBaseContext(1001, 0)
+	// Build a security context for the pod that will allow the pod to be deployed. Guardian is run in a namespace with a
+	// Baseline pod security standard, which requires that the security context meet certain criteria in order for pods to
+	// be accepted by the API server
+	securityContext.Capabilities = &corev1.Capabilities{
+		Drop: []corev1.Capability{"ALL"},
+	}
+	securityContext.SeccompProfile = &corev1.SeccompProfile{
+		Type: corev1.SeccompProfileTypeRuntimeDefault,
+	}
+
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
@@ -252,12 +313,15 @@ func (c *GuardianComponent) container() []corev1.Container {
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
+				{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(c.cfg.TunnelCAType)},
 				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+				{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+				{Name: "GUARDIAN_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
-				Handler: corev1.Handler{
+				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/health",
 						Port: intstr.FromInt(9080),
@@ -267,7 +331,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 				PeriodSeconds:       10,
 			},
 			ReadinessProbe: &corev1.Probe{
-				Handler: corev1.Handler{
+				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/health",
 						Port: intstr.FromInt(9080),
@@ -276,15 +340,14 @@ func (c *GuardianComponent) container() []corev1.Container {
 				InitialDelaySeconds: 10,
 				PeriodSeconds:       5,
 			},
-			// UID 1001 is used in the guardian Dockerfile.
-			SecurityContext: securitycontext.NewBaseContext(1001, 0),
+			SecurityContext: securityContext,
 		},
 	}
 }
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(),
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",
@@ -299,4 +362,136 @@ func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 	return annotations
+}
+
+func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: PacketCaptureEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.PrometheusEntityRule,
+		},
+	}...)
+
+	// Assumes address has the form "host:port", required by net.Dial for TCP.
+	host, port, err := net.SplitHostPort(cfg.URL)
+	if err != nil {
+		return nil, err
+	}
+	parsedPort, err := numorstring.PortFromString(port)
+	if err != nil {
+		return nil, err
+	}
+	parsedIp := net.ParseIP(host)
+	if parsedIp == nil {
+		// Assume host is a valid hostname.
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Domains: []string{host},
+				Ports:   []numorstring.Port{parsedPort},
+			},
+		})
+	} else {
+		var netSuffix string
+		if parsedIp.To4() != nil {
+			netSuffix = "/32"
+		} else {
+			netSuffix = "/128"
+		}
+
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets:  []string{parsedIp.String() + netSuffix},
+				Ports: []numorstring.Port{parsedPort},
+			},
+		})
+	}
+
+	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
+
+	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(8080)}
+	ingressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      FluentdSourceEntityRule,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      ComplianceBenchmarkerSourceEntityRule,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      ComplianceReporterSourceEntityRule,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      ComplianceSnapshotterSourceEntityRule,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      ComplianceControllerSourceEntityRule,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      IntrusionDetectionSourceEntityRule,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      IntrusionDetectionInstallerSourceEntityRule,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: guardianIngressDestinationEntityRule,
+		},
+	}
+
+	policy := &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianPolicyName,
+			Namespace: GuardianNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
+
+	return policy, nil
 }

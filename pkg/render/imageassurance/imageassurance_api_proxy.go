@@ -5,6 +5,7 @@ package imageassurance
 import (
 	"github.com/tigera/operator/pkg/ptr"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
+	"github.com/tigera/operator/pkg/render/common/meta"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -65,7 +66,7 @@ func (c *component) apiProxyDeployment() *appsv1.Deployment {
 
 	volumeMounts := []corev1.VolumeMount{
 		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
-		c.config.TrustedCertBundle.VolumeMount(),
+		c.config.TrustedCertBundle.VolumeMount(meta.OSTypeLinux),
 	}
 
 	if c.config.KeyValidatorConfig != nil {

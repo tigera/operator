@@ -189,6 +189,13 @@ spec:
                       x days, use a retention period of x+1. Default: 91'
                     format: int32
                     type: integer
+                  bgpLogs:
+                    description: 'BGPLogs configures the retention period for BGP
+                      logs, in days.  Logs written on a day that started at least
+                      this long ago are removed.  To keep logs for at least x days,
+                      use a retention period of x+1. Default: 8'
+                    format: int32
+                    type: integer
                   complianceReports:
                     description: 'ComplianceReports configures the retention period
                       for compliance reports, in days. Reports are output from the
@@ -197,6 +204,13 @@ spec:
                       more details on reports. Logs written on a day that started
                       at least this long ago are removed.  To keep logs for at least
                       x days, use a retention period of x+1. Default: 91'
+                    format: int32
+                    type: integer
+                  dnsLogs:
+                    description: 'DNSLogs configures the retention period for DNS
+                      logs, in days.  Logs written on a day that started at least
+                      this long ago are removed.  To keep logs for at least x days,
+                      use a retention period of x+1. Default: 8'
                     format: int32
                     type: integer
                   flows:

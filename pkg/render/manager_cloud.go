@@ -15,8 +15,14 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
+var (
+	CloudManagerConfigOverrideName = "cloud-manager-config"
+	ManagerExtraEnv                = map[string]string{}
+)
+
 // ManagerCloudResources contains all the resource needed for cloud manager.
 type ManagerCloudResources struct {
+	TenantID                string
 	ImageAssuranceResources *rcimageassurance.Resources
 }
 

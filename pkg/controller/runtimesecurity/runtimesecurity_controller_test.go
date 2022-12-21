@@ -56,6 +56,7 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("RemoveCronJobs", mock.Anything).Return()
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("OnCRNotFound").Return()
 		mockStatus.On("ClearDegraded")

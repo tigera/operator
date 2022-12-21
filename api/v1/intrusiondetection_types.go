@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +27,25 @@ type IntrusionDetectionSpec struct {
 	// Only DeepPacketInspection is supported for this spec.
 	// +optional
 	ComponentResources []IntrusionDetectionComponentResource `json:"componentResources,omitempty"`
+
+	// AnomalyDetection provides configuration for running AnomalyDetection Component within
+	// IntrusionDetection. Anomaly Detection configuration will only be applied to standalone and
+	// management clusters.
+	// +optional
+	AnomalyDetection AnomalyDetectionSpec `json:"anomalyDetection,omitempty"`
+}
+
+type AnomalyDetectionSpec struct {
+
+	// StorageClassName will be used to query for an existing StorageClass with the same as the field value. It will also
+	// populate the PersistentVolumeClaim.StorageClassName that is used to provision disks for the Anomaly Detection API
+	// pod for model storage. If the field is left blank, Anomaly Detection API will be using EmptyDir VolumeSource.
+	// The StorageClassName should only be modified when no StorageClass is currently active. We recommend choosing a
+	// storage class dedicated to AnomalyDetection only. Otherwise, model retention cannot be guaranteed during upgrades.
+	// See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
+	// This field is not used for managed clusters in a Multi-cluster management setup.
+	// +optional
+	StorageClassName string `json:"storageClassName,omitempty"`
 }
 
 // IntrusionDetectionStatus defines the observed state of Tigera intrusion detection capabilities.

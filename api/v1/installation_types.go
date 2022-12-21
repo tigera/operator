@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -91,6 +92,7 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
+	// Deprecated. Please use Installation.Spec.TyphaDeployment instead.
 	// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 	// +optional
 	TyphaAffinity *TyphaAffinity `json:"typhaAffinity,omitempty"`
@@ -126,11 +128,18 @@ type InstallationSpec struct {
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
+	// KubeletVolumePluginPath optionally specifies enablement of Calico CSI plugin. If not specified,
+	// CSI will be enabled by default. If set to 'None', CSI will be disabled.
+	// Default: /var/lib/kubelet
+	// +optional
+	KubeletVolumePluginPath string `json:"kubeletVolumePluginPath,omitempty"`
+
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
 	// field.
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 
+	// Deprecated. Please use CalicoNodeDaemonSet, TyphaDeployment, and KubeControllersDeployment.
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// Node, Typha, and KubeControllers are supported for installations.
 	// +optional
@@ -145,8 +154,37 @@ type InstallationSpec struct {
 	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
 	// +optional
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
+
+	// CalicoNodeDaemonSet configures the calico-node DaemonSet. If used in
+	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
+
+	// CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
+	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`
+
+	// TyphaDeployment configures the typha Deployment. If used in conjunction with the deprecated
+	// ComponentResources or TyphaAffinity, then these overrides take precedence.
+	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
+
+	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
+	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
+
+	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
+	// Default: Disabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	// +optional
+	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
 }
 
+type FIPSMode string
+
+const (
+	FIPSModeEnabled  FIPSMode = "Enabled"
+	FIPSModeDisabled FIPSMode = "Disabled"
+)
+
+// Deprecated. Please use TyphaDeployment instead.
 // TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
@@ -189,11 +227,13 @@ const (
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
 )
 
+// Deprecated. Please use component resource config fields in Installation.Spec instead.
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type ComponentResource struct {
 	// ComponentName is an enum which identifies the component
 	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
 	ComponentName ComponentName `json:"componentName"`
+
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
@@ -489,6 +529,12 @@ type IPPool struct {
 	// Default: 26 (IPv4), 122 (IPv6)
 	// +optional
 	BlockSize *int32 `json:"blockSize,omitempty"`
+
+	// DisableBGPExport specifies whether routes from this IP pool's CIDR are exported over BGP.
+	// Default: false
+	// +optional
+	// +kubebuilder:default:=false
+	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
 }
 
 // CNIPluginType describes the type of CNI plugin used.
@@ -605,6 +651,11 @@ type InstallationStatus struct {
 	// Computed is the final installation including overlaid resources.
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -660,4 +711,14 @@ type CertificateManagement struct {
 	// +kubebuilder:validation:Enum="";SHA256WithRSA;SHA384WithRSA;SHA512WithRSA;ECDSAWithSHA256;ECDSAWithSHA384;ECDSAWithSHA512;
 	// +optional
 	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
+}
+
+// IsFIPSModeEnabled is a convenience function for turning a FIPSMode reference into a bool.
+func IsFIPSModeEnabled(mode *FIPSMode) bool {
+	return mode != nil && *mode == FIPSModeEnabled
+}
+
+// IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
+func IsFIPSModeEnabledString(mode *FIPSMode) string {
+	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
 }

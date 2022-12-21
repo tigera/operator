@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -113,6 +114,9 @@ type NodeConfiguration struct {
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -134,30 +138,31 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
-	var err error
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is)
-	} else {
-		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is)
-	}
-	errMsgs := []string{}
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+	var errMsgs []string
+	appendIfErr := func(imageName string, err error) string {
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+		return imageName
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is)
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIFIPS, reg, path, prefix, is))
+		} else {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
+		}
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 	} else {
-		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is)
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
+		} else {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
+		}
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
 	}
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
+
+	c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
@@ -208,7 +213,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
 		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
@@ -336,6 +341,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"patch"},
 			},
 			{
+				// Used for creating service account tokens to be used by the CNI plugin.
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"create"},
+			},
+			{
 				// Calico needs to query configmaps for pool auto-detection on kubeadm.
 				APIGroups: []string{""},
 				Resources: []string{"configmaps"},
@@ -406,6 +418,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"blockaffinities",
 					"ipamblocks",
 					"ipamhandles",
+					"ipamconfigs",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
@@ -751,12 +764,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": CalicoNodeObjectName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": CalicoNodeObjectName,
-					},
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -786,6 +795,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	setNodeCriticalPod(&(ds.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
+	}
+
+	if overrides := c.cfg.Installation.CalicoNodeDaemonSet; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 	}
 	return &ds
 }
@@ -1095,8 +1108,8 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.NodeSecret.VolumeMount(),
+		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
 	}
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
@@ -1161,7 +1174,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			})
 	}
 	if c.cfg.PrometheusServerTLS != nil {
-		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount())
+		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount(c.SupportedOSType()))
 	}
 	return nodeVolumeMounts
 }
@@ -1186,6 +1199,10 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	if bgpEnabled(c.cfg.Installation) {
 		clusterType = clusterType + ",bgp"
+	}
+
+	if c.vppDataplaneEnabled() {
+		clusterType = clusterType + ",vpp"
 	}
 
 	nodeEnv := []corev1.EnvVar{
@@ -1213,6 +1230,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
+		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -1268,6 +1286,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			if v4pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
 			}
+			if v4pool.DisableBGPExport != nil {
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v4pool.DisableBGPExport)})
+			}
 		}
 
 		// Configure IPv6 pool.
@@ -1293,6 +1314,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			}
 			if v6pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
+			}
+			if v6pool.DisableBGPExport != nil {
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v6pool.DisableBGPExport)})
 			}
 		}
 	}
@@ -1402,6 +1426,14 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		if v4Method == "" && bgpEnabled(c.cfg.Installation) {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 		}
+
+		// Set IPv6 VXLAN and Wireguard MTU
+		if mtu != nil {
+			vxlanMtuV6 := strconv.Itoa(int(*mtu))
+			wireguardMtuV6 := strconv.Itoa(int(*mtu))
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTUV6", Value: vxlanMtuV6})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTUV6", Value: wireguardMtuV6})
+		}
 	} else {
 		// IPv6 Auto-detection is disabled.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})
@@ -1455,6 +1487,11 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
+		}
+	case operatorv1.ProviderRKE2:
+		// For RKE2, configure a non-default trusted DNS server, as the DNS service is not named "kube-dns".
+		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"})
 		}
 	// For AKS/AzureVNET and EKS/VPCCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
 	case operatorv1.ProviderAKS:
@@ -1513,7 +1550,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
 	lc := &corev1.Lifecycle{
-		PreStop: &corev1.Handler{Exec: &corev1.ExecAction{Command: preStopCmd}},
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: preStopCmd}},
 	}
 	return lc
 }
@@ -1535,7 +1572,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	}
 
 	lp := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
@@ -1545,7 +1582,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 		TimeoutSeconds: 10,
 	}
 	rp := &corev1.Probe{
-		Handler: corev1.Handler{Exec: &corev1.ExecAction{Command: readinessCmd}},
+		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
 		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
 		// This timeout should be less than the PeriodSeconds.
 		TimeoutSeconds: 5,
@@ -1568,7 +1605,11 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": CalicoNodeObjectName},
-			Type:     corev1.ServiceTypeClusterIP,
+			// Important: "None" tells Kubernetes that we want a headless service with
+			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
+			// a huge set of iptables rules for this service since there's an instance
+			// on every node.
+			ClusterIP: "None",
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "calico-metrics-port",

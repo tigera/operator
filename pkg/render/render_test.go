@@ -89,6 +89,7 @@ func allCalicoComponents(
 		BirdTemplates:           bt,
 		MigrateNamespaces:       up,
 		FelixHealthPort:         9099,
+		UsePSP:                  true,
 	}
 	typhaCfg := &render.TyphaConfiguration{
 		K8sServiceEp:           k8sServiceEp,
@@ -98,6 +99,7 @@ func allCalicoComponents(
 		AmazonCloudIntegration: aci,
 		MigrateNamespaces:      up,
 		FelixHealthPort:        9099,
+		UsePSP:                 true,
 	}
 	kcCfg := &kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sServiceEp,
@@ -107,6 +109,7 @@ func allCalicoComponents(
 		ManagerInternalSecret:       managerInternalTLSSecret,
 		ClusterDomain:               clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
+		UsePSP:                      true,
 	}
 	winCfg := &render.WindowsConfig{
 		Installation: cr,
@@ -251,7 +254,6 @@ var _ = Describe("Rendering tests", func() {
 			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{common.KubeControllersDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},
-			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
 
@@ -267,7 +269,7 @@ var _ = Describe("Rendering tests", func() {
 
 		var resources []client.Object
 		for _, component := range c {
-			var toCreate, _ = component.Objects()
+			toCreate, _ := component.Objects()
 			resources = append(resources, toCreate...)
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -448,7 +450,7 @@ func componentCount(components []render.Component) int {
 func getAKSWindowsUpgraderComponentCount(components []render.Component) int {
 	var resources []client.Object
 	for _, component := range components {
-		var toCreate, _ = component.Objects()
+		toCreate, _ := component.Objects()
 		resources = append(resources, toCreate...)
 	}
 	count := 0

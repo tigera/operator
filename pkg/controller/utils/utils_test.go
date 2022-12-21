@@ -33,7 +33,6 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +60,6 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -141,7 +139,6 @@ var _ = Describe("Utils APIServer type tests", func() {
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -176,6 +173,25 @@ var _ = Describe("Utils APIServer type tests", func() {
 		Entry("with tigera-secure name", "tigera-secure"),
 		Entry("wth default name", "default"),
 	)
+})
+
+var _ = Describe("ValidateResourceNameIsQualified", func() {
+
+	It("returns nil for a compliant kubernetes name.", func() {
+		qualifiedName := "proper-resource-name"
+
+		err := ValidateResourceNameIsQualified(qualifiedName)
+
+		Expect(err).To(BeNil())
+	})
+
+	It("returns nil for an invalid resource name", func() {
+		invalidName := "improper_resource_name"
+
+		err := ValidateResourceNameIsQualified(invalidName)
+
+		Expect(err).ToNot(BeNil())
+	})
 })
 
 type fakeClient struct {

@@ -36,6 +36,9 @@ var _ = Describe("Convert network tests", func() {
 	var ctx = context.Background()
 	var pool *crdv1.IPPool
 	var scheme *runtime.Scheme
+	var trueValue bool
+	var falseValue bool
+
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
 		err := apis.AddToScheme(scheme)
@@ -46,6 +49,8 @@ var _ = Describe("Convert network tests", func() {
 			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
+		trueValue = true
+		falseValue = false
 	})
 	Describe("handle IPPool migration", func() {
 		var v4pool1 *crdv1.IPPool
@@ -108,9 +113,10 @@ var _ = Describe("Convert network tests", func() {
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(Equal([]operatorv1.IPPool{{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationIPIP,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationIPIP,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				DisableBGPExport: &falseValue,
 			}}))
 		})
 		It("should handle no pools", func() {
@@ -208,13 +214,15 @@ var _ = Describe("Convert network tests", func() {
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ConsistOf([]operatorv1.IPPool{{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationIPIP,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationIPIP,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				DisableBGPExport: &falseValue,
 			}, {
-				CIDR:          "ff00:0001::/24",
-				Encapsulation: operatorv1.EncapsulationNone,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				CIDR:             "ff00:0001::/24",
+				Encapsulation:    operatorv1.EncapsulationNone,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				DisableBGPExport: &falseValue,
 			}}))
 		})
 		DescribeTable("should block mismatch of pools and assign_ip*", func(assigns string, cidrs ...string) {
@@ -246,6 +254,7 @@ var _ = Describe("Convert network tests", func() {
 			Entry("v4 and v6 pool but no assigning v4", `"assign_ipv4": "false", "assign_ipv6": "true"`, "1.168.4.0/24", "ff00:0001::/24"),
 			Entry("v4 and v6 pool but no assigning v6", `"assign_ipv4": "true", "assign_ipv6": "false"`, "1.168.4.0/24", "ff00:0001::/24"),
 		)
+
 		DescribeTable("test convert pool flags", func(success bool, crdPool crdv1.IPPool, opPool operatorv1.IPPool) {
 			p, err := convertPool(crdPool)
 			if success {
@@ -264,11 +273,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationNone,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
-				BlockSize:     int32Ptr(27),
-				NodeSelector:  "nodeselectorstring",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationNone,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				BlockSize:        int32Ptr(27),
+				NodeSelector:     "nodeselectorstring",
+				DisableBGPExport: &falseValue,
 			}),
 			Entry("ipv4, vxlan encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
@@ -279,11 +289,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationVXLAN,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
-				BlockSize:     int32Ptr(27),
-				NodeSelector:  "nodeselectorstring",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationVXLAN,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				BlockSize:        int32Ptr(27),
+				NodeSelector:     "nodeselectorstring",
+				DisableBGPExport: &falseValue,
 			}),
 			Entry("ipv4, ipip encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
@@ -294,11 +305,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationIPIP,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
-				BlockSize:     int32Ptr(27),
-				NodeSelector:  "nodeselectorstring",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationIPIP,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				BlockSize:        int32Ptr(27),
+				NodeSelector:     "nodeselectorstring",
+				DisableBGPExport: &falseValue,
 			}),
 			Entry("ipv4, vxlancross encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
@@ -309,11 +321,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationVXLANCrossSubnet,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
-				BlockSize:     int32Ptr(27),
-				NodeSelector:  "nodeselectorstring",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationVXLANCrossSubnet,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				BlockSize:        int32Ptr(27),
+				NodeSelector:     "nodeselectorstring",
+				DisableBGPExport: &falseValue,
 			}),
 			Entry("ipv4, ipipcross encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
@@ -324,11 +337,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationIPIPCrossSubnet,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
-				BlockSize:     int32Ptr(27),
-				NodeSelector:  "nodeselectorstring",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationIPIPCrossSubnet,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				BlockSize:        int32Ptr(27),
+				NodeSelector:     "nodeselectorstring",
+				DisableBGPExport: &falseValue,
 			}),
 			Entry("ipv4, no encap, no nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
@@ -339,11 +353,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationNone,
-				NATOutgoing:   operatorv1.NATOutgoingDisabled,
-				BlockSize:     int32Ptr(27),
-				NodeSelector:  "nodeselectorstring",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationNone,
+				NATOutgoing:      operatorv1.NATOutgoingDisabled,
+				BlockSize:        int32Ptr(27),
+				NodeSelector:     "nodeselectorstring",
+				DisableBGPExport: &falseValue,
 			}),
 			Entry("ipv4, no encap, nat, block 24", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
@@ -354,11 +369,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    24,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationNone,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
-				BlockSize:     int32Ptr(24),
-				NodeSelector:  "nodeselectorstring",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationNone,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				BlockSize:        int32Ptr(24),
+				NodeSelector:     "nodeselectorstring",
+				DisableBGPExport: &falseValue,
 			}),
 			Entry("ipv4, no encap, nat, block 27, different nodeselector", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
@@ -369,11 +385,12 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "othernodeselector",
 			}}, operatorv1.IPPool{
-				CIDR:          "1.168.4.0/24",
-				Encapsulation: operatorv1.EncapsulationNone,
-				NATOutgoing:   operatorv1.NATOutgoingEnabled,
-				BlockSize:     int32Ptr(27),
-				NodeSelector:  "othernodeselector",
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationNone,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				BlockSize:        int32Ptr(27),
+				NodeSelector:     "othernodeselector",
+				DisableBGPExport: &falseValue,
 			}),
 
 			Entry("ipv4, invalid encap, nat, block 27", false, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
@@ -394,6 +411,34 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{}),
+			Entry("ipv4, vxlan encap, nat, disableBGPExport true", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+				CIDR:             "1.168.4.0/24",
+				VXLANMode:        crdv1.VXLANModeAlways,
+				IPIPMode:         crdv1.IPIPModeNever,
+				NATOutgoing:      true,
+				Disabled:         false,
+				DisableBGPExport: true,
+			}}, operatorv1.IPPool{
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationVXLAN,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				NodeSelector:     "",
+				DisableBGPExport: &trueValue,
+			}),
+			Entry("ipv4, vxlan encap, nat, disableBGPExport false", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+				CIDR:             "1.168.4.0/24",
+				VXLANMode:        crdv1.VXLANModeAlways,
+				IPIPMode:         crdv1.IPIPModeNever,
+				NATOutgoing:      true,
+				Disabled:         false,
+				DisableBGPExport: false,
+			}}, operatorv1.IPPool{
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationVXLAN,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				NodeSelector:     "",
+				DisableBGPExport: &falseValue,
+			}),
 		)
 	})
 

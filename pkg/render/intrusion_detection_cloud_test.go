@@ -33,7 +33,9 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		adAPIKeyPair, err := certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ADAPITLSSecretName, common.OperatorNamespace(), render.ADAPITLSSecretName), []string{""}, "")
+		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
+		Expect(err).NotTo(HaveOccurred())
+		adAPIKeyPair := certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		bundle := certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
@@ -88,7 +90,7 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(3))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
 			corev1.VolumeMount{
 				Name:      certificatemanagement.TrustedCertConfigMapName,
@@ -101,12 +103,6 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 				Name:      "tigera-image-assurance-api-cert",
 				MountPath: "/certs/bast",
 				ReadOnly:  true,
-			},
-		))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
-			corev1.VolumeMount{
-				Name:      "elastic-ca-cert-volume",
-				MountPath: "/etc/ssl/elastic/",
 			},
 		))
 
@@ -126,14 +122,12 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 
 		Expect(idc.Spec.Template.Spec.Volumes).To(ContainElement(
 			corev1.Volume{
-				Name: "elastic-ca-cert-volume",
+				Name: "tigera-ca-bundle",
 				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: "tigera-secure-es-gateway-http-certs-public",
-						Items: []corev1.KeyToPath{{
-							Key:  "tls.crt",
-							Path: "ca.pem",
-						}},
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ca-bundle",
+						},
 					},
 				},
 			},

@@ -20,6 +20,7 @@ pkg/render/manager_cloud.go
 pkg/render/kubecontrollers/kube-controllers-cloud.go
 pkg/controller/utils/utils_cloud.go
 pkg/controller/utils/auth_cloud.go
+pkg/controller/utils/certs_cloud.go
 pkg/render/common/imageassurance/resource.go
 pkg/render/common/clusterrole/clusterroles.go
 pkg/render/common/authentication/tigera/key_validator_config/key_validator_cloud.go
@@ -31,3 +32,6 @@ pkg/controller/runtimesecurity/runtimesecurity_controller_test.go
 pkg/render/runtimesecurity/runtimesecurity_suite_test.go
 pkg/render/runtimesecurity/runtimesecurity_test.go
 pkg/render/runtimesecurity/old.go
+pkg/render/intrusion_detection_cloud_test.go
+pkg/render/logstorage/esgateway/cloud.go
+pkg/render/logstorage/externalelasticsearch/externalelasticsearch.go

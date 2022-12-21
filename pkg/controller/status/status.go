@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +27,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batch "k8s.io/api/batch/v1beta1"
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -76,7 +76,22 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
+	SetMetaData(meta *metav1.ObjectMeta)
 }
+
+// This regex matches any characters that are not allowed in a Status Reason.
+var reasonInvalidCharacters = regexp.MustCompile(`[^A-Za-z0-9_,:]`)
+
+// This regex matches any characters not allowed at the start of a Status Reason.
+// We use this to trim all invalid characters at the start of the Status Reason which is
+// why we use * in the regex.
+var reasonInvalidStartCharacters = regexp.MustCompile(`^[^A-Za-z]*`)
+
+// This regex matches any characters not allowed at the end of a Status Reason.
+// Also disallow _ since it doesn't add anything to the reason for us.
+// We use this to trim all invalid characters at the end of the Status Reason which is
+// why we use * in the regex.
+var reasonInvalidEndCharacters = regexp.MustCompile(`[^A-Za-z0-9]*$`)
 
 type statusManager struct {
 	client                    client.Client
@@ -111,6 +126,8 @@ type statusManager struct {
 	// to determine whether we need to call Delete() on the object, without sending unnecessary
 	// get/delete calls to the API server.
 	crExists bool
+
+	observedGeneration int64
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
@@ -161,22 +178,31 @@ func (m *statusManager) updateStatus() {
 
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
+		available := m.IsAvailable()
 		if m.IsAvailable() {
-			m.setAvailable("All objects available", "")
+			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
 		} else {
 			m.clearAvailable()
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing("Not all resources are ready", m.progressingMessage())
+			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
 		} else {
-			m.clearProgressing()
+			if available {
+				m.clearProgressingWithReason(operator.AllObjectsAvailable, "All Objects Available")
+			} else {
+				m.clearProgressing()
+			}
 		}
 
 		if m.IsDegraded() {
 			m.setDegraded(m.degradedReason(), m.degradedMessage())
 		} else {
-			m.clearDegraded()
+			if available {
+				m.clearDegradedWithReason(operator.AllObjectsAvailable, "All Objects Available")
+			} else {
+				m.clearDegraded()
+			}
 		}
 	} else {
 		log.V(2).WithName(m.component).Info("Status manager is not ready to report component statuses.")
@@ -195,7 +221,7 @@ func (m *statusManager) updateStatus() {
 func (m *statusManager) isExplicitlyDegraded() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	return m.explicitDegradedReason != ""
+	return m.degraded
 }
 
 // Run starts the status manager state monitoring routine.
@@ -335,7 +361,7 @@ func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed [
 	defer m.lock.Unlock()
 
 	if err != nil {
-		m.windowsUpgradeDegradedMsg = err.Error()
+		m.windowsUpgradeDegradedMsg = fmt.Sprintf("Windows upgrade error: %s", err.Error())
 		return
 	}
 
@@ -489,6 +515,16 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
 		}
 
+		// If all these are true then all expected pods are present and healthy
+		// so we don't need to worry about any failed pods so continue.
+		if ds.Generation == ds.Status.ObservedGeneration &&
+			ds.Status.NumberMisscheduled == 0 &&
+			ds.Status.NumberUnavailable == 0 &&
+			ds.Status.DesiredNumberScheduled == ds.Status.NumberAvailable &&
+			ds.Status.DesiredNumberScheduled == ds.Status.NumberReady {
+			continue
+		}
+
 		// Check if any pods within the daemonset are failing.
 		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
 			if f != "" {
@@ -515,6 +551,20 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("Deployment %q update is being processed (generation %d, observed generation %d)", depnn.String(), dep.Generation, dep.Status.ObservedGeneration))
 		}
 
+		replicas := int32(1)
+		if dep.Spec.Replicas != nil {
+			replicas = *dep.Spec.Replicas
+		}
+		// There could be old pods in the Errored, Terminated, or Completed state
+		// but if the following are true then we don't need to worry about those
+		// failed pods so continue.
+		if dep.Status.ObservedGeneration == dep.Generation &&
+			dep.Status.UnavailableReplicas == 0 &&
+			replicas == dep.Status.AvailableReplicas &&
+			replicas == dep.Status.ReadyReplicas {
+			continue
+		}
+
 		// Check if any pods within the deployment are failing.
 		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
 			if f != "" {
@@ -539,6 +589,20 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration))
 		}
 
+		replicas := int32(1)
+		if ss.Spec.Replicas != nil {
+			replicas = *ss.Spec.Replicas
+		}
+		// There could be old pods in the Errored, Terminated, or Completed state
+		// but if the following are true then we don't need to worry about those
+		// failed pods so continue.
+		if ss.Status.ObservedGeneration == ss.Generation &&
+			replicas == ss.Status.CurrentReplicas &&
+			replicas == ss.Status.ReadyReplicas &&
+			replicas == ss.Status.UpdatedReplicas {
+			continue
+		}
+
 		// Check if any pods within the deployment are failing.
 		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err == nil {
 			if f != "" {
@@ -551,7 +615,7 @@ func (m *statusManager) syncState() {
 	}
 
 	for _, depnn := range m.cronjobs {
-		cj := &batch.CronJob{}
+		cj := &batchv1.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
 			log.WithValues("reason", err).Info("Failed to query cronjobs")
 			continue
@@ -693,6 +757,11 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	// update it. Otherwise add a new one.
 	for _, condition := range conditions {
 		found := false
+
+		//set the CR's observedGeneration for tigerastatus condition
+		if m.observedGeneration != 0 {
+			condition.ObservedGeneration = m.observedGeneration
+		}
 		for i, c := range ts.Status.Conditions {
 			if c.Type == condition.Type {
 				// If the status has changed, update the transition time.
@@ -734,7 +803,16 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	m.crExists = true
 }
 
+func sanitizeReason(r string) string {
+	// First replace all invalid middle characters with '_', then strip all
+	// invalid beginning characters, and then strip all invalid ending characters
+	return reasonInvalidEndCharacters.ReplaceAllString(
+		reasonInvalidStartCharacters.ReplaceAllString(
+			reasonInvalidCharacters.ReplaceAllString(r, "_"), ""), "")
+}
+
 func (m *statusManager) setAvailable(reason, msg string) {
+	reason = sanitizeReason(reason)
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -745,6 +823,7 @@ func (m *statusManager) setAvailable(reason, msg string) {
 }
 
 func (m *statusManager) setDegraded(reason, msg string) {
+	reason = sanitizeReason(reason)
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -755,6 +834,7 @@ func (m *statusManager) setDegraded(reason, msg string) {
 }
 
 func (m *statusManager) setProgressing(reason, msg string) {
+	reason = sanitizeReason(reason)
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -769,7 +849,7 @@ func (m *statusManager) clearDegraded() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(operator.Unknown), Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -779,7 +859,7 @@ func (m *statusManager) clearProgressing() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse},
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: string(operator.Unknown), Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -789,7 +869,7 @@ func (m *statusManager) clearAvailable() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: string(operator.Unknown), Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -814,21 +894,53 @@ func (m *statusManager) degradedMessage() string {
 	return strings.Join(msgs, "\n")
 }
 
+// This function should only be called if we are in a degraded state.
+// Every path should return a non-empty string that can be used in
+// the Condition Reason.
 func (m *statusManager) degradedReason() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	reasons := []string{}
-	if m.explicitDegradedReason != "" {
-		reasons = append(reasons, m.explicitDegradedReason)
+	if m.degraded {
+		// Ensure we always have a reason that is non-empty
+		if m.explicitDegradedReason == "" {
+			return string(operator.Unknown)
+		}
+		return m.explicitDegradedReason
 	}
 	// Add a reason if we have a windows upgrade degraded msg.
 	if m.windowsUpgradeDegradedMsg != "" {
-		reasons = append(reasons, common.CalicoWindowsNodeUpgradeStatusErrorReason)
+		return string(operator.UpgradeError)
 	}
 	if len(m.failing) != 0 {
-		reasons = append(reasons, "Some pods are failing")
+		return string(operator.PodFailure)
 	}
-	return strings.Join(reasons, "; ")
+	return string(operator.Unknown)
+}
+
+func (m *statusManager) clearDegradedWithReason(reason operator.TigeraStatusReason, msg string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	conditions := []operator.TigeraStatusCondition{
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(reason), Message: msg},
+	}
+	m.set(true, conditions...)
+}
+
+func (m *statusManager) clearProgressingWithReason(reason operator.TigeraStatusReason, msg string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	conditions := []operator.TigeraStatusCondition{
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: string(reason), Message: msg},
+	}
+	m.set(true, conditions...)
+}
+
+func (m *statusManager) SetMetaData(meta *metav1.ObjectMeta) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.observedGeneration = meta.Generation
 }
 
 func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {
@@ -896,4 +1008,57 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 		}
 	}
 	return false, nil
+}
+
+// UpdateStatusCondition updates CR's status conditions from tigerastatus conditions.
+func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition) []metav1.Condition {
+	if statuscondition == nil {
+		statuscondition = []metav1.Condition{}
+	}
+
+	for _, condition := range conditions {
+		found := false
+
+		ctype := string(condition.Type)
+		if condition.Type == operator.ComponentAvailable {
+			ctype = string(operator.ComponentReady)
+		}
+
+		status := metav1.ConditionUnknown
+		if condition.Status == operator.ConditionTrue {
+			status = metav1.ConditionTrue
+		} else if condition.Status == operator.ConditionFalse {
+			status = metav1.ConditionFalse
+		}
+		ic := metav1.Condition{
+			Type:               ctype,
+			Status:             status,
+			LastTransitionTime: condition.LastTransitionTime,
+			ObservedGeneration: condition.ObservedGeneration,
+			Message:            condition.Message,
+		}
+
+		if len(condition.Reason) > 0 {
+			ic.Reason = condition.Reason
+		} else {
+			ic.Reason = string(operator.Unknown)
+		}
+
+		for i, c := range statuscondition {
+			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ComponentReady) ||
+				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ComponentDegraded) ||
+				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ComponentProgressing) {
+				if !reflect.DeepEqual(c.Status, condition.Status) {
+					ic.LastTransitionTime = metav1.NewTime(time.Now())
+				}
+				statuscondition[i] = ic
+				found = true
+			}
+		}
+		if !found {
+			ic.LastTransitionTime = metav1.NewTime(time.Now())
+			statuscondition = append(statuscondition, ic)
+		}
+	}
+	return statuscondition
 }

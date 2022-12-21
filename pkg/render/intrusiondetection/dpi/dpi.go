@@ -15,6 +15,7 @@
 package dpi
 
 import (
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -22,6 +23,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,13 +35,16 @@ import (
 )
 
 const (
-	DeepPacketInspectionNamespace = "tigera-dpi"
-	DeepPacketInspectionName      = "tigera-dpi"
-	DefaultMemoryLimit            = "1Gi"
-	DefaultMemoryRequest          = "100Mi"
-	DefaultCPULimit               = "1"
-	DefaultCPURequest             = "100m"
+	DeepPacketInspectionNamespace  = "tigera-dpi"
+	DeepPacketInspectionName       = "tigera-dpi"
+	DeepPacketInspectionPolicyName = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DefaultMemoryLimit             = "1Gi"
+	DefaultMemoryRequest           = "100Mi"
+	DefaultCPULimit                = "1"
+	DefaultCPURequest              = "100m"
 )
+
+var DPISourceEntityRule = networkpolicy.CreateSourceEntityRule(DeepPacketInspectionNamespace, DeepPacketInspectionName)
 
 type DPIConfig struct {
 	IntrusionDetection *operatorv1.IntrusionDetection
@@ -47,6 +52,7 @@ type DPIConfig struct {
 	TyphaNodeTLS       *render.TyphaNodeTLS
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
+	ManagedCluster     bool
 	HasNoLicense       bool
 	HasNoDPIResource   bool
 	ESSecrets          []*corev1.Secret
@@ -80,14 +86,16 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var toCreate, toDelete []client.Object
 	if d.cfg.HasNoLicense {
-		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
+		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	} else {
-		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
+		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	}
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
+		toDelete = append(toDelete, d.dpiAllowTigeraPolicy())
 		toDelete = append(toDelete, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
+			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
+		})
 		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toDelete = append(toDelete,
 			d.dpiServiceAccount(),
@@ -96,6 +104,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiDaemonset(),
 		)
 	} else {
+		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toCreate = append(toCreate,
@@ -125,12 +134,9 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"k8s-app": DeepPacketInspectionName,
-			},
 			Annotations: d.dpiAnnotations(),
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			Tolerations:                   rmeta.TolerateAll,
 			ImagePullSecrets:              secret.GetReferenceList(d.cfg.PullSecrets),
 			ServiceAccountName:            DeepPacketInspectionName,
@@ -141,7 +147,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			InitContainers: initContainers,
 			Containers:     []corev1.Container{d.dpiContainer()},
 			Volumes:        d.dpiVolumes(),
-		}),
+		},
 	}, d.cfg.ESClusterConfig, d.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -150,7 +156,6 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			Namespace: DeepPacketInspectionNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeepPacketInspectionName}},
 			Template: *podTemplate,
 		},
 	}
@@ -212,6 +217,7 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
 		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
+		{Name: "DPI_FIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode)},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -226,15 +232,15 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(),
-		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(),
+		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(d.SupportedOSType()),
+		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(d.SupportedOSType()),
 		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
 	}
 }
 
 func (d *dpiComponent) dpiReadinessProbes() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host:   "localhost",
 				Path:   "/readiness",
@@ -330,4 +336,46 @@ func (d *dpiComponent) dpiAnnotations() map[string]string {
 	annotations := d.cfg.TyphaNodeTLS.TrustedBundle.HashAnnotations()
 	annotations[d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
 	return annotations
+}
+
+// This policy uses service selectors.
+func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendServiceSelectorDNSEgressRules(egressRules, d.cfg.Openshift)
+
+	if d.cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianServiceSelectorEntityRule,
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.ESGatewayServiceSelectorEntityRule,
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeepPacketInspectionPolicyName,
+			Namespace: DeepPacketInspectionNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(DeepPacketInspectionName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -46,6 +50,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -59,10 +64,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
 	controller, err := controller.New("logcollector-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -78,11 +84,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+	})
+
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -90,6 +101,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		tierWatchReady:  tierWatchReady,
+		usePSP:          opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -123,7 +136,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName} {
+		render.FluentdPrometheusTLSSecretName,
+	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
@@ -156,6 +170,8 @@ type ReconcileLogCollector struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	tierWatchReady  *utils.ReadyFlag
+	usePSP          bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -206,9 +222,13 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}
-
 				// Include the field that was modified (in case we need to display error messages)
 				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
+			}
+			if len(syslog.Encryption) == 0 {
+				instance.Spec.AdditionalStores.Syslog.Encryption = v1.EncryptionNone
+				// Include the field that was modified (in case we need to display error messages)
+				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.Encryption")
 			}
 		}
 	}
@@ -237,11 +257,44 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
+
+	// Default fields on the LogCollector instance if needed.
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+	modifiedFields := fillDefaults(instance)
+	if len(modifiedFields) > 0 {
+		if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+			r.status.SetDegraded(
+				fmt.Sprintf(
+					"Failed to set defaults for LogCollector fields: [%s]",
+					strings.Join(modifiedFields, ", "),
+				),
+				err.Error(),
+			)
+			return reconcile.Result{}, err
+		}
+	}
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, nil
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for allow-tigera tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {
@@ -257,18 +310,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-	modifiedFields := fillDefaults(instance)
-	// Update the LogCollector instance with any changes that have occurred.
-	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(
-			fmt.Sprintf(
-				"Failed to set defaults for LogCollector fields: [%s]",
-				strings.Join(modifiedFields, ", "),
-			),
-			err.Error(),
-		)
-		return reconcile.Result{}, err
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -327,21 +368,38 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	certificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, "Failed to get certificate")
 		r.status.SetDegraded("Failed to get certificate", err.Error())
 		return reconcile.Result{}, err
-	} else if certificate == nil {
+	} else if prometheusCertificate == nil {
 		log.Info("Prometheus secrets are not available yet, waiting until they become available")
 		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(certificate)
+
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, nil
+	}
+
+	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate)
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
-	var exportLogs = utils.IsFeatureActive(license, common.ExportLogsFeature)
+	exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
 	if !exportLogs && instance.Spec.AdditionalStores != nil {
 		r.status.SetDegraded("Feature is not active", "License does not support feature: export-logs")
 		return reconcile.Result{}, err
@@ -381,31 +439,48 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	var useSyslogCertificate bool
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil && instance.Spec.AdditionalStores.Syslog.Encryption == v1.EncryptionTLS {
+			syslogCert, err := getSysLogCertificate(r.client)
+			if err != nil {
+				log.Error(err, "Error loading Syslog certificate")
+				r.status.SetDegraded("Error loading Syslog certificate", err.Error())
+				return reconcile.Result{}, err
+			}
+			if syslogCert != nil {
+				useSyslogCertificate = true
+				trustedBundle.AddCertificates(syslogCert)
+			}
+		}
+	}
+
+	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
+	// as well as validation with respect to Syslog.logTypes.
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
+		// have this CR available, but we should communicate any other kind of error that we encounter.
+		if !errors.IsNotFound(err) {
+			r.status.SetDegraded(
+				"An error occurred while looking for a ManagementClusterConnection",
+				err.Error(),
+			)
+			return reconcile.Result{}, err
+		}
+	}
+	managedCluster := managementClusterConnection != nil
+
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
-
-			// Try to grab the ManagementClusterConnection CR because we need it for some
-			// validation with respect to Syslog.logTypes.
-			managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-			if err != nil {
-				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
-				// have this CR available, but we should communicate any other kind of error that we encounter.
-				if !errors.IsNotFound(err) {
-					r.status.SetDegraded(
-						"An error occurred while looking for a ManagementClusterConnection",
-						err.Error(),
-					)
-					return reconcile.Result{}, err
-				}
-			}
 
 			// If the user set Syslog.logTypes, we need to ensure that they did not include
 			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
 			// ManagementClusterConnection CR is present). This is because IDS events
 			// are only forwarded within a non-managed cluster (where LogStorage is present).
 			if syslog.LogTypes != nil {
-				if err == nil && managementClusterConnection != nil {
+				if err == nil && managedCluster {
 					for _, l := range syslog.LogTypes {
 						// Set status to degraded to warn user and let them fix the issue themselves.
 						if l == v1.SyslogLogIDSEvents {
@@ -451,19 +526,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LogCollector:     instance,
-		ESSecrets:        esSecrets,
-		ESClusterConfig:  esClusterConfig,
-		S3Credential:     s3Credential,
-		SplkCredential:   splunkCredential,
-		Filters:          filters,
-		EKSConfig:        eksConfig,
-		PullSecrets:      pullSecrets,
-		Installation:     installation,
-		ClusterDomain:    r.clusterDomain,
-		OSType:           rmeta.OSTypeLinux,
-		MetricsServerTLS: fluentdPrometheusTLS,
-		TrustedBundle:    trustedBundle,
+		LogCollector:         instance,
+		ESSecrets:            esSecrets,
+		ESClusterConfig:      esClusterConfig,
+		S3Credential:         s3Credential,
+		SplkCredential:       splunkCredential,
+		Filters:              filters,
+		EKSConfig:            eksConfig,
+		PullSecrets:          pullSecrets,
+		Installation:         installation,
+		ClusterDomain:        r.clusterDomain,
+		OSType:               rmeta.OSTypeLinux,
+		MetricsServerTLS:     fluentdPrometheusTLS,
+		TrustedBundle:        trustedBundle,
+		ManagedCluster:       managedCluster,
+		UsePSP:               r.usePSP,
+		UseSyslogCertificate: useSyslogCertificate,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -500,17 +578,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:    instance,
-			ESSecrets:       esSecrets,
-			ESClusterConfig: esClusterConfig,
-			S3Credential:    s3Credential,
-			SplkCredential:  splunkCredential,
-			Filters:         filters,
-			EKSConfig:       eksConfig,
-			PullSecrets:     pullSecrets,
-			Installation:    installation,
-			ClusterDomain:   r.clusterDomain,
-			OSType:          rmeta.OSTypeWindows,
+			LogCollector:         instance,
+			ESSecrets:            esSecrets,
+			ESClusterConfig:      esClusterConfig,
+			S3Credential:         s3Credential,
+			SplkCredential:       splunkCredential,
+			Filters:              filters,
+			EKSConfig:            eksConfig,
+			PullSecrets:          pullSecrets,
+			Installation:         installation,
+			ClusterDomain:        r.clusterDomain,
+			OSType:               rmeta.OSTypeWindows,
+			TrustedBundle:        trustedBundle,
+			ManagedCluster:       managedCluster,
+			UsePSP:               r.usePSP,
+			UseSyslogCertificate: useSyslogCertificate,
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -698,4 +780,25 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 		StreamPrefix:  prefix,
 		FetchInterval: interval,
 	}, nil
+}
+func getSysLogCertificate(client client.Client) (certificatemanagement.CertificateInterface, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      render.SyslogCAConfigMapName,
+		Namespace: common.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info(fmt.Sprintf("ConfigMap %q is not found, assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName))
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", render.SyslogCAConfigMapName, err)
+	}
+	if len(cm.Data[corev1.TLSCertKey]) == 0 {
+		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName, corev1.TLSCertKey))
+		return nil, nil
+	}
+	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, []byte(cm.Data[corev1.TLSCertKey]), nil)
+
+	return syslogCert, nil
 }

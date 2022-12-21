@@ -22,15 +22,13 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,8 +38,10 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
+
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
@@ -67,6 +67,136 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
+func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+	om, ok := obj.(metav1.ObjectMetaAccessor)
+	if !ok {
+		return fmt.Errorf("Object is not ObjectMetaAccessor")
+	}
+
+	// Add owner ref for controller owned resources,
+	switch obj.(type) {
+	case *v3.UISettings:
+		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
+	default:
+		if c.cr != nil {
+			if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
+				return err
+			}
+		}
+	}
+
+	logCtx := ContextLoggerForResource(c.log, obj)
+	key := client.ObjectKeyFromObject(obj)
+
+	// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
+	// system as specified by the osType.
+	ensureOSSchedulingRestrictions(obj, osType)
+
+	// Make sure any objects with images also have an image pull policy.
+	modifyPodSpec(obj, setImagePullPolicy)
+
+	// Make sure we have our standard selector and pod labels
+	setStandardSelectorAndLabels(obj)
+
+	cur, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		logCtx.V(2).Info("Failed converting object", "obj", obj)
+		return fmt.Errorf("Failed converting object %+v", obj)
+	}
+	// Check to see if the object exists or not.
+	err := c.client.Get(ctx, key, cur)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			// Anything other than "Not found" we should retry.
+			return err
+		}
+
+		// Otherwise, if it was not found, we should create it and move on.
+		logCtx.V(2).Info("Object does not exist, creating it", "error", err)
+		err = c.client.Create(ctx, obj)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// The object exists. Update it, unless the user has marked it as "ignored".
+	if IgnoreObject(cur) {
+		logCtx.Info("Ignoring annotated object")
+		return nil
+	}
+	logCtx.V(1).Info("Resource already exists, update it")
+
+	// if mergeState returns nil we don't want to update the object
+	if mobj := mergeState(obj, cur); mobj != nil {
+		switch obj.(type) {
+		case *batchv1.Job:
+			// Jobs can't be updated, they can only be deleted then created
+			if err := c.client.Delete(ctx, obj); err != nil {
+				logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
+				return err
+			}
+
+			// Do the Create() with the merged object so that we preserve external labels/annotations.
+			resetMetadataForCreate(mobj)
+			if err := c.client.Create(ctx, mobj); err != nil {
+				return err
+			}
+			return nil
+		case *v1.Secret:
+			objSecret := obj.(*v1.Secret)
+			curSecret := cur.(*v1.Secret)
+			// Secret types are immutable, we need to delete the old version if the type has changed. If the
+			// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
+			if objSecret.Type != curSecret.Type &&
+				!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
+				if err := c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
+					return err
+				}
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err := c.client.Create(ctx, mobj); err != nil {
+					return err
+				}
+				return nil
+			}
+		case *v1.Service:
+			objService := obj.(*v1.Service)
+			curService := cur.(*v1.Service)
+			if objService.Spec.ClusterIP == "None" && curService.Spec.ClusterIP != "None" {
+				// We don't want this service to have a cluster IP, but it has got one already.  Need to recreate
+				// the service to remove it.
+				logCtx.WithValues("key", key).Info("Service already exists and has unwanted ClusterIP, recreating service.")
+				if err := c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to delete Service for recreation.")
+					return err
+				}
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err := c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to recreate service.", "obj", obj)
+					return err
+				}
+				return nil
+			}
+		}
+		if err := c.client.Update(ctx, mobj); err != nil {
+			logCtx.WithValues("key", key).Info("Failed to update object.")
+			return err
+		}
+	}
+	return nil
+}
+
+func resetMetadataForCreate(obj client.Object) {
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	obj.SetCreationTimestamp(metav1.Time{})
+}
+
 func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
@@ -89,32 +219,21 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	osType := component.SupportedOSType()
 
 	for _, obj := range objsToCreate {
-		om, ok := obj.(metav1.ObjectMetaAccessor)
-		if !ok {
-			return fmt.Errorf("Object is not ObjectMetaAccessor")
-		}
-
-		// Add owner ref for controller owned resources,
-		switch obj.(type) {
-		case *v3.UISettings:
-			// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
-		default:
-			if c.cr != nil {
-				if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
-					return err
-				}
-			}
-		}
-
-		logCtx := ContextLoggerForResource(c.log, obj)
 		key := client.ObjectKeyFromObject(obj)
 
-		// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
-		// system as specified by the osType.
-		ensureOSSchedulingRestrictions(obj, osType)
-
-		// Make sure any objects with images also have an image pull policy.
-		modifyPodSpec(obj, setImagePullPolicy)
+		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
+		// if we need to retry the function
+		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
+		// If the error is a resource Conflict, try the update again
+		if err != nil && errors.IsConflict(err) {
+			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
+			err = c.createOrUpdateObject(ctx, obj, osType)
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
 
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
@@ -124,79 +243,8 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 			daemonSets = append(daemonSets, key)
 		case *apps.StatefulSet:
 			statefulsets = append(statefulsets, key)
-		case *batchv1beta.CronJob:
+		case *batchv1.CronJob:
 			cronJobs = append(cronJobs, key)
-		}
-
-		cur, ok := obj.DeepCopyObject().(client.Object)
-		if !ok {
-			logCtx.V(2).Info("Failed converting object", "obj", obj)
-			return fmt.Errorf("Failed converting object %+v", obj)
-		}
-		// Check to see if the object exists or not.
-		err := c.client.Get(ctx, key, cur)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				// Anything other than "Not found" we should retry.
-				return err
-			}
-
-			// Otherwise, if it was not found, we should create it and move on.
-			logCtx.V(2).Info("Object does not exist, creating it", "error", err)
-			err = c.client.Create(ctx, obj)
-			if err != nil {
-				return err
-			}
-			continue
-		}
-
-		// The object exists. Update it, unless the user has marked it as "ignored".
-		if IgnoreObject(cur) {
-			logCtx.Info("Ignoring annotated object")
-			continue
-		}
-		logCtx.V(1).Info("Resource already exists, update it")
-
-		// if mergeState returns nil we don't want to update the object
-		if mobj := mergeState(obj, cur); mobj != nil {
-			switch obj.(type) {
-			case *batchv1.Job:
-				// Jobs can't be updated, they can't only be deleted then created
-				if err := c.client.Delete(ctx, obj); err != nil {
-					logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
-					return err
-				}
-
-				if err := c.client.Create(ctx, obj); err != nil {
-					return err
-				}
-			case *v1.Secret:
-				objSecret := obj.(*v1.Secret)
-				curSecret := cur.(*v1.Secret)
-				// Secret types are immutable, we need to delete the old version if the type has changed. If the
-				// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
-				if objSecret.Type != curSecret.Type &&
-					!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
-					if err := c.client.Delete(ctx, obj); err != nil {
-						logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
-						return err
-					}
-					obj.SetResourceVersion("")
-					if err := c.client.Create(ctx, obj); err != nil {
-						return err
-					}
-				} else {
-					if err := c.client.Update(ctx, mobj); err != nil {
-						logCtx.WithValues("key", key).Info("Failed to update object.")
-						return err
-					}
-				}
-			default:
-				if err := c.client.Update(ctx, mobj); err != nil {
-					logCtx.WithValues("key", key).Info("Failed to update object.")
-					return err
-				}
-			}
 		}
 
 		continue
@@ -225,7 +273,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 				status.RemoveDaemonsets(key)
 			case *apps.StatefulSet:
 				status.RemoveStatefulSets(key)
-			case *batchv1beta.CronJob:
+			case *batchv1.CronJob:
 				status.RemoveCronJobs(key)
 			}
 		}
@@ -241,6 +289,10 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 
 // mergeState returns the object to pass to Update given the current and desired object states.
 func mergeState(desired client.Object, current runtime.Object) client.Object {
+	// Take a copy of the desired object, so we can merge values into it without
+	// adjusting the caller's copy.
+	desired = desired.DeepCopyObject().(client.Object)
+
 	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
@@ -257,16 +309,16 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 
 	// Merge annotations by reconciling the ones that components expect, but leaving everything else
 	// as-is.
-	currentAnnotations := mapExistsOrInitialize(currentMeta.GetAnnotations())
-	desiredAnnotations := mapExistsOrInitialize(desiredMeta.GetAnnotations())
-	mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+	currentAnnotations := common.MapExistsOrInitialize(currentMeta.GetAnnotations())
+	desiredAnnotations := common.MapExistsOrInitialize(desiredMeta.GetAnnotations())
+	mergedAnnotations := common.MergeMaps(currentAnnotations, desiredAnnotations)
 	desiredMeta.SetAnnotations(mergedAnnotations)
 
 	// Merge labels by reconciling the ones that components expect, but leaving everything else
 	// as-is.
-	currentLabels := mapExistsOrInitialize(currentMeta.GetLabels())
-	desiredLabels := mapExistsOrInitialize(desiredMeta.GetLabels())
-	mergedLabels := mergeMaps(currentLabels, desiredLabels)
+	currentLabels := common.MapExistsOrInitialize(currentMeta.GetLabels())
+	desiredLabels := common.MapExistsOrInitialize(desiredMeta.GetLabels())
+	mergedLabels := common.MergeMaps(currentLabels, desiredLabels)
 	desiredMeta.SetLabels(mergedLabels)
 
 	switch desired.(type) {
@@ -275,7 +327,10 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		// and we need to maintain them on updates.
 		cs := current.(*v1.Service)
 		ds := desired.(*v1.Service)
-		ds.Spec.ClusterIP = cs.Spec.ClusterIP
+		if ds.Spec.ClusterIP != "None" {
+			// We want this service to keep its cluster IP.
+			ds.Spec.ClusterIP = cs.Spec.ClusterIP
+		}
 		return ds
 	case *batchv1.Job:
 		cj := current.(*batchv1.Job)
@@ -300,15 +355,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		}
 
 		// Merge the template's labels.
-		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
-		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
-		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		currentLabels := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := common.MergeMaps(currentLabels, desiredLabels)
 		dd.Spec.Template.SetLabels(mergedLabels)
 
 		// Merge the template's annotations.
-		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
-		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
-		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		currentAnnotations := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := common.MergeMaps(currentAnnotations, desiredAnnotations)
 		dd.Spec.Template.SetAnnotations(mergedAnnotations)
 
 		return dd
@@ -317,15 +372,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dd := desired.(*apps.DaemonSet)
 
 		// Merge the template's labels.
-		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
-		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
-		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		currentLabels := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := common.MergeMaps(currentLabels, desiredLabels)
 		dd.Spec.Template.SetLabels(mergedLabels)
 
 		// Merge the template's annotations.
-		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
-		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
-		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		currentAnnotations := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := common.MergeMaps(currentAnnotations, desiredAnnotations)
 		dd.Spec.Template.SetAnnotations(mergedAnnotations)
 
 		return dd
@@ -400,7 +455,7 @@ func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 		f(&x.Spec.Template.Spec)
 	case *apps.StatefulSet:
 		f(&x.Spec.Template.Spec)
-	case *batchv1beta.CronJob:
+	case *batchv1.CronJob:
 		f(&x.Spec.JobTemplate.Spec.Template.Spec)
 	case *batchv1.Job:
 		f(&x.Spec.Template.Spec)
@@ -438,13 +493,19 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
 		// We can't add it to the podSpecs list and assign osType in the for loop below.
 		podSpec := &x.Spec
-		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = make(map[string]string)
+		}
+		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 		return
 	case *monitoringv1.Prometheus:
 		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
 		// We can't add it to the podSpecs list and assign osType in the for loop below.
 		podSpec := &x.Spec
-		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = make(map[string]string)
+		}
+		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 		return
 	}
 
@@ -458,23 +519,49 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 	modifyPodSpec(obj, f)
 }
 
-// mergeMaps merges current and desired maps. If both current and desired maps contain the same key, the
-// desired map, i.e, the ones that the operators Components specify take preference.
-func mergeMaps(current, desired map[string]string) map[string]string {
-	for k, v := range current {
-		// Copy over annotations that should be copied.
-		if _, ok := desired[k]; !ok {
-			desired[k] = v
+// setStandardSelectorAndLabels will set the k8s-app and app.kubernetes.io/name Labels on the podTemplates
+// for Deployments and Daemonsets. If there is no Selector specified a selector will also be added
+// that selects the k8s-app label.
+func setStandardSelectorAndLabels(obj client.Object) {
+	var podTemplate *v1.PodTemplateSpec
+	var name string
+	switch obj := obj.(type) {
+	case *apps.Deployment:
+		d := obj
+		name = d.ObjectMeta.Name
+		if d.ObjectMeta.Labels == nil {
+			d.ObjectMeta.Labels = make(map[string]string)
 		}
+		d.ObjectMeta.Labels["k8s-app"] = name
+		d.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+		if d.Spec.Selector == nil {
+			d.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": name,
+				},
+			}
+		}
+		podTemplate = &d.Spec.Template
+	case *apps.DaemonSet:
+		d := obj
+		name = d.ObjectMeta.Name
+		if d.Spec.Selector == nil {
+			d.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": name,
+				},
+			}
+		}
+		podTemplate = &d.Spec.Template
+	default:
+		return
 	}
-	return desired
-}
 
-func mapExistsOrInitialize(m map[string]string) map[string]string {
-	if m != nil {
-		return m
+	if podTemplate.ObjectMeta.Labels == nil {
+		podTemplate.ObjectMeta.Labels = make(map[string]string)
 	}
-	return make(map[string]string)
+	podTemplate.ObjectMeta.Labels["k8s-app"] = name
+	podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
 }
 
 // ReadyFlag is used to synchronize access to a boolean flag

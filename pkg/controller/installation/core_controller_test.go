@@ -20,11 +20,18 @@ import (
 	"fmt"
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+
+	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/mock"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,13 +42,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/go-logr/logr"
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
-	"github.com/stretchr/testify/mock"
-
 	osconfigv1 "github.com/openshift/api/config/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -309,6 +311,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				HostPorts: &hpDisabled,
 			}),
 	)
+
+	notReady := &utils.ReadyFlag{}
+	ready := &utils.ReadyFlag{}
+	ready.MarkAsReady()
+
 	Context("image reconciliation tests", func() {
 		var c client.Client
 		var cs *kfake.Clientset
@@ -326,6 +333,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -362,6 +370,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
@@ -388,16 +397,18 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
 				ctx,
@@ -518,6 +529,8 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
+						{Image: "calico/csi", Digest: "sha256:calicocsihash"},
+						{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -628,7 +641,7 @@ var _ = Describe("Testing core-controller installation", func() {
 	})
 
 	table.DescribeTable("test Node Affinity defaults",
-		func(expected bool, provider operator.Provider, result []v1.NodeSelectorTerm) {
+		func(expected bool, provider operator.Provider, result []corev1.NodeSelectorTerm) {
 			installation := &operator.Installation{
 				Spec: operator.InstallationSpec{
 					KubernetesProvider: provider,
@@ -645,8 +658,8 @@ var _ = Describe("Testing core-controller installation", func() {
 		table.Entry("AKS provider sets default",
 			true,
 			operator.ProviderAKS,
-			[]v1.NodeSelectorTerm{{
-				MatchExpressions: []v1.NodeSelectorRequirement{
+			[]corev1.NodeSelectorTerm{{
+				MatchExpressions: []corev1.NodeSelectorRequirement{
 					{
 						Key:      "type",
 						Operator: corev1.NodeSelectorOpNotIn,
@@ -654,7 +667,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 					{
 						Key:      "kubernetes.azure.com/cluster",
-						Operator: v1.NodeSelectorOpExists,
+						Operator: corev1.NodeSelectorOpExists,
 					},
 				},
 			}},
@@ -662,7 +675,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		table.Entry("Expect no default value for DockerEE provider",
 			false,
 			operator.ProviderDockerEE,
-			[]v1.NodeSelectorTerm{},
+			[]corev1.NodeSelectorTerm{},
 		),
 	)
 
@@ -689,6 +702,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -728,6 +742,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
@@ -755,6 +770,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
+				tierWatchReady:        ready,
 			}
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
@@ -797,9 +813,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			certificateManager, err = certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -895,6 +912,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(typhaSecret.GetOwnerReferences()).To(HaveLen(0))
 		})
 	})
+
 	Context("Reconcile tests", func() {
 		var c client.Client
 		var cs *kfake.Clientset
@@ -914,6 +932,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -963,6 +982,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
@@ -990,6 +1010,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -1008,9 +1029,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -1274,6 +1296,256 @@ var _ = Describe("Testing core-controller installation", func() {
 					return test.AssertNodesHadUpgradeTriggered(cs, n1, n2)
 				}, 10*time.Second).Should(BeNil())
 			})
+		})
+		It("should reconcile with creating new installation status condition with one item", func() {
+			generation := int64(2)
+			ts := &operator.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
+				Spec:       operator.TigeraStatusSpec{},
+				Status: operator.TigeraStatusStatus{
+					Conditions: []operator.TigeraStatusCondition{
+						{
+							Type:               operator.ComponentAvailable,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "calico",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cr.Status.Conditions).To(HaveLen(1))
+
+			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
+			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
+			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+		})
+
+		It("should reconcile with Empty tigera status condition", func() {
+			ts := &operator.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
+				Spec:       operator.TigeraStatusSpec{},
+				Status:     operator.TigeraStatusStatus{},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "calico",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cr.Status.Conditions).To(HaveLen(0))
+		})
+		It("should reconcile with creating new installation status with multiple conditions as true", func() {
+			generation := int64(2)
+			ts := &operator.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
+				Spec:       operator.TigeraStatusSpec{},
+				Status: operator.TigeraStatusStatus{
+					Conditions: []operator.TigeraStatusCondition{
+						{
+							Type:               operator.ComponentAvailable,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operator.ComponentProgressing,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.ResourceNotReady),
+							Message:            "Progressing Installation.operator.tigera.io",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operator.ComponentDegraded,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.ResourceUpdateError),
+							Message:            "Error resolving ImageSet for components",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "calico",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cr.Status.Conditions).To(HaveLen(3))
+
+			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
+			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
+			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
+
+			Expect(cr.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(cr.Status.Conditions[1].Status)).To(Equal(string(operator.ConditionTrue)))
+			Expect(cr.Status.Conditions[1].Reason).To(Equal(string(operator.ResourceNotReady)))
+			Expect(cr.Status.Conditions[1].Message).To(Equal("Progressing Installation.operator.tigera.io"))
+			Expect(cr.Status.Conditions[1].ObservedGeneration).To(Equal(int64(2)))
+
+			Expect(cr.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(cr.Status.Conditions[2].Status)).To(Equal(string(operator.ConditionTrue)))
+			Expect(cr.Status.Conditions[2].Reason).To(Equal(string(operator.ResourceUpdateError)))
+			Expect(cr.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
+			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
+		})
+
+		It("should reconcile with Existing conditions and toggle Available to true & others to false", func() {
+			generation := int64(2)
+			ts := &operator.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
+				Spec:       operator.TigeraStatusSpec{},
+				Status: operator.TigeraStatusStatus{
+					Conditions: []operator.TigeraStatusCondition{
+						{
+							Type:               operator.ComponentAvailable,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operator.ComponentProgressing,
+							Status:             operator.ConditionFalse,
+							Reason:             string(operator.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operator.ComponentDegraded,
+							Status:             operator.ConditionFalse,
+							Reason:             string(operator.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+			cr.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Ready",
+					Status:             metav1.ConditionStatus(operator.ConditionFalse),
+					Reason:             string(operator.NotApplicable),
+					Message:            "Not Applicable",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				},
+				{
+					Type:               "Progressing",
+					Status:             metav1.ConditionStatus(operator.ConditionTrue),
+					LastTransitionTime: metav1.NewTime(time.Now()),
+					Reason:             string(operator.ResourceNotReady),
+					Message:            "All resources are not available",
+				},
+				{
+					Type:               "Degraded",
+					Status:             metav1.ConditionStatus(operator.ConditionFalse),
+					Reason:             string(operator.NotApplicable),
+					Message:            "Not Applicable",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				},
+			}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "calico",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cr.Status.Conditions).To(HaveLen(3))
+
+			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
+			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
+			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
+
+			Expect(cr.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(cr.Status.Conditions[1].Status)).To(Equal(string(operator.ConditionFalse)))
+			Expect(cr.Status.Conditions[1].Reason).To(Equal(string(operator.NotApplicable)))
+			Expect(cr.Status.Conditions[1].Message).To(Equal("Not Applicable"))
+			Expect(cr.Status.Conditions[1].ObservedGeneration).To(Equal(int64(2)))
+
+			Expect(cr.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(cr.Status.Conditions[2].Status)).To(Equal(string(operator.ConditionFalse)))
+			Expect(cr.Status.Conditions[2].Reason).To(Equal(string(operator.NotApplicable)))
+			Expect(cr.Status.Conditions[2].Message).To(Equal("Not Applicable"))
+			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
+		})
+
+		It("should render allow-tigera policy when tier and tier watch are ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(1))
+			Expect(policies.Items[0].Name).To(Equal("allow-tigera.kube-controller-access"))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			r.tierWatchReady = notReady
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit allow-tigera policy and not degrade when installation is calico", func() {
+			cr.Spec.Variant = operator.Calico
+			cr.Status.Variant = operator.Calico
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			r.enterpriseCRDsExist = false
+			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
 		})
 	})
 })

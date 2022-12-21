@@ -8,7 +8,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -48,10 +47,7 @@ var _ = Describe("Runtime Security rendering tests", func() {
 			OsType:          rmeta.OSTypeLinux,
 			SashaESSecrets:  []*corev1.Secret{sashaSecret},
 			ESClusterConfig: esConfig,
-			ESSecrets: []*corev1.Secret{
-				{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-			},
-			ClusterDomain: "nil",
+			ClusterDomain:   "nil",
 		})
 
 		expectedResources := []struct {
@@ -92,5 +88,5 @@ var _ = Describe("Runtime Security rendering tests", func() {
 })
 
 func checkThreatIdProbe(probe *corev1.Probe) {
-	Expect(probe.Handler.Exec.Command).To(ContainElement("bin/grpc_health_probe-linux-amd64"))
+	Expect(probe.Exec.Command).To(ContainElement("bin/grpc_health_probe-linux-amd64"))
 }

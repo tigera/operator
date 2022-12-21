@@ -31,33 +31,33 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 	reqLogger logr.Logger,
 	ctx context.Context,
 ) (reconcile.Result, bool, error) {
-	c.EsAdminUserSecret = esAdminUserSecret
-	c.ExternalElastic = true
+	c.Cloud.EsAdminUserSecret = esAdminUserSecret
+	c.Cloud.ExternalElastic = true
 
 	cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
 	if cloudConfig == nil || err != nil {
 		return reconcile.Result{}, false, err
 	}
 
-	c.ExternalESDomain = cloudConfig.ExternalESDomain()
-	c.ExternalKibanaDomain = cloudConfig.ExternalKibanaDomain()
+	c.Cloud.ExternalESDomain = cloudConfig.ExternalESDomain()
+	c.Cloud.ExternalKibanaDomain = cloudConfig.ExternalKibanaDomain()
 
 	if cloudConfig.EnableMTLS() {
-		c.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCertsSecret, common.OperatorNamespace())
+		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCertsSecret, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
 			return reconcile.Result{}, false, err
 		}
-		if c.ExternalCertsSecret == nil {
+		if c.Cloud.ExternalCertsSecret == nil {
 			r.status.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
 			return reconcile.Result{}, false, nil
 		}
-		c.EnableMTLS = cloudConfig.EnableMTLS()
+		c.Cloud.EnableMTLS = cloudConfig.EnableMTLS()
 	}
 
 	if cloudConfig.TenantId() != "" {
-		c.TenantId = cloudConfig.TenantId()
+		c.Cloud.TenantId = cloudConfig.TenantId()
 	}
 
 	return reconcile.Result{}, true, nil

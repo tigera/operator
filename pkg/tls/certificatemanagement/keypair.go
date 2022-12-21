@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This renderer is responsible for all resources related to a Guardian Deployment in a
-// multicluster setup.
-
 package certificatemanagement
 
 import (

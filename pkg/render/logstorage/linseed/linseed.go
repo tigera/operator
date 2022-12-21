@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 
@@ -171,7 +173,7 @@ func (e linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 
 func (e linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
-		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
+		{Name: "LINSEED_LOG_LEVEL", Value: "Info"},
 
 		// Configuration for linseed API.
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
@@ -218,7 +220,20 @@ func (e linseed) linseedDeployment() *appsv1.Deployment {
 					Image:        e.linseedImage,
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
+					// UID 1001 is used in the Dockerfile.
+					SecurityContext: securitycontext.NewBaseContext(1001, 0),
 					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/health",
+								Port:   intstr.FromInt(Port),
+								Scheme: corev1.URISchemeHTTPS,
+							},
+						},
+						InitialDelaySeconds: 10,
+						PeriodSeconds:       5,
+					},
+					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/health",

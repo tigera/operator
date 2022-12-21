@@ -18,7 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/ptr"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -40,12 +43,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 )
 
 type resourceTestObj struct {
@@ -63,6 +63,15 @@ var _ = Describe("Linseed rendering tests", func() {
 		clusterDomain := "cluster.local"
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp.json")
+
+		var expectedResources = []resourceTestObj{
+			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+			{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
+			{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+			{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
+		}
 
 		BeforeEach(func() {
 			installation = &operatorv1.InstallationSpec{
@@ -84,46 +93,21 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should render an Linseed deployment and all supporting resources", func() {
-			expectedResources := []resourceTestObj{
-				{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
-				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
-				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-			}
-
 			component := Linseed(cfg)
 
 			createResources, _ := component.Objects()
-			compareResources(createResources, expectedResources)
+			compareResources(createResources, expectedResources, false)
 		})
 
 		It("should render an Linseed deployment and all supporting resources when CertificateManagement is enabled", func() {
 			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 			Expect(err).NotTo(HaveOccurred())
 			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
-			expectedResources := []resourceTestObj{
-				{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
-				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
-				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-			}
 
 			component := Linseed(cfg)
 
 			createResources, _ := component.Objects()
-			compareResources(createResources, expectedResources)
+			compareResources(createResources, expectedResources, true)
 		})
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
@@ -245,7 +229,7 @@ func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.Ke
 	return gwKeyPair, trustedBundle
 }
 
-func compareResources(resources []client.Object, expectedResources []resourceTestObj) {
+func compareResources(resources []client.Object, expectedResources []resourceTestObj, useCSR bool) {
 	Expect(len(resources)).To(Equal(len(expectedResources)))
 	for i, expectedResource := range expectedResources {
 		resource := resources[i]
@@ -258,5 +242,164 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 		if expectedResource.f != nil {
 			expectedResource.f(resource)
 		}
+	}
+
+	// TODO: Check namespace labels
+
+	// Check deployment
+	deployment := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+	Expect(deployment).NotTo(BeNil())
+
+	// Check containers
+	Expect(deployment.Spec.Template.Spec.Containers).To(ConsistOf(expectedContainers()))
+
+	// Check init containers
+	if useCSR {
+		Expect(len(deployment.Spec.Template.Spec.InitContainers)).To(Equal(1))
+		Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TigeraLinseedSecret)))
+	}
+
+	// Check volumes
+	Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR)))
+
+	// Check annotations
+	if !useCSR {
+		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-secure-linseed-cert", Not(BeEmpty())))
+	}
+	Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
+
+	// Check permissions
+	clusterRole := rtest.GetResource(resources, RoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+	Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{"authorization.k8s.io"},
+			Resources:     []string{"subjectaccessreview"},
+			ResourceNames: []string{},
+			Verbs:         []string{"create"},
+		},
+	}))
+	clusterRoleBinding := rtest.GetResource(resources, RoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(RoleName))
+	Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      ServiceAccountName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+	}))
+
+	// Check service
+	service := rtest.GetResource(resources, ServiceName, render.ElasticsearchNamespace, "", "v1", "Service").(*corev1.Service)
+	Expect(service.Spec.Ports).To(ConsistOf([]corev1.ServicePort{
+		{
+			Name:       PortName,
+			Port:       int32(Port),
+			TargetPort: intstr.FromInt(Port),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	}))
+
+}
+
+func expectedVolumes(useCSR bool) []corev1.Volume {
+	var volumes []corev1.Volume
+	if useCSR {
+		volumes = append(volumes, corev1.Volume{
+			Name: render.TigeraLinseedSecret,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	} else {
+		volumes = append(volumes, corev1.Volume{
+			Name: render.TigeraLinseedSecret,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  render.TigeraLinseedSecret,
+					DefaultMode: ptr.Int32ToPtr(420),
+				},
+			},
+		})
+	}
+
+	volumes = append(volumes, corev1.Volume{
+		Name: "tigera-ca-bundle",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "tigera-ca-bundle",
+				},
+			},
+		},
+	})
+	return volumes
+}
+func expectedContainers() []corev1.Container {
+	return []corev1.Container{
+		{
+			Name: DeploymentName,
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: ptr.BoolToPtr(false),
+				Privileged:               ptr.BoolToPtr(false),
+				RunAsGroup:               ptr.Int64ToPtr(0),
+				RunAsNonRoot:             ptr.BoolToPtr(true),
+				RunAsUser:                ptr.Int64ToPtr(1001),
+			},
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path:   "/health",
+						Port:   intstr.FromInt(Port),
+						Scheme: corev1.URISchemeHTTPS,
+					},
+				},
+				InitialDelaySeconds: 10,
+				PeriodSeconds:       5,
+			},
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path:   "/health",
+						Port:   intstr.FromInt(Port),
+						Scheme: corev1.URISchemeHTTPS,
+					},
+				},
+				InitialDelaySeconds: 10,
+				PeriodSeconds:       5,
+			},
+			Env: []corev1.EnvVar{
+				{Name: "LINSEED_LOG_LEVEL", Value: "Info"},
+				{
+					Name:      "LINSEED_FIPS_MODE_ENABLED",
+					Value:     "false",
+					ValueFrom: nil,
+				},
+				{
+					Name:  "LINSEED_HTTPS_CERT",
+					Value: "/tigera-secure-linseed-cert/tls.crt",
+				},
+				{
+					Name:  "LINSEED_HTTPS_KEY",
+					Value: "/tigera-secure-linseed-cert/tls.key",
+				},
+				{
+					Name:      "LINSEED_ELASTIC_ENDPOINT",
+					Value:     "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200",
+					ValueFrom: nil,
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      render.TigeraLinseedSecret,
+					MountPath: "/tigera-secure-linseed-cert",
+					ReadOnly:  true,
+				},
+				{
+					Name:      "tigera-ca-bundle",
+					MountPath: "/etc/pki/tls/certs/",
+					ReadOnly:  true,
+				},
+			},
+		},
 	}
 }

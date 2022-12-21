@@ -102,6 +102,11 @@ var (
 		Image:   "tigera/es-gateway",
 	}
 
+	ComponentLinseed = component{
+		Version: "master",
+		Image:   "tigera/linseed",
+	}
+
 	ComponentFluentd = component{
 		Version: "master",
 		Image:   "tigera/fluentd",

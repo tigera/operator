@@ -303,8 +303,8 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	Expect(service.Spec.Ports).To(ConsistOf([]corev1.ServicePort{
 		{
 			Name:       PortName,
-			Port:       int32(Port),
-			TargetPort: intstr.FromInt(Port),
+			Port:       443,
+			TargetPort: intstr.FromInt(TargetPort),
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}))
@@ -359,7 +359,7 @@ func expectedContainers() []corev1.Container {
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path:   "/health",
-						Port:   intstr.FromInt(Port),
+						Port:   intstr.FromInt(TargetPort),
 						Scheme: corev1.URISchemeHTTPS,
 					},
 				},
@@ -370,7 +370,7 @@ func expectedContainers() []corev1.Container {
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path:   "/health",
-						Port:   intstr.FromInt(Port),
+						Port:   intstr.FromInt(TargetPort),
 						Scheme: corev1.URISchemeHTTPS,
 					},
 				},
@@ -378,7 +378,7 @@ func expectedContainers() []corev1.Container {
 				PeriodSeconds:       5,
 			},
 			Env: []corev1.EnvVar{
-				{Name: "LINSEED_LOG_LEVEL", Value: "Info"},
+				{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 				{
 					Name:      "LINSEED_FIPS_MODE_ENABLED",
 					Value:     "false",

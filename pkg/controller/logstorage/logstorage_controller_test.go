@@ -83,7 +83,6 @@ var (
 
 	esDNSNames         = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	esGatewayDNSNmes   = dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	linseedDNSNmes     = dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	kbDNSNames         = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 	kbInternalDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 )

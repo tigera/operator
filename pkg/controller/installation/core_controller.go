@@ -1210,6 +1210,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	}
 
+	components = append(components,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       common.CalicoNamespace,
+			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				// this controller is responsible for rendering the tigera-ca-private secret.
+				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+			},
+			TrustedBundle: typhaNodeTLS.TrustedBundle,
+		}))
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
 		K8sServiceEp:           k8sapi.Endpoint,
@@ -1281,21 +1295,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		UsePSP:       r.usePSP,
 	}
 	components = append(components, render.CSI(&csiCfg))
-
-	components = append(components,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       common.CalicoNamespace,
-			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// this controller is responsible for rendering the tigera-ca-private secret.
-				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
-			},
-			TrustedBundle: typhaNodeTLS.TrustedBundle,
-		}))
 
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{

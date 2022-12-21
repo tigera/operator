@@ -39,6 +39,9 @@ type KeyPair struct {
 	*operatorv1.CertificateManagement
 	DNSNames []string
 	Issuer   KeyPairInterface
+
+	// OriginalSecret maintains a copy of the secret that the KeyPair was created from.
+	OriginalSecret *corev1.Secret
 }
 
 func (k *KeyPair) GetCertificatePEM() []byte {
@@ -60,13 +63,20 @@ func (k *KeyPair) BYO() bool {
 }
 
 func (k *KeyPair) Secret(namespace string) *corev1.Secret {
+	var data map[string][]byte
+	if k.OriginalSecret == nil {
+		data = make(map[string][]byte)
+	} else {
+		// Preserve original fields, such as uri-san, common-name or legacy names for tls.key and tls.crt.
+		// This is necessary for example to support rolling calico-node updates of larger clusters from older versions.
+		data = k.OriginalSecret.Data
+	}
+	data[corev1.TLSPrivateKeyKey] = k.PrivateKeyPEM
+	data[corev1.TLSCertKey] = k.CertificatePEM
 	return &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: k.GetName(), Namespace: namespace},
-		Data: map[string][]byte{
-			corev1.TLSPrivateKeyKey: k.PrivateKeyPEM,
-			corev1.TLSCertKey:       k.CertificatePEM,
-		},
+		Data:       data,
 	}
 }
 

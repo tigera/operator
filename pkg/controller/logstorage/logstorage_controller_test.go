@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -1499,6 +1501,7 @@ var _ = Describe("LogStorage controller", func() {
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
 									{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 									{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
+									{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
 								},
 							},
 						})).ToNot(HaveOccurred())
@@ -1609,6 +1612,23 @@ var _ = Describe("LogStorage controller", func() {
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentESGateway.Image,
 								"sha256:esgatewayhash")))
+
+						linseedDp := appsv1.Deployment{
+							TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      linseed.DeploymentName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
+						Expect(linseedDp.Spec.Template.Spec.Containers).To(HaveLen(1))
+						linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
+						Expect(linseed).ToNot(BeNil())
+						Expect(linseed.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentLinseed.Image,
+								"sha256:linseedhash")))
+
 					})
 				})
 

@@ -52,9 +52,11 @@ import (
 var _ = Describe("Test CertificateManagement suite", func() {
 
 	const (
-		appSecretName  = "my-app-tls"
-		appSecretName2 = "my-app-tls-2"
-		appNs          = "my-app"
+		appSecretName       = "my-app-tls"
+		appSecretName2      = "my-app-tls-2"
+		appNs               = "my-app"
+		legacyKeyFieldName  = "key"
+		legacyCertFieldName = "cert"
 	)
 
 	var (
@@ -92,7 +94,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		cm = &operatorv1.CertificateManagement{CACert: keyPair.GetCertificatePEM()}
 
 		// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name.
-		legacySecret, err = secret.CreateTLSSecret(nil, appSecretName, appNs, "key", "cert", time.Hour, nil, appSecretName)
+		legacySecret, err = secret.CreateTLSSecret(nil, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, nil, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Create a byo secret with non-standardized legacy key and cert name (like our docs for felix/typha).
@@ -105,14 +107,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 		legacyCryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
 		Expect(err).NotTo(HaveOccurred())
-		expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, "key", "cert", -time.Hour, nil, appSecretName)
+		expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, -time.Hour, nil, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
 
 		ca, err := crypto.GetCAFromBytes(certificateManager.KeyPair().GetCertificatePEM(), certificateManager.KeyPair().Secret("").Data[corev1.TLSPrivateKeyKey])
 		Expect(err).NotTo(HaveOccurred())
-		expiredSecret, err = secret.CreateTLSSecret(ca, appSecretName, appNs, "key", "cert", -time.Hour, nil, appSecretName)
+		expiredSecret, err = secret.CreateTLSSecret(ca, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, -time.Hour, nil, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
-
 	})
 
 	Describe("test CertificateManager interface", func() {
@@ -419,6 +420,10 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("verifying that the non-standard secret fields have been standardized")
 			Expect(keyPair.Secret(appNs).Data[corev1.TLSPrivateKeyKey]).NotTo(BeNil())
 			Expect(keyPair.Secret(appNs).Data[corev1.TLSCertKey]).NotTo(BeNil())
+
+			By("verifying that the legacy fields have been preserved for certain edge-cases in cluster upgrades")
+			Expect(keyPair.Secret(appNs).Data[legacyKeyFieldName]).NotTo(BeNil())
+			Expect(keyPair.Secret(appNs).Data[legacyCertFieldName]).NotTo(BeNil())
 		})
 	})
 

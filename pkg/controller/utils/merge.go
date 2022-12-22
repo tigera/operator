@@ -156,7 +156,7 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	case BOnlySet:
 		inst.CSINodeDriverDaemonSet = override.CSINodeDriverDaemonSet.DeepCopy()
 	case Different:
-		inst.CSINodeDriverDaemonSet = mergeCNINodeDriverDaemonset(inst.CSINodeDriverDaemonSet, override.CSINodeDriverDaemonSet)
+		inst.CSINodeDriverDaemonSet = mergeCSINodeDriverDaemonset(inst.CSINodeDriverDaemonSet, override.CSINodeDriverDaemonSet)
 	}
 
 	switch compareFields(inst.CalicoKubeControllersDeployment, override.CalicoKubeControllersDeployment) {
@@ -385,7 +385,7 @@ func mergeCalicoNodeDaemonSet(cfg, override *operatorv1.CalicoNodeDaemonSet) *op
 	return out
 }
 
-func mergeCNINodeDriverDaemonset(cfg, override *operatorv1.CSINodeDriverDaemonSet) *operatorv1.CSINodeDriverDaemonSet {
+func mergeCSINodeDriverDaemonset(cfg, override *operatorv1.CSINodeDriverDaemonSet) *operatorv1.CSINodeDriverDaemonSet {
 	out := cfg.DeepCopy()
 
 	switch compareFields(out.Metadata, override.Metadata) {

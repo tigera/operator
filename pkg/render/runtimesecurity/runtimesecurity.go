@@ -122,14 +122,6 @@ func (c *component) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *component) esClusterName() string {
-	clusterName := c.config.ESClusterConfig.ClusterName()
-	if v := strings.Split(clusterName, "."); len(v) > 1 {
-		clusterName = v[1]
-	}
-	return clusterName
-}
-
 func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{

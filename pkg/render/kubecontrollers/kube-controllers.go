@@ -201,6 +201,11 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"events"},
 				Verbs:     []string{"create", "get", "list", "delete"},
 			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"imageassurance.tigera.io"},
+				Resources: []string{"pods"},
+				Verbs:     []string{"create", "get", "list", "delete"},
+			},
 		)
 
 		kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)

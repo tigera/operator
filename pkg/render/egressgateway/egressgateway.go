@@ -90,13 +90,13 @@ func (c *component) SupportedOSType() rmeta.OSType {
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	objects := []client.Object{}
-	objects = append(objects, c.egwDeployment())
 	if c.config.Provider == operatorv1.ProviderRKE2 {
 		objects = append(objects, c.egwPodSecurityPolicy())
 		objects = append(objects, c.egwClusterRole())
 		objects = append(objects, c.egwClusterRoleBinding())
 		objects = append(objects, c.egwServiceAccount())
 	}
+	objects = append(objects, c.egwDeployment())
 	return objects, nil
 }
 
@@ -126,7 +126,7 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 	for _, x := range c.config.PullSecrets {
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
-	return &corev1.PodTemplateSpec{
+	ptSpec := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: c.egwBuildAnnotations(),
 			Labels:      c.config.EgressGW.Spec.Template.Metadata.Labels,
@@ -142,6 +142,10 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 			Volumes:                       []corev1.Volume{*c.egwVolume()},
 		},
 	}
+	if c.config.Provider == operatorv1.ProviderRKE2 {
+		ptSpec.Spec.ServiceAccountName = "tigera-egress-gateway"
+	}
+	return ptSpec
 }
 
 func (c *component) egwBuildAnnotations() map[string]string {

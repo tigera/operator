@@ -226,6 +226,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))
-
+		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-egress-gateway"))
 	})
 })

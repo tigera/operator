@@ -1166,6 +1166,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
+	releaseToBeInstalled := components.EnterpriseRelease
 	components := []render.Component{}
 
 	namespaceCfg := &render.NamespaceConfiguration{
@@ -1446,6 +1447,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	} else {
 		instance.Status.ImageSet = imageSet.Name
 	}
+	instance.Status.Version = releaseToBeInstalled
 	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

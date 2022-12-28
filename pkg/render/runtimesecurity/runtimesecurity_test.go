@@ -7,15 +7,20 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/runtimesecurity"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Runtime Security rendering tests", func() {
@@ -41,6 +46,13 @@ var _ = Describe("Runtime Security rendering tests", func() {
 			},
 		}
 
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		certificateManager, err := certificatemanager.Create(cli, installation, "nil")
+		Expect(err).NotTo(HaveOccurred())
+
 		component := runtimesecurity.RuntimeSecurity(&runtimesecurity.Config{
 			PullSecrets:     nil,
 			Installation:    installation,
@@ -48,6 +60,7 @@ var _ = Describe("Runtime Security rendering tests", func() {
 			SashaESSecrets:  []*corev1.Secret{sashaSecret},
 			ESClusterConfig: esConfig,
 			ClusterDomain:   "nil",
+			TrustedBundle:   certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair()),
 		})
 
 		expectedResources := []struct {
@@ -58,6 +71,7 @@ var _ = Describe("Runtime Security rendering tests", func() {
 			kind    string
 		}{
 			{name: runtimesecurity.NameSpaceRuntimeSecurity, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: certificatemanagement.TrustedCertConfigMapName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ConfigMap"},
 			{name: runtimesecurity.ElasticsearchSashaJobUserSecretName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "Secret"},
 			{name: runtimesecurity.SashaName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: runtimesecurity.SashaName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "apps", version: "v1", kind: "Deployment"},

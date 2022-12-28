@@ -12,6 +12,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +59,7 @@ type Config struct {
 	ESClusterConfig *relasticsearch.ClusterConfig
 	ESSecrets       []*corev1.Secret
 	ClusterDomain   string
+	TrustedBundle   certificatemanagement.TrustedBundle
 	// Calculated internal fields.
 	sashaImage    string
 	threatIdImage string
@@ -101,6 +103,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 
 	objs = append(objs, render.CreateNamespace(NameSpaceRuntimeSecurity, c.config.Installation.KubernetesProvider, render.PSSPrivileged))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.PullSecrets...)...)...)
+	objs = append(objs, c.config.TrustedBundle.ConfigMap(NameSpaceRuntimeSecurity))
 
 	if len(c.config.SashaESSecrets) > 0 {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.SashaESSecrets...)...)...)
@@ -163,6 +166,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 					Labels: map[string]string{
 						"k8s-app": SashaName,
 					},
+					Annotations: c.config.TrustedBundle.HashAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: c.config.Installation.ControlPlaneNodeSelector,
@@ -177,6 +181,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 								},
 							},
 						},
+						c.config.TrustedBundle.Volume(),
 					},
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(corev1.Container{
@@ -198,6 +203,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 									Name:      SashaVerifyAuthVolumeName,
 									MountPath: SashaVerifyAuthPath,
 								},
+								c.config.TrustedBundle.VolumeMount(c.SupportedOSType()),
 							},
 						},
 							c.config.ESClusterConfig.ClusterName(),

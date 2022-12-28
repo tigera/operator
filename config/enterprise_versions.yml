@@ -133,3 +133,6 @@ components:
   dikastes:
     image: tigera/dikastes
     version: v3.14.3
+  flexvol:
+    image: tigera/flexvol
+    version: v3.14.3

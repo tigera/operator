@@ -146,7 +146,11 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.flexvolImage, err = components.GetReference(components.ComponentFlexVolumePrivate, reg, path, prefix, is)
+	} else {
+		c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is)
+	}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

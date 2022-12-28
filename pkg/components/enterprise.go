@@ -234,6 +234,11 @@ var (
 		Version: "v3.14.3",
 		Image:   "tigera/calico-windows-upgrade",
 	}
+
+	ComponentFlexVolumePrivate = component{
+		Version: "v3.14.3",
+		Image:   "tigera/flexvol",
+	}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -278,5 +283,6 @@ var (
 		ComponentESGateway,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
+		ComponentFlexVolumePrivate,
 	}
 )

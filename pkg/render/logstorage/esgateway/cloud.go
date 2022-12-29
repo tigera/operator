@@ -5,8 +5,12 @@ package esgateway
 import (
 	"strconv"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -109,4 +113,21 @@ func (e *esGateway) getCloudObjects() (toCreate []client.Object) {
 		s = append(s, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.Cloud.EsAdminUserSecret)...)...)
 	}
 	return s
+}
+
+func (e *esGateway) cloudEgressRules() []v3.Rule {
+	var egressRules []v3.Rule
+	if e.cfg.Cloud.ExternalElastic {
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports:   []numorstring.Port{{MinPort: 443, MaxPort: 443}},
+					Domains: []string{e.cfg.Cloud.ExternalESDomain, e.cfg.Cloud.ExternalKibanaDomain},
+				},
+			},
+		)
+	}
+	return egressRules
 }

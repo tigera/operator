@@ -24,14 +24,16 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	restMeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -78,7 +80,6 @@ var _ = Describe("Component handler tests", func() {
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -91,6 +92,47 @@ var _ = Describe("Component handler tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}
 		handler = NewComponentHandler(log, c, scheme, instance)
+	})
+
+	It("adds Owner references when Custom Resource is provided", func() {
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&apps.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ds",
+					Namespace: "default",
+				},
+				Spec: apps.DaemonSetSpec{
+					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: map[string]string{
+								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+							},
+						},
+					},
+				},
+			}},
+		}
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		dsKey := client.ObjectKey{
+			Name:      "test-ds",
+			Namespace: "default",
+		}
+		ds := &apps.DaemonSet{}
+		_ = c.Get(ctx, dsKey, ds)
+		Expect(ds.OwnerReferences).To(HaveLen(1))
+		t := true
+		expectOR := metav1.OwnerReference{
+			APIVersion:         "operator.tigera.io/v1",
+			Kind:               "Manager",
+			Name:               "tigera-secure",
+			Controller:         &t,
+			BlockOwnerDeletion: &t,
+		}
+		Expect(ds.OwnerReferences[0]).To(Equal(expectOR))
 	})
 
 	It("merges daemonset template annotations and reconciles only operator added annotations", func() {
@@ -558,7 +600,7 @@ var _ = Describe("Component handler tests", func() {
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
 		case *apps.StatefulSet:
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
-		case *batchv1beta.CronJob:
+		case *batchv1.CronJob:
 			nodeSelectors = x.Spec.JobTemplate.Spec.Template.Spec.NodeSelector
 		case *batchv1.Job:
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
@@ -750,10 +792,10 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&batchv1beta.CronJob{
+					objs: []client.Object{&batchv1.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-						Spec: batchv1beta.CronJobSpec{
-							JobTemplate: batchv1beta.JobTemplateSpec{
+						Spec: batchv1.CronJobSpec{
+							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
 									Template: v1.PodTemplateSpec{
 										Spec: v1.PodSpec{
@@ -764,7 +806,7 @@ var _ = Describe("Component handler tests", func() {
 							},
 						}},
 					},
-				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1beta.CronJob{},
+				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1.CronJob{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -775,10 +817,10 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&batchv1beta.CronJob{
+					objs: []client.Object{&batchv1.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-						Spec: batchv1beta.CronJobSpec{
-							JobTemplate: batchv1beta.JobTemplateSpec{
+						Spec: batchv1.CronJobSpec{
+							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
 									Template: v1.PodTemplateSpec{
 										Spec: v1.PodSpec{
@@ -789,7 +831,7 @@ var _ = Describe("Component handler tests", func() {
 							},
 						}},
 					},
-				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1beta.CronJob{},
+				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1.CronJob{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -950,11 +992,14 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&monitoringv1.Alertmanager{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-alertmanager"},
 						Spec: monitoringv1.AlertmanagerSpec{
-							NodeSelector: map[string]string{},
+							NodeSelector: map[string]string{
+								"kubernetes.io/a": "b",
+							},
 						},
 					}},
 				}, client.ObjectKey{Name: "test-alertmanager"}, &monitoringv1.Alertmanager{},
 				map[string]string{
+					"kubernetes.io/a":  "b",
 					"kubernetes.io/os": "linux",
 				},
 			},
@@ -967,16 +1012,91 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&monitoringv1.Prometheus{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-prometheus"},
 						Spec: monitoringv1.PrometheusSpec{
-							NodeSelector: map[string]string{},
+							NodeSelector: map[string]string{
+								"kubernetes.io/a": "b",
+							},
 						},
 					}},
 				}, client.ObjectKey{Name: "test-prometheus"}, &monitoringv1.Prometheus{},
 				map[string]string{
+					"kubernetes.io/a":  "b",
 					"kubernetes.io/os": "linux",
 				},
 			},
 		},
 	)
+
+	It("recreates a service if its ClusterIP is removed", func() {
+		// Simulate creation of a service by earlier version of operator that includes a ClusterIP.
+		svcWithIP := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-service",
+				Labels: map[string]string{
+					"old": "should-be-preserved",
+				},
+			},
+			Spec: corev1.ServiceSpec{
+				ClusterIP: "10.96.0.1",
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				svcWithIP,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcWithIP)).NotTo(HaveOccurred())
+		Expect(svcWithIP.Spec.ClusterIP).To(Equal("10.96.0.1"))
+		Expect(svcWithIP.Labels).To(Equal(map[string]string{
+			"old": "should-be-preserved",
+		}))
+
+		// Now pretend we're the new operator version, wanting to remove the cluster IP.
+		svcNoIP := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-service",
+				Labels: map[string]string{
+					"new": "should-be-added",
+				},
+			},
+			Spec: corev1.ServiceSpec{
+				ClusterIP: "None",
+			},
+		}
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				svcNoIP,
+			},
+		}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcNoIP)).NotTo(HaveOccurred())
+		Expect(svcNoIP.Spec.ClusterIP).To(Equal("None"))
+		Expect(svcNoIP.Labels).To(Equal(map[string]string{
+			"old": "should-be-preserved",
+			"new": "should-be-added",
+		}))
+
+		// The fake client resets the resource version to 1 on create.
+		Expect(svcNoIP.ObjectMeta.ResourceVersion).To(Equal("1"),
+			"Expected recreation of Service to reset resourceVersion to 1")
+
+		// Finally, make a normal change, this should result in an update.
+		svcNoIP.Labels = map[string]string{"newer": "should-be-added"}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcNoIP)).NotTo(HaveOccurred())
+		Expect(svcNoIP.Labels).To(Equal(map[string]string{
+			"old":   "should-be-preserved",
+			"new":   "should-be-added",
+			"newer": "should-be-added",
+		}))
+		Expect(svcNoIP.ObjectMeta.ResourceVersion).To(Equal("2"),
+			"Expected update to rev ResourceVersion")
+	})
 
 	It("allows you to replace a secret if the types change", func() {
 		// Please note that a fake client does not behave exactly as it would on K8s:
@@ -1003,6 +1123,271 @@ var _ = Describe("Component handler tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-secret"}, secret)).NotTo(HaveOccurred())
 		Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
 	})
+
+	Context("common labels and labelselector", func() {
+		It("updates daemonsets", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			By("checking that the daemonset is created and labels are added")
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-daemonset",
+				"app.kubernetes.io/name": "test-daemonset",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "test-daemonset"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-daemonset",
+				Namespace: "test-namespace",
+			}
+			ds := &apps.DaemonSet{}
+			Expect(c.Get(ctx, key, ds)).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*ds.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("does not change LabelSelector on daemonsets", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"preset-key": "preset-value",
+							},
+						},
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-daemonset",
+				"app.kubernetes.io/name": "test-daemonset",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"preset-key": "preset-value"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-daemonset",
+				Namespace: "test-namespace",
+			}
+			ds := &apps.DaemonSet{}
+			Expect(c.Get(ctx, key, ds)).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*ds.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("updates deployments", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-deployment",
+				"app.kubernetes.io/name": "test-deployment",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "test-deployment"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-deployment",
+				Namespace: "test-namespace",
+			}
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, key, d)).NotTo(HaveOccurred())
+			Expect(d.GetLabels()).To(Equal(expectedLabels))
+			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("does not change LabelSelector on deployments", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"preset-key": "preset-value",
+							},
+						},
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-deployment",
+				"app.kubernetes.io/name": "test-deployment",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"preset-key": "preset-value"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-deployment",
+				Namespace: "test-namespace",
+			}
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, key, d)).To(BeNil())
+			Expect(d.GetLabels()).To(Equal(expectedLabels))
+			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
+		})
+	})
+})
+
+var _ = Describe("Mocked client Component handler tests", func() {
+
+	var (
+		c       client.Client
+		mc      mockClient
+		ctx     context.Context
+		handler ComponentHandler
+	)
+
+	BeforeEach(func() {
+		log := logf.Log.WithName("test_utils_logger")
+
+		mc = mockClient{Info: make([]mockReturn, 0)}
+		c = &mc
+		ctx = context.Background()
+
+		handler = NewComponentHandler(log, c, runtime.NewScheme(), nil)
+	})
+
+	It("if Updating a resource conflicts try the update again", func() {
+		ds := apps.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ds",
+				Namespace: "default",
+			},
+			Spec: apps.DaemonSetSpec{
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+						},
+					},
+				},
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{&ds},
+		}
+
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: nil,
+			Obj:    &ds,
+		})
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+		Expect(err).To(BeNil())
+
+		Expect(mc.Index).To(Equal(4))
+
+	})
+
+	It("if Updating a resource conflicts try the update again", func() {
+		ds := apps.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ds",
+				Namespace: "default",
+			},
+			Spec: apps.DaemonSetSpec{
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+						},
+					},
+				},
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{&ds},
+		}
+
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			Obj:    &ds,
+		})
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+		Expect(err).NotTo(BeNil())
+
+		Expect(mc.Index).To(Equal(4))
+	})
 })
 
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.
@@ -1025,4 +1410,85 @@ func (c *fakeComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *fakeComponent) SupportedOSType() rmeta.OSType {
 	return c.supportedOSType
+}
+
+type mockReturn struct {
+	Method string
+	Return interface{}
+	Obj    client.Object
+}
+
+type mockClient struct {
+	Info  []mockReturn
+	Index int
+}
+
+func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	defer func() { mc.Index++ }()
+	funcName := "Get"
+	if len(mc.Info) <= mc.Index {
+		panic(fmt.Sprintf("mockClient Info doesn't have enough entries for %s %v", funcName, key))
+	}
+	if mc.Info[mc.Index].Method != funcName {
+		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
+	}
+	if mc.Info[mc.Index].Return == nil {
+		return nil
+	}
+
+	v, ok := mc.Info[mc.Index].Return.(error)
+	if !ok {
+		panic(fmt.Sprintf("mockClient Info didn't have right type for entry %d for %s %v", mc.Index, funcName, key))
+	}
+
+	return v
+}
+
+func (mc *mockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	panic("List not implemented in mockClient")
+}
+func (mc *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	panic("Create not implemented in mockClient")
+}
+func (mc *mockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	panic("Delete not implemented in mockClient")
+}
+
+func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	defer func() { mc.Index++ }()
+	funcName := "Update"
+	if len(mc.Info) <= mc.Index {
+		panic(fmt.Sprintf("mockClient Info doesn't have enough entries for %s %v", funcName, client.ObjectKeyFromObject(obj)))
+	}
+	if mc.Info[mc.Index].Method != funcName {
+		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
+	}
+	if mc.Info[mc.Index].Return == nil {
+		//nolint ignore SA4005 ignore ineffassign
+		obj = mc.Info[mc.Index].Obj
+		return nil
+	}
+
+	v, ok := mc.Info[mc.Index].Return.(error)
+	if !ok {
+		panic(fmt.Sprintf("mockClient Info didn't have right type for entry %d for %s %v", mc.Index, funcName, client.ObjectKeyFromObject(obj)))
+	}
+
+	return v
+}
+func (mc *mockClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	panic("Patch not implemented in mockClient")
+}
+func (mc *mockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	panic("DeleteAll not implemented in mockClient")
+}
+
+func (mc *mockClient) Status() client.StatusWriter {
+	panic("Status not implemented in mockClient")
+}
+func (mc *mockClient) Scheme() *runtime.Scheme {
+	panic("Scheme not implemented in mockClient")
+}
+func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
+	panic("RESTMapper not implemented in mockClient")
 }

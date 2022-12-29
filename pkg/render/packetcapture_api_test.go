@@ -17,7 +17,11 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/testutils"
+	"k8s.io/apimachinery/pkg/types"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -43,6 +47,10 @@ import (
 )
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
+	pcPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture.json")
+	pcPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture_ocp.json")
+	pcPolicyForManaged := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture_managed.json")
+	pcPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture_managed_ocp.json")
 
 	var secret certificatemanagement.KeyPairInterface
 	var cli client.Client
@@ -57,7 +65,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	// Pull secret
-	var pullSecrets = []*corev1.Secret{{
+	pullSecrets := []*corev1.Secret{{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pull-secret",
@@ -65,17 +73,17 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		},
 	}}
 	// Installation with minimal setup
-	var defaultInstallation = operatorv1.InstallationSpec{}
+	defaultInstallation := operatorv1.InstallationSpec{}
 
 	// Rendering packet capture resources
-	var renderPacketCapture = func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
+	renderPacketCapture := func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
 		cfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:        pullSecrets,
 			Installation:       &i,
 			KeyValidatorConfig: config,
 			ServerCertSecret:   secret,
 		}
-		var pc = render.PacketCaptureAPI(cfg)
+		pc := render.PacketCaptureAPI(cfg)
 		Expect(pc.ResolveImages(nil)).To(BeNil())
 		resources, _ = pc.Objects()
 		return resources
@@ -89,8 +97,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		kind    string
 	}
 	// Generate expected resources
-	var expectedResources = func(useCSR, enableOIDC bool) []expectedResource {
-		var resources = []expectedResource{
+	expectedResources := func(useCSR, enableOIDC bool) []expectedResource {
+		resources := []expectedResource{
 			{name: render.PacketCaptureNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "pull-secret", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureServiceAccountName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "ServiceAccount"},
@@ -101,12 +109,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		}
 
 		return resources
-
 	}
 
 	// Generate expected environment variables
-	var expectedEnvVars = func(enableOIDC bool) []corev1.EnvVar {
-		var envVars = []corev1.EnvVar{
+	expectedEnvVars := func(enableOIDC bool) []corev1.EnvVar {
+		envVars := []corev1.EnvVar{
 			{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
 			{
 				Name:  "PACKETCAPTURE_API_HTTPS_KEY",
@@ -115,6 +122,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			{
 				Name:  "PACKETCAPTURE_API_HTTPS_CERT",
 				Value: "/tigera-packetcapture-server-tls/tls.crt",
+			},
+			{
+				Name:      "PACKETCAPTURE_API_FIPS_MODE_ENABLED",
+				Value:     "false",
+				ValueFrom: nil,
 			},
 		}
 
@@ -167,8 +179,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volume mounts
-	var expectedVolumeMounts = func() []corev1.VolumeMount {
-		var volumeMounts = []corev1.VolumeMount{
+	expectedVolumeMounts := func() []corev1.VolumeMount {
+		volumeMounts := []corev1.VolumeMount{
 			{
 				Name:      render.PacketCaptureCertSecret,
 				MountPath: "/tigera-packetcapture-server-tls",
@@ -178,9 +190,9 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		return volumeMounts
 	}
 	// Generate expected containers
-	var expectedContainers = func(enableOIDC bool) []corev1.Container {
-		var volumeMounts = expectedVolumeMounts()
-		var envVars = expectedEnvVars(enableOIDC)
+	expectedContainers := func(enableOIDC bool) []corev1.Container {
+		volumeMounts := expectedVolumeMounts()
+		envVars := expectedEnvVars(enableOIDC)
 
 		return []corev1.Container{
 			{
@@ -194,7 +206,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					RunAsUser:                ptr.Int64ToPtr(1001),
 				},
 				ReadinessProbe: &corev1.Probe{
-					Handler: corev1.Handler{
+					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
 							Path:   "/health",
 							Port:   intstr.FromInt(8444),
@@ -205,7 +217,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					PeriodSeconds:       10,
 				},
 				LivenessProbe: &corev1.Probe{
-					Handler: corev1.Handler{
+					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
 							Path:   "/health",
 							Port:   intstr.FromInt(8444),
@@ -222,7 +234,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volumes
-	var expectedVolumes = func(useCSR bool) []corev1.Volume {
+	expectedVolumes := func(useCSR bool) []corev1.Volume {
 		var volumes []corev1.Volume
 		if useCSR {
 			volumes = append(volumes, corev1.Volume{
@@ -232,7 +244,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				},
 			})
 		} else {
-
 			volumes = append(volumes, corev1.Volume{
 				Name: render.PacketCaptureCertSecret,
 				VolumeSource: corev1.VolumeSource{
@@ -242,17 +253,21 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					},
 				},
 			})
-
 		}
 
 		return volumes
 	}
 
-	var checkPacketCaptureResources = func(resources []client.Object, useCSR, enableOIDC bool) {
+	checkPacketCaptureResources := func(resources []client.Object, useCSR, enableOIDC bool) {
 		for i, expectedRes := range expectedResources(useCSR, enableOIDC) {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources(useCSR, enableOIDC))))
+
+		// Check the namespace.
+		namespace := rtest.GetResource(resources, render.PacketCaptureNamespace, "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		// Check deployment
 		deployment := rtest.GetResource(resources, render.PacketCaptureDeploymentName, render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -317,11 +332,12 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Port:       443,
 				Protocol:   corev1.ProtocolTCP,
 				TargetPort: intstr.FromInt(8444),
-			}}))
+			},
+		}))
 	}
 
 	It("should render all resources for default installation", func() {
-		var resources = renderPacketCapture(defaultInstallation, nil)
+		resources := renderPacketCapture(defaultInstallation, nil)
 
 		checkPacketCaptureResources(resources, false, false)
 	})
@@ -332,7 +348,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		var resources = renderPacketCapture(operatorv1.InstallationSpec{
+		resources := renderPacketCapture(operatorv1.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}, nil)
 
@@ -340,7 +356,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		deployment := rtest.GetResource(resources, render.PacketCaptureDeploymentName, render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment).NotTo(BeNil())
-		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rmeta.TolerateCriticalAddonsOnly, rmeta.TolerateMaster))
+		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
 	})
 
 	It("should render all resources for an installation with certificate management", func() {
@@ -352,7 +368,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 
-		var resources = renderPacketCapture(installation, nil)
+		resources := renderPacketCapture(installation, nil)
 		checkPacketCaptureResources(resources, true, false)
 	})
 
@@ -360,11 +376,51 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
-				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
+				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"},
+			},
+		}
 
-		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
-		var resources = renderPacketCapture(defaultInstallation, dexCfg)
+		dexCfg := render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
+		resources := renderPacketCapture(defaultInstallation, dexCfg)
 
 		checkPacketCaptureResources(resources, false, true)
 	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-packetcapture", Namespace: "tigera-packetcapture"}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg := &render.PacketCaptureApiConfiguration{
+					PullSecrets:      pullSecrets,
+					Installation:     &defaultInstallation,
+					ServerCertSecret: secret,
+				}
+				cfg.Openshift = scenario.Openshift
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+
+				component := render.PacketCaptureAPIPolicy(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
+					scenario,
+					pcPolicyForUnmanaged,
+					pcPolicyForUnmanagedOCP,
+					pcPolicyForManaged,
+					pcPolicyForManagedOCP,
+				)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
+
 })

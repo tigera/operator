@@ -71,5 +71,21 @@ func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger l
 	}
 	reqLogger.Info("Successfully processed resources for Image Assurance")
 
+	if r.elasticExternal {
+		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
+				r.status.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
+				return mcr, &reconcile.Result{}, nil
+			}
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Unable to read cloud config map", err.Error())
+			return mcr, &reconcile.Result{}, err
+		}
+
+		mcr.TenantID = cloudConfig.TenantId()
+	}
+
 	return mcr, nil, nil
 }

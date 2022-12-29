@@ -9,10 +9,12 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/runtimesecurity"
 
@@ -85,7 +87,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("RuntimeSecurity-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	for _, secretName := range []string{runtimesecurity.ElasticsearchSashaJobUserSecretName} {
+	for _, secretName := range []string{runtimesecurity.ElasticsearchSashaJobUserSecretName, relasticsearch.PublicCertSecret} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("RuntimeSecurity-controller failed to watch Secret resource: %v", err)
 		}
@@ -183,6 +185,25 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 		return reconcile.Result{}, err
 	}
 
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
+
 	config := &runtimesecurity.Config{
 		PullSecrets:     pullSecrets,
 		Installation:    installation,
@@ -190,6 +211,7 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 		SashaESSecrets:  ss,
 		ESClusterConfig: esClusterConfig,
 		ClusterDomain:   r.clusterDomain,
+		TrustedBundle:   trustedBundle,
 	}
 
 	component := runtimesecurity.RuntimeSecurity(config)

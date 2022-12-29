@@ -134,7 +134,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 
 	objs = append(objs,
-		render.CreateNamespace(NameSpaceImageAssurance, c.config.Installation.KubernetesProvider),
+		render.CreateNamespace(NameSpaceImageAssurance, c.config.Installation.KubernetesProvider, render.PSSPrivileged),
 	)
 
 	objs = append(objs, configmap.ToRuntimeObjects(

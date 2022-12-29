@@ -27,6 +27,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/cni" }}
+	ComponentCalicoCNIFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
 		Version: "{{ .Version }}",
@@ -63,13 +69,26 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/csi"}}
+	ComponentCalicoCSI = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar"}}
+	ComponentCalicoCSIRegistrar = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
 	}
 
-	CalicoComponents = []component{
+	CalicoImages = []component{
 		ComponentCalicoCNI,
+		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoNode,
 		ComponentCalicoTypha,
@@ -77,5 +96,7 @@ var (
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentWindowsUpgrade,
+		ComponentCalicoCSI,
+		ComponentCalicoCSIRegistrar,
 	}
 )

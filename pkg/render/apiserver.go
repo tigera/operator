@@ -28,11 +28,14 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -41,20 +44,40 @@ import (
 )
 
 const (
-	apiServerPort   = 5443
-	queryServerPort = 8080
+	APIServerPort       = 5443
+	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
 )
 
+const (
+	QueryServerPort        = 8080
+	QueryserverNamespace   = "tigera-system"
+	QueryserverServiceName = "tigera-api"
+
+	// Use the same API server container name for both OSS and Enterprise.
+	APIServerContainerName                  = "calico-apiserver"
+	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
+
+	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
+	tigeraAPIServerTLSSecretName = "tigera-apiserver-certs"
+)
+
+var TigeraAPIServerEntityRule = v3.EntityRule{
+	Services: &v3.ServiceMatch{
+		Namespace: QueryserverNamespace,
+		Name:      QueryserverServiceName,
+	},
+}
+
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
 func ProjectCalicoApiServerTLSSecretName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
-		return "calico-apiserver-certs"
+		return calicoAPIServerTLSSecretName
 	}
-	return "tigera-apiserver-certs"
+	return tigeraAPIServerTLSSecretName
 }
 
 func ProjectCalicoApiServerServiceName(v operatorv1.ProductVariant) string {
@@ -77,10 +100,15 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	}, nil
 }
 
+func APIServerPolicy(cfg *APIServerConfiguration) Component {
+	return NewPassthrough(allowTigeraAPIServerPolicy(cfg))
+}
+
 // APIServerConfiguration contains all the config information needed to render the component.
 type APIServerConfiguration struct {
 	K8SServiceEndpoint          k8sapi.ServiceEndpoint
 	Installation                *operatorv1.InstallationSpec
+	APIServer                   *operatorv1.APIServerSpec
 	ForceHostNetwork            bool
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
@@ -89,6 +117,9 @@ type APIServerConfiguration struct {
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
 	TunnelCASecret              certificatemanagement.KeyPairInterface
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type apiServerComponent struct {
@@ -154,7 +185,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
-	if !c.cfg.Openshift {
+	if !c.cfg.Openshift && c.cfg.UsePSP {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
@@ -180,7 +211,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 		c.tigeraCustomResourcesClusterRole(),
 		c.tigeraCustomResourcesClusterRoleBinding(),
 		c.tierGetterClusterRole(),
@@ -202,7 +233,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 	}
 
 	// Compile the final arrays based on the variant.
@@ -301,7 +332,6 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 				Name: nameToDelete,
 			},
 		}
-
 }
 
 // authReaderRoleBinding creates a rolebinding that allows the API server to access the
@@ -347,7 +377,6 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 				Namespace: "kube-system",
 			},
 		}
-
 }
 
 // apiServerServiceAccount creates the service account used by the API server.
@@ -359,6 +388,68 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+		},
+	}
+}
+
+func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.PrometheusEntityRule,
+		},
+		{
+			// Pass to subsequent tiers for further enforcement
+			Action: v3.Pass,
+		},
+	}...)
+
+	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
+	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      APIServerPolicyName,
+			Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector("tigera-apiserver"),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					// This policy allows Calico Enterprise API Server access from anywhere.
+					Source: v3.EntityRule{
+						Nets: []string{"0.0.0.0/0"},
+					},
+					Destination: v3.EntityRule{
+						Ports: ingressPorts,
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source: v3.EntityRule{
+						Nets: []string{"::/0"},
+					},
+					Destination: v3.EntityRule{
+						Ports: ingressPorts,
+					},
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }
@@ -417,6 +508,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"ipreservations",
 				"ipamblocks",
 				"blockaffinities",
+				"ipamconfigs",
 			},
 			Verbs: []string{
 				"get",
@@ -574,7 +666,6 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 				Name: nameToDelete,
 			},
 		}
-
 }
 
 // webhookReaderClusterRole returns a ClusterRole to read MutatingWebhookConfigurations and ValidatingWebhookConfigurations and an
@@ -660,7 +751,6 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: nameToDelete},
 		}
-
 }
 
 // apiServerService creates a service backed by the API server and - for enterprise - query server.
@@ -672,6 +762,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			Labels:    map[string]string{"k8s-app": QueryserverServiceName},
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -679,7 +770,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 					Name:       "apiserver",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(apiServerPort),
+					TargetPort: intstr.FromInt(APIServerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -693,12 +784,11 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
 				Name:       "queryserver",
-				Port:       queryServerPort,
+				Port:       QueryServerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt(queryServerPort),
+				TargetPort: intstr.FromInt(QueryServerPort),
 			},
 		)
-
 	}
 	return s
 }
@@ -722,7 +812,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
+		// Use the same CSR init container name for both OSS and Enterprise.
+		initContainer := c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant))
+		initContainer.Name = fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+		initContainers = append(initContainers, initContainer)
 	}
 
 	annotations := map[string]string{
@@ -739,7 +832,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			Labels: map[string]string{
 				"apiserver": "true",
-				"k8s-app":   name,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -747,6 +839,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
+			// For legacy reasons we use apiserver: true here instead of the k8s-app: name label,
+			// so we need to set it explicitly rather than use the common labeling logic.
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"apiserver": "true"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -754,7 +848,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 					Labels: map[string]string{
 						"apiserver": "true",
-						"k8s-app":   name,
 					},
 					Annotations: annotations,
 				},
@@ -783,6 +876,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
 	}
 
+	if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(d, overrides)
+	}
+
 	return d
 }
 
@@ -801,11 +898,11 @@ func (c *apiServerComponent) hostNetwork() bool {
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TLSKeyPair.VolumeMount(),
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.ManagementCluster != nil {
-			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount())
+			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount(c.SupportedOSType()))
 		}
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
@@ -829,16 +926,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	var name string
-	switch c.cfg.Installation.Variant {
-	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-apiserver"
-	case operatorv1.Calico:
-		name = "calico-apiserver"
-	}
-
 	apiServer := corev1.Container{
-		Name:  name,
+		Name:  APIServerContainerName,
 		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,
@@ -849,10 +938,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		},
 		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(apiServerPort),
+					Port:   intstr.FromInt(APIServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -860,7 +949,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			PeriodSeconds:       10,
 		},
 		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/code/filecheck",
@@ -878,9 +967,13 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
-		fmt.Sprintf("--secure-port=%d", apiServerPort),
+		fmt.Sprintf("--secure-port=%d", APIServerPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
+	}
+
+	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+		args = append(args, "--tls-max-version=VersionTLS12")
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -898,6 +991,9 @@ func (c *apiServerComponent) startUpArgs() []string {
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
+		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
+			args = append(args, "--managementClusterCAType=Public")
+		}
 	}
 
 	return args
@@ -909,6 +1005,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		// Set queryserver logging to "info"
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
@@ -918,15 +1018,19 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	}
+
 	container := corev1.Container{
-		Name:  "tigera-queryserver",
+		Name:  TigeraAPIServerQueryServerContainerName,
 		Image: c.queryServerImage,
 		Env:   env,
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(queryServerPort),
+					Port:   intstr.FromInt(QueryServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -935,6 +1039,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		},
 		// UID 1001 is used in the queryserver Dockerfile.
 		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		VolumeMounts:    volumeMounts,
 	}
 	return container
 }
@@ -993,7 +1098,7 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	if c.hostNetwork() {
 		return rmeta.TolerateAll
 	}
-	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster)
+	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 }
 
 // apiServerPodSecurityPolicy returns a PSP to create and a PSP to delete based on variant.
@@ -1616,7 +1721,7 @@ func (c *apiServerComponent) uiSettingsPassthruClusterRolebinding() *rbacv1.Clus
 //
 // Calico Enterprise only
 func (c *apiServerComponent) auditPolicyConfigMap() *corev1.ConfigMap {
-	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
+	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
 - level: RequestResponse

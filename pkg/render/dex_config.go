@@ -299,18 +299,12 @@ func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 }
 
 func (d *dexConfig) RequiredVolumes() []corev1.Volume {
-
-	tlsVolumeSource := certificatemanagement.CertificateVolumeSource(d.certificateManagement, DexTLSSecretName)
 	defaultMode := int32(420)
 	volumes := []corev1.Volume{
 		{
 			Name: "config",
 			VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{Name: DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
-		},
-		{
-			Name:         "tls",
-			VolumeSource: tlsVolumeSource,
 		},
 	}
 
@@ -340,11 +334,6 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 		{
 			Name:      "config",
 			MountPath: "/etc/dex/baseCfg",
-			ReadOnly:  true,
-		},
-		{
-			Name:      "tls",
-			MountPath: "/etc/dex/tls",
 			ReadOnly:  true,
 		},
 	}

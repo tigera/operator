@@ -21,6 +21,7 @@
                         domain: "%REQ(HOST?:AUTHORITY)%"
                         upstream_host: "%UPSTREAM_HOST%"
                         upstream_local_address: "%UPSTREAM_LOCAL_ADDRESS%"
+                        upstream_service_time: "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
 {{- end -}}
 
 {{- define "WAF" -}}

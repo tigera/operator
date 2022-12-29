@@ -15,22 +15,29 @@
 package render_test
 
 import (
+	"strconv"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -39,19 +46,38 @@ var (
 	notManagedCluster = false
 )
 
-var _ = Describe("Intrusion Detection rendering tests", func() {
+type expectedEnvVar struct {
+	name       string
+	val        string
+	secretName string
+	secretKey  string
+}
 
+var _ = Describe("Intrusion Detection rendering tests", func() {
 	var cfg *render.IntrusionDetectionConfiguration
 	var bundle certificatemanagement.TrustedBundle
 	var adAPIKeyPair certificatemanagement.KeyPairInterface
+
+	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")
+	expectedIDPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed.json")
+	expectedIDPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged_ocp.json")
+	expectedIDPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed_ocp.json")
+	expectedIDInstallerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-elastic.json")
+	expectedIDInstallerPolicyForOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-elastic_ocp.json")
+	expectedAnomalyDetectionAPIPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-api.json")
+	expectedAnomalyDetectionAPIPolicyForOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-api_ocp.json")
+	expectedAnomalyDetectorsPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-detectors.json")
+	expectedAnomalyDetectorsPolicyForOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-detectors_ocp.json")
+
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		adAPIKeyPair, err = certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ADAPITLSSecretName, common.OperatorNamespace(), render.ADAPITLSSecretName), []string{""}, "")
+		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
+		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -63,6 +89,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			ClusterDomain:         dns.DefaultClusterDomain,
 			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
 			ManagedCluster:        notManagedCluster,
+			UsePSP:                true,
 		}
 	})
 
@@ -80,6 +107,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -101,32 +130,37 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "tigera.io.detector.http-connection-spike", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.http-response-codes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.http-verbs", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.ip-sweep", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.port-scan", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.time-series-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.time-series-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.multivariable-flow", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-l7", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.dns-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dns-tunnel", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.l7-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-in", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-out", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.process-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: render.ADJobPodTemplateBaseName + ".training", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: render.ADJobPodTemplateBaseName + ".detection", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
+			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -185,10 +219,26 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		// secrets are mounted
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMount().Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount().MountPath))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount().Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount().MountPath))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).Name))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).MountPath))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).Name))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
+		// emptyDir is expected as the default volume
+		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		))
+
+		// check non-privileged container is used
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(true))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(Equal(int64(10001)))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(int64(10001)))
 
 		// Check all Role for respective AD API SAs
 		detectorsSecret := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "", "v1", "Secret").(*corev1.Secret)
@@ -197,9 +247,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		detectorsRole := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
 		Expect(len(detectorsRole.Rules)).To(Equal(1))
-		Expect(detectorsRole.Rules[0].APIGroups).To(ConsistOf(render.ADResourceGroup))
-		Expect(detectorsRole.Rules[0].Resources).To(ConsistOf(render.ADDetectorsModelResourceName))
-		Expect(detectorsRole.Rules[0].Verbs).To(ConsistOf("get", "create", "update"))
+		Expect(detectorsRole.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{
+					render.ADResourceGroup,
+				},
+				Resources: []string{
+					render.ADDetectorsModelResourceName, render.ADLogTypeMetaDataResourceName,
+				},
+				Verbs: []string{
+					"get",
+					"create",
+					"update",
+				},
+			},
+		))
 
 		detectorsRoleBinding := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
 		Expect(detectorsRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
@@ -233,6 +295,66 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Name:      render.ADAPIObjectName,
 			Namespace: render.IntrusionDetectionNamespace,
 		}))
+	})
+
+	It("should render a persistentVolume claim if an AD StorageClassName is provided and an existing PVC does not exist", func() {
+		testADStorageClassName := "test-storage-class-name"
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = true
+		cfg.Openshift = notOpenshift
+		cfg.ManagedCluster = false
+
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
+		Expect(*adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
+		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
+
+		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: render.ADPersistentVolumeClaimName,
+					},
+				},
+			},
+		))
+
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(Equal(int64(0)))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(int64(0)))
+	})
+
+	It("should not render a persistentVolume claim if indicated that the AD StorageClassName is provided but an existing PVC already exists", func() {
+		testADStorageClassName := "test-storage-class-name"
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = false
+		cfg.Openshift = notOpenshift
+		cfg.ManagedCluster = false
+
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim")
+
+		Expect(adAPIPVC).To(BeNil())
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
@@ -274,6 +396,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -295,32 +419,37 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "tigera.io.detector.http-connection-spike", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.http-response-codes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.http-verbs", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.ip-sweep", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.port-scan", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.time-series-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.time-series-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.multivariable-flow", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-l7", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.dns-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dns-tunnel", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.l7-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-in", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-out", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.process-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: render.ADJobPodTemplateBaseName + ".training", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: render.ADJobPodTemplateBaseName + ".detection", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
+			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -335,6 +464,14 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		dp := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 
+		expectedEnvs := []expectedEnvVar{
+			{"CLUSTER_NAME", cfg.ESClusterConfig.ClusterName(), "", ""},
+			{"MULTI_CLUSTER_FORWARDING_CA", cfg.TrustedCertBundle.MountPath(), "", ""},
+			{"IDS_ENABLE_EVENT_FORWARDING", "true", "", ""},
+		}
+
+		assertEnvVarlistMatch(envs, expectedEnvs)
+
 		// Validate that even with syslog configured we still have the CA configmap Volume
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
@@ -342,30 +479,35 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
 		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 
-		expectedEnvs := []struct {
-			name       string
-			val        string
-			secretName string
-			secretKey  string
-		}{
-			{"CLUSTER_NAME", cfg.ESClusterConfig.ClusterName(), "", ""},
-			{"MULTI_CLUSTER_FORWARDING_CA", cfg.TrustedCertBundle.MountPath(), "", ""},
-			{"IDS_ENABLE_EVENT_FORWARDING", "true", "", ""},
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+
+		// expect AD PodTemplate EnvVars
+		expectedADEnvs := []expectedEnvVar{
+			{"ELASTIC_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[2], "", ""},
+			{"ELASTIC_PORT", strconv.Itoa(render.ElasticsearchDefaultPort), "", ""},
+			{"ELASTIC_CA", certificatemanagement.TrustedCertBundleMountPath, "", ""},
+			{"ELASTIC_USERNAME", "", render.ElasticsearchADJobUserSecret, "username"},
+			{"ELASTIC_PASSWORD", "", render.ElasticsearchADJobUserSecret, "password"},
+			{"MODEL_STORAGE_API_HOST", render.ADAPIExpectedServiceName, "", ""},
+			{"MODEL_STORAGE_API_PORT", strconv.Itoa(8080), "", ""},
+			{"MODEL_STORAGE_CLIENT_CERT", cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(), "", ""},
+			{"MODEL_STORAGE_API_TOKEN", "", "anomaly-detectors", "token"},
 		}
-		for _, expected := range expectedEnvs {
-			if expected.val != "" {
-				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
-			} else {
-				Expect(envs).To(ContainElement(corev1.EnvVar{
-					Name: expected.name,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
-							Key:                  expected.secretKey,
-						}},
-				}))
-			}
-		}
+
+		adDetectionPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".detection", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		Expect(*adDetectionPodtemplate.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+		adDetectionEnvs := adDetectionPodtemplate.Template.Spec.Containers[0].Env
+
+		adTrainingPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".training", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		Expect(*adTrainingPodtemplate.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+		adTrainingEnvs := adTrainingPodtemplate.Template.Spec.Containers[0].Env
+
+		assertEnvVarlistMatch(adDetectionEnvs, expectedADEnvs)
+		assertEnvVarlistMatch(adTrainingEnvs, expectedADEnvs)
 	})
 
 	It("should not render intrusion-detection-es-job-installer and should disable GlobalAlert controller when cluster is managed", func() {
@@ -384,6 +526,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -405,20 +549,22 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "tigera.io.detector.http-connection-spike", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.http-response-codes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.http-verbs", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.ip-sweep", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.port-scan", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.time-series-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.time-series-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.multivariable-flow", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.generic-l7", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.dns-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dns-tunnel", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.l7-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-in", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-out", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.process-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -460,6 +606,18 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := render.IntrusionDetection(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
+
 	It("should apply controlPlaneNodeSelector correctly", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
@@ -472,6 +630,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 	})
+
 	It("should apply controlPlaneTolerations correctly", func() {
 		t := corev1.Toleration{
 			Key:      "foo",
@@ -489,4 +648,176 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 		Expect(job.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})
+
+	Context("allow-tigera rendering", func() {
+		policyNames := []types.NamespacedName{
+			{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"},
+			{Name: "allow-tigera.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"},
+			{Name: "allow-tigera.anomaly-detection-api", Namespace: "tigera-intrusion-detection"},
+			{Name: "allow-tigera.anomaly-detectors", Namespace: "tigera-intrusion-detection"},
+		}
+
+		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			if policyName.Name == "allow-tigera.intrusion-detection-controller" {
+				return testutils.SelectPolicyByClusterTypeAndProvider(scenario,
+					expectedIDPolicyForUnmanaged,
+					expectedIDPolicyForUnmanagedOCP,
+					expectedIDPolicyForManaged,
+					expectedIDPolicyForManagedOCP,
+				)
+			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.intrusion-detection-elastic" {
+				return testutils.SelectPolicyByProvider(scenario, expectedIDInstallerPolicy, expectedIDInstallerPolicyForOCP)
+			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.anomaly-detection-api" {
+				return testutils.SelectPolicyByProvider(scenario, expectedAnomalyDetectionAPIPolicy, expectedAnomalyDetectionAPIPolicyForOCP)
+			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.anomaly-detectors" {
+				return testutils.SelectPolicyByProvider(scenario, expectedAnomalyDetectorsPolicy, expectedAnomalyDetectorsPolicyForOCP)
+			}
+
+			return nil
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.Openshift = scenario.Openshift
+				cfg.ManagedCluster = scenario.ManagedCluster
+				component := render.IntrusionDetection(cfg)
+				resources, _ := component.Objects()
+
+				for _, policyName := range policyNames {
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(policyName, scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				}
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
+
+	It("should not render anomaly detection or es-job installer when FIPS mode is enabled", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		testADStorageClassName := "test-storage-class-name"
+		cfg.Installation.FIPSMode = &fipsEnabled
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = true
+		component := render.IntrusionDetection(cfg)
+		toCreate, toRemove := component.Objects()
+
+		// Should render the correct resources.
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dga", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.http-connection-spike", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.http-response-codes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.http-verbs", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.port-scan", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.generic-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.generic-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.multivariable-flow", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.generic-l7", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dns-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dns-tunnel", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.l7-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-in", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.bytes-out", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.process-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+
+			if expectedRes.kind == "GlobalAlertTemplate" {
+				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
+			}
+		}
+
+		expectedResourcesToRemove := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-anomaly-detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PersistentVolumeClaim"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera.io.detectors.training", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
+			{name: "tigera.io.detectors.detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
+			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
+		}
+
+		Expect(toRemove).To(HaveLen(len(expectedResourcesToRemove)))
+
+		for i, expectedRes := range expectedResourcesToRemove {
+			rtest.ExpectResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+	})
 })
+
+func assertEnvVarlistMatch(envVars []corev1.EnvVar, expectedEnvVars []expectedEnvVar) {
+	for _, expected := range expectedEnvVars {
+		if expected.val != "" {
+			Expect(envVars).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+		} else {
+			Expect(envVars).To(ContainElement(corev1.EnvVar{
+				Name: expected.name,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
+						Key:                  expected.secretKey,
+					},
+				},
+			}))
+		}
+	}
+}

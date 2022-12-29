@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 )
@@ -170,7 +171,6 @@ var _ = Describe("Mainline component function tests", func() {
 				}
 				return nil
 			}, 30*time.Second, 500*time.Millisecond).Should(BeNil())
-
 		})
 	})
 
@@ -284,11 +284,23 @@ func setupManager(manageCRDs bool) (client.Client, context.Context, context.Canc
 		MapperProvider: func(c *rest.Config) (kmeta.RESTMapper, error) { return apiutil.NewDynamicRESTMapper(c) },
 	})
 	Expect(err).NotTo(HaveOccurred())
+
+	cs, err := kubernetes.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Auto-detect whether the cluster supports PSP. Since we use a kind cluster
+	// from before v1.25, we expect this to be true. Once we update our kind
+	// version >= v1.25, we should instead expect this to return "false".
+	usePSP, err := utils.SupportsPodSecurityPolicies(cs)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(usePSP).To(BeTrue())
+
 	// Setup Scheme for all resources
 	err = apis.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
 	ctx, cancel := context.WithCancel(context.TODO())
+
 	// Setup all Controllers
 	err = controllers.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
@@ -296,6 +308,7 @@ func setupManager(manageCRDs bool) (client.Client, context.Context, context.Canc
 		AmazonCRDExists:     true,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
+		UsePSP:              usePSP,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), ctx, cancel, mgr

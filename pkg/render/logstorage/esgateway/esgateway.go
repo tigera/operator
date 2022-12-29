@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,16 @@ package esgateway
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -27,11 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -42,108 +46,45 @@ const (
 	DeploymentName        = "tigera-secure-es-gateway"
 	ServiceAccountName    = "tigera-secure-es-gateway"
 	RoleName              = "tigera-secure-es-gateway"
-	VolumeName            = "tigera-secure-es-gateway-certs"
 	ServiceName           = "tigera-secure-es-gateway-http"
+	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "es-gateway-access"
 	ElasticsearchPortName = "es-gateway-elasticsearch-port"
 	KibanaPortName        = "es-gateway-kibana-port"
 	Port                  = 5554
 
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
-	ElasticsearchPort          = 9200
-
-	ExternalCertsSecret     = "tigera-secure-external-es-certs"
-	ExternalCertsVolumeName = "tigera-secure-external-es-certs"
 
 	KibanaHTTPSEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
-	KibanaPort          = 5601
 )
 
 func EsGateway(c *Config) render.Component {
-	var certSecretsESCopy []*corev1.Secret
-	// Only render the public cert secret in the Operator namespace.
-	secrets := []*corev1.Secret{c.CertSecrets[1]}
-	tlsAnnotations := map[string]string{}
-
-	// Copy the Operator namespaced cert secrets to the Elasticsearch namespace.
-	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.CertSecrets...)...)
-
-	if c.ExternalCertsSecret != nil {
-		certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.ExternalCertsSecret)...)
-	}
-	tlsAnnotations[render.ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(append(certSecretsESCopy, c.EsInternalCertSecret, c.EsAdminUserSecret)...)
-
-	secrets = append(secrets, certSecretsESCopy...)
-
-	// tigera-secure-es-http-certs-public, mounted by ES Gateway.
-	if c.EsInternalCertSecret != nil && c.EsInternalCertSecret.ObjectMeta.Namespace == common.OperatorNamespace() {
-		secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.EsInternalCertSecret)...)
-	}
-
-	// tigera-secure-kb-http-certs-public, mounted by ES Gateway.
-	secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.KibanaInternalCertSecret)...)
-	tlsAnnotations[render.KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(c.KibanaInternalCertSecret)
-
-	// tigera-secure-es-elastic-user, mounted by ES Gateway.
-	if c.EsAdminUserSecret != nil {
-		secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.EsAdminUserSecret)...)
-	}
-
-	secrets = append(secrets, c.KubeControllersUserSecrets...)
-
 	return &esGateway{
-		installation:         c.Installation,
-		pullSecrets:          c.PullSecrets,
-		secrets:              secrets,
-		tlsAnnotations:       tlsAnnotations,
-		clusterDomain:        c.ClusterDomain,
-		esAdminUserName:      c.EsAdminUserName,
-		tenantId:             c.TenantId,
-		enableMTLS:           c.EnableMTLS,
-		externalElastic:      c.ExternalElastic,
-		externalESDomain:     c.ExternalESDomain,
-		externalKibanaDomain: c.ExternalKibanaDomain,
+		cfg: c,
 	}
 }
 
 type esGateway struct {
-	installation         *operatorv1.InstallationSpec
-	pullSecrets          []*corev1.Secret
-	secrets              []*corev1.Secret
-	tlsAnnotations       map[string]string
-	clusterDomain        string
-	csrImage             string
-	esGatewayImage       string
-	esAdminUserName      string
-	tenantId             string
-	enableMTLS           bool
-	externalElastic      bool
-	externalESDomain     string
-	externalKibanaDomain string
+	csrImage       string
+	esGatewayImage string
+	cfg            *Config
 }
 
 // Config contains all the config information needed to render the EsGateway component.
 type Config struct {
 	Installation               *operatorv1.InstallationSpec
 	PullSecrets                []*corev1.Secret
-	CertSecrets                []*corev1.Secret
 	KubeControllersUserSecrets []*corev1.Secret
-	KibanaInternalCertSecret   *corev1.Secret
-	EsInternalCertSecret       *corev1.Secret
+	ESGatewayKeyPair           certificatemanagement.KeyPairInterface
+	TrustedBundle              certificatemanagement.TrustedBundle
 	ClusterDomain              string
 	EsAdminUserName            string
-	EsAdminUserSecret          *corev1.Secret
-	ExternalCertsSecret        *corev1.Secret
-	TenantId                   string
-	EnableMTLS                 bool
-	ExternalElastic            bool
-	ExternalESDomain           string
-	ExternalKibanaDomain       string
+	Cloud                      CloudConfig
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := e.installation.Registry
-	path := e.installation.ImagePath
-	prefix := e.installation.ImagePrefix
+	reg := e.cfg.Installation.Registry
+	path := e.cfg.Installation.ImagePath
+	prefix := e.cfg.Installation.ImagePrefix
 	var err error
 	errMsgs := []string{}
 
@@ -151,8 +92,8 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
-	if e.installation.CertificateManagement != nil {
-		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.installation, is)
+	if e.cfg.Installation.CertificateManagement != nil {
+		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -164,14 +105,19 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
-	toCreate = append(toCreate, e.esGatewaySecrets()...)
+	toCreate = append(toCreate, e.esGatewayAllowTigeraPolicy())
+	toCreate = append(toCreate, secret.ToRuntimeObjects(e.cfg.KubeControllersUserSecrets...)...)
 	toCreate = append(toCreate, e.esGatewayService())
 	toCreate = append(toCreate, e.esGatewayRole())
 	toCreate = append(toCreate, e.esGatewayRoleBinding())
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
+	toCreate = append(toCreate, e.getCloudObjects()...)
 	toCreate = append(toCreate, e.esGatewayDeployment())
-	if e.installation.CertificateManagement != nil {
-		toCreate = append(toCreate, certificatemanagement.CSRClusterRoleBinding(RoleName, render.ElasticsearchNamespace))
+	// The following secret is used by the kube controllers and sent to managed clusters. It is also used by manifests in our docs.
+	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
+		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.Installation.CertificateManagement.CACert, elasticsearch.PublicCertSecret, common.OperatorNamespace()))
+	} else {
+		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, common.OperatorNamespace()))
 	}
 	return toCreate, toDelete
 }
@@ -225,129 +171,56 @@ func (e esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 }
 
 func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
-
-	elasticEndpoint := ElasticsearchHTTPSEndpoint
-	kibanaEndpoint := KibanaHTTPSEndpoint
-	if e.externalElastic {
-		elasticEndpoint = "https://" + e.externalESDomain + ":443"
-		kibanaEndpoint = "https://" + e.externalKibanaDomain + ":443"
-	}
-
 	envVars := []corev1.EnvVar{
 		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
-		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: elasticEndpoint},
-		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: kibanaEndpoint},
-		{Name: "ES_GATEWAY_HTTPS_CERT", Value: "/certs/https/tls.crt"},
-		{Name: "ES_GATEWAY_HTTPS_KEY", Value: "/certs/https/tls.key"},
-		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.esAdminUserName},
+		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
+		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
+		{Name: "ES_GATEWAY_HTTPS_CERT", Value: e.cfg.ESGatewayKeyPair.VolumeMountCertificateFilePath()},
+		{Name: "ES_GATEWAY_HTTPS_KEY", Value: e.cfg.ESGatewayKeyPair.VolumeMountKeyFilePath()},
+		{Name: "ES_GATEWAY_KIBANA_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_KIBANA_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.cfg.EsAdminUserName},
 		{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: render.ElasticsearchAdminUserSecret,
 				},
-				Key: e.esAdminUserName,
+				Key: e.cfg.EsAdminUserName,
 			},
 		}},
-		// Currently Cloud only. Enable prometheus metrics endpoint at :METRICS_PORT/metrics (Default is 9091).
-		{Name: "ES_GATEWAY_METRICS_ENABLED", Value: "true"},
-	}
-
-	certVolume := corev1.Volume{
-		Name: VolumeName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: render.TigeraElasticsearchCertSecret,
-			},
-		},
+		{Name: "ES_GATEWAY_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 	}
 
 	var initContainers []corev1.Container
-	if e.installation.CertificateManagement != nil {
-		svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, e.clusterDomain)
-		svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(ServiceName, render.ElasticsearchNamespace, e.clusterDomain)...)
-
-		initContainers = append(initContainers, certificatemanagement.CreateCSRInitContainer(
-			e.installation.CertificateManagement,
-			e.csrImage,
-			VolumeName,
-			ServiceName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			svcDNSNames,
-			render.ElasticsearchNamespace))
-
-		certVolume.VolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, e.cfg.ESGatewayKeyPair.InitContainer(render.ElasticsearchNamespace))
 	}
 
 	volumes := []corev1.Volume{
-		certVolume,
-		{
-			Name: render.KibanaInternalCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: render.KibanaInternalCertSecret,
-				},
-			},
-		},
-		{
-			Name: relasticsearch.InternalCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: relasticsearch.InternalCertSecret,
-				},
-			},
-		},
+		e.cfg.ESGatewayKeyPair.Volume(),
+		e.cfg.TrustedBundle.Volume(),
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		{Name: VolumeName, MountPath: "/certs/https", ReadOnly: true},
-		{Name: render.KibanaInternalCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
-		{Name: relasticsearch.InternalCertSecret, MountPath: "/certs/elasticsearch", ReadOnly: true},
+		e.cfg.ESGatewayKeyPair.VolumeMount(e.SupportedOSType()),
+		e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
 	}
 
-	if e.enableMTLS {
-		envVars = append(envVars, []corev1.EnvVar{
-			{Name: "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH", Value: "/certs/elasticsearch/mtls/client.crt"},
-			{Name: "ES_GATEWAY_ELASTIC_CLIENT_KEY_PATH", Value: "/certs/elasticsearch/mtls/client.key"},
-			{Name: "ES_GATEWAY_ENABLE_ELASTIC_MUTUAL_TLS", Value: strconv.FormatBool(e.enableMTLS)},
-			{Name: "ES_GATEWAY_KIBANA_CLIENT_CERT_PATH", Value: "/certs/kibana/mtls/client.crt"},
-			{Name: "ES_GATEWAY_KIBANA_CLIENT_KEY_PATH", Value: "/certs/kibana/mtls/client.key"},
-			{Name: "ES_GATEWAY_ENABLE_KIBANA_MUTUAL_TLS", Value: strconv.FormatBool(e.enableMTLS)},
-		}...)
-
-		volumes = append(volumes, corev1.Volume{
-			Name: ExternalCertsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: ExternalCertsSecret,
-				},
-			},
-		})
-
-		volumeMounts = append(volumeMounts, []corev1.VolumeMount{
-			{Name: ExternalCertsVolumeName, MountPath: "/certs/elasticsearch/mtls", ReadOnly: true},
-			{Name: ExternalCertsVolumeName, MountPath: "/certs/kibana/mtls", ReadOnly: true},
-		}...)
-	}
-
-	if e.tenantId != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: "ES_GATEWAY_TENANT_ID", Value: e.tenantId})
-	}
-
+	annotations := e.cfg.TrustedBundle.HashAnnotations()
+	annotations[e.cfg.ESGatewayKeyPair.HashAnnotationKey()] = e.cfg.ESGatewayKeyPair.HashAnnotationValue()
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      DeploymentName,
-			Namespace: render.ElasticsearchNamespace,
-			Labels: map[string]string{
-				"k8s-app": DeploymentName,
-			},
-			Annotations: e.tlsAnnotations,
+			Name:        DeploymentName,
+			Namespace:   render.ElasticsearchNamespace,
+			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        e.installation.ControlPlaneTolerations,
-			NodeSelector:       e.installation.ControlPlaneNodeSelector,
+			Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ServiceAccountName,
-			ImagePullSecrets:   secret.GetReferenceList(e.pullSecrets),
+			ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
 			Volumes:            volumes,
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
@@ -357,7 +230,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
 					ReadinessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/health",
 								Port:   intstr.FromInt(Port),
@@ -372,11 +245,11 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if e.installation.ControlPlaneReplicas != nil && *e.installation.ControlPlaneReplicas > 1 {
+	if e.cfg.Installation.ControlPlaneReplicas != nil && *e.cfg.Installation.ControlPlaneReplicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchNamespace)
 	}
 
-	return &appsv1.Deployment{
+	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
@@ -389,11 +262,13 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeploymentName}},
 			Template: *podTemplate,
-			Replicas: e.installation.ControlPlaneReplicas,
+			Replicas: e.cfg.Installation.ControlPlaneReplicas,
 		},
 	}
+
+	e.modifyDeploymentForCloud(&d)
+	return &d
 }
 
 func (e esGateway) esGatewayServiceAccount() *corev1.ServiceAccount {
@@ -403,14 +278,6 @@ func (e esGateway) esGatewayServiceAccount() *corev1.ServiceAccount {
 			Namespace: render.ElasticsearchNamespace,
 		},
 	}
-}
-
-func (e esGateway) esGatewaySecrets() []client.Object {
-	objs := []client.Object{}
-	for _, s := range e.secrets {
-		objs = append(objs, s)
-	}
-	return objs
 }
 
 func (e esGateway) esGatewayService() *corev1.Service {
@@ -426,17 +293,158 @@ func (e esGateway) esGatewayService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       ElasticsearchPortName,
-					Port:       int32(ElasticsearchPort),
+					Port:       int32(render.ElasticsearchDefaultPort),
 					TargetPort: intstr.FromInt(Port),
 					Protocol:   corev1.ProtocolTCP,
 				},
 				{
 					Name:       KibanaPortName,
-					Port:       int32(KibanaPort),
+					Port:       int32(render.KibanaPort),
 					TargetPort: intstr.FromInt(Port),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
+		},
+	}
+}
+
+// Allow access to ES Gateway from components that need to talk to Elasticsearch or Kibana.
+func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.DexEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.ElasticsearchEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.KibanaEntityRule,
+		},
+	}...)
+	egressRules = append(egressRules, e.cloudEgressRules()...)
+
+	esgatewayIngressDestinationEntityRule := v3.EntityRule{
+		Ports: networkpolicy.Ports(Port),
+	}
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PolicyName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(DeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.FluentdSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.EKSLogForwarderEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.IntrusionDetectionInstallerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ESCuratorSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ManagerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceBenchmarkerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceControllerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceServerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceSnapshotterSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceReporterSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.IntrusionDetectionSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ECKOperatorSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      esmetrics.ESMetricsSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      dpi.DPISourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: esgatewayIngressDestinationEntityRule,
+					// The operator needs access to Elasticsearch and Kibana (through ES Gateway), however, since the
+					// operator is on the hostnetwork it's hard to create specific network policies for it.
+					// Allow all sources, as node CIDRs are not known.
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }

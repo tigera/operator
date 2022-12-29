@@ -83,7 +83,7 @@ join_platforms = $(subst $(space),$(comma),$(call prefix_linux,$(strip $1)))
 # This is only needed when running non-native binaries.
 register:
 ifneq ($(BUILDARCH),$(ARCH))
-	docker run --rm --privileged multiarch/qemu-user-static:register || true
+	docker run --rm --privileged multiarch/qemu-user-static:register --reset || true
 endif
 
 # list of arches *not* to build when doing *-all
@@ -104,7 +104,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.76
+GO_BUILD_VER?=v0.78
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -223,7 +223,7 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
-build: fmt vet $(BINDIR)/operator-$(ARCH)
+build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
@@ -282,12 +282,17 @@ WHAT?=.
 GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
 
-## Run the full set of tests
-ut: cluster-create run-uts cluster-destroy
-run-uts:
+ut:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -r --skipPackage "./vendor,./test" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+
+## Run the functional tests
+fv: cluster-create run-fvs cluster-destroy
+run-fvs:
+	-mkdir -p .go-pkg-cache report
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
+	ginkgo -pkgdir test -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
@@ -311,9 +316,13 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 ## kubectl create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
+## kubectl create is used for operator CRDS since the Installation API is large enough now that we hit the following error:
+##
+##   The CustomResourceDefinition "installations.operator.tigera.io" is invalid: metadata.annotations: Too long: must have at most 262144 bytes
+##
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
-		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \
+		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
@@ -390,7 +399,7 @@ validate-gen-versions:
 	make dirty-check
 
 ## Deploys images to registry
-cd:
+cd: image-all
 ifndef CONFIRM
 	$(error CONFIRM is undefined - run using make <target> CONFIRM=true)
 endif
@@ -662,7 +671,7 @@ fmt:
 	go fmt ./...'
 
 # Run go vet against code
-vet:
+vet: register
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'

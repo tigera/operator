@@ -19,14 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"gopkg.in/yaml.v2"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -35,6 +27,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -43,7 +46,10 @@ const (
 	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
 	DexClientId      = "tigera-manager"
+	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
 )
+
+var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
 
 func Dex(cfg *DexComponentConfiguration) Component {
 
@@ -102,6 +108,8 @@ func (*dexComponent) SupportedOSType() rmeta.OSType {
 
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
+		c.allowTigeraNetworkPolicy(),
+		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),
@@ -189,50 +197,56 @@ func (c *dexComponent) deployment() client.Object {
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(DexNamespace))
 	}
+
 	annotations := c.cfg.DexConfig.RequiredAnnotations()
 	annotations[c.cfg.TLSKeyPair.HashAnnotationKey()] = c.cfg.TLSKeyPair.HashAnnotationValue()
+
+	// UID and GID 1001:1001 are used in dex Dockerfile.
+	sc := securitycontext.NewBaseContext(1001, 1001)
+	// Build a security context for the pod that will allow the pod to be deployed. Dex is run in a namespace with a
+	// Baseline pod security standard, which requires that the security context meet certain criteria in order for pods to
+	// be accepted by the API server
+	sc.Capabilities = &corev1.Capabilities{
+		Drop: []corev1.Capability{"ALL"},
+	}
+	sc.SeccompProfile = &corev1.SeccompProfile{
+		Type: corev1.SeccompProfileTypeRuntimeDefault,
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DexObjectName,
 			Namespace: DexNamespace,
-			Labels: map[string]string{
-				"k8s-app": DexObjectName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": DexObjectName,
-				},
-			},
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      DexObjectName,
-					Namespace: DexNamespace,
-					Labels: map[string]string{
-						"k8s-app": DexObjectName,
-					},
+					Name:        DexObjectName,
+					Namespace:   DexNamespace,
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						{
-							Name:          DexObjectName,
-							Image:         c.image,
-							Env:           c.cfg.DexConfig.RequiredEnv(""),
-							LivenessProbe: c.probe(),
-							// UID and GID 1001:1001 are used in dex Dockerfile.
-							SecurityContext: securitycontext.NewBaseContext(1001, 1001),
+							Name:  DexObjectName,
+							Image: c.image,
+							Env: append(
+								[]corev1.EnvVar{
+									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+								},
+								c.cfg.DexConfig.RequiredEnv("")...),
+							LivenessProbe:   c.probe(),
+							SecurityContext: sc,
 
 							Command: []string{"/usr/local/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 
@@ -242,7 +256,7 @@ func (c *dexComponent) deployment() client.Object {
 									ContainerPort: DexPort,
 								},
 							},
-							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount()),
+							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType())),
 						},
 					},
 					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume()),
@@ -287,7 +301,7 @@ func (c *dexComponent) service() client.Object {
 // Perform a HTTP GET to determine if an endpoint is available.
 func (c *dexComponent) probe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/dex/.well-known/openid-configuration",
 				Port:   intstr.FromInt(DexPort),
@@ -310,8 +324,8 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		},
 		"web": map[string]interface{}{
 			"https":                   "0.0.0.0:5556",
-			"tlsCert":                 "/etc/dex/tls/tls.crt",
-			"tlsKey":                  "/etc/dex/tls/tls.key",
+			"tlsCert":                 c.cfg.TLSKeyPair.VolumeMountCertificateFilePath(),
+			"tlsKey":                  c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
 			"allowedOrigins":          []string{"*"},
 			"discoveryAllowedOrigins": []string{"*"},
 		},
@@ -341,6 +355,86 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		},
 		Data: map[string]string{
 			"config.yaml": string(bytes),
+		},
+	}
+}
+
+func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+
+		// These rules allow egress between dex and identity providers.
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets:  []string{"0.0.0.0/0"},
+				Ports: networkpolicy.Ports(443, 6443, 389, 636),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets:  []string{"::/0"},
+				Ports: networkpolicy.Ports(443, 6443, 389, 636),
+			},
+		},
+	}...)
+
+	dexIngressPortDestination := v3.EntityRule{
+		Ports: networkpolicy.Ports(DexPort),
+	}
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DexPolicyName,
+			Namespace: DexNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(DexObjectName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      ManagerSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      ComplianceServerSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      PacketCaptureSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.PrometheusSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }

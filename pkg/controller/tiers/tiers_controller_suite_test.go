@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package tiers
 
 import (
-	"crypto/rand"
-	"encoding/base64"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
+	"github.com/onsi/ginkgo/reporters"
 )
 
-func RandomPassword(length int) (string, error) {
-	byts := make([]byte, length)
-	_, err := rand.Read(byts)
-
-	return base64.URLEncoding.EncodeToString(byts), err
+func TestStatus(t *testing.T) {
+	RegisterFailHandler(Fail)
+	junitReporter := reporters.NewJUnitReporter("../../../report/tiers_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/tiers Suite", []Reporter{junitReporter})
 }

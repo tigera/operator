@@ -12,6 +12,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +59,7 @@ type Config struct {
 	ESClusterConfig *relasticsearch.ClusterConfig
 	ESSecrets       []*corev1.Secret
 	ClusterDomain   string
+	TrustedBundle   certificatemanagement.TrustedBundle
 	// Calculated internal fields.
 	sashaImage    string
 	threatIdImage string
@@ -99,8 +101,9 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var objs, toDelete []client.Object
 
-	objs = append(objs, render.CreateNamespace(NameSpaceRuntimeSecurity, c.config.Installation.KubernetesProvider))
+	objs = append(objs, render.CreateNamespace(NameSpaceRuntimeSecurity, c.config.Installation.KubernetesProvider, render.PSSPrivileged))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.PullSecrets...)...)...)
+	objs = append(objs, c.config.TrustedBundle.ConfigMap(NameSpaceRuntimeSecurity))
 
 	if len(c.config.SashaESSecrets) > 0 {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.SashaESSecrets...)...)...)
@@ -122,14 +125,6 @@ func (c *component) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *component) esClusterName() string {
-	clusterName := c.config.ESClusterConfig.ClusterName()
-	if v := strings.Split(clusterName, "."); len(v) > 1 {
-		clusterName = v[1]
-	}
-	return clusterName
-}
-
 func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{
@@ -141,8 +136,9 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	// The threat-id API will use this probe for liveness and readiness
 	grpcProbe := &corev1.Probe{
-		Handler: corev1.Handler{Exec: &corev1.ExecAction{
-			Command: []string{"bin/grpc_health_probe-linux-amd64", "-addr", "127.0.0.1:50051"}}},
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"bin/grpc_health_probe-linux-amd64", "-addr", "127.0.0.1:50051"}}},
 		PeriodSeconds:    2,
 		FailureThreshold: 6,
 	}
@@ -163,15 +159,16 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 				},
 			},
 			Replicas: &numReplica,
-			Template: corev1.PodTemplateSpec{
+			Template: *(relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      SashaName,
 					Namespace: NameSpaceRuntimeSecurity,
 					Labels: map[string]string{
 						"k8s-app": SashaName,
 					},
+					Annotations: c.config.TrustedBundle.HashAnnotations(),
 				},
-				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+				Spec: corev1.PodSpec{
 					NodeSelector: c.config.Installation.ControlPlaneNodeSelector,
 					Tolerations:  c.config.Installation.ControlPlaneTolerations,
 					Volumes: []corev1.Volume{
@@ -184,6 +181,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 								},
 							},
 						},
+						c.config.TrustedBundle.Volume(),
 					},
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(corev1.Container{
@@ -205,6 +203,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 									Name:      SashaVerifyAuthVolumeName,
 									MountPath: SashaVerifyAuthPath,
 								},
+								c.config.TrustedBundle.VolumeMount(c.SupportedOSType()),
 							},
 						},
 							c.config.ESClusterConfig.ClusterName(),
@@ -231,8 +230,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
 					ServiceAccountName: SashaName,
-				}),
-			},
+				},
+			}, c.config.ESClusterConfig, c.config.ESSecrets).(*corev1.PodTemplateSpec)),
 		},
 	}
 }

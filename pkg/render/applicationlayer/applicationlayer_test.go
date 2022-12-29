@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -95,8 +95,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{
 				Name: applicationlayer.FelixSync,
 				VolumeSource: corev1.VolumeSource{
-					FlexVolume: &corev1.FlexVolumeSource{
-						Driver: "nodeagent/uds",
+					CSI: &corev1.CSIVolumeSource{
+						Driver: "csi.tigera.io",
 					},
 				},
 			},

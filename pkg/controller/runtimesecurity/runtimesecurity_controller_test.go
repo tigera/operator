@@ -5,7 +5,6 @@ package runtimesecurity
 import (
 	"context"
 	"fmt"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -14,6 +13,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -56,6 +56,7 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("RemoveCronJobs", mock.Anything).Return()
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("OnCRNotFound").Return()
 		mockStatus.On("ClearDegraded")
@@ -92,10 +93,11 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 			Data:       map[string][]byte{},
 		})).NotTo(HaveOccurred())
 
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure-es-gateway-http-certs-public", Namespace: common.OperatorNamespace()},
-			Data:       map[string][]byte{},
-		})).NotTo(HaveOccurred())
+		certificateManager, err := certificatemanager.Create(c, nil, "")
+		Expect(err).NotTo(HaveOccurred())
+		gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Create empty secrets, so that reconciles passes.
 		Expect(c.Create(ctx, &corev1.ConfigMap{

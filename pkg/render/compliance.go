@@ -20,17 +20,6 @@ import (
 
 	ocsv1 "github.com/openshift/api/security/v1"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/authentication"
-	"github.com/tigera/operator/pkg/render/common/configmap"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -38,15 +27,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	ComplianceNamespace       = "tigera-compliance"
-	ComplianceServiceName     = "compliance"
-	ComplianceServerName      = "compliance-server"
-	ComplianceControllerName  = "compliance-controller"
-	ComplianceSnapshotterName = "compliance-snapshotter"
-	ComplianceServerSAName    = "tigera-compliance-server"
+	ComplianceNamespace        = "tigera-compliance"
+	ComplianceServiceName      = "compliance"
+	ComplianceServerName       = "compliance-server"
+	ComplianceControllerName   = "compliance-controller"
+	ComplianceSnapshotterName  = "compliance-snapshotter"
+	ComplianceReporterName     = "compliance-reporter"
+	ComplianceBenchmarkerName  = "compliance-benchmarker"
+	ComplianceServerSAName     = "tigera-compliance-server"
+	ComplianceAccessPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "compliance-access"
+	ComplianceServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + ComplianceServerName
 )
 
 const (
@@ -59,6 +65,13 @@ const (
 
 	ComplianceServerCertSecret = "tigera-compliance-server-tls"
 )
+
+var ComplianceServerEntityRule = networkpolicy.CreateEntityRule(ComplianceNamespace, ComplianceServerName, complianceServerPort)
+var ComplianceServerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName)
+var ComplianceBenchmarkerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName)
+var ComplianceControllerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName)
+var ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
+var ComplianceReporterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 	return &complianceComponent{
@@ -80,7 +93,12 @@ type ComplianceConfiguration struct {
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	ClusterDomain               string
 	HasNoLicense                bool
-	TenantID                    string
+
+	// Calico Cloud addition
+	TenantID string
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type complianceComponent struct {
@@ -135,10 +153,12 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
-	complianceObjs := append(
-		[]client.Object{CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider)},
-		secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...,
-	)
+	complianceObjs := []client.Object{
+		CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
+		c.complianceAccessAllowTigeraNetworkPolicy(),
+		networkpolicy.AllowTigeraDefaultDeny(ComplianceNamespace),
+	}
+	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...)
 	complianceObjs = append(complianceObjs,
 		c.complianceControllerServiceAccount(),
 		c.complianceControllerRole(),
@@ -182,6 +202,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	// Compliance server is only for Standalone or Management clusters
 	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs,
+			c.complianceServerAllowTigeraNetworkPolicy(),
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
@@ -197,7 +218,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Openshift {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
-	} else {
+	} else if c.cfg.UsePSP {
 		complianceObjs = append(complianceObjs,
 			c.complianceBenchmarkerPodSecurityPolicy(),
 			c.complianceControllerPodSecurityPolicy(),
@@ -225,21 +246,12 @@ func (c *complianceComponent) Ready() bool {
 	return true
 }
 
-var complianceBoolTrue = true
-var complianceReplicas int32 = 1
+var (
+	complianceBoolTrue       = true
+	complianceReplicas int32 = 1
+)
 
 const complianceServerPort = 5443
-
-// complianceLivenssProbe is the liveness probe to use for compliance components.
-// They all use the same liveness configuration, so we just define it once here.
-var complianceLivenessProbe = &corev1.Probe{
-	Handler: corev1.Handler{
-		HTTPGet: &corev1.HTTPGetAction{
-			Path: "/liveness",
-			Port: intstr.FromInt(9099),
-		},
-	},
-}
 
 func (c *complianceComponent) complianceControllerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
@@ -372,24 +384,35 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceControllerName,
-			},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-controller",
-			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
-					Name:          ComplianceControllerName,
-					Image:         c.controllerImage,
-					Env:           envVars,
-					LivenessProbe: complianceLivenessProbe,
+					Name:  ComplianceControllerName,
+					Image: c.controllerImage,
+					Env:   envVars,
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/liveness",
+								Port: intstr.FromInt(9099),
+							},
+						},
+					},
+					SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+					VolumeMounts: []corev1.VolumeMount{
+						c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
+					},
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
-		}),
+			Volumes: []corev1.Volume{
+				c.cfg.TrustedBundle.Volume(),
+			},
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
@@ -406,7 +429,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceControllerName}},
 			Template: *podTemplate,
 		},
 	}
@@ -478,7 +500,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	}
 
 	envVars := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "warning"},
+		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
 	return &corev1.PodTemplate{
@@ -487,7 +509,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			Name:      "tigera.io.report",
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-reporter",
+				"k8s-app": ComplianceReporterName,
 			},
 		},
 		Template: corev1.PodTemplateSpec{
@@ -495,26 +517,35 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Name:      "tigera.io.report",
 				Namespace: ComplianceNamespace,
 				Labels: map[string]string{
-					"k8s-app": "compliance-reporter",
+					"k8s-app": ComplianceReporterName,
 				},
 			},
-			Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+			Spec: corev1.PodSpec{
 				ServiceAccountName: "tigera-compliance-reporter",
-				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				Containers: []corev1.Container{
 					relasticsearch.ContainerDecorateIndexCreator(
 						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:          "reporter",
-							Image:         c.reporterImage,
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:  "reporter",
+							Image: c.reporterImage,
+							Env:   envVars,
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/liveness",
+										Port: intstr.FromInt(9099),
+									},
+								},
+								PeriodSeconds: 300,
+							},
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: &privileged,
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/var/log/calico", Name: "var-log-calico"},
+								c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 							},
 						}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 					),
@@ -529,8 +560,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							},
 						},
 					},
+					c.cfg.TrustedBundle.Volume(),
 				},
-			}),
+			},
 		},
 	}
 }
@@ -647,6 +679,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
@@ -658,16 +691,13 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ComplianceServerName,
-			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceServerName,
-			},
+			Name:        ComplianceServerName,
+			Namespace:   ComplianceNamespace,
 			Annotations: complianceAnnotations(c),
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-server",
-			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
@@ -677,7 +707,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					Image: c.serverImage,
 					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
 								Port:   intstr.FromInt(complianceServerPort),
@@ -689,7 +719,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						FailureThreshold:    5,
 					},
 					ReadinessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
 								Port:   intstr.FromInt(complianceServerPort),
@@ -700,16 +730,16 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					Command: []string{"/code/server"},
 					Args: []string{
 						fmt.Sprintf("-certpath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountCertificateFilePath()),
 						fmt.Sprintf("-keypath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountKeyFilePath()),
 					},
-					VolumeMounts: c.complianceServerVolumeMounts(),
+					SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+					VolumeMounts:    c.complianceServerVolumeMounts(),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())),
 			},
 			Volumes: c.complianceServerVolumes(),
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
@@ -717,16 +747,12 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceServerName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &complianceReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceServerName}},
 			Template: *podTemplate,
 		},
 	}
@@ -740,8 +766,8 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedBundle.VolumeMount(),
-		c.cfg.ComplianceServerCertSecret.VolumeMount(),
+		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.ComplianceServerCertSecret.VolumeMount(c.SupportedOSType()),
 	}
 
 	return mounts
@@ -774,26 +800,31 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
-			Resources: []string{"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
-				"endpoints", "services"},
+			Resources: []string{
+				"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
+				"endpoints", "services",
+			},
 			Verbs: []string{"get", "list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"globalnetworkpolicies", "tier.globalnetworkpolicies",
+			Resources: []string{
+				"globalnetworkpolicies", "tier.globalnetworkpolicies",
 				"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
 				"networkpolicies", "tier.networkpolicies",
 				"stagednetworkpolicies", "tier.stagednetworkpolicies",
 				"stagedkubernetesnetworkpolicies",
 				"tiers", "hostendpoints",
-				"globalnetworksets", "networksets"},
+				"globalnetworksets", "networksets",
+			},
 			Verbs: []string{"get", "list"},
 		},
 	}
 
 	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{ComplianceSnapshotterName},
@@ -837,26 +868,37 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceSnapshotterName,
-			},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-snapshotter",
-			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          ComplianceSnapshotterName,
-						Image:         c.snapshotterImage,
-						Env:           envVars,
-						LivenessProbe: complianceLivenessProbe,
+						Name:  ComplianceSnapshotterName,
+						Image: c.snapshotterImage,
+						Env:   envVars,
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/liveness",
+									Port: intstr.FromInt(9099),
+								},
+							},
+						},
+						SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+						VolumeMounts: []corev1.VolumeMount{
+							c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
+						},
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
-		}),
+			Volumes: []corev1.Volume{
+				c.cfg.TrustedBundle.Volume(),
+			},
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
@@ -864,16 +906,12 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceSnapshotterName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &complianceReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceSnapshotterName}},
 			Template: *podTemplate,
 		},
 	}
@@ -908,7 +946,8 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 
 	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"compliance-benchmarker"},
@@ -952,6 +991,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "etc-systemd", MountPath: "/etc/systemd", ReadOnly: true},
 		{Name: "etc-kubernetes", MountPath: "/etc/kubernetes", ReadOnly: true},
 		{Name: "usr-bin", MountPath: "/usr/local/bin", ReadOnly: true},
+		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 	}
 
 	vols := []corev1.Volume{
@@ -975,6 +1015,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Name:         "usr-bin",
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/usr/bin"}},
 		},
+		c.cfg.TrustedBundle.Volume(),
 	}
 
 	// benchmarker needs an extra host path volume mount for GKE for CIS benchmarks
@@ -989,13 +1030,10 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-benchmarker",
+			Name:      ComplianceBenchmarkerName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": "compliance-benchmarker",
-			},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-benchmarker",
 			HostPID:            true,
 			Tolerations:        rmeta.TolerateAll,
@@ -1003,28 +1041,34 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          "compliance-benchmarker",
-						Image:         c.benchmarkerImage,
-						Env:           envVars,
-						VolumeMounts:  volMounts,
-						LivenessProbe: complianceLivenessProbe,
+						Name:         ComplianceBenchmarkerName,
+						Image:        c.benchmarkerImage,
+						Env:          envVars,
+						VolumeMounts: volMounts,
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/liveness",
+									Port: intstr.FromInt(9099),
+								},
+							},
+							PeriodSeconds: 300,
+						},
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
 			Volumes: vols,
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-benchmarker",
+			Name:      ComplianceBenchmarkerName,
 			Namespace: ComplianceNamespace,
-			Labels:    map[string]string{"k8s-app": "compliance-benchmarker"},
 		},
 
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-benchmarker"}},
 			Template: *podTemplate,
 		},
 	}
@@ -1357,6 +1401,108 @@ func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplat
 {{- $c := $c.AddColumn "medNodeCount"        "{{ .CISBenchmarkSummary.MedCount }}" }}
 {{- $c := $c.AddColumn "lowNodeCount"        "{{ .CISBenchmarkSummary.LowCount }}" }}
 {{- $c.Render . }}`,
+		},
+	}
+}
+
+// Allow internal communication from compliance-benchmarker, compliance-controller, compliance-snapshotter, compliance-reporter
+// to apiserver, coredns and elasticsearch.
+func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+	}
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+
+	if c.cfg.ManagementClusterConnection == nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.ESGatewayEntityRule,
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: GuardianEntityRule,
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ComplianceAccessPolicyName,
+			Namespace: ComplianceNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ComplianceBenchmarkerName, ComplianceControllerName, ComplianceSnapshotterName, ComplianceReporterName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+// Allow internal communication to compliance-server from Manager.
+func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+	}
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
+		},
+		// compliance-server does RBAC checks for managed cluster compliance reports via guardian.
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ManagerEntityRule,
+		},
+	}...)
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   ManagerSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(complianceServerPort),
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ComplianceServerPolicyName,
+			Namespace: ComplianceNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ComplianceServerName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

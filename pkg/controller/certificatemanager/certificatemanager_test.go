@@ -19,32 +19,32 @@ package certificatemanager_test
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/utils/imageset"
-
-	"github.com/openshift/library-go/pkg/crypto"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"github.com/tigera/operator/test"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/openshift/library-go/pkg/crypto"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
+
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -59,7 +59,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 	var (
 		cli                 client.Client
-		scheme              *runtime.Scheme
+		scheme              *k8sruntime.Scheme
 		installation        *operatorv1.InstallationSpec
 		cm                  *operatorv1.CertificateManagement
 		clusterDomain       = "cluster.local"
@@ -74,13 +74,12 @@ var _ = Describe("Test CertificateManagement suite", func() {
 	)
 	BeforeEach(func() {
 		// Create a Kubernetes client.
-		scheme = runtime.NewScheme()
+		scheme = k8sruntime.NewScheme()
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -294,7 +293,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -321,7 +320,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.EmptyDir).NotTo(BeNil())
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -361,7 +360,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -409,7 +408,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -466,7 +465,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 					},
 				},
 			}))
-			Expect(trustedBundle.VolumeMount()).To(Equal(corev1.VolumeMount{
+			Expect(trustedBundle.VolumeMount(rmeta.OSTypeLinux)).To(Equal(corev1.VolumeMount{
 				Name:      certificatemanagement.TrustedCertConfigMapName,
 				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
 				ReadOnly:  true,
@@ -486,6 +485,20 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
 			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/byo-secret"))
 			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/legacy-secret"))
+		})
+		It("should load the system certificates into the bundle", func() {
+			if runtime.GOOS != "linux" {
+				Skip("Skip for users that run this test outside of a container on incompatible systems.")
+			}
+			trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+			Expect(err).NotTo(HaveOccurred())
+			configMap := trustedBundle.ConfigMap(appNs)
+			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: appNs}))
+			Expect(configMap.TypeMeta).To(Equal(metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}))
+			By("counting the number of pem blocks in the configmap")
+			bundle := configMap.Data[certificatemanagement.RHELRootCertificateBundleName]
+			numBlocks := strings.Count(bundle, "-----BEGIN CERTIFICATE-----")
+			Expect(numBlocks > 1).To(BeTrue()) // We expect tens of them most likely.
 		})
 	})
 })

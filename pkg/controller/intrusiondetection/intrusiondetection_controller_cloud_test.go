@@ -89,6 +89,7 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
 			dpiAPIReady:     &utils.ReadyFlag{},
+			tierWatchReady:  &utils.ReadyFlag{},
 			elasticExternal: false,
 		}
 
@@ -117,6 +118,7 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
@@ -151,6 +153,7 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		// mark that the watch for license key and dpi was successful
 		r.licenseAPIReady.MarkAsReady()
 		r.dpiAPIReady.MarkAsReady()
+		r.tierWatchReady.MarkAsReady()
 	})
 
 	Context("image reconciliation for Image Assurance", func() {
@@ -235,8 +238,9 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 
 			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
 				corev1.VolumeMount{
-					Name:      "elastic-ca-cert-volume",
-					MountPath: "/etc/ssl/elastic/",
+					Name:      "tigera-ca-bundle",
+					MountPath: "/etc/pki/tls/certs/",
+					ReadOnly:  true,
 				},
 			))
 
@@ -256,12 +260,11 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 
 			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(
 				corev1.Volume{
-					Name: "elastic-ca-cert-volume",
+					Name: "tigera-ca-bundle",
 					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: "tigera-secure-es-gateway-http-certs-public",
-							Items: []corev1.KeyToPath{
-								{Key: "tls.crt", Path: "ca.pem"},
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "tigera-ca-bundle",
 							},
 						},
 					},

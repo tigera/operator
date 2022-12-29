@@ -50,7 +50,9 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 			ComponentCalicoKubeControllers,
 			ComponentFlexVolume,
 			ComponentCalicoAPIServer,
-			ComponentWindowsUpgrade:
+			ComponentWindowsUpgrade,
+			ComponentCalicoCSI,
+			ComponentCalicoCSIRegistrar:
 
 			registry = CalicoRegistry
 		case ComponentOperatorInit:

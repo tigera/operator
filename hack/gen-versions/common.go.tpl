@@ -20,7 +20,7 @@ var ({{ with index .Components "key-cert-provisioner" }}
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-	CommonComponents = []component{
+	CommonImages = []component{
 		ComponentCSRInitContainer,
 	}
 )

@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 )
@@ -42,6 +43,11 @@ const (
 	TyphaServiceAccountName       = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
+
+	TyphaContainerName = "calico-typha"
+
+	defaultTyphaTerminationGracePeriod = 300
+	shutdownTimeoutEnvVar              = "TYPHA_SHUTDOWNTIMEOUTSECS"
 )
 
 var (
@@ -63,6 +69,9 @@ type TyphaConfiguration struct {
 	// The health port that Felix is bound to. We configure Typha to bind to the port
 	// that is one less.
 	FelixHealthPort int
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
@@ -107,7 +116,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaPodDisruptionBudget(),
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
@@ -340,10 +349,23 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 
 // typhaDeployment creates the typha deployment.
 func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
-	var terminationGracePeriod int64 = 0
+	// We set a fairly long grace period by default. Typha sheds load during the grace period rather than
+	// disconnecting all clients at once.
+	var terminationGracePeriod int64 = defaultTyphaTerminationGracePeriod
 	var revisionHistoryLimit int32 = 2
+	// Allowing 1 unavailable Typha by default ensures that we make progress in a cluster with constrained scheduling.
 	maxUnavailable := intstr.FromInt(1)
-	maxSurge := intstr.FromString("25%")
+	// Allowing 100% surge allows a complete replacement fleet of Typha instances to start during an upgrade. When
+	// combined with Typha's graceful shutdown, we get nice emergent behavior:
+	// - All up-level Typhas start if there's room available.
+	// - Back-level Typhas shed load slowly over the termination grace period.
+	// - Clients that are shed end up connecting to up-level Typhas (because all the back-level Typhas are marked
+	//   as terminating once all the up-level Typhas are ready).  This tends to avoid bouncing a client multiple
+	//   times during an upgrade.
+	// - If there's any sort of version skew issue where a back-level client can't understand an up-level Typha,
+	//   it'll go non-ready and Kubernetes will upgrade it.  This is rate limited by Typha's load-shedding rate,
+	//   so we shouldn't get a "thundering herd".
+	maxSurge := intstr.FromString("100%")
 
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	annotations[c.cfg.TLS.TyphaSecret.HashAnnotationKey()] = c.cfg.TLS.TyphaSecret.HashAnnotationValue()
@@ -369,14 +391,8 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.TyphaDeploymentName,
 			Namespace: common.CalicoNamespace,
-			Labels: map[string]string{
-				AppLabelName: TyphaK8sAppName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{AppLabelName: TyphaK8sAppName},
-			},
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
@@ -387,9 +403,6 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 			RevisionHistoryLimit: &revisionHistoryLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						AppLabelName: TyphaK8sAppName,
-					},
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -410,7 +423,46 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	if c.cfg.MigrateNamespaces {
 		migration.SetTyphaAntiAffinity(&d)
 	}
+
+	if overrides := c.cfg.Installation.TyphaDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(&d, overrides)
+	}
+
+	// ApplyDeploymentOverrides patches some fields that have consistency requirements elsewhere in the spec.
+	// fix up the other places.
+	c.applyPostOverrideFixUps(&d)
+
 	return &d
+}
+
+func (c *typhaComponent) applyPostOverrideFixUps(d *appsv1.Deployment) {
+	// The deployment overrides may update the termination grace period and typha needs to know what the grace
+	// period is in order to calculate its shutdown disconnection rate.  Copy that over to an env var.
+	terminationGracePeriod := *d.Spec.Template.Spec.TerminationGracePeriodSeconds
+	for _, c := range d.Spec.Template.Spec.Containers {
+		if c.Name != TyphaContainerName {
+			continue
+		}
+		for i, e := range c.Env {
+			if e.Name != shutdownTimeoutEnvVar {
+				continue
+			}
+			c.Env[i].Value = fmt.Sprint(terminationGracePeriod)
+			break
+		}
+		break
+	}
+
+	// If the termination grace period has been set to a very high value, make sure the Deployment's progress
+	// deadline takes account of that.
+	minProgressDeadline := int32(terminationGracePeriod * 120 / 100)
+	if minProgressDeadline < 600 {
+		// 600 is the Kubernetes default so let's not go below that.
+		minProgressDeadline = 600
+	}
+	if d.Spec.ProgressDeadlineSeconds == nil || *d.Spec.ProgressDeadlineSeconds < minProgressDeadline {
+		d.Spec.ProgressDeadlineSeconds = &minProgressDeadline
+	}
 }
 
 // volumes creates the typha's volumes.
@@ -424,8 +476,8 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 // typhaVolumeMounts creates the typha's volume mounts.
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.TyphaSecret.VolumeMount(),
+		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.TLS.TyphaSecret.VolumeMount(c.SupportedOSType()),
 	}
 }
 
@@ -444,7 +496,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	return corev1.Container{
-		Name:           "calico-typha",
+		Name:           TyphaContainerName,
 		Image:          c.typhaImage,
 		Resources:      c.typhaResources(),
 		Env:            c.typhaEnvVars(),
@@ -474,6 +526,8 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
 		{Name: "TYPHA_SERVERKEYFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountKeyFilePath()},
+		{Name: "TYPHA_FIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: shutdownTimeoutEnvVar, Value: fmt.Sprint(defaultTyphaTerminationGracePeriod)}, // May get overridden later.
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -536,7 +590,7 @@ func (c *typhaComponent) healthPort() int {
 func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	port := intstr.FromInt(c.healthPort())
 	lp := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
@@ -546,7 +600,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe
 		TimeoutSeconds: 10,
 	}
 	rp := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/readiness",
@@ -605,6 +659,28 @@ func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 			},
 		}
 
+	}
+	if aff == nil {
+		aff = &corev1.Affinity{}
+	}
+	aff.PodAntiAffinity = &corev1.PodAntiAffinity{
+		PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+			{
+				Weight: 1,
+				PodAffinityTerm: corev1.PodAffinityTerm{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      AppLabelName,
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{TyphaK8sAppName},
+							},
+						},
+					},
+					TopologyKey: "topology.kubernetes.io/zone",
+				},
+			},
+		},
 	}
 	return aff
 }

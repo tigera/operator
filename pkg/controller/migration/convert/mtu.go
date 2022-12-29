@@ -28,7 +28,7 @@ func handleMTU(c *components, install *operatorv1.Installation) error {
 		curMTUSrc string
 	)
 
-	for _, src := range []string{"FELIX_IPINIPMTU", "FELIX_VXLANMTU", "FELIX_WIREGUARDMTU"} {
+	for _, src := range []string{"FELIX_IPINIPMTU", "FELIX_VXLANMTU", "FELIX_VXLANMTUV6", "FELIX_WIREGUARDMTU", "FELIX_WIREGUARDMTUV6"} {
 		mtu, err := getMTU(c, containerCalicoNode, src)
 		if err != nil {
 			return ErrIncompatibleCluster{

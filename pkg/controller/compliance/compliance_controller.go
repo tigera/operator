@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,12 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -52,9 +58,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{}
+
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
 	controller, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -70,11 +78,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+		{Name: render.ComplianceAccessPolicyName, Namespace: render.ComplianceNamespace},
+		{Name: render.ComplianceServerPolicyName, Namespace: render.ComplianceNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ComplianceNamespace},
+	})
+
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new *reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileCompliance{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -83,6 +98,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		elasticExternal: opts.ElasticExternal,
+		tierWatchReady:  tierWatchReady,
+		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -113,10 +130,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the compliance and operator namespaces
 	for _, namespace := range []string{common.OperatorNamespace(), render.ComplianceNamespace} {
 		for _, secretName := range []string{
-			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			render.TigeraElasticsearchGatewaySecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -161,6 +179,8 @@ type ReconcileCompliance struct {
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	elasticExternal bool
+	tierWatchReady  *utils.ReadyFlag
+	usePSP          bool
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -201,6 +221,24 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, err
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for allow-tigera tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {
@@ -305,7 +343,17 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret)
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 
 	var complianceServerCertSecret certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {
@@ -361,7 +409,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(3).Info("rendering components")
-	var hasNoLicense = !utils.IsFeatureActive(license, common.ComplianceFeature)
+	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
 		ESSecrets:                   esSecrets,
@@ -377,6 +425,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		ClusterDomain:               r.clusterDomain,
 		HasNoLicense:                hasNoLicense,
 		TenantID:                    tenantId,
+		UsePSP:                      r.usePSP,
 	}
 	// Render the desired objects from the CRD and create or update them.
 	comp, err := render.Compliance(complianceCfg)

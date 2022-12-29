@@ -17,6 +17,9 @@ package esmetrics
 import (
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +41,11 @@ const (
 	ElasticsearchMetricsSecret          = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
 	ElasticsearchMetricsServerTLSSecret = "tigera-ee-elasticsearch-metrics-tls"
 	ElasticsearchMetricsName            = "tigera-elasticsearch-metrics"
+	ElasticsearchMetricsPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-metrics"
+	ElasticsearchMetricsPort            = 9081
 )
+
+var ESMetricsSourceEntityRule = networkpolicy.CreateSourceEntityRule(render.ElasticsearchNamespace, ElasticsearchMetricsName)
 
 func ElasticsearchMetrics(cfg *Config) render.Component {
 	return &elasticsearchMetrics{
@@ -51,7 +58,6 @@ type Config struct {
 	PullSecrets          []*corev1.Secret
 	ESConfig             *relasticsearch.ClusterConfig
 	ESMetricsCredsSecret *corev1.Secret
-	ESCertSecret         *corev1.Secret
 	ClusterDomain        string
 	ServerTLS            certificatemanagement.KeyPairInterface
 	TrustedBundle        certificatemanagement.TrustedBundle
@@ -78,9 +84,10 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Object) {
-	toCreate := secret.ToRuntimeObjects(
-		secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...,
-	)
+	toCreate := []client.Object{
+		e.allowTigeraPolicy(),
+	}
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
 	return toCreate, objsToDelete
@@ -115,15 +122,20 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 			},
 		},
 		Spec: corev1.ServiceSpec{
+			// Important: "None" tells Kubernetes that we want a headless service with
+			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
+			// a huge set of iptables rules for this service since there's an instance
+			// on every node.
+			ClusterIP: "None",
 			Selector: map[string]string{
 				"k8s-app": ElasticsearchMetricsName,
 			},
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "metrics-port",
-					Port:       9081,
+					Port:       ElasticsearchMetricsPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(9081),
+					TargetPort: intstr.FromInt(ElasticsearchMetricsPort),
 				},
 			},
 		},
@@ -147,19 +159,11 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.Int32ToPtr(1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": ElasticsearchMetricsName,
-				},
-			},
 			Template: *relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": ElasticsearchMetricsName,
-					},
 					Annotations: annotations,
 				},
-				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+				Spec: corev1.PodSpec{
 					Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
 					NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 					ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
@@ -177,8 +181,11 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
 								VolumeMounts: []corev1.VolumeMount{
-									e.cfg.ServerTLS.VolumeMount(),
-									e.cfg.TrustedBundle.VolumeMount(),
+									e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
+									e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
+								},
+								Env: []corev1.EnvVar{
+									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 								},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
 							e.cfg.ClusterDomain, e.SupportedOSType(),
@@ -188,8 +195,53 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 						e.cfg.ServerTLS.Volume(),
 						e.cfg.TrustedBundle.Volume(),
 					},
-				}),
-			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),
+				},
+			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret}).(*corev1.PodTemplateSpec),
+		},
+	}
+}
+
+func (e *elasticsearchMetrics) allowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      v3.EntityRule{},
+			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules,
+		v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+	)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchMetricsPolicyName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:                  &networkpolicy.HighPrecedenceOrder,
+			Tier:                   networkpolicy.TigeraComponentTierName,
+			Selector:               networkpolicy.KubernetesAppSelector(ElasticsearchMetricsName),
+			ServiceAccountSelector: "",
+			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   networkpolicy.PrometheusSourceEntityRule,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(ElasticsearchMetricsPort),
+					},
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }

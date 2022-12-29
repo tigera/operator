@@ -1,0 +1,58 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.tigera-dpi",
+    "namespace": "tigera-dpi"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "k8s-app == 'tigera-dpi'",
+    "types": [
+      "Egress"
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "services": {
+            "namespace": "default",
+            "name": "kubernetes"
+          }
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "services": {
+            "namespace": "default",
+            "name": "openshift-dns"
+          }
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "services": {
+            "namespace": "default",
+            "name": "openshift-dns"
+          }
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "services": {
+            "namespace": "tigera-elasticsearch",
+            "name": "tigera-secure-es-gateway-http"
+          }
+        }
+      }
+    ]
+  }
+}

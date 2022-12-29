@@ -17,6 +17,9 @@ package kubecontrollers
 import (
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -44,6 +48,7 @@ const (
 	KubeControllerRoleBinding       = "calico-kube-controllers"
 	KubeControllerPodSecurityPolicy = "calico-kube-controllers"
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
+	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
 	EsKubeController                  = "es-calico-kube-controllers"
 	EsKubeControllerServiceAccount    = "calico-kube-controllers"
@@ -51,6 +56,7 @@ const (
 	EsKubeControllerRoleBinding       = "es-calico-kube-controllers"
 	EsKubeControllerPodSecurityPolicy = "es-calico-kube-controllers"
 	EsKubeControllerMetrics           = "es-calico-kube-controllers-metrics"
+	EsKubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -68,9 +74,8 @@ type KubeControllersConfiguration struct {
 	// Whether or not the LogStorage CRD is present in the cluster.
 	LogStorageExists bool
 
-	EnabledESOIDCWorkaround bool
-	ClusterDomain           string
-	MetricsPort             int
+	ClusterDomain string
+	MetricsPort   int
 
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	Terminating bool
@@ -79,13 +84,15 @@ type KubeControllersConfiguration struct {
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
-	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
-	KibanaSecret                 *corev1.Secret
+	TrustedBundle                certificatemanagement.TrustedBundle
 
-	TenantId string
-
+	// Calico Cloud additions
+	TenantId    string
 	CloudConfig CloudConfig
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -121,13 +128,17 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		kubeControllerName:               KubeController,
 		kubeControllerConfigName:         "default",
 		kubeControllerMetricsName:        KubeControllerMetrics,
-		renderManagerInternalSecret:      cfg.ManagerInternalSecret != nil,
 		kubeControllersRules:             kubeControllerRolePolicyRules,
 		enabledControllers:               enabledControllers,
 	}
 }
 
+func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Component {
+	return render.NewPassthrough(kubeControllersAllowTigeraPolicy(cfg))
+}
+
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
+	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, EsKubeController)
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
@@ -191,6 +202,8 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Verbs:     []string{"create", "get", "list", "delete"},
 			},
 		)
+
+		kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
 	}
 
 	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}
@@ -201,17 +214,16 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	enabledControllers = append(enabledControllers, cloudEnabledControllers(cfg)...)
 
 	return &kubeControllersComponent{
-		cfg:                                cfg,
-		kubeControllerServiceAccountName:   EsKubeControllerServiceAccount,
-		kubeControllerRoleName:             EsKubeControllerRole,
-		kubeControllerRoleBindingName:      EsKubeControllerRoleBinding,
-		kubeControllerName:                 EsKubeController,
-		kubeControllerConfigName:           "elasticsearch",
-		kubeControllerMetricsName:          EsKubeControllerMetrics,
-		renderElasticsearchSecret:          cfg.ElasticsearchSecret != nil,
-		renderKubeControllersGatewaySecret: cfg.KubeControllersGatewaySecret != nil,
-		kubeControllersRules:               kubeControllerRolePolicyRules,
-		enabledControllers:                 enabledControllers,
+		cfg:                              cfg,
+		kubeControllerServiceAccountName: EsKubeControllerServiceAccount,
+		kubeControllerRoleName:           EsKubeControllerRole,
+		kubeControllerRoleBindingName:    EsKubeControllerRoleBinding,
+		kubeControllerName:               EsKubeController,
+		kubeControllerConfigName:         "elasticsearch",
+		kubeControllerMetricsName:        EsKubeControllerMetrics,
+		kubeControllersRules:             kubeControllerRolePolicyRules,
+		kubeControllerAllowTigeraPolicy:  kubeControllerAllowTigeraPolicy,
+		enabledControllers:               enabledControllers,
 	}
 }
 
@@ -229,11 +241,8 @@ type kubeControllersComponent struct {
 	kubeControllerConfigName         string
 	kubeControllerMetricsName        string
 
-	renderElasticsearchSecret          bool
-	renderManagerInternalSecret        bool
-	renderKubeControllersGatewaySecret bool
-
-	kubeControllersRules []rbacv1.PolicyRule
+	kubeControllersRules            []rbacv1.PolicyRule
+	kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
 
 	enabledControllers []string
 }
@@ -256,28 +265,26 @@ func (c *kubeControllersComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) {
-	objectsToCreate := []client.Object{
+	objectsToCreate := []client.Object{}
+
+	if c.kubeControllerAllowTigeraPolicy != nil {
+		objectsToCreate = append(objectsToCreate, c.kubeControllerAllowTigeraPolicy)
+	}
+
+	objectsToCreate = append(objectsToCreate,
 		c.controllersServiceAccount(),
 		c.controllersRole(),
 		c.controllersRoleBinding(),
 		c.controllersDeployment(),
-	}
+	)
+
 	objectsToDelete := []client.Object{}
-	if c.renderManagerInternalSecret {
-		objectsToCreate = append(objectsToCreate, c.cfg.ManagerInternalSecret.Secret(common.CalicoNamespace))
-	}
-
-	if c.renderElasticsearchSecret {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ElasticsearchSecret)...)...)
-	}
-
-	if c.renderKubeControllersGatewaySecret {
+	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
 		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
 	}
 
@@ -369,8 +376,8 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"watch", "list", "get", "update", "create"},
+			Resources: []string{"configmaps", "secrets"},
+			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
 		},
 		{
 			// Needed to validate the license
@@ -414,16 +421,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
 		)
 	}
 
@@ -458,6 +455,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.kubeControllerConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
+		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 
 	if c.cfg.TenantId != "" {
@@ -468,9 +466,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.kubeControllerName == EsKubeController {
-			if c.cfg.EnabledESOIDCWorkaround {
-				env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
-			}
+			// What started as a workaround is now the default behaviour. This feature uses our backend in order to
+			// log into Kibana for users from external identity providers, rather than configuring an authn realm
+			// in the Elastic stack.
+			env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
 
 			if c.cfg.Authentication != nil {
 				env = append(env,
@@ -495,7 +494,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
 			PeriodSeconds: int32(10),
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/usr/bin/check-status",
@@ -509,7 +508,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			PeriodSeconds:       int32(10),
 			InitialDelaySeconds: int32(10),
 			FailureThreshold:    int32(6),
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/usr/bin/check-status",
@@ -529,15 +528,11 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
-		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
 		ServiceAccountName: c.kubeControllerServiceAccountName,
 		Containers:         []corev1.Container{container},
 		Volumes:            c.kubeControllersVolumes(),
-	}
-
-	if c.kubeControllerName == EsKubeController {
-		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
 
 	var replicas int32 = 1
@@ -547,27 +542,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerName,
 			Namespace: common.CalicoNamespace,
-			Labels: map[string]string{
-				"k8s-app": c.kubeControllerName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": c.kubeControllerName,
-				},
-			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      c.kubeControllerName,
-					Namespace: common.CalicoNamespace,
-					Labels: map[string]string{
-						"k8s-app": c.kubeControllerName,
-					},
+					Name:        c.kubeControllerName,
+					Namespace:   common.CalicoNamespace,
 					Annotations: c.annotations(),
 				},
 				Spec: podSpec,
@@ -576,6 +560,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 	render.SetClusterCriticalPod(&(d.Spec.Template))
 
+	if overrides := c.cfg.Installation.CalicoKubeControllersDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(&d, overrides)
+	}
 	return &d
 }
 
@@ -613,7 +600,9 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": c.kubeControllerName},
-			Type:     corev1.ServiceTypeClusterIP,
+			// "Headless" service; prevent kube-proxy from rendering any rules for this service
+			// (which is only intended for Prometheus to scrape).
+			ClusterIP: "None",
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "metrics-port",
@@ -632,18 +621,17 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
-	am := map[string]string{}
+	var am map[string]string
+	if c.cfg.TrustedBundle != nil {
+		am = c.cfg.TrustedBundle.HashAnnotations()
+	} else {
+		am = make(map[string]string)
+	}
 	if c.cfg.ManagerInternalSecret != nil {
 		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
 	}
-	if c.cfg.ElasticsearchSecret != nil {
-		am[render.TlsSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.ElasticsearchSecret.Data)
-	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
-	}
-	if c.cfg.KibanaSecret != nil {
-		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
 	}
 	return am
 }
@@ -655,19 +643,109 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
+	var mounts []corev1.VolumeMount
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.VolumeMount{
-			c.cfg.ManagerInternalSecret.VolumeMount(),
-		}
+		mounts = append(mounts, c.cfg.ManagerInternalSecret.VolumeMount(c.SupportedOSType()))
 	}
-	return []corev1.VolumeMount{}
+	if c.cfg.TrustedBundle != nil {
+		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+	}
+	return mounts
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
+	var volumes []corev1.Volume
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.Volume{
-			c.cfg.ManagerInternalSecret.Volume(),
-		}
+		volumes = append(volumes, c.cfg.ManagerInternalSecret.Volume())
 	}
-	return []corev1.Volume{}
+	if c.cfg.TrustedBundle != nil {
+		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+	}
+	return volumes
+}
+
+func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(443, 6443, 12388),
+			},
+		},
+	}...)
+
+	if cfg.ManagementClusterConnection != nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianEntityRule,
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.ManagerEntityRule,
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KubeControllerNetworkPolicyName,
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(KubeController),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.NetworkPolicy {
+	if cfg.ManagementClusterConnection != nil {
+		return nil
+	}
+
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(443, 6443, 12388),
+			},
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.ManagerEntityRule,
+		},
+	}...)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsKubeControllerNetworkPolicyName,
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(EsKubeController),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
 }

@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -31,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -138,8 +140,32 @@ func AddClusterRoleWatch(c controller.Controller, name string) error {
 	return AddClusterResourceWatch(c, clusterRole)
 }
 
-func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
-	WaitToAddResourceWatch(controller, client, log, flag, &v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}})
+func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
+}
+
+func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, policies []types.NamespacedName) {
+	objs := []client.Object{}
+	for _, policy := range policies {
+		objs = append(objs, &v3.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: policy.Namespace},
+		})
+	}
+
+	// The success of a NetworkPolicy watch is not a dependency for resources to be installed or function correctly.
+	// Therefore, no ready flag is accepted or created for the watch.
+	WaitToAddResourceWatch(controller, c, log, nil, objs)
+}
+
+func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	obj := &v3.Tier{
+		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: tierName},
+	}
+
+	// The success of a Tier watch can be used as a signal that Tier queries will be resolved using the cache.
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{obj})
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
@@ -150,26 +176,7 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 	if objMeta.GetNamespace() == "" {
 		return fmt.Errorf("No namespace provided for namespaced watch")
 	}
-	pred := predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
-		},
-	}
+	pred := createPredicateForObject(objMeta)
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
 }
 
@@ -476,9 +483,23 @@ func StrToElasticLicenseType(license string, logger logr.Logger) render.Elastics
 	return render.ElasticsearchLicenseTypeUnknown
 }
 
+type resourceWatchContext struct {
+	predicate predicate.Predicate
+	logger    logr.Logger
+}
+
 // WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag, obj client.Object) {
+func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
+	// Track resources left to watch and establish their watch context.
+	resourcesToWatch := map[client.Object]resourceWatchContext{}
+	for _, obj := range objs {
+		resourcesToWatch[obj] = resourceWatchContext{
+			predicate: createPredicateForObject(obj),
+			logger:    ContextLoggerForResource(log, obj),
+		}
+	}
+
 	maxDuration := 30 * time.Second
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
@@ -489,27 +510,89 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 			duration = maxDuration
 		}
 		ticker.Reset(duration)
-		if isCalicoResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
-			err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
-			if err != nil {
-				log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
+		for obj := range resourcesToWatch {
+			objLog := resourcesToWatch[obj].logger
+			predicateFn := resourcesToWatch[obj].predicate
+			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+				objLog.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+			} else if !ok {
+				objLog.Info("Waiting for resource to be ready - will retry")
+			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
+				objLog.WithValues("Error", err).Info("Failed to watch resource - will retry")
 			} else {
-				flag.MarkAsReady()
-				return
+				objLog.Info("Successfully watching resource")
+				delete(resourcesToWatch, obj)
 			}
+		}
+
+		if len(resourcesToWatch) == 0 {
+			if flag != nil {
+				flag.MarkAsReady()
+			}
+			return
 		}
 	}
 }
 
-func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) bool {
+// isCalicoResourceReady checks if the specified resourceKind is available.
+// the resourceKind must be of the calico resource group.
+func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
+	// Only get the resources for the groupVersion we care about so that we are resilient to other
+	// apiservices being down.
 	res, err := client.Discovery().ServerResourcesForGroupVersion(v3.GroupVersionCurrent)
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, r := range res.APIResources {
 		if resourceKind == r.Kind {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
+}
+
+// Creates a predicate for CRUD operations that matches the object's namespace, and name if provided.
+// If neither name nor namespace is provided, all objects will be matched.
+func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				return true
+			}
+			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Object.GetNamespace() == objMeta.GetNamespace()
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				return true
+			}
+			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				return true
+			}
+			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Object.GetNamespace() == objMeta.GetNamespace()
+		},
+	}
+}
+
+// ValidateResourceNameIsQualified returns a compiled list of errors which states which rule the name
+// did not respect. Returns nil if it's a valid name.
+func ValidateResourceNameIsQualified(name string) error {
+	errors := validation.IsDNS1123Subdomain(name)
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s is not a qualified resource name with errors: %s", name, strings.Join(errors[:], ", "))
+	}
+
+	return nil
 }

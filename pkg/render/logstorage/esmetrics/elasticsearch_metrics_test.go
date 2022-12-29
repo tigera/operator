@@ -16,8 +16,14 @@ package esmetrics
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -38,6 +44,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 	Context("Rendering resources", func() {
 		var esConfig *relasticsearch.ClusterConfig
 		var cfg *Config
+		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-metrics.json")
+		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-metrics_ocp.json")
 
 		BeforeEach(func() {
 			installation := &operatorv1.InstallationSpec{
@@ -61,10 +69,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				ESConfig:     esConfig,
 				ESMetricsCredsSecret: &corev1.Secret{
 					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				ESCertSecret: &corev1.Secret{
-					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}},
 				ClusterDomain: "cluster.local",
 				ServerTLS:     secret,
 				TrustedBundle: bundle,
@@ -91,7 +96,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 				version string
 				kind    string
 			}{
-				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
+				{ElasticsearchMetricsPolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "ServiceAccount"},
@@ -110,7 +116,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 					Labels:    map[string]string{"k8s-app": ElasticsearchMetricsName},
 				},
 				Spec: corev1.ServiceSpec{
-					Selector: map[string]string{"k8s-app": ElasticsearchMetricsName},
+					ClusterIP: "None",
+					Selector:  map[string]string{"k8s-app": ElasticsearchMetricsName},
 					Ports: []corev1.ServicePort{
 						{
 							Name:       "metrics-port",
@@ -134,7 +141,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{"k8s-app": ElasticsearchMetricsName},
 							Annotations: map[string]string{
 								"hash.operator.tigera.io/elasticsearch-configmap": "ae0242f242af19c4916434cb08e8f68f8c15f61d",
 								"hash.operator.tigera.io/elasticsearch-secrets":   "9718549725e37ca6a5f12ba2405392a04d7b5521",
@@ -153,6 +159,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
 									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 								Env: []corev1.EnvVar{
+									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 									{Name: "ELASTIC_SCHEME", Value: "https"},
 									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
@@ -192,29 +199,19 @@ var _ = Describe("Elasticsearch metrics", func() {
 											},
 										},
 									},
-									{Name: "ELASTIC_CA", Value: "/etc/ssl/elastic/ca.pem"},
-									{Name: "ES_CA_CERT", Value: "/etc/ssl/elastic/ca.pem"},
-									{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
+									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: []corev1.VolumeMount{
-									cfg.ServerTLS.VolumeMount(),
-									cfg.TrustedBundle.VolumeMount(),
-									{Name: "elastic-ca-cert-volume", MountPath: "/etc/ssl/elastic/"},
+									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
+									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
 								},
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
 							Volumes: []corev1.Volume{
 								cfg.ServerTLS.Volume(),
 								cfg.TrustedBundle.Volume(),
-								{
-									Name: "elastic-ca-cert-volume",
-									VolumeSource: corev1.VolumeSource{
-										Secret: &corev1.SecretVolumeSource{
-											SecretName: "tigera-secure-es-gateway-http-certs-public",
-											Items:      []corev1.KeyToPath{{Key: "tls.crt", Path: "ca.pem"}},
-										},
-									},
-								},
 							},
 						},
 					},
@@ -261,6 +258,38 @@ var _ = Describe("Elasticsearch metrics", func() {
 			d, ok := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+		})
+
+		Context("allow-tigera rendering", func() {
+			policyName := types.NamespacedName{Name: "allow-tigera.elasticsearch-metrics", Namespace: "tigera-elasticsearch"}
+
+			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+				if scenario.ManagedCluster {
+					return nil
+				}
+
+				return testutils.SelectPolicyByProvider(scenario, expectedPolicy, expectedPolicyForOpenshift)
+			}
+
+			DescribeTable("should render allow-tigera policy",
+				func(scenario testutils.AllowTigeraScenario) {
+					if scenario.Openshift {
+						cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+					} else {
+						cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+					}
+					component := ElasticsearchMetrics(cfg)
+					resources, _ := component.Objects()
+
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				},
+				// ES Gateway only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
+				// does not have a config option for managed clusters.
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			)
 		})
 	})
 })

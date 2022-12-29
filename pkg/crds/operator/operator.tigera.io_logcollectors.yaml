@@ -105,13 +105,20 @@ spec:
                     description: If specified, enables exporting of flow, audit, and
                       DNS logs to syslog.
                     properties:
+                      encryption:
+                        description: 'Encryption configures traffic encryption to
+                          the Syslog server. Default: None'
+                        enum:
+                        - None
+                        - TLS
+                        type: string
                       endpoint:
                         description: 'Location of the syslog server. example: tcp://1.2.3.4:601'
                         type: string
                       logTypes:
-                        description: LogTypes contains a list of types of logs to
-                          export to syslog. By default, if this field is omitted,
-                          it will be set to include all possible values.
+                        description: 'If no values are provided, the list will be
+                          updated to include log types Audit, DNS and Flows. Default:
+                          Audit, DNS, Flows'
                         items:
                           description: SyslogLogType represents the allowable log
                             types for syslog. Allowable values are Audit, DNS, Flows

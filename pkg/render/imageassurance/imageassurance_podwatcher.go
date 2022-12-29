@@ -235,7 +235,7 @@ func (c *component) podWatcherDeployment() *appsv1.Deployment {
 		},
 		Env: env,
 		VolumeMounts: []corev1.VolumeMount{
-			c.config.TrustedCertBundle.VolumeMount(),
+			c.config.TrustedCertBundle.VolumeMount(rmeta.OSTypeLinux),
 			{Name: rcimageassurance.ImageAssuranceSecretName, MountPath: rcimageassurance.CAMountPath, ReadOnly: true},
 		},
 	}

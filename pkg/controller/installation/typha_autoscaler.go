@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -121,7 +122,7 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 		if err := t.autoscaleReplicas(); err != nil {
 			degraded = true
 			typhaLog.Error(err, "Failed to autoscale typha")
-			t.statusManager.SetDegraded("Failed to autoscale typha", err.Error())
+			t.statusManager.SetDegraded(string(operator.ResourceScalingError), fmt.Sprintf("Failed to autoscale typha - %s", err.Error()))
 		}
 
 		for {
@@ -132,7 +133,7 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 					typhaLog.Error(err, "Failed to autoscale typha")
 
 					// Since this run was triggered by the ticker we need to degrade the tigera status now.
-					t.statusManager.SetDegraded("Failed to autoscale typha", err.Error())
+					t.statusManager.SetDegraded(string(operator.ResourceScalingError), fmt.Sprintf("Failed to autoscale typha - %s", err.Error()))
 				} else {
 					degraded = false
 				}

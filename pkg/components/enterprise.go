@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -244,6 +244,10 @@ var (
 		Version: "v3.15.0",
 		Image:   "tigera/calico-windows-upgrade",
 	}
+	ComponentFlexVolumePrivate = component{
+		Version: "master",
+		Image:   "tigera/pod2daemon-flexvol",
+	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []component{
@@ -288,5 +292,6 @@ var (
 		ComponentESGateway,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
+		ComponentFlexVolumePrivate,
 	}
 )

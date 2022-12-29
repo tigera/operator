@@ -136,3 +136,6 @@ components:
   egress-gateway:
     image: tigera/egress-gateway
     version: v3.15.0
+  flexvol:
+    image: tigera/pod2daemon-flexvol
+    version: v3.15.0

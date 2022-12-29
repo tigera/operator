@@ -642,6 +642,9 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 		rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
+		// Verify the Flex volume container image.
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentFlexVolumePrivate.Image, components.ComponentFlexVolumePrivate.Version)))
+
 		expectedNodeEnv := []corev1.EnvVar{
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -1733,6 +1736,9 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 
 		rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
+
+		// Verify the Flex volume container image.
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentFlexVolumePrivate.Image, components.ComponentFlexVolumePrivate.Version)))
 
 		expectedNodeEnv := []corev1.EnvVar{
 			// Default envvars.

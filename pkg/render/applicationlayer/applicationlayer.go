@@ -121,11 +121,6 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.dikastesEnabled = false
-	if c.config.WAFEnabled || c.config.ALPEnabled {
-		c.config.dikastesEnabled = true
-	}
-
 	c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -146,6 +141,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// If l7spec is provided render the required objects.
 	objs = append(objs, c.serviceAccount())
+
+	c.config.dikastesEnabled = false
+	if c.config.WAFEnabled || c.config.ALPEnabled {
+		c.config.dikastesEnabled = true
+	}
 
 	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
 	if c.config.WAFEnabled {

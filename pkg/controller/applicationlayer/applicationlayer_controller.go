@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,6 +50,10 @@ import (
 const ResourceName = "applicationlayer"
 
 var log = logf.Log.WithName("controller_applicationlayer")
+
+const (
+	DefaultPolicySyncPrefix string = "/var/run/nodeagent"
+)
 
 // Add creates a new ApplicationLayer Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -174,7 +178,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			reqLogger.Info("ApplicationLayer object not found")
 			// Patch tproxyMode if it's  needed after crd deletion.
-			if err = r.patchFelixTproxyMode(ctx, nil); err != nil {
+			if err = r.patchFelixConfiguration(ctx, nil); err != nil {
 				reqLogger.Error(err, "Error patching felix configuration")
 			}
 			r.status.OnCRNotFound()
@@ -248,7 +252,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	// Patch felix configuration if necessary.
-	err = r.patchFelixTproxyMode(ctx, applicationLayer)
+	err = r.patchFelixConfiguration(ctx, applicationLayer)
 
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
@@ -274,7 +278,8 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
 		WAFEnabled:             r.isWAFEnabled(&applicationLayer.Spec),
-		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
+		LogsEnabled:            r.isLogsCollectionEnabled(&applicationLayer.Spec),
+		ALPEnabled:             r.isALPEnabled(&applicationLayer.Spec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
 		ModSecurityConfigMap:   modSecurityRuleSet,
@@ -322,10 +327,13 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 // updateApplicationLayerWithDefaults populates the applicationlayer with defaults.
 func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
-	var defaultLogIntervalSeconds int64 = 5
-	var defaultLogRequestsPerInterval int64 = -1
-	var defaultLogCollectionDisabled operatorv1.LogCollectionStatusType = operatorv1.L7LogCollectionDisabled
-	var defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType = operatorv1.WAFDisabled
+	var (
+		defaultLogIntervalSeconds             int64                                       = 5
+		defaultLogRequestsPerInterval         int64                                       = -1
+		defaultLogCollectionDisabled          operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
+		defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
+		defaultApplicationLayerPolicySpec     operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
+	)
 
 	if al.Spec.LogCollection == nil {
 		al.Spec.LogCollection = new(operatorv1.LogCollectionSpec)
@@ -347,20 +355,33 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	if al.Spec.WebApplicationFirewall == nil {
 		al.Spec.WebApplicationFirewall = &defaultWebApplicationFirewallDisabled
 	}
+
+	if al.Spec.ApplicationLayerPolicyStatus == nil {
+		al.Spec.ApplicationLayerPolicyStatus = &defaultApplicationLayerPolicySpec
+	}
 }
 
 // validateApplicationLayer validates ApplicationLayer
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
+	var atLeastOneFeatureDetected bool
 
-	// Just a precaution to make sure it is safe to dereference pointers below.
-	// This is already taken care of in updateApplicationLayerWithDefaults.
-	properlyConfigured := al.Spec.LogCollection != nil &&
-		al.Spec.LogCollection.CollectLogs != nil &&
-		al.Spec.WebApplicationFirewall != nil
+	if *al.Spec.LogCollection.CollectLogs == operatorv1.L7LogCollectionEnabled {
+		log.Info("L7 Log Collection found enabled.")
+		atLeastOneFeatureDetected = true
+	}
 
+	if *al.Spec.WebApplicationFirewall == operatorv1.WAFEnabled {
+		log.Info("L7 WAF found enabled.")
+		atLeastOneFeatureDetected = true
+	}
+
+	if *al.Spec.ApplicationLayerPolicyStatus == operatorv1.ApplicationLayerPolicyEnabled {
+		log.Info("L7 ALP found enabled")
+		atLeastOneFeatureDetected = true
+	}
 	// If ApplicationLayer spec exists then one of its features should be set.
-	if !properlyConfigured || (*al.Spec.LogCollection.CollectLogs != operatorv1.L7LogCollectionEnabled && *al.Spec.WebApplicationFirewall != operatorv1.WAFEnabled) {
-		return fmt.Errorf("at least one of webApplicationFirewall or logCollection.collectLogs must be specified in ApplicationLayer resource")
+	if !atLeastOneFeatureDetected {
+		return errors.New("at least one of webApplicationFirewall, policy.Mode or logCollection.collectLogs must be specified in ApplicationLayer resource")
 	}
 
 	return nil
@@ -440,8 +461,14 @@ func getApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.Ap
 	return instance, nil
 }
 
-func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(l7Spec *operatorv1.LogCollectionSpec) bool {
+func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+	l7Spec := applicationLayerSpec.LogCollection
 	return l7Spec != nil && l7Spec.CollectLogs != nil && *l7Spec.CollectLogs == operatorv1.L7LogCollectionEnabled
+}
+
+func (r *ReconcileApplicationLayer) isALPEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+	return applicationLayerSpec.ApplicationLayerPolicyStatus != nil &&
+		*applicationLayerSpec.ApplicationLayerPolicyStatus == operatorv1.ApplicationLayerPolicyEnabled
 }
 
 func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
@@ -449,23 +476,45 @@ func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv
 		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
 }
 
-// patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.
+func (r *ReconcileApplicationLayer) polsyncPathPfx(al *operatorv1.ApplicationLayer) string {
+	if al == nil {
+		return ""
+	}
+	return DefaultPolicySyncPrefix
+}
+
+func (r *ReconcileApplicationLayer) tproxyMode(al *operatorv1.ApplicationLayer) (_ bool, _ crdv1.TPROXYModeOption) {
+	if al == nil {
+		return
+	}
+
+	spec := &al.Spec
+	if r.isALPEnabled(spec) ||
+		r.isWAFEnabled(spec) ||
+		r.isLogsCollectionEnabled(spec) {
+		return true, crdv1.TPROXYModeOptionEnabled
+	}
+
+	// alp config is not nil, but neither of the features are enabled
+	return true, crdv1.TPROXYModeOptionDisabled
+}
+
+// patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
-func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al *operatorv1.ApplicationLayer) error {
+func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
 	// Fetch any existing default FelixConfiguration object.
 	fc := &crdv1.FelixConfiguration{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-
 	if err != nil && !apierrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, log)
 		return err
 	}
 
-	var tproxyMode crdv1.TPROXYModeOption
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWAFEnabled(&al.Spec)) {
-		tproxyMode = crdv1.TPROXYModeOptionEnabled
+	var tproxyMode crdv1.TPROXYModeOption
+	if ok, v := r.tproxyMode(al); ok {
+		tproxyMode = v
 	} else {
 		if fc.Spec.TPROXYMode == nil {
 			// Workaround: we'd like to always force the value to be the correct one, matching the operator's
@@ -483,13 +532,23 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 		// we avoid setting it back to nil.
 		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
+
+	polsyncPfx := r.polsyncPathPfx(al)
+	policySyncSet := fc.Spec.PolicySyncPathPrefix == polsyncPfx
+	tproxyModeSet := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
+
 	// If tproxy mode is already set to desired state return nil.
-	if fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode {
+	if policySyncSet && tproxyModeSet {
 		return nil
 	}
 	fc.Spec.TPROXYMode = &tproxyMode
+	fc.Spec.PolicySyncPathPrefix = polsyncPfx
 
-	log.Info("Patching TPROXYMode FelixConfiguration with mode", "mode", string(tproxyMode))
+	log.Info(
+		"Patching FelixConfiguration: ",
+		"policySyncPathPrefix=", fc.Spec.PolicySyncPathPrefix,
+		"tproxyMode=", string(tproxyMode),
+	)
 
 	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
 		return err

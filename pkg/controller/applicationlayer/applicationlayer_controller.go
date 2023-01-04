@@ -451,11 +451,25 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 	} else {
 		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
-	// If tproxy mode is already set to desired state return nil.
-	if fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode {
-		return nil
+
+	if tproxyMode == crdv1.TPROXYModeOptionDisabled {
+		// Workaround: we'd like to always force the value to be the correct one, matching the operator's
+		// configuration.  However, during an upgrade from a version that predates the TPROXYMode option,
+		// Felix hits a bug and gets confused by the new config parameter, which in turn triggers a restart.
+		// Work around that by relying on Disabled being the default value for the field instead.
+		//
+		// The felix bug was fixed in v3.16, v3.15.1 and v3.14.4; it should be safe to set new config fields
+		// once we know we're only upgrading from those versions and above.
+		if fc.Spec.TPROXYMode == nil {
+			return nil
+		}
+		fc.Spec.TPROXYMode = nil
+	} else {
+		if fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode {
+			return nil
+		}
+		fc.Spec.TPROXYMode = &tproxyMode
 	}
-	fc.Spec.TPROXYMode = &tproxyMode
 
 	log.Info("Patching TPROXYMode FelixConfiguration with mode", "mode", string(tproxyMode))
 

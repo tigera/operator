@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -177,7 +177,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 	}
 
 	// Query for the installation object.
-	variant, network, err := utils.GetInstallation(context.Background(), r.client)
+	network, instlstatus, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -186,6 +186,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	variant := instlstatus.Variant
 	if variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "", fmt.Errorf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), reqLogger)
 		return reconcile.Result{}, nil

@@ -165,9 +165,14 @@ var _ = Describe("Application layer controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("ensuring that felix configuration updated to disabled")
+			By("ensuring that felix configuration updated to nil, relying on default being disabled")
+			fc = crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
 			Expect(test.GetResource(c, &fc)).To(BeNil())
-			Expect(*fc.Spec.TPROXYMode).To(Equal(crdv1.TPROXYModeOptionDisabled))
+			Expect(fc.Spec.TPROXYMode).To(BeNil())
 		})
 
 	})

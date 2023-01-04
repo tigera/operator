@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -100,7 +100,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		component := egressgateway.EgressGateway(&egressgateway.Config{
 			PullSecrets:       nil,
 			Installation:      installation,
-			OsType:            rmeta.OSTypeLinux,
+			OSType:            rmeta.OSTypeLinux,
 			EgressGW:          egw,
 			EgressGWVxlanVNI:  4097,
 			EgressGWVxlanPort: 4790,
@@ -197,11 +197,11 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 
 		nativeIP := operatorv1.NativeIPEnabled
-		egw.Spec.AWS = &operatorv1.AwsEgressGateway{NativeIP: &nativeIP, ElasticIPs: []string{"1.2.3.4", "5.6.7.8"}}
+		egw.Spec.AWS = &operatorv1.AWSEgressGateway{NativeIP: &nativeIP, ElasticIPs: []string{"1.2.3.4", "5.6.7.8"}}
 		component := egressgateway.EgressGateway(&egressgateway.Config{
 			PullSecrets:       nil,
 			Installation:      installation,
-			OsType:            rmeta.OSTypeLinux,
+			OSType:            rmeta.OSTypeLinux,
 			EgressGW:          egw,
 			EgressGWVxlanVNI:  4097,
 			EgressGWVxlanPort: 4790,
@@ -214,15 +214,15 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(elasticIPAnnotation).To(Equal("[\"1.2.3.4\",\"5.6.7.8\"]"))
 	})
 
-	It("should create service account, clusterrole, clusterrolebinding and psp if provider is RKE2", func() {
+	It("should create service account, clusterrole, clusterrolebinding and psp if platform uses psp", func() {
 		component := egressgateway.EgressGateway(&egressgateway.Config{
 			PullSecrets:       nil,
 			Installation:      installation,
-			OsType:            rmeta.OSTypeLinux,
+			OSType:            rmeta.OSTypeLinux,
 			EgressGW:          egw,
 			EgressGWVxlanVNI:  4097,
 			EgressGWVxlanPort: 4790,
-			Provider:          operatorv1.ProviderRKE2,
+			UsePSP:            true,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(5))

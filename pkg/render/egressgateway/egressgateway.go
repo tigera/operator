@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package egressgateway
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -36,10 +37,12 @@ import (
 )
 
 const (
-	EGWPortName               = "health"
-	DefaultEGWVxlanPort int   = 4790
-	DefaultEGWVxlanVNI  int   = 4097
-	DefaultHealthPort   int32 = 8080
+	egwPortName                 = "health"
+	egwClusterRoleName          = "tigera-egress-gateway"
+	egwServiceAccountName       = "tigera-egress-gateway"
+	DefaultEGWVxlanPort   int   = 4790
+	DefaultEGWVxlanVNI    int   = 4097
+	DefaultHealthPort     int32 = 8080
 )
 
 func EgressGateway(
@@ -58,13 +61,15 @@ type component struct {
 type Config struct {
 	PullSecrets  []*corev1.Secret
 	Installation *operatorv1.InstallationSpec
-	OsType       rmeta.OSType
+	OSType       rmeta.OSType
 	EgressGW     *operatorv1.EgressGateway
 
 	egwImage          string
 	EgressGWVxlanVNI  int
 	EgressGWVxlanPort int
-	Provider          operatorv1.Provider
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -72,7 +77,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.config.Installation.ImagePath
 	prefix := c.config.Installation.ImagePrefix
 
-	if c.config.OsType != c.SupportedOSType() {
+	if c.config.OSType != c.SupportedOSType() {
 		return fmt.Errorf("Egress Gateway is supported only on %s", c.SupportedOSType())
 	}
 
@@ -90,7 +95,7 @@ func (c *component) SupportedOSType() rmeta.OSType {
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	objects := []client.Object{}
-	if c.config.Provider == operatorv1.ProviderRKE2 {
+	if c.config.UsePSP {
 		objects = append(objects, c.egwPodSecurityPolicy())
 		objects = append(objects, c.egwClusterRole())
 		objects = append(objects, c.egwClusterRoleBinding())
@@ -142,8 +147,8 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 			Volumes:                       []corev1.Volume{*c.egwVolume()},
 		},
 	}
-	if c.config.Provider == operatorv1.ProviderRKE2 {
-		ptSpec.Spec.ServiceAccountName = "tigera-egress-gateway"
+	if c.config.UsePSP {
+		ptSpec.Spec.ServiceAccountName = egwServiceAccountName
 	}
 	return ptSpec
 }
@@ -158,13 +163,12 @@ func (c *component) egwBuildAnnotations() map[string]string {
 }
 
 func (c *component) egwInitContainer() *corev1.Container {
-	initContainerPrivileges := true
 	return &corev1.Container{
 		Name:            "egress-gateway-init",
 		Image:           c.config.egwImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"/init-gateway.sh"},
-		SecurityContext: &corev1.SecurityContext{Privileged: &initContainerPrivileges},
+		SecurityContext: &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
 		Env:             c.egwInitEnvVars(),
 	}
 }
@@ -211,7 +215,7 @@ func (c *component) egwPorts() []corev1.ContainerPort {
 	return []corev1.ContainerPort{
 		{
 			ContainerPort: DefaultHealthPort,
-			Name:          EGWPortName,
+			Name:          egwPortName,
 			Protocol:      corev1.ProtocolTCP,
 		},
 	}
@@ -300,7 +304,7 @@ func (c *component) egwClusterRole() *rbacv1.ClusterRole {
 	}
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-egress-gateway",
+			Name: egwClusterRoleName,
 		},
 		Rules: rules,
 	}
@@ -314,12 +318,12 @@ func (c *component) egwClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "tigera-egress-gateway",
+			Name:     egwClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-egress-gateway",
+				Name:      c.config.EgressGW.Name,
 				Namespace: c.config.EgressGW.Namespace,
 			},
 		},
@@ -329,7 +333,7 @@ func (c *component) egwClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 func (c *component) egwServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-egress-gateway",
+			Name:      egwServiceAccountName,
 			Namespace: c.config.EgressGW.Namespace,
 		},
 	}
@@ -392,13 +396,16 @@ func (c *component) getHealthTimeoutDs() string {
 }
 
 func concatString(arr []string) string {
-	ret := "["
+	var builder strings.Builder
+	builder.WriteByte('[')
 	for idx, str := range arr {
-		temp := fmt.Sprintf("\"%s\"", str)
-		ret = ret + temp
+		builder.WriteString("\"")
+		builder.WriteString(str)
+		builder.WriteString("\"")
 		if idx != len(arr)-1 {
-			ret = ret + ","
+			builder.WriteByte(',')
 		}
 	}
-	return ret + "]"
+	builder.WriteByte(']')
+	return builder.String()
 }

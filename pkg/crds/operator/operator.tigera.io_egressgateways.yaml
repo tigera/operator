@@ -110,7 +110,7 @@ spec:
                         type: integer
                       ips:
                         description: IPs define the list of ICMP probe IPs. Egress
-                          Gateway will probe each IP periodically. If all probes faile,
+                          Gateway will probe each IP periodically. If all probes fail,
                           Egress Gateway will report non-ready.
                         items:
                           type: string
@@ -127,7 +127,7 @@ spec:
               ipPools:
                 description: IPPools defines the IP Pools that the Egress Gateway
                   pods should be using. Either name or CIDR must be specified. IPPools
-                  must match an existing IPPools.
+                  must match existing IPPools.
                 items:
                   properties:
                     cidr:
@@ -178,7 +178,7 @@ spec:
                         additionalProperties:
                           type: string
                         description: Labels is a map of string keys and values that
-                          may match replicaset and service selectors. Each of these
+                          may match replica set and service selectors. Each of these
                           key/value pairs are added to the object's labels provided
                           the key does not already exist in the object's labels. If
                           not specified will default to projectcalico.org/egw:<name>,

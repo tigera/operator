@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,7 @@ type EgressGatewaySpec struct {
 
 	// IPPools defines the IP Pools that the Egress Gateway pods should be using.
 	// Either name or CIDR must be specified.
-	// IPPools must match an existing IPPools.
+	// IPPools must match existing IPPools.
 	// +required
 	IPPools []EgressGatewayIPPool `json:"ipPools"`
 
@@ -55,7 +55,7 @@ type EgressGatewaySpec struct {
 
 	// AWS defines the additional configuration options for Egress Gateways on AWS.
 	// +optional
-	AWS *AwsEgressGateway `json:"aws,omitempty"`
+	AWS *AWSEgressGateway `json:"aws,omitempty"`
 }
 
 type EgressGatewayDeploymentPodSpec struct {
@@ -91,7 +91,7 @@ type EgressGatewayDeploymentPodTemplateSpec struct {
 
 // EgressGatewayMetadata contains the standard Kubernetes labels and annotations fields.
 type EgressGatewayMetadata struct {
-	// Labels is a map of string keys and values that may match replicaset and
+	// Labels is a map of string keys and values that may match replica set and
 	// service selectors. Each of these key/value pairs are added to the
 	// object's labels provided the key does not already exist in the object's labels.
 	// If not specified will default to projectcalico.org/egw:<name>, where <name> is
@@ -163,7 +163,7 @@ type EgressGatewayFailureDetection struct {
 // ICMPProbes defines the ICMP probe configuration for Egress Gateway.
 type ICMPProbes struct {
 	// IPs define the list of ICMP probe IPs. Egress Gateway will probe each IP
-	// periodically. If all probes faile, Egress Gateway will report non-ready.
+	// periodically. If all probes fail, Egress Gateway will report non-ready.
 	// +optional
 	IPs []string `json:"ips,omitempty"`
 
@@ -202,8 +202,8 @@ type HTTPProbes struct {
 	TimeoutSeconds *int32 `json:"timeoutSeconds"`
 }
 
-// AwsEgressGateway defines the configurations for deploying EgressGateway in AWS
-type AwsEgressGateway struct {
+// AWSEgressGateway defines the configurations for deploying EgressGateway in AWS
+type AWSEgressGateway struct {
 
 	// NativeIP defines if EgressGateway is to use an AWS backed IPPool.
 	// Default: Disabled

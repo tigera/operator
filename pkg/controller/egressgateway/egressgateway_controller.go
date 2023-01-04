@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -79,10 +79,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 	r := &ReconcileEgressGateway{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "egressgateway", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -125,10 +125,10 @@ type ReconcileEgressGateway struct {
 	// that reads objects from the cache and writes to the apiserver.
 	client          client.Client
 	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	usePSP          bool
 }
 
 // Reconcile reads that state of the cluster for an EgressGateway object and makes changes
@@ -180,9 +180,59 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	r.status.OnCRFound()
+
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Error(err, "Installation not found")
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			// Set the EGW resource's condition to Degraded.
+			for _, egw := range egws {
+				r.setDegraded(ctx, &egw, "Installation not found", err)
+			}
+			return reconcile.Result{}, nil
+		}
+		reqLogger.Error(err, "Error querying installation")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		for _, egw := range egws {
+			r.setDegraded(ctx, &egw, "Error querying installation", err)
+		}
+		return reconcile.Result{}, err
+	}
+
+	if variant != operatorv1.TigeraSecureEnterprise {
+		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+		for _, egw := range egws {
+			r.setDegraded(ctx, &egw, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil)
+		}
+		return reconcile.Result{}, nil
+	}
+
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving pull secrets")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		for _, egw := range egws {
+			r.setDegraded(ctx, &egw, "Error retrieving pull secrets", err)
+		}
+		return reconcile.Result{}, err
+	}
+
+	// Fetch any existing default FelixConfiguration object.
+	fc := &crdv1.FelixConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading FelixConfiguration", err, reqLogger)
+		for _, egw := range egws {
+			r.setDegraded(ctx, &egw, "Error reading felix configuration", err)
+		}
+		return reconcile.Result{}, err
+	}
+
 	// Reconcile all the EGWs
 	for _, egw := range egws {
-		result, err := r.reconcile(ctx, &egw, reqLogger)
+		result, err := r.reconcile(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation)
 		if err != nil {
 			return result, err
 		}
@@ -190,39 +240,28 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger) (reconcile.Result, error) {
+func (r *ReconcileEgressGateway) setDegraded(ctx context.Context, egw *operatorv1.EgressGateway, msg string, err error) {
+	reconcileErr := "Error_reconciling_Egress_Gateway"
+	if err != nil {
+		setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("%s Name = %s, Namespace = %s, err = %s", msg, egw.Name, egw.Namespace, err.Error()))
+	} else {
+		setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("%s Name = %s, Namespace = %s", msg, egw.Name, egw.Namespace))
+	}
+}
+
+func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
+	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
+	installation *operatorv1.InstallationSpec) (reconcile.Result, error) {
+
 	// Set the condition to progressing
 	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 	reconcileErr := "Error_reconciling_Egress_Gateway"
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			reqLogger.Error(err, "Installation not found")
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
-			// Set the EGW resource's condition to Degraded.
-			setDegraded(r.client, ctx, egw, reconcileErr,
-				fmt.Sprintf("Installation not found Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-			return reconcile.Result{}, nil
-		}
-		reqLogger.Error(err, "Error querying installation")
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
-		setDegraded(r.client, ctx, egw, reconcileErr,
-			fmt.Sprintf("Error querying installation Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		return reconcile.Result{}, err
-	}
 
-	if variant != operatorv1.TigeraSecureEnterprise {
-		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
-		setDegraded(r.client, ctx, egw, reconcileErr,
-			fmt.Sprintf("Waiting for network to be %s Name = %s, Namespace = %s", operatorv1.TigeraSecureEnterprise, egw.Name, egw.Namespace))
-		return reconcile.Result{}, nil
-	}
-
+	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
 	fillDefaults(egw, installation)
 	// Validate the EGW resource.
-	err = validateEgressGateway(ctx, r.client, egw)
+	err := validateEgressGateway(ctx, r.client, egw)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 		r.status.SetDegraded(operatorv1.ResourceValidationError,
@@ -232,22 +271,12 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
-	if err != nil {
-		reqLogger.Error(err, "Error retrieving pull secrets")
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+	if err = r.client.Patch(ctx, egw, preDefaultPatchFrom); err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Failed to write defaults to egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+		r.status.SetDegraded(operatorv1.ResourceUpdateError,
+			fmt.Sprintf("Failed to write defaults to egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
-			fmt.Sprintf("Error retrieving pull secrets Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		return reconcile.Result{}, err
-	}
-
-	// Fetch any existing default FelixConfiguration object.
-	fc := &crdv1.FelixConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading FelixConfiguration", err, reqLogger)
-		setDegraded(r.client, ctx, egw, reconcileErr,
-			fmt.Sprintf("Error reading felix configuration Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+			fmt.Sprintf("Failed to write defaults to egress gateway Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
 	}
 
@@ -263,11 +292,11 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	config := &egressgateway.Config{
 		PullSecrets:       pullSecrets,
 		Installation:      installation,
-		OsType:            rmeta.OSTypeLinux,
+		OSType:            rmeta.OSTypeLinux,
 		EgressGW:          egw,
 		EgressGWVxlanPort: egwVxlanPort,
 		EgressGWVxlanVNI:  egwVxlanVNI,
-		Provider:          installation.KubernetesProvider,
+		UsePSP:            r.usePSP,
 	}
 
 	component := egressgateway.EgressGateway(config)
@@ -346,8 +375,8 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	// If CIDR is specified, check if CIDR matches with any IPPool.
 	// If Aws.NativeIP is enabled, check if the IPPool is backed by aws-subnet ID.
 	for _, ippool := range egw.Spec.IPPools {
-		ret, err := validateIPPool(ctx, cli, ippool, nativeIP)
-		if !ret {
+		err := validateIPPool(ctx, cli, ippool, nativeIP)
+		if err != nil {
 			return err
 		}
 	}
@@ -459,6 +488,8 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 	} else {
 		if egw.Spec.Template.Metadata == nil {
 			egw.Spec.Template.Metadata = &operatorv1.EgressGatewayMetadata{Labels: defLabel}
+		} else {
+			egw.Spec.Template.Metadata.Labels["projectcalico.org/egw"] = egw.Name
 		}
 	}
 
@@ -512,43 +543,43 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 func getCalicoVersion(ctx context.Context, cli client.Client) (string, error) {
 	ins := &operatorv1.Installation{}
 	err := cli.Get(ctx, types.NamespacedName{Name: "default"}, ins)
-	return ins.Status.Version, err
+	return ins.Status.CalicoVersion, err
 }
 
-func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.EgressGatewayIPPool, awsNativeIP operatorv1.NativeIP) (bool, error) {
+func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.EgressGatewayIPPool, awsNativeIP operatorv1.NativeIP) error {
 	if ipPool.Name != "" {
 		instance := &crdv1.IPPool{}
 		key := types.NamespacedName{Name: ipPool.Name}
 		err := cli.Get(ctx, key, instance)
 		if err != nil {
-			return false, err
+			return err
 		}
 		if ipPool.CIDR != "" {
 			if instance.Spec.CIDR != ipPool.CIDR {
-				return false, fmt.Errorf("IPPool CIDR does not match with name")
+				return fmt.Errorf("IPPool CIDR does not match with name")
 			}
 		}
 		if awsNativeIP == operatorv1.NativeIPEnabled && instance.Spec.AWSSubnetID == "" {
-			return false, fmt.Errorf("AWS subnet ID must be set when NativeIP is enabled")
+			return fmt.Errorf("AWS subnet ID must be set when NativeIP is enabled")
 		}
-		return true, nil
+		return nil
 	}
 	if ipPool.CIDR != "" {
 		instance := &crdv1.IPPoolList{}
 		err := cli.List(ctx, instance)
 		if err != nil {
-			return false, err
+			return err
 		}
 		for _, item := range instance.Items {
 			if item.Spec.CIDR == ipPool.CIDR {
 				if awsNativeIP == operatorv1.NativeIPEnabled && item.Spec.AWSSubnetID == "" {
-					return false, fmt.Errorf("AWS subnet ID must be set when NativeIP is enabled")
+					return fmt.Errorf("AWS subnet ID must be set when NativeIP is enabled")
 				}
-				return true, nil
+				return nil
 			}
 		}
 	}
-	return false, fmt.Errorf("IPPool matching CIDR = %s not present", ipPool.CIDR)
+	return fmt.Errorf("IPPool matching CIDR = %s not present", ipPool.CIDR)
 }
 
 func getCumulativeEgressGatewayStatus(egws []operatorv1.EgressGateway) (bool, *operatorv1.EgressGateway) {

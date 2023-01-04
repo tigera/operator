@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -77,7 +77,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					Computed: &operatorv1.InstallationSpec{
 						Registry: "my-reg",
 					},
-					Version: components.EnterpriseRelease,
+					CalicoVersion: components.EnterpriseRelease,
 				},
 			}
 			mockStatus = &status.MockStatus{}
@@ -86,7 +86,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			r = ReconcileEgressGateway{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				licenseAPIReady: &utils.ReadyFlag{},
 			}
@@ -268,7 +267,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			By("setting AWS elastic IPs")
 			nativeIP := operatorv1.NativeIPEnabled
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
-			egw.Spec.AWS = &operatorv1.AwsEgressGateway{ElasticIPs: []string{"4.5.6.7"}, NativeIP: &nativeIP}
+			egw.Spec.AWS = &operatorv1.AWSEgressGateway{ElasticIPs: []string{"4.5.6.7"}, NativeIP: &nativeIP}
 			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -412,7 +411,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-1"},
 					},
-					AWS:      &operatorv1.AwsEgressGateway{ElasticIPs: []string{"5.6.7.8"}},
+					AWS:      &operatorv1.AWSEgressGateway{ElasticIPs: []string{"5.6.7.8"}},
 					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 				},
 				Status: operatorv1.EgressGatewayStatus{
@@ -440,7 +439,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "", CIDR: "1.2.5.0/24"},
 					},
-					AWS:      &operatorv1.AwsEgressGateway{NativeIP: &nativeIP},
+					AWS:      &operatorv1.AWSEgressGateway{NativeIP: &nativeIP},
 					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 				},
 				Status: operatorv1.EgressGatewayStatus{
@@ -467,7 +466,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-4", CIDR: ""},
 					},
-					AWS:      &operatorv1.AwsEgressGateway{NativeIP: &nativeIP},
+					AWS:      &operatorv1.AWSEgressGateway{NativeIP: &nativeIP},
 					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 				},
 				Status: operatorv1.EgressGatewayStatus{
@@ -560,7 +559,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
-			installation.Status.Version = "3.15"
+			installation.Status.CalicoVersion = "3.15"
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			var requeueInterval time.Duration = 30 * time.Second
@@ -590,7 +589,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				defer wg.Done()
 				ins := &operatorv1.Installation{}
 				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, ins)).NotTo(HaveOccurred())
-				ins.Status.Version = components.EnterpriseRelease
+				ins.Status.CalicoVersion = components.EnterpriseRelease
 				Expect(c.Update(ctx, ins)).NotTo(HaveOccurred())
 			}()
 			dep := appsv1.Deployment{

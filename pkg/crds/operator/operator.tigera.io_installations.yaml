@@ -6104,6 +6104,9 @@ spec:
             description: Most recently observed state for the Calico or Calico Enterprise
               installation.
             properties:
+              calicoVersion:
+                description: CalicoVersion shows the current running version of calico.
+                type: string
               computed:
                 description: Computed is the final installation including overlaid
                   resources.
@@ -12707,9 +12710,6 @@ spec:
                 enum:
                 - Calico
                 - TigeraSecureEnterprise
-                type: string
-              version:
-                description: Version shows the current running version of calico.
                 type: string
             type: object
         type: object

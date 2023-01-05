@@ -23,7 +23,7 @@ package v1
 
 import (
 	"github.com/projectcalico/api/pkg/lib/numorstring"
-	convertnumorstring "github.com/tigera/operator/pkg/controller/migration/convert/numorstring"
+	libnumorstring "github.com/tigera/api/pkg/lib/numorstring"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -435,10 +435,10 @@ func (in *FelixConfigurationSpec) DeepCopyInto(out *FelixConfigurationSpec) {
 	}
 	if in.KubeNodePortRanges != nil {
 		in, out := &in.KubeNodePortRanges, &out.KubeNodePortRanges
-		*out = new([]convertnumorstring.Port)
+		*out = new([]libnumorstring.Port)
 		if **in != nil {
 			in, out := *in, *out
-			*out = make([]convertnumorstring.Port, len(*in))
+			*out = make([]libnumorstring.Port, len(*in))
 			copy(*out, *in)
 		}
 	}
@@ -459,7 +459,7 @@ func (in *FelixConfigurationSpec) DeepCopyInto(out *FelixConfigurationSpec) {
 	}
 	if in.NATPortRange != nil {
 		in, out := &in.NATPortRange, &out.NATPortRange
-		*out = new(convertnumorstring.Port)
+		*out = new(libnumorstring.Port)
 		**out = **in
 	}
 	if in.DeviceRouteProtocol != nil {

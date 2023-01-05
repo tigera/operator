@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -43,14 +44,14 @@ func (r *ReconcileLogStorage) createEsGateway(
 	reqLogger logr.Logger,
 	ctx context.Context,
 	certificateManager certificatemanager.CertificateManager,
-) (reconcile.Result, bool, error) {
+) (reconcile.Result, certificatemanagement.TrustedBundle, bool, error) {
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
 	gatewayKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), svcDNSNames)
 	if err != nil {
 		log.Error(err, "Error creating TLS certificate")
 		r.status.SetDegraded("Error creating TLS certificate", err.Error())
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, nil, false, err
 	}
 
 	kbSecret := render.TigeraKibanaCertSecret
@@ -70,11 +71,11 @@ func (r *ReconcileLogStorage) createEsGateway(
 		if err != nil {
 			reqLogger.Error(err, "failed to get Kibana tls certificate secret")
 			r.status.SetDegraded("Failed to get Kibana tls certificate secret", err.Error())
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, nil, false, err
 		} else if kibanaCertificate == nil {
 			reqLogger.Info("Waiting for internal Kibana tls certificate secret to be available")
 			r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
-			return reconcile.Result{}, false, nil
+			return reconcile.Result{}, nil, false, nil
 		}
 	}
 
@@ -82,18 +83,26 @@ func (r *ReconcileLogStorage) createEsGateway(
 	if err != nil {
 		reqLogger.Error(err, "failed to get Elasticsearch tls certificate secret")
 		r.status.SetDegraded("Failed to get Elasticsearch tls certificate secret", err.Error())
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, nil, false, err
 	} else if esInternalCertificate == nil {
 		reqLogger.Info("Waiting for internal Elasticsearch tls certificate secret to be available")
 		r.status.SetDegraded("Waiting for internal Elasticsearch tls certificate secret to be available", "")
-		return reconcile.Result{}, false, nil
+		return reconcile.Result{}, nil, false, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, kibanaCertificate)
+
+	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		return reconcile.Result{}, nil, false, err
+	} else if prometheusCertificate == nil {
+		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, nil, false, err
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, kibanaCertificate, prometheusCertificate, gatewayKeyPair)
 
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
 		r.status.SetDegraded("Elasticsearch admin user secret contains too many entries", "")
-		return reconcile.Result{}, false, nil
+		return reconcile.Result{}, nil, false, nil
 	}
 
 	var esAdminUserName string
@@ -106,7 +115,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Failed to create kube-controllers secrets for Elasticsearch gateway", "")
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, nil, false, err
 	}
 
 	cfg := &esgateway.Config{
@@ -131,7 +140,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, nil, false, err
 	}
 
 	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -146,9 +155,9 @@ func (r *ReconcileLogStorage) createEsGateway(
 	for _, comp := range []render.Component{esGatewayComponent, certificateComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, nil, false, err
 		}
 	}
 
-	return reconcile.Result{}, true, nil
+	return reconcile.Result{}, trustedBundle, true, nil
 }

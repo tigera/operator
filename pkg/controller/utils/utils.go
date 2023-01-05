@@ -352,6 +352,16 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	return authentication, nil
 }
 
+// GetInstallationStatus returns the current installation status, for use by other controllers.
+func GetInstallationStatus(ctx context.Context, client client.Client) (*operatorv1.InstallationStatus, error) {
+	// Fetch the Installation instance. We only support a single instance named "default".
+	instance := &operatorv1.Installation{}
+	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
+		return nil, err
+	}
+	return &instance.Status, nil
+}
+
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
 // returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
 // launch enterprise-dependent components.

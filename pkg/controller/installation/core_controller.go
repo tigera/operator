@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ import (
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -1148,14 +1147,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		if prometheusClientCert != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
-		}
-		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if esgwCertificate != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
 		}
 	}
 

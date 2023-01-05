@@ -68,6 +68,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -1146,6 +1147,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
 		}
 		calicoVersion = components.EnterpriseRelease
+		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if esgwCertificate != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
+		}
 	}
 
 	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.

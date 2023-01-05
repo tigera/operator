@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/controller/migration/convert/numorstring"
+	"github.com/tigera/api/pkg/lib/numorstring"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -214,6 +214,13 @@ func convert(t interface{}, str string) (interface{}, error) {
 			ports = append(ports, port)
 		}
 		return &ports, nil
+
+	case *numorstring.Port:
+		v, err := numorstring.PortFromString(str)
+		if err != nil {
+			return nil, err
+		}
+		return &v, nil
 
 	case *metav1.Duration:
 		d, err := time.ParseDuration(str)

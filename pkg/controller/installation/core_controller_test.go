@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	osconfigv1 "github.com/openshift/api/config/v1"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -1110,6 +1111,31 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 65, Max: 99}))
 			Expect(fc.Spec.LogSeverityScreen).To(Equal("Error"))
 		})
+
+		It("should Reconcile with FelixConfig natPortRange set", func() {
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					NATPortRange: &numorstring.Port{MinPort: 15, MaxPort: 55},
+				},
+			}
+			err := c.Create(ctx, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginAmazonVPC}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Check that FelixConfiguration has not changed
+			fc = &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.NATPortRange).NotTo(BeNil())
+			Expect(*fc.Spec.NATPortRange).To(Equal(numorstring.Port{MinPort: 15, MaxPort: 55}))
+		})
+
 		It("should Reconcile with GKE and create a resource quota", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderGKE
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/client-go/kubernetes"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -609,8 +610,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil || !proceed {
 			return result, err
 		}
-
-		result, proceed, err = r.createEsGateway(
+		var trustedBundle certificatemanagement.TrustedBundle
+		result, trustedBundle, proceed, err = r.createEsGateway(
 			install,
 			variant,
 			pullSecrets,
@@ -643,6 +644,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			ctx,
 			hdler,
 			r.clusterDomain,
+			trustedBundle,
 		)
 		if err != nil || !proceed {
 			return result, err

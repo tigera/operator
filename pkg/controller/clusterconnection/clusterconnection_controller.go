@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -187,10 +187,11 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.Info("Reconciling the management cluster connection")
 	result := reconcile.Result{}
 
-	variant, instl, err := utils.GetInstallation(ctx, r.Client)
+	instl, instlstatus, err := utils.GetInstallation(ctx, r.Client)
 	if err != nil {
 		return result, err
 	}
+	variant := instlstatus.Variant
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.Client)
 	if err != nil {

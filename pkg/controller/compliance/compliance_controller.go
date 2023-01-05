@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -278,7 +278,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Query for the installation object.
-	variant, network, err := utils.GetInstallation(ctx, r.client)
+	network, instlstatus, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -287,6 +287,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	variant := instlstatus.Variant
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {

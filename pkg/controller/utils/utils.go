@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -355,26 +355,27 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
 // returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
 // launch enterprise-dependent components.
-func GetInstallation(ctx context.Context, client client.Client) (operatorv1.ProductVariant, *operatorv1.InstallationSpec, error) {
+func GetInstallation(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, *operatorv1.InstallationStatus, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
-		return instance.Status.Variant, nil, err
+		return nil, nil, err
 	}
 
 	spec := instance.Spec
+	status := instance.Status
 
 	// update Installation with 'overlay'
 	overlay := operatorv1.Installation{}
 	if err := client.Get(ctx, OverlayInstanceKey, &overlay); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return instance.Status.Variant, nil, err
+			return nil, nil, err
 		}
 	} else {
 		spec = OverrideInstallationSpec(spec, overlay.Spec)
 	}
 
-	return instance.Status.Variant, &spec, nil
+	return &spec, &status, nil
 }
 
 // GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -218,7 +218,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	installation, instlstatus, err := utils.GetInstallation(ctx, r.client)
 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -228,6 +228,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	variant := instlstatus.Variant
 
 	if variant != operatorv1.TigeraSecureEnterprise {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)

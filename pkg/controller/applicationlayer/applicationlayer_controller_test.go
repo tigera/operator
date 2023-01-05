@@ -106,6 +106,7 @@ var _ = Describe("Application layer controller tests", func() {
 			// that do.  Setting an unknown felix config field causes older versions of felix to cyclicly restart,
 			// which causes a disruptive upgrade.
 			By("reconciling before without an app layer resource")
+			mockStatus.On("OnCRNotFound").Return()
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 

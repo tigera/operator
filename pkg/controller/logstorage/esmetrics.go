@@ -30,9 +30,9 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 func (r *ReconcileLogStorage) createEsMetrics(

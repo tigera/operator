@@ -131,7 +131,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	// Multi-tenancy modifications.
 	if r.elasticExternal {
 		if result, proceed, err := r.esGatewayAddCloudModificationsToConfig(cfg, esAdminUserSecret, reqLogger, ctx); err != nil || !proceed {
-			return result, proceed, err
+			return result, nil, proceed, err
 		}
 	}
 

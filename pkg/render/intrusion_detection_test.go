@@ -487,7 +487,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		// expect AD PodTemplate EnvVars
 		expectedADEnvs := []expectedEnvVar{
-			{"ELASTIC_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[2], "", ""},
+			{"ELASTIC_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[1], "", ""},
 			{"ELASTIC_PORT", strconv.Itoa(render.ElasticsearchDefaultPort), "", ""},
 			{"ELASTIC_CA", certificatemanagement.TrustedCertBundleMountPath, "", ""},
 			{"ELASTIC_USERNAME", "", render.ElasticsearchADJobUserSecret, "username"},

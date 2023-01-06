@@ -162,7 +162,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 									{Name: "ELASTIC_SCHEME", Value: "https"},
-									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch"},
 									{Name: "ELASTIC_PORT", Value: "9200"},
 									{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
 									{Name: "ELASTIC_SSL_VERIFY", Value: "true"},

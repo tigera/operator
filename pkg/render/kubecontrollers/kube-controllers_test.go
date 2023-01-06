@@ -55,7 +55,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	esEnvs := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 		{Name: "ELASTIC_SCHEME", Value: "https"},
-		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch"},
 		{Name: "ELASTIC_PORT", Value: "9200", ValueFrom: nil},
 		{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
 		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},

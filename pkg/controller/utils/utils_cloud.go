@@ -15,6 +15,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render/common/cloudrbac"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	iarender "github.com/tigera/operator/pkg/render/imageassurance"
 )
@@ -88,4 +89,22 @@ func AddClusterRoleBindingWatch(c controller.Controller, name string) error {
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}
 	return AddClusterResourceWatch(c, crb)
+}
+
+// GetCloudRbacTLSSecret gets the TLS secret for the Cloud RBAC API communication.
+func GetCloudRbacTLSSecret(client client.Client) (*corev1.Secret, error) {
+	return ValidateCertPair(client, common.OperatorNamespace(), cloudrbac.TLSSecretName, corev1.TLSPrivateKeyKey, corev1.TLSCertKey)
+}
+
+func AddCloudRBACWatch(c controller.Controller, destNamespace string) error {
+
+	// Watch the given tls secrets in each both the operator namespace and the destNamespace for cloud
+	for _, namespace := range []string{common.OperatorNamespace(), destNamespace} {
+		secretName := cloudrbac.TLSSecretName
+		if err := AddSecretsWatch(c, secretName, namespace); err != nil {
+			return fmt.Errorf("failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
+		}
+	}
+
+	return nil
 }

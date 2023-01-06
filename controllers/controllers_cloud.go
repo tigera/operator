@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/tigera/operator/pkg/controller/options"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -23,5 +22,13 @@ func addCloudControllersToManager(mgr ctrl.Manager, options options.AddOptions) 
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "RuntimeSecurity", err)
 	}
+	if err := (&CloudRBACReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("CloudRBAC"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "CloudRBAC", err)
+	}
+
 	return nil
 }

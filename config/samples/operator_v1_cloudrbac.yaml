@@ -1,0 +1,6 @@
+apiVersion: operator.tigera.io/v1
+kind: CloudRBAC
+metadata:
+  name: tigera-secure
+spec:
+  portalURL: https://www.dev.calicocloud.io

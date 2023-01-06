@@ -79,6 +79,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 	r := &ReconcileEgressGateway{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
+		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "egressgateway", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
@@ -89,6 +90,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 }
 
 // add adds watches for resources that are available at startup.
+// Watching namespaced resources must be avoided.
 func add(mgr manager.Manager, c controller.Controller) error {
 	var err error
 
@@ -125,6 +127,7 @@ type ReconcileEgressGateway struct {
 	// that reads objects from the cache and writes to the apiserver.
 	client          client.Client
 	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
@@ -139,8 +142,8 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 	// Wait for right version of the calico to be installed. When upgrading EGWs, calico-node needs to be upgraded
 	// first, before proceeding with the EGW upgrade. Hence wait for the right version of calico to be installed.
-	ver, err := getCalicoVersion(ctx, r.client)
-	if err != nil || ver != components.EnterpriseRelease {
+	installStatus, err := utils.GetInstallationStatus(ctx, r.client)
+	if err != nil || installStatus.CalicoVersion != components.EnterpriseRelease {
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -155,10 +158,10 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			reqLogger.Info("EgressGateway object not found")
 			// Since the EGW resource is not found, remove the deployment.
 			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
-			// Get the cumulative Egress Gateway status. Lets say we have 2 EGW resources red and blue.
+			// Get the cumulative Egress Gateway status. Let's say we have 2 EGW resources red and blue.
 			// Red has already degraded. When the user deletes Red, Tigerastatus should go back to available
-			// as Blue is healthy. Hence get the cumulative EGW status. If all the EGWs are ready, clear the degraded
-			// Tigerastatus. If at least one of the EGWs is unhealthy, get the degraded msg from the conditions and
+			// as Blue is healthy. If all the EGWs are ready, clear the degraded Tigerastatus.
+			// If at least one of the EGWs is unhealthy, get the degraded msg from the conditions and
 			// update the Tigerastatus.
 			egws, err := getEgressGateways(ctx, r.client, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ""}})
 			if err != nil || len(egws) == 0 {
@@ -166,7 +169,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			}
 			status, egw := getCumulativeEgressGatewayStatus(egws)
 			if !status {
-				r.status.SetDegraded(operatorv1.ResourceCreateError,
+				r.status.SetDegraded(operatorv1.ResourceNotReady,
 					fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", egw.Name, egw.Namespace),
 					fmt.Errorf("%s", getDegradedMsg(egw)), reqLogger)
 				return reconcile.Result{}, nil
@@ -180,6 +183,11 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	r.status.OnCRFound()
+
+	if !r.licenseAPIReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
 
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
@@ -253,8 +261,6 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
 	installation *operatorv1.InstallationSpec) (reconcile.Result, error) {
 
-	// Set the condition to progressing
-	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 	reconcileErr := "Error_reconciling_Egress_Gateway"
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
@@ -279,6 +285,9 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 			fmt.Sprintf("Failed to write defaults to egress gateway Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
 	}
+
+	// Set the condition to progressing
+	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 
 	egwVxlanPort := egressgateway.DefaultEGWVxlanPort
 	egwVxlanVNI := egressgateway.DefaultEGWVxlanVNI
@@ -323,7 +332,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
 
-	// After the resource has been created/updated, Tigerastatus needs to be set by taking the cumulative status of the
+	// After the resource is created/updated, Tigerastatus needs to be set by taking the cumulative status of the
 	// available EGW resources. Lets say we create 2 EGW resources Red, Blue. Both are degraded. Now lets create 3rd resource
 	// yellow. Though yellow is reconciled and rendered successfully, Tigerastatus should still be degraded as Red, Blue are
 	// degraded. Now lets assume Blue gets updated and gets rendered properly. In this case, Tigerastatus should still be
@@ -489,7 +498,11 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 		if egw.Spec.Template.Metadata == nil {
 			egw.Spec.Template.Metadata = &operatorv1.EgressGatewayMetadata{Labels: defLabel}
 		} else {
-			egw.Spec.Template.Metadata.Labels["projectcalico.org/egw"] = egw.Name
+			if len(egw.Spec.Template.Metadata.Labels) > 0 {
+				egw.Spec.Template.Metadata.Labels["projectcalico.org/egw"] = egw.Name
+			} else {
+				egw.Spec.Template.Metadata.Labels = defLabel
+			}
 		}
 	}
 
@@ -537,13 +550,6 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 	} else if egw.Spec.Template.Spec.Affinity == nil {
 		egw.Spec.Template.Spec.Affinity = defAffinity
 	}
-}
-
-// getCalicoVersion reads the status.Version from the Installation
-func getCalicoVersion(ctx context.Context, cli client.Client) (string, error) {
-	ins := &operatorv1.Installation{}
-	err := cli.Get(ctx, types.NamespacedName{Name: "default"}, ins)
-	return ins.Status.CalicoVersion, err
 }
 
 func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.EgressGatewayIPPool, awsNativeIP operatorv1.NativeIP) error {

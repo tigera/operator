@@ -214,6 +214,15 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(*dep.Spec.Template.Spec.Affinity).To(Equal(expectedAffinity))
 			Expect(dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/ipv4pools"]).To(Equal("[\"ippool-1\",\"1.2.4.0/24\"]"))
 
+			By("update egw with empty metadata")
+			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
+			egw.Spec.Template = &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{}}
+			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &dep)).To(BeNil())
+			Expect(dep.Spec.Template.ObjectMeta.Labels["projectcalico.org/egw"]).To(Equal(dep.Name))
+
 			By("update egw with log level")
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
 			egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{}

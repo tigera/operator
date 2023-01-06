@@ -58,6 +58,7 @@ type EgressGatewaySpec struct {
 	AWS *AWSEgressGateway `json:"aws,omitempty"`
 }
 
+// EgressGatewayDeploymentPodSpec is the Egress Gateway Deployment's PodSpec.
 type EgressGatewayDeploymentPodSpec struct {
 	// Affinity is a group of affinity scheduling rules for the EGW pods.
 	// +optional
@@ -116,6 +117,8 @@ type EgressGatewayIPPool struct {
 	CIDR string `json:"cidr,omitempty"`
 }
 
+// NativeIP defines if Egress Gateway pods should have AWS IPs.
+// When NativeIP is enabled, the IPPools should be backed by AWS subnet.
 type NativeIP string
 
 const (

@@ -154,13 +154,13 @@ type EgressGatewayFailureDetection struct {
 	// verify its upstream connection. Egress Gateway will report not ready if all
 	// fail. Timeout must be greater than interval.
 	// +optional
-	ICMPProbes *ICMPProbes `json:"icmpProbe,omitempty"`
+	ICMPProbes *ICMPProbes `json:"icmpProbes,omitempty"`
 
 	// HTTPProbes define outgoing HTTP probes that Egress Gateway will use to
 	// verify its upsteam connection. Egress Gateway will report not ready if all
 	// fail. Timeout must be greater than interval.
 	// +optional
-	HTTPProbes *HTTPProbes `json:"httpProbe,omitempty"`
+	HTTPProbes *HTTPProbes `json:"httpProbes,omitempty"`
 }
 
 // ICMPProbes defines the ICMP probe configuration for Egress Gateway.

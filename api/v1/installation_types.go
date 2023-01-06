@@ -653,6 +653,8 @@ type InstallationStatus struct {
 	Computed *InstallationSpec `json:"computed,omitempty"`
 
 	// CalicoVersion shows the current running version of calico.
+	// CalicoVersion along with Variant is needed to know the exact
+	// version deployed.
 	CalicoVersion string `json:"calicoVersion,omitempty"`
 
 	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of

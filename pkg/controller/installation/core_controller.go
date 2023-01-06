@@ -1442,7 +1442,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, errors.New("The MTU size should be between Max int32 (2147483647) and 0")
 	}
 	instance.Status.MTU = int32(statusMTU)
+	// Variant and CalicoVersion must be updated at the same time.
 	instance.Status.Variant = instance.Spec.Variant
+	instance.Status.CalicoVersion = calicoVersion
 	if imageSet == nil {
 		instance.Status.ImageSet = ""
 	} else {

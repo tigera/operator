@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 package render_test
 
@@ -8,6 +8,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -15,6 +16,7 @@ import (
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -51,6 +53,7 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: rcimageassurance.ImageAssuranceSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-image-assurance-config", ns: render.ManagerNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.ImageAssurancePolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
 		}
 
@@ -121,6 +124,26 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 			corev1.EnvVar{Name: "ENABLE_IMAGE_ASSURANCE_SUPPORT", Value: "true"},
 			corev1.EnvVar{Name: "CNX_IMAGE_ASSURANCE_API_URL", Value: "/bast/v1"},
 		))
+	})
 
+	Context("allow-tigera.image-assurance-access rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.image-assurance-access", Namespace: "tigera-manager"}
+
+		It("should render allow-tigera.image-assurance-access policy",
+			func() {
+				// Default configuration.
+				resources := renderObjects(renderConfig{
+					oidc:                    false,
+					managementCluster:       nil,
+					installation:            installation,
+					complianceFeatureActive: true,
+					imageAssuranceEnabled:   true,
+				})
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/image-assurance.json")
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+		)
 	})
 })

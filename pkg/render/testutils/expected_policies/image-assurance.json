@@ -1,0 +1,30 @@
+{
+    "apiVersion": "projectcalico.org/v3",
+    "kind": "NetworkPolicy",
+    "metadata": {
+      "name": "allow-tigera.image-assurance-access",
+      "namespace": "tigera-manager"
+    },
+    "spec": {
+      "order": 1,
+      "tier": "allow-tigera",
+      "selector": "k8s-app == 'tigera-manager'",
+      "types": [
+        "Egress"
+      ],
+      "egress": [
+        {
+            "action": "Allow",
+            "protocol": "TCP",
+            "destination": {
+              "namespaceSelector": "projectcalico.org/name == 'tigera-image-assurance'",
+              "selector": "k8s-app == 'tigera-image-assurance-api-proxy'",
+              "ports": [
+                5557
+              ]
+            }
+        }
+      ]
+    }
+  }
+  

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 package render
 
@@ -9,9 +9,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -19,6 +21,12 @@ var (
 	CloudManagerConfigOverrideName = "cloud-manager-config"
 	ManagerExtraEnv                = map[string]string{}
 )
+
+const (
+	ImageAssurancePolicyName = networkpolicy.TigeraComponentPolicyPrefix + "image-assurance-access"
+)
+
+var ImageAssuranceEntityRule = networkpolicy.CreateEntityRule("tigera-image-assurance", "tigera-image-assurance-api-proxy", 5557)
 
 // ManagerCloudResources contains all the resource needed for cloud manager.
 type ManagerCloudResources struct {
@@ -79,6 +87,8 @@ func (c *managerComponent) addCloudResources(objs []client.Object) []client.Obje
 
 		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(ManagerNamespace,
 			c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
+
+		objs = append(objs, c.managerImageAssuranceNetworkPolicy())
 	}
 
 	return objs
@@ -139,4 +149,29 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 	}
 
 	return envs
+}
+
+func (c *managerComponent) managerImageAssuranceNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ImageAssuranceEntityRule,
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ImageAssurancePolicyName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
 }

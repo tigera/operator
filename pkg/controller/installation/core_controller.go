@@ -1450,6 +1450,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	} else {
 		instance.Status.ImageSet = imageSet.Name
 	}
+	instance.Status.CalicoVersion = calicoVersion
 	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err

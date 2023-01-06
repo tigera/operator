@@ -62,6 +62,14 @@ type IPPoolSpec struct {
 
 	// Allows IPPool to allocate for a specific node by label selector.
 	NodeSelector string `json:"nodeSelector,omitempty" validate:"omitempty,selector"`
+
+	// AWSSubnetID if specified Calico will attempt to ensure that IPs chosen from this IP pool are routed
+	// to the corresponding node by adding one or more secondary ENIs to the node and explicitly assigning
+	// the IP to one of the secondary ENIs.  Important: since subnets cannot cross availability zones,
+	// it's important to use Kubernetes node selectors to avoid scheduling pods to one availability zone
+	// using an IP pool that is backed by a subnet that belongs to another availability zone. If AWSSubnetID
+	// is specified, then the CIDR of the IP pool must be contained within the specified AWS subnet.
+	AWSSubnetID string `json:"awsSubnetID,omitempty" validate:"omitempty"`
 }
 
 type VXLANMode string

@@ -448,8 +448,6 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 
-	env = append(env, corev1.EnvVar{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.CloudResources.TenantID})
-
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
 	}
@@ -489,6 +487,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.CloudResources.TenantID},
 	}
 
 	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}

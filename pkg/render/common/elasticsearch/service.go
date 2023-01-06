@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	httpsEndpoint     = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"
+	httpsEndpoint     = "https://tigera-secure-es-gateway-http.tigera-elasticsearch:9200"
 	httpsFQDNEndpoint = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc.%s:9200"
 )
 

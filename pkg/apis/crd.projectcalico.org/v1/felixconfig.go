@@ -15,7 +15,7 @@
 package v1
 
 import (
-	"github.com/tigera/operator/pkg/controller/migration/convert/numorstring"
+	"github.com/tigera/api/pkg/lib/numorstring"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

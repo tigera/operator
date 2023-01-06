@@ -1190,6 +1190,8 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"deeppacketinspections/status",
 				"uisettingsgroups",
 				"uisettings",
+				"bgpfilters",
+				"externalnetworks",
 			},
 			Verbs: []string{
 				"get",
@@ -1465,6 +1467,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"user-settings"},
 		},
+		// Allow the user to read services to configure WAF.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
@@ -1606,6 +1614,19 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Resources:     []string{"uisettingsgroups/data"},
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		// Allow the user to read and write the applicationlayers resource to enable/disable WAF.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"applicationlayers"},
+			ResourceNames: []string{"tigera-secure"},
+			Verbs:         []string{"get", "update", "patch", "create"},
+		},
+		// Allow the user to read services to configure WAF.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
 

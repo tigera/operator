@@ -63,7 +63,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		} else if kibanaCertificate == nil {
 			reqLogger.Info("Waiting for internal Kibana tls certificate secret to be available")
 			r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
-			return reconcile.Result{}, nil, false, err
+			return reconcile.Result{}, nil, false, nil
 		}
 	}
 	esInternalCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace())

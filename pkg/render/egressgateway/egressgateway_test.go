@@ -36,6 +36,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 	var healthTimeoutDS int32 = 30
 	var interval int32 = 20
 	var timeout int32 = 40
+	rbac := "rbac.authorization.k8s.io"
 	logSeverity := operatorv1.LogLevelInfo
 	labels := map[string]string{"egress-code": "red"}
 
@@ -77,8 +78,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 				},
 				EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
 					HealthTimeoutDataStoreSeconds: &healthTimeoutDS,
-					ICMPProbes:                    &operatorv1.ICMPProbes{IPs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
-					HTTPProbes:                    &operatorv1.HTTPProbes{URLs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
+					ICMPProbe:                     &operatorv1.ICMPProbe{IPs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
+					HTTPProbe:                     &operatorv1.HTTPProbe{URLs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
 				},
 			},
 		}
@@ -94,7 +95,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "egress-test", ns: "test-ns", group: "apps", version: "v1", kind: "Deployment"},
+			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -106,11 +108,9 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			EgressGWVxlanPort: 4790,
 		})
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(1))
-		i := 0
-		for _, expectedRes := range expectedResources {
+		Expect(len(resources)).To(Equal(2))
+		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
 		}
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(len(dep.Spec.Template.Spec.Containers)).To(Equal(1))
@@ -125,6 +125,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			},
 		}
 		Expect(dep.Spec.Template.Spec.Volumes).To(ContainElement(expectedVolume))
+		Expect(dep.Spec.Template.Spec.ServiceAccountName).To(Equal("egress-test"))
 		initContainer := dep.Spec.Template.Spec.InitContainers[0]
 		egwContainer := dep.Spec.Template.Spec.Containers[0]
 		expectedInitEnvVars := []corev1.EnvVar{
@@ -207,7 +208,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			EgressGWVxlanPort: 4790,
 		})
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(1))
+		Expect(len(resources)).To(Equal(2))
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Resources).To(Equal(expectedResource))
 		elasticIPAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/awsElasticIPs"]
@@ -215,6 +216,20 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 	})
 
 	It("should create service account, clusterrole, clusterrolebinding and psp if platform uses psp", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
+			{"test-ns-egress-test", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{"test-ns-egress-test", "", rbac, "v1", "ClusterRole"},
+			{"test-ns-egress-test", "", rbac, "v1", "ClusterRoleBinding"},
+		}
+
 		component := egressgateway.EgressGateway(&egressgateway.Config{
 			PullSecrets:       nil,
 			Installation:      installation,
@@ -225,8 +240,39 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			UsePSP:            true,
 		})
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
-		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(dep.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-egress-gateway"))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
 	})
+
+	It("should create security context if platform is openshift", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
+			{"test-ns-egress-test", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
+		}
+
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			PullSecrets:       nil,
+			Installation:      installation,
+			OSType:            rmeta.OSTypeLinux,
+			EgressGW:          egw,
+			EgressGWVxlanVNI:  4097,
+			EgressGWVxlanPort: 4790,
+			Openshift:         true,
+		})
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(3))
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+	})
+
 })

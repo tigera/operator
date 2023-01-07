@@ -150,21 +150,21 @@ type EgressGatewayFailureDetection struct {
 	// +optional
 	HealthTimeoutDataStoreSeconds *int32 `json:"healthTimeoutDataStoreSeconds,omitempty"`
 
-	// ICMPProbes define outgoing ICMP probes that Egress Gateway will use to
+	// ICMPProbe define outgoing ICMP probes that Egress Gateway will use to
 	// verify its upstream connection. Egress Gateway will report not ready if all
 	// fail. Timeout must be greater than interval.
 	// +optional
-	ICMPProbes *ICMPProbes `json:"icmpProbes,omitempty"`
+	ICMPProbe *ICMPProbe `json:"icmpProbe,omitempty"`
 
-	// HTTPProbes define outgoing HTTP probes that Egress Gateway will use to
+	// HTTPProbe define outgoing HTTP probes that Egress Gateway will use to
 	// verify its upsteam connection. Egress Gateway will report not ready if all
 	// fail. Timeout must be greater than interval.
 	// +optional
-	HTTPProbes *HTTPProbes `json:"httpProbes,omitempty"`
+	HTTPProbe *HTTPProbe `json:"httpProbe,omitempty"`
 }
 
-// ICMPProbes defines the ICMP probe configuration for Egress Gateway.
-type ICMPProbes struct {
+// ICMPProbe defines the ICMP probe configuration for Egress Gateway.
+type ICMPProbe struct {
 	// IPs define the list of ICMP probe IPs. Egress Gateway will probe each IP
 	// periodically. If all probes fail, Egress Gateway will report non-ready.
 	// +optional
@@ -185,8 +185,8 @@ type ICMPProbes struct {
 	TimeoutSeconds *int32 `json:"timeoutSeconds"`
 }
 
-// HTTPProbes defines the HTTP probe configuration for Egress Gateway.
-type HTTPProbes struct {
+// HTTPProbe defines the HTTP probe configuration for Egress Gateway.
+type HTTPProbe struct {
 	// URLs define the list of HTTP probe URLs. Egress Gateway will probe each URL
 	// periodically.If all probes fail, Egress Gateway will report non-ready.
 	// +optional

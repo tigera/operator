@@ -17,6 +17,7 @@ package egressgateway
 import (
 	"fmt"
 
+	ocsv1 "github.com/openshift/api/security/v1"
 	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,12 +38,10 @@ import (
 )
 
 const (
-	egwPortName                 = "health"
-	egwClusterRoleName          = "tigera-egress-gateway"
-	egwServiceAccountName       = "tigera-egress-gateway"
-	DefaultEGWVxlanPort   int   = 4790
-	DefaultEGWVxlanVNI    int   = 4097
-	DefaultHealthPort     int32 = 8080
+	egwPortName               = "health"
+	DefaultEGWVxlanPort int   = 4790
+	DefaultEGWVxlanVNI  int   = 4097
+	DefaultHealthPort   int32 = 8080
 )
 
 func EgressGateway(
@@ -68,6 +67,7 @@ type Config struct {
 	EgressGWVxlanVNI  int
 	EgressGWVxlanPort int
 
+	Openshift bool
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
 }
@@ -95,13 +95,15 @@ func (c *component) SupportedOSType() rmeta.OSType {
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	objects := []client.Object{}
+	objects = append(objects, c.egwServiceAccount())
+	objects = append(objects, c.egwDeployment())
 	if c.config.UsePSP {
 		objects = append(objects, c.egwPodSecurityPolicy())
 		objects = append(objects, c.egwClusterRole())
 		objects = append(objects, c.egwClusterRoleBinding())
-		objects = append(objects, c.egwServiceAccount())
+	} else if c.config.Openshift {
+		objects = append(objects, c.egwSecurityContextConstraints())
 	}
-	objects = append(objects, c.egwDeployment())
 	return objects, nil
 }
 
@@ -131,7 +133,7 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 	for _, x := range c.config.PullSecrets {
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
-	ptSpec := &corev1.PodTemplateSpec{
+	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: c.egwBuildAnnotations(),
 			Labels:      c.config.EgressGW.Spec.Template.Metadata.Labels,
@@ -144,13 +146,10 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 			TerminationGracePeriodSeconds: c.config.EgressGW.GetTerminationGracePeriod(),
 			InitContainers:                []corev1.Container{*c.egwInitContainer()},
 			Containers:                    []corev1.Container{*c.egwContainer()},
+			ServiceAccountName:            c.config.EgressGW.Name,
 			Volumes:                       []corev1.Volume{*c.egwVolume()},
 		},
 	}
-	if c.config.UsePSP {
-		ptSpec.Spec.ServiceAccountName = egwServiceAccountName
-	}
-	return ptSpec
 }
 
 func (c *component) egwBuildAnnotations() map[string]string {
@@ -235,8 +234,8 @@ func (c *component) egwVolumeMounts() []corev1.VolumeMount {
 }
 
 func (c *component) egwEnvVars() []corev1.EnvVar {
-	icmpProbeIPs, icmpInterval, icmpTimeout := c.getICMPProbes()
-	httpProbeURLs, httpInterval, httpTimeout := c.getHTTPProbes()
+	icmpProbeIPs, icmpInterval, icmpTimeout := c.getICMPProbe()
+	httpProbeURLs, httpInterval, httpTimeout := c.getHTTPProbe()
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
 	return []corev1.EnvVar{
 		{Name: "HEALTH_TIMEOUT_DATASTORE", Value: c.getHealthTimeoutDs()},
@@ -264,8 +263,9 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 
 func (c *component) egwPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	boolTrue := true
+	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
 	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-egress-gateway")
+	psp.GetObjectMeta().SetName(namespacedName)
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
 		corev1.Capability("NET_ADMIN"),
 	}
@@ -294,31 +294,35 @@ func (c *component) egwPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 }
 
 func (c *component) egwClusterRole() *rbacv1.ClusterRole {
+	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
-			ResourceNames: []string{"tigera-egress-gateway"},
+			ResourceNames: []string{namespacedName},
 			Verbs:         []string{"use"},
 		},
 	}
 	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: egwClusterRoleName,
+			Name: namespacedName,
 		},
 		Rules: rules,
 	}
 }
 
 func (c *component) egwClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
 	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: c.config.EgressGW.Name,
+			Name: namespacedName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     egwClusterRoleName,
+			Name:     namespacedName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -332,23 +336,24 @@ func (c *component) egwClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 
 func (c *component) egwServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      egwServiceAccountName,
+			Name:      c.config.EgressGW.Name,
 			Namespace: c.config.EgressGW.Namespace,
 		},
 	}
 }
 
-func (c *component) getICMPProbes() (string, string, string) {
-	icmpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.ICMPProbes
+func (c *component) getICMPProbe() (string, string, string) {
+	icmpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.ICMPProbe
 	probeIPs := strings.Join(icmpProbes.IPs, ",")
 	interval := fmt.Sprintf("%ds", *icmpProbes.IntervalSeconds)
 	timeout := fmt.Sprintf("%ds", *icmpProbes.TimeoutSeconds)
 	return probeIPs, interval, timeout
 }
 
-func (c *component) getHTTPProbes() (string, string, string) {
-	httpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.HTTPProbes
+func (c *component) getHTTPProbe() (string, string, string) {
+	httpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.HTTPProbe
 	probeURLs := strings.Join(httpProbes.URLs, ",")
 	interval := fmt.Sprintf("%ds", *httpProbes.IntervalSeconds)
 	timeout := fmt.Sprintf("%ds", *httpProbes.TimeoutSeconds)
@@ -393,6 +398,30 @@ func (c *component) getElasticIPs() string {
 func (c *component) getHealthTimeoutDs() string {
 	egw := c.config.EgressGW
 	return fmt.Sprintf("%ds", *egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds)
+}
+
+func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
+	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
+	return &ocsv1.SecurityContextConstraints{
+		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
+		ObjectMeta:               metav1.ObjectMeta{Name: namespacedName},
+		AllowHostDirVolumePlugin: true,
+		AllowHostIPC:             false,
+		AllowHostNetwork:         false,
+		AllowHostPID:             false,
+		AllowHostPorts:           false,
+		AllowPrivilegeEscalation: ptr.BoolToPtr(true),
+		AllowPrivilegedContainer: true,
+		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
+		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
+		ReadOnlyRootFilesystem:   false,
+		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
+		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
+		Users: []string{
+			fmt.Sprintf("system:serviceaccount:%s:%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name),
+		},
+		Volumes: []ocsv1.FSType{"*"},
+	}
 }
 
 func concatString(arr []string) string {

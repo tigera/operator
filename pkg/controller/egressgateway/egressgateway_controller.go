@@ -45,6 +45,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	reconcileErr = "Error_reconciling_Egress_Gateway"
+)
+
 var log = logf.Log.WithName("controller_egressgateway")
 
 // Add creates a new EgressGateway Controller and adds it to the Manager.
@@ -240,7 +244,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 	// Reconcile all the EGWs
 	for _, egw := range egws {
-		result, err := r.reconcile(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation)
+		result, err := r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation)
 		if err != nil {
 			return result, err
 		}
@@ -249,7 +253,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 }
 
 func (r *ReconcileEgressGateway) setDegraded(ctx context.Context, egw *operatorv1.EgressGateway, msg string, err error) {
-	reconcileErr := "Error_reconciling_Egress_Gateway"
 	if err != nil {
 		setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("%s Name = %s, Namespace = %s, err = %s", msg, egw.Name, egw.Namespace, err.Error()))
 	} else {
@@ -257,11 +260,9 @@ func (r *ReconcileEgressGateway) setDegraded(ctx context.Context, egw *operatorv
 	}
 }
 
-func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
+func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
 	installation *operatorv1.InstallationSpec) (reconcile.Result, error) {
-
-	reconcileErr := "Error_reconciling_Egress_Gateway"
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
@@ -298,6 +299,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 		egwVxlanVNI = *fc.Spec.EgressIPVXLANVNI
 	}
 
+	openshift := r.provider == operatorv1.ProviderOpenShift
 	config := &egressgateway.Config{
 		PullSecrets:       pullSecrets,
 		Installation:      installation,
@@ -305,6 +307,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 		EgressGW:          egw,
 		EgressGWVxlanPort: egwVxlanPort,
 		EgressGWVxlanVNI:  egwVxlanVNI,
+		Openshift:         openshift,
 		UsePSP:            r.usePSP,
 	}
 
@@ -397,13 +400,13 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	}
 
 	// Check if ICMP and HTTP probe timeout is greater than interval.
-	if *egw.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds <
-		*egw.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds {
+	if *egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds <
+		*egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds {
 		return fmt.Errorf("ICMP probe timeout must be greater than interval")
 	}
 
-	if *egw.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds <
-		*egw.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds {
+	if *egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds <
+		*egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds {
 		return fmt.Errorf("HTTP probe timeout must be greater than interval")
 	}
 	return nil
@@ -453,9 +456,9 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 	if egw.Spec.EgressGatewayFailureDetection == nil {
 		egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
 			HealthTimeoutDataStoreSeconds: &defaultHealthTimeoutDS,
-			ICMPProbes: &operatorv1.ICMPProbes{IPs: []string{},
+			ICMPProbe: &operatorv1.ICMPProbe{IPs: []string{},
 				IntervalSeconds: &defaultIcmpInterval, TimeoutSeconds: &defaultIcmpTimeout},
-			HTTPProbes: &operatorv1.HTTPProbes{URLs: []string{},
+			HTTPProbe: &operatorv1.HTTPProbe{URLs: []string{},
 				IntervalSeconds: &defaultHttpInterval, TimeoutSeconds: &defaultHttpTimeout},
 		}
 	} else {
@@ -463,28 +466,28 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 			egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds = &defaultHealthTimeoutDS
 		}
 
-		if egw.Spec.EgressGatewayFailureDetection.ICMPProbes == nil {
-			egw.Spec.EgressGatewayFailureDetection.ICMPProbes = &operatorv1.ICMPProbes{IPs: []string{},
+		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe == nil {
+			egw.Spec.EgressGatewayFailureDetection.ICMPProbe = &operatorv1.ICMPProbe{IPs: []string{},
 				IntervalSeconds: &defaultIcmpInterval,
 				TimeoutSeconds:  &defaultIcmpTimeout}
 		} else {
-			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds = &defaultIcmpInterval
+			if egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds = &defaultIcmpInterval
 			}
-			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds = &defaultIcmpTimeout
+			if egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds = &defaultIcmpTimeout
 			}
 		}
-		if egw.Spec.EgressGatewayFailureDetection.HTTPProbes == nil {
-			egw.Spec.EgressGatewayFailureDetection.HTTPProbes = &operatorv1.HTTPProbes{URLs: []string{},
+		if egw.Spec.EgressGatewayFailureDetection.HTTPProbe == nil {
+			egw.Spec.EgressGatewayFailureDetection.HTTPProbe = &operatorv1.HTTPProbe{URLs: []string{},
 				IntervalSeconds: &defaultHttpInterval,
 				TimeoutSeconds:  &defaultHttpTimeout}
 		} else {
-			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds = &defaultHttpInterval
+			if egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds = &defaultHttpInterval
 			}
-			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds = &defaultHttpTimeout
+			if egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds = &defaultHttpTimeout
 			}
 		}
 	}

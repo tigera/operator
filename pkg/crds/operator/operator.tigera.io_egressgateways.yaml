@@ -69,8 +69,8 @@ spec:
                     maximum: 2147483647
                     minimum: 1
                     type: integer
-                  httpProbes:
-                    description: HTTPProbes define outgoing HTTP probes that Egress
+                  httpProbe:
+                    description: HTTPProbe define outgoing HTTP probes that Egress
                       Gateway will use to verify its upsteam connection. Egress Gateway
                       will report not ready if all fail. Timeout must be greater than
                       interval.
@@ -95,8 +95,8 @@ spec:
                           type: string
                         type: array
                     type: object
-                  icmpProbes:
-                    description: ICMPProbes define outgoing ICMP probes that Egress
+                  icmpProbe:
+                    description: ICMPProbe define outgoing ICMP probes that Egress
                       Gateway will use to verify its upstream connection. Egress Gateway
                       will report not ready if all fail. Timeout must be greater than
                       interval.

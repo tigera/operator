@@ -250,8 +250,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			By("setting ICMP probe IPs and HTTP URLs, should set default value for other fields")
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
 			egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
-				ICMPProbes: &operatorv1.ICMPProbes{IPs: []string{"1.2.3.4"}},
-				HTTPProbes: &operatorv1.HTTPProbes{URLs: []string{"abcd.com"}},
+				ICMPProbe: &operatorv1.ICMPProbe{IPs: []string{"1.2.3.4"}},
+				HTTPProbe: &operatorv1.HTTPProbe{URLs: []string{"abcd.com"}},
 			}
 			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -505,7 +505,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					},
 					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 					EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
-						ICMPProbes: &operatorv1.ICMPProbes{
+						ICMPProbe: &operatorv1.ICMPProbe{
 							IPs:             []string{"1.2.4.5"},
 							TimeoutSeconds:  &timeout,
 							IntervalSeconds: &interval,
@@ -539,7 +539,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					},
 					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 					EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
-						HTTPProbes: &operatorv1.HTTPProbes{
+						HTTPProbe: &operatorv1.HTTPProbe{
 							URLs:            []string{"test.com"},
 							TimeoutSeconds:  &timeout,
 							IntervalSeconds: &interval,

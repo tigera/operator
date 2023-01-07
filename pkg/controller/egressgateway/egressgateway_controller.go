@@ -19,8 +19,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -28,21 +30,19 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/egressgateway"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/components"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -144,13 +144,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling EgressGateway")
 
-	// Wait for right version of the calico to be installed. When upgrading EGWs, calico-node needs to be upgraded
-	// first, before proceeding with the EGW upgrade. Hence wait for the right version of calico to be installed.
-	installStatus, err := utils.GetInstallationStatus(ctx, r.client)
-	if err != nil || installStatus.CalicoVersion != components.EnterpriseRelease {
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
 	// If request name and namespace is not "", getEgressGateways will just return the
 	// exact EGW resource. If the namespace is "", getEgressGateways will return all the
 	// EGW resources in all namespaces.
@@ -163,10 +156,10 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			// Since the EGW resource is not found, remove the deployment.
 			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
 			// Get the cumulative Egress Gateway status. Let's say we have 2 EGW resources red and blue.
-			// Red has already degraded. When the user deletes Red, Tigerastatus should go back to available
-			// as Blue is healthy. If all the EGWs are ready, clear the degraded Tigerastatus.
+			// Red has already degraded. When the user deletes Red, TigeraStatus should go back to available
+			// as Blue is healthy. If all the EGWs are ready, clear the degraded TigeraStatus.
 			// If at least one of the EGWs is unhealthy, get the degraded msg from the conditions and
-			// update the Tigerastatus.
+			// update the TigeraStatus.
 			egws, err := getEgressGateways(ctx, r.client, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ""}})
 			if err != nil || len(egws) == 0 {
 				r.status.OnCRNotFound()
@@ -193,7 +186,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	installation, installStatus, err := utils.GetInstallationAndStatus(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
@@ -212,6 +205,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	variant := installStatus.Variant
 	if variant != operatorv1.TigeraSecureEnterprise {
 		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
@@ -219,6 +213,10 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			r.setDegraded(ctx, &egw, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil)
 		}
 		return reconcile.Result{}, nil
+	}
+
+	if installStatus.CalicoVersion != components.EnterpriseRelease {
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
@@ -335,10 +333,10 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
 
-	// After the resource is created/updated, Tigerastatus needs to be set by taking the cumulative status of the
+	// After the resource is created/updated, TigeraStatus needs to be set by taking the cumulative status of the
 	// available EGW resources. Lets say we create 2 EGW resources Red, Blue. Both are degraded. Now lets create 3rd resource
-	// yellow. Though yellow is reconciled and rendered successfully, Tigerastatus should still be degraded as Red, Blue are
-	// degraded. Now lets assume Blue gets updated and gets rendered properly. In this case, Tigerastatus should still be
+	// yellow. Though yellow is reconciled and rendered successfully, TigeraStatus should still be degraded as Red, Blue are
+	// degraded. Now lets assume Blue gets updated and gets rendered properly. In this case, TigeraStatus should still be
 	// degraded as Red is unhealthy.
 	egws, err := getEgressGateways(ctx, r.client, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ""}})
 	if err != nil {

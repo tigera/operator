@@ -184,6 +184,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "egress-gateway" }}
+	ComponentEgressGateway = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "l7-collector" }}
 	ComponentL7Collector = component{
 		Version: "{{ .Version }}",
@@ -311,6 +317,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,

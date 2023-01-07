@@ -74,6 +74,8 @@ func (r *ReconcileLogStorage) createEsGateway(
 		return reconcile.Result{}, nil, false, nil
 	}
 
+	// Esgateway.go will render the trusted bundle for the whole namespace, so we want to include also the Prometheus
+	// TLS certificate, which the elasticsearch-metrics server depends on.
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
@@ -129,7 +131,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		TrustedBundle: trustedBundle,
 	})
 
-	for _, comp := range []render.Component{esGatewayComponent, certificateComponent} {
+	for _, comp := range []render.Component{certificateComponent, esGatewayComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, nil, false, err

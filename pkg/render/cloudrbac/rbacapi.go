@@ -3,9 +3,6 @@
 package cloudrbac
 
 import (
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/authentication"
-	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -13,6 +10,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/configmap"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	oprender "github.com/tigera/operator/pkg/render"
@@ -184,13 +185,9 @@ func (c *rbacApiComponent) deployment() client.Object {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RBACApiDeploymentName,
 			Namespace: RBACApiNamespace,
-			Labels:    map[string]string{"k8s-app": RBACApiDeploymentName},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"k8s-app": RBACApiDeploymentName},
-			},
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -198,7 +195,6 @@ func (c *rbacApiComponent) deployment() client.Object {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        RBACApiDeploymentName,
 					Namespace:   RBACApiNamespace,
-					Labels:      map[string]string{"k8s-app": RBACApiDeploymentName},
 					Annotations: c.config.TrustedBundle.HashAnnotations(),
 				},
 				Spec: corev1.PodSpec{

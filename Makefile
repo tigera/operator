@@ -699,7 +699,7 @@ $(BINDIR)/controller-gen:
 		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 		cd $$CONTROLLER_GEN_TMP_DIR ;\
 		go mod init tmp ;\
-		go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0'
+		go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0'
 
 KUSTOMIZE=$(BINDIR)/kustomize
 # download kustomize if necessary
@@ -711,7 +711,7 @@ $(BINDIR)/kustomize:
 		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 		cd $$CONTROLLER_GEN_TMP_DIR ;\
 		go mod init tmp ;\
-		go install sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
+		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
 
 
 # Options for 'bundle-build'

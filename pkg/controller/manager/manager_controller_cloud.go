@@ -40,7 +40,7 @@ func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger l
 		return mcr, nil, err
 	}
 
-	err = r.handleCloudRBACResources(&mcr, reqLogger)
+	err = r.handleCloudRBACResources(ctx, &mcr, reqLogger)
 	if err != nil {
 		return mcr, nil, err
 	}
@@ -49,16 +49,27 @@ func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger l
 }
 
 // handleCloudRBACResources registers Cloud RBAC specific resources with managerCloudResources.
-func (r *ReconcileManager) handleCloudRBACResources(mcr *render.ManagerCloudResources, reqLogger logr.Logger) error {
+func (r *ReconcileManager) handleCloudRBACResources(ctx context.Context, mcr *render.ManagerCloudResources, reqLogger logr.Logger) error {
+
+	if _, err := utils.GetCloudRBAC(ctx, r.client); err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Info("CloudRBAC CR is not found, continuing without enabling Cloud RBAC")
+			return nil
+		}
+		reqLogger.Error(err, "failed to check for Cloud RBAC existence")
+		r.status.SetDegraded("failed to check for Cloud RBAC existence: %s", err.Error())
+		return err
+	}
 
 	// get tls secret for cloud rbac, created by the cc-management-core operator
 	secret, err := utils.GetCloudRbacTLSSecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve secret %s", cloudrbac.TLSSecretName), err.Error())
+		r.status.SetDegraded(fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName), err.Error())
 		return err
 	} else if secret == nil {
-		reqLogger.Info("Cloud RBAC TLS Secret not found, continuing without enabling Cloud RBAC in Manager")
+		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName), "")
 		return nil
 	}
 

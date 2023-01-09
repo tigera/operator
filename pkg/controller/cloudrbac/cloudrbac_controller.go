@@ -129,8 +129,7 @@ func (r *ReconcileCloudRBAC) Reconcile(ctx context.Context, req ctrl.Request) (c
 	reqLogger.Info("Reconciling CloudRBAC")
 
 	// Fetch the CloudRBAC instance
-	instance := &operatorv1.CloudRBAC{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	instance, err := utils.GetCloudRBAC(ctx, r.client)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			reqLogger.Info("CloudRBAC CR not found", "err", err)

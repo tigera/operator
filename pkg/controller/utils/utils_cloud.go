@@ -91,6 +91,17 @@ func AddClusterRoleBindingWatch(c controller.Controller, name string) error {
 	return AddClusterResourceWatch(c, crb)
 }
 
+// GetCloudRBAC returns the default CloudRBAC instance.
+func GetCloudRBAC(ctx context.Context, cli client.Client) (*operatorv1.CloudRBAC, error) {
+	instance := &operatorv1.CloudRBAC{}
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance, nil
+}
+
 // GetCloudRbacTLSSecret gets the TLS secret for the Cloud RBAC API communication.
 func GetCloudRbacTLSSecret(client client.Client) (*corev1.Secret, error) {
 	return ValidateCertPair(client, common.OperatorNamespace(), cloudrbac.TLSSecretName, corev1.TLSPrivateKeyKey, corev1.TLSCertKey)

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -312,8 +312,8 @@ func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path:   "/tigera-elasticsearch/version",
-				Port:   intstr.FromInt(managerPort),
+				Path:   "/version",
+				Port:   intstr.FromInt(8443),
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
@@ -479,6 +479,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		// Listen anywhere so the Liveness probe can connect.
+		// Do not allow this port in network policy, we do not want it available outside of the pod.
+		{Name: "LISTEN_ADDR", Value: "0.0.0.0:8443"},
 	}
 
 	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}

@@ -180,7 +180,7 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-cloud-rbac-tls", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.CloudRBACPPIPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: render.CloudRBACAPIPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
 		}
 

@@ -25,7 +25,7 @@ var (
 
 const (
 	ImageAssurancePolicyName = networkpolicy.TigeraComponentPolicyPrefix + "image-assurance-access"
-	CloudRBACPPIPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "cloud-rbac-api"
+	CloudRBACAPIPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "cloud-rbac-api"
 )
 
 var ImageAssuranceEntityRule = networkpolicy.CreateEntityRule("tigera-image-assurance", "tigera-image-assurance-api-proxy", 5557)
@@ -228,7 +228,7 @@ func (c *managerComponent) managerToCloudRBACAPINetworkPolicy(rbacResources *clo
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      CloudRBACPPIPolicyName,
+			Name:      CloudRBACAPIPolicyName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{

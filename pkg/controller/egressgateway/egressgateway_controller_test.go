@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -42,7 +43,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var _ = Describe("Egress Gateway controller tests", func() {
@@ -622,5 +627,39 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(test.GetResource(c, &dep)).To(BeNil())
 			wg.Wait()
 		})
+
+		It("should not watch namespaced resources", func() {
+			m := &mockController{}
+			var mgr manager.Manager
+			err := add(mgr, m)
+			Expect(err).ShouldNot(HaveOccurred())
+			for _, watch := range m.watches {
+				kind := watch.(*source.Kind)
+				Expect(len(kind.Type.GetNamespace())).To(Equal(0))
+			}
+		})
 	})
 })
+
+type mockController struct {
+	mock.Mock
+	watches []source.Source
+}
+
+func (m *mockController) Watch(src source.Source, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	m.watches = append(m.watches, src)
+	return nil
+}
+
+func (m *mockController) Start(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockController) GetLogger() logr.Logger {
+	var logger logr.Logger
+	return logger
+}
+
+func (m *mockController) Reconcile(ctx context.Context, req reconcile.Request) (_ reconcile.Result, err error) {
+	return reconcile.Result{}, nil
+}

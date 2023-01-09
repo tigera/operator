@@ -364,7 +364,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 
 	var complianceServerCertSecret certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {
@@ -389,6 +388,20 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authenticationCR status: %s", authenticationCR.Status.State), nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+
+	// create the trusted bundle.
+	// compliance-server running on management may need root certificates if oidc provider is external
+	var trustedBundle certificatemanagement.TrustedBundle
+	if managementCluster != nil && authenticationCR != nil && authenticationCR.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
+		var err error
+		trustedBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates(managerInternalTLSSecret, esgwCertificate)
+		if err != nil {
+			r.status.SetDegraded("failed to create trusted bundle with system root certs", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else {
+		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 	}
 
 	// Create a component handler to manage the rendered component.

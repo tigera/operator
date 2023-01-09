@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
+
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
@@ -31,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ = Describe("Runtime Security Controller Tests", func() {
+var _ = Describe("Cloud RBAC Controller Tests", func() {
 	var c client.Client
 	var ctx context.Context
 	var r ReconcileCloudRBAC

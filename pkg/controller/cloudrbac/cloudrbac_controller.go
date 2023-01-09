@@ -6,13 +6,21 @@ import (
 	"context"
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
+	oprender "github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/cloudrbac"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -29,15 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/go-logr/logr"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	oprender "github.com/tigera/operator/pkg/render"
 )
 
 // ReconcileCloudRBAC reconciles a CloudRBAC object
@@ -70,7 +69,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 	r := &ReconcileCloudRBAC{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
-		status:        status.New(mgr.GetClient(), "cloudrbac", opts.KubernetesVersion),
+		status:        status.New(mgr.GetClient(), "cloud-rbac", opts.KubernetesVersion),
 		clusterDomain: opts.ClusterDomain,
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -88,12 +87,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("RuntimeSecurity-controller failed to watch ImageSet: %w", err)
+		return fmt.Errorf("CloudRBAC-controller failed to watch ImageSet: %w", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("RuntimeSecurity-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("CloudRBAC-controller failed to watch Tigera network resource: %v", err)
 	}
 
 	for _, role := range []string{
@@ -127,20 +126,20 @@ func add(mgr manager.Manager, c controller.Controller) error {
 // and what is in the CloudRBAC.Spec
 func (r *ReconcileCloudRBAC) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
-	reqLogger.Info("Reconciling CloudCore")
+	reqLogger.Info("Reconciling CloudRBAC")
 
-	// Fetch the CloudCore instance
+	// Fetch the CloudRBAC instance
 	instance := &operatorv1.CloudRBAC{}
 	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			reqLogger.Info("CloudCore CR not found", "err", err)
+			reqLogger.Info("CloudRBAC CR not found", "err", err)
 			// Request object not found, could have been deleted after reconcile request.
 			// Return and don't requeue
 			r.status.OnCRNotFound()
 			return ctrl.Result{}, nil
 		}
-		r.SetDegraded(reqLogger, "ResourceNotFound", "Error querying CloudCore", err)
+		r.SetDegraded(reqLogger, "ResourceNotFound", "Error querying CloudRBAC", err)
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
@@ -270,14 +269,14 @@ func (r *ReconcileCloudRBAC) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// SetDegraded sets status as degraded the for the CloudCore resource
+// SetDegraded sets status as degraded the for the CloudRBAC resource
 func (r *ReconcileCloudRBAC) SetDegraded(reqLogger logr.Logger, reason string, message string, err error) {
-	reqLogger.WithValues(reason, message).Error(err, string(reason))
+	reqLogger.WithValues(reason, message).Error(err, reason)
 	msg := ""
 	if err == nil {
 		msg = message
 	} else {
 		msg = fmt.Sprintf("%s - Error: %s", message, err.Error())
 	}
-	r.status.SetDegraded(string(reason), msg)
+	r.status.SetDegraded(reason, msg)
 }

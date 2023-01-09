@@ -124,7 +124,7 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 			if errors.IsNotFound(err) {
 				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
 				r.status.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
-				return nil, nil
+				return &reconcile.Result{}, nil
 			}
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Unable to read cloud config map", err.Error())

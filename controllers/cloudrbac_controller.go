@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/controller/cloudrbac"
-	"github.com/tigera/operator/pkg/controller/options"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/tigera/operator/pkg/controller/cloudrbac"
+	"github.com/tigera/operator/pkg/controller/options"
 )
 
 // CloudRBACReconciler reconciles a CloudRBAC object

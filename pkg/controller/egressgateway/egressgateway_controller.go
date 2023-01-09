@@ -25,7 +25,6 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
 
-	//"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -409,6 +408,10 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	// If name is specified, check IPPool exists.
 	// If CIDR is specified, check if CIDR matches with any IPPool.
 	// If Aws.NativeIP is enabled, check if the IPPool is backed by aws-subnet ID.
+	if len(egw.Spec.IPPools) == 0 {
+		return fmt.Errorf("At least one IPPool must be specified")
+	}
+
 	for _, ippool := range egw.Spec.IPPools {
 		err := validateIPPool(ctx, cli, ippool, nativeIP)
 		if err != nil {

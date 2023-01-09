@@ -24,6 +24,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
+
+	//"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -95,7 +97,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 }
 
 // add adds watches for resources that are available at startup.
-// Watching namespaced resources must be avoided.
+// Watching namespaced resources must be avoided as the controller
+// can't differentiate if the request namespaced resource is an
+// Egress Gateway resource or not.
 func add(mgr manager.Manager, c controller.Controller) error {
 	var err error
 
@@ -145,9 +149,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling EgressGateway")
 
-	// If request name and namespace is not "", getEgressGateways will just return the
-	// exact EGW resource. If the namespace is "", getEgressGateways will return all the
-	// EGW resources in all namespaces.
+	// Get all the Egress Gateway resources available.
 	egws, err := getEgressGateways(ctx, r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error querying for Egress Gateway")
@@ -155,14 +157,29 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	// If there are no Egress Gateway resources, return.
 	if len(egws) == 0 {
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
 
+	/* Reconcile is done as follows.
+	1. At the start, assume all the EGW resources need to be reconciled.
+	2. If the request is to a particular EGW resource, find the requested EGW from the list of EGWs.
+	3. If the requested EGW resource is not present, it could have been deleted.
+	   'egws' is now the list of all EGW resources present. Get the cumulative status and update
+	   TigeraStatus object.
+	4. If the requested EGW resource is present, then it is the only resource to reconcile. Remove this
+	   EGW resource from the list and get the status of all the other EGW resources present and update
+	   TigeraStatus accordingly.
+	5. If the request is not to a particular EGW resource, reconcile all the resources.
+	*/
+
+	// egwsToReconcile is the list of Egress Gateway resources that needs to be reconciled.
+	// To start with all EGW resources must be reconciled.
 	egwsToReconcile := egws
 	if request.Namespace != "" {
-		requestedEGW := getRequestedEgressGateway(egws, request)
+		requestedEGW, idx := getRequestedEgressGateway(egws, request)
 		if requestedEGW == nil {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
@@ -184,9 +201,15 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			r.status.ClearDegraded()
 			return reconcile.Result{}, nil
 		}
+		// If the EGW resource is present, reconcile only that resource.
+		// Remove this from the list of EGWs before computing status.
 		egwsToReconcile = []operatorv1.EgressGateway{*requestedEGW}
+		egws = append(egws[:idx], egws[idx+1:]...)
 	}
 	r.status.OnCRFound()
+
+	// Get the status and the degradedEGW
+	status, degradedEGW := getCumulativeEgressGatewayStatus(egws)
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
@@ -250,7 +273,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		_, err := r.reconcileEgressGateway(ctx, egws, &egw, reqLogger, variant, fc, pullSecrets, installation)
+		_, err := r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, status, degradedEGW)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -270,9 +293,9 @@ func (r *ReconcileEgressGateway) setDegraded(ctx context.Context, egw *operatorv
 	}
 }
 
-func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egws []operatorv1.EgressGateway, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
+func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec) (reconcile.Result, error) {
+	installation *operatorv1.InstallationSpec, status bool, degradedEGW *operatorv1.EgressGateway) (reconcile.Result, error) {
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
@@ -349,10 +372,8 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	// available EGW resources. Lets say we create 2 EGW resources Red, Blue. Both are degraded. Now lets create 3rd resource
 	// yellow. Though yellow is reconciled and rendered successfully, TigeraStatus should still be degraded as Red, Blue are
 	// degraded. Now lets assume Blue gets updated and gets rendered properly. In this case, TigeraStatus should still be
-	// degraded as Red is unhealthy.
-	// Get the cumulative status of all Egress Gateway resources.
-	status, degradedEGW := getCumulativeEgressGatewayStatus(egws)
-	if !status && degradedEGW != nil && degradedEGW != egw {
+	// degraded as Red is unhealthy. "status" represents, the cumulative status of EGWs.
+	if !status && degradedEGW != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError,
 			fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", degradedEGW.Name, degradedEGW.Namespace),
 			fmt.Errorf("%s", getDegradedMsg(degradedEGW)), reqLogger)
@@ -368,13 +389,13 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 }
 
 // getRequestedEgressGateway returns the namespaced EgressGateway instance.
-func getRequestedEgressGateway(egws []operatorv1.EgressGateway, request reconcile.Request) *operatorv1.EgressGateway {
-	for _, egw := range egws {
+func getRequestedEgressGateway(egws []operatorv1.EgressGateway, request reconcile.Request) (*operatorv1.EgressGateway, int) {
+	for index, egw := range egws {
 		if request.Name == egw.Name && request.Namespace == egw.Namespace {
-			return &egw
+			return &egw, index
 		}
 	}
-	return nil
+	return nil, -1
 }
 
 // validateEgressGateway checks if the ippools specified are already present.

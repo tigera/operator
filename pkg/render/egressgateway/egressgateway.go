@@ -227,7 +227,7 @@ func (c *component) egwVolume() *corev1.Volume {
 
 func (c *component) egwVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		corev1.VolumeMount{Name: "policysync", MountPath: "/var/run"},
+		corev1.VolumeMount{Name: "policysync", MountPath: "/var/run/calico"},
 	}
 }
 

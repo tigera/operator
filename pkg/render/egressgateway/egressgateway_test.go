@@ -183,7 +183,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 		Expect(egwContainer.ReadinessProbe).To(Equal(expectedRP))
 
-		volumeMount := corev1.VolumeMount{Name: "policysync", MountPath: "/var/run"}
+		volumeMount := corev1.VolumeMount{Name: "policysync", MountPath: "/var/run/calico"}
 		Expect(egwContainer.VolumeMounts).To(ContainElement(volumeMount))
 
 		Expect(dep.Spec.Template.Spec.TopologySpreadConstraints).To(ContainElement(topoConstraint))
@@ -269,7 +269,40 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			Openshift:         true,
 		})
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(3))
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+	})
+
+	It("Test with long string lengths for ns and name", func() {
+		egw.Namespace = "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg"
+		egw.Name = "egress-testabcdefghijklmnopqrstuvwxyz1234567890abc"
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			PullSecrets:       nil,
+			Installation:      installation,
+			OSType:            rmeta.OSTypeLinux,
+			EgressGW:          egw,
+			EgressGWVxlanVNI:  4097,
+			EgressGWVxlanPort: 4790,
+			UsePSP:            true,
+		})
+
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{"egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg", "", "v1", "ServiceAccount"},
+			{"egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg", "apps", "v1", "Deployment"},
+			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", rbac, "v1", "ClusterRole"},
+			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", rbac, "v1", "ClusterRoleBinding"},
+		}
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}

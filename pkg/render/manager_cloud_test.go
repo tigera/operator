@@ -239,16 +239,4 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 			))
 		})
 	})
-
-	Context("manager", func() {
-		var manager = template.Containers[0]
-
-		It("should have env vars", func() {
-			Expect(manager.Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ENABLE_CLOUD_RBAC_SUPPORT", Value: "true"},
-				corev1.EnvVar{Name: "CNX_CLOUD_RBAC_API_URL", Value: "/cloud-rbac"},
-			))
-		})
-	})
-
 })

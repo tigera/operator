@@ -166,12 +166,6 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 		)
 	}
 
-	if c.cfg.CloudResources.CloudRBACResources != nil {
-		envs = append(envs,
-			corev1.EnvVar{Name: "ENABLE_CLOUD_RBAC_SUPPORT", Value: "true"},
-			corev1.EnvVar{Name: "CNX_CLOUD_RBAC_API_URL", Value: "/cloud-rbac"},
-		)
-	}
 	// move extra env vars into Manager, but sort them alphabetically first,
 	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
 	// which will cause another reconciliation event when Manager is updated.

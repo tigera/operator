@@ -15,8 +15,6 @@ const (
 )
 
 // Resources contains the information needed for configuring tls & voltron for calico-cloud-rbac.
-//
-//	The majority of calico-cloud-rbac is managed by the cc-management-core operator
 type Resources struct {
 	NamespaceName string
 	ServiceName   string

@@ -3,12 +3,13 @@
 package cloudrbac_test
 
 import (
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/cloudrbac"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/cloudrbac"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -58,8 +59,6 @@ var _ = Describe("Role rendering tests (Calico Cloud)", func() {
 			kind    string
 		}{
 			{name: cloudrbac.RBACApiNamespace, group: "", version: "v1", kind: "Namespace"},
-			//{name: "tigera-ca-bundle", ns: cloudrbac.RBACApiNamespace, group: "", version: "v1", kind: "ConfigMap"},
-			//{name: cloudrbac.RBACAPICertSecretName, ns: cloudrbac.RBACApiNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: cloudrbac.RBACApiServiceAccountName, ns: cloudrbac.RBACApiNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: cloudrbac.RBACApiClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: cloudrbac.RBACApiClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},

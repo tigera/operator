@@ -41,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -439,14 +438,6 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		// APIServer.
 		dui.SetOwnerReferences(cui.GetOwnerReferences())
 		return dui
-	case *v3.Tier:
-		// Cloud: Remove allow-tigera tier label to fix CD sync
-		_ = current.(*v3.Tier) // fix for static-checks CI
-		dt := desired.(*v3.Tier)
-		if dt.Labels["app.kubernetes.io/instance"] != "" && dt.Name == networkpolicy.TigeraComponentTierName {
-			delete(dt.Labels, "app.kubernetes.io/instance")
-		}
-		return dt
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

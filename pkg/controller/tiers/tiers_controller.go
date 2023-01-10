@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/tiers"
@@ -136,6 +137,11 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
+	if err := r.cloudPatchTier(ctx); err != nil {
+		r.status.SetDegraded("Error patching tier", err.Error())
+		return reconcile.Result{}, nil
+	}
+
 	component := tiers.Tiers(&tiers.Config{Openshift: r.provider == operatorv1.ProviderOpenShift})
 
 	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
@@ -146,4 +152,27 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// cloudPatchTier Remove allow-tigera tier label to fix CD sync
+func (r *ReconcileTiers) cloudPatchTier(ctx context.Context) error {
+
+	tier := &v3.Tier{}
+	err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, tier)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	if tier.Labels["app.kubernetes.io/instance"] != "" {
+		tierPatchFrom := client.MergeFrom(tier.DeepCopy())
+		delete(tier.Labels, "app.kubernetes.io/instance")
+
+		if err = r.client.Patch(ctx, tier, tierPatchFrom); err != nil {
+			return err
+		}
+	}
+	return nil
 }

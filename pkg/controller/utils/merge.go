@@ -152,6 +152,12 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	case Different:
 		inst.CalicoNodeDaemonSet = mergeCalicoNodeDaemonSet(inst.CalicoNodeDaemonSet, override.CalicoNodeDaemonSet)
 	}
+	switch compareFields(inst.CSINodeDriverDaemonSet, override.CSINodeDriverDaemonSet) {
+	case BOnlySet:
+		inst.CSINodeDriverDaemonSet = override.CSINodeDriverDaemonSet.DeepCopy()
+	case Different:
+		inst.CSINodeDriverDaemonSet = mergeCSINodeDriverDaemonset(inst.CSINodeDriverDaemonSet, override.CSINodeDriverDaemonSet)
+	}
 
 	switch compareFields(inst.CalicoKubeControllersDeployment, override.CalicoKubeControllersDeployment) {
 	case BOnlySet:
@@ -377,6 +383,84 @@ func mergeCalicoNodeDaemonSet(cfg, override *operatorv1.CalicoNodeDaemonSet) *op
 	}
 
 	return out
+}
+
+func mergeCSINodeDriverDaemonset(cfg, override *operatorv1.CSINodeDriverDaemonSet) *operatorv1.CSINodeDriverDaemonSet {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Metadata, override.Metadata) {
+	case BOnlySet:
+		out.Metadata = override.Metadata.DeepCopy()
+	case Different:
+		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	}
+
+	mergePodSpec := func(cfg, override *operatorv1.CSINodeDriverDaemonSetPodSpec) *operatorv1.CSINodeDriverDaemonSetPodSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Containers, override.Containers) {
+		case BOnlySet, Different:
+			out.Containers = make([]operatorv1.CSINodeDriverDaemonSetContainer, len(override.Containers))
+			copy(out.Containers, override.Containers)
+		}
+
+		switch compareFields(out.Affinity, override.Affinity) {
+		case BOnlySet, Different:
+			out.Affinity = override.Affinity
+		}
+
+		switch compareFields(out.NodeSelector, override.NodeSelector) {
+		case BOnlySet, Different:
+			out.NodeSelector = override.NodeSelector
+		}
+
+		switch compareFields(out.Tolerations, override.Tolerations) {
+		case BOnlySet, Different:
+			out.Tolerations = override.Tolerations
+		}
+		return out
+	}
+	mergeTemplateSpec := func(cfg, override *operatorv1.CSINodeDriverDaemonSetPodTemplateSpec) *operatorv1.CSINodeDriverDaemonSetPodTemplateSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Metadata, override.Metadata) {
+		case BOnlySet:
+			out.Metadata = override.Metadata.DeepCopy()
+		case Different:
+			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+		}
+
+		switch compareFields(out.Spec, override.Spec) {
+		case BOnlySet:
+			out.Spec = override.Spec.DeepCopy()
+		case Different:
+			out.Spec = mergePodSpec(out.Spec, override.Spec)
+		}
+
+		return out
+	}
+	mergeSpec := func(cfg, override *operatorv1.CSINodeDriverDaemonSetSpec) *operatorv1.CSINodeDriverDaemonSetSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Template, override.Template) {
+		case BOnlySet:
+			out.Template = override.Template.DeepCopy()
+		case Different:
+			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+
+		return out
+	}
+
+	switch compareFields(out.Spec, override.Spec) {
+	case BOnlySet:
+		out.Spec = override.Spec.DeepCopy()
+	case Different:
+		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
+
+	return out
+
 }
 
 func mergeCalicoKubeControllersDeployment(cfg, override *operatorv1.CalicoKubeControllersDeployment) *operatorv1.CalicoKubeControllersDeployment {

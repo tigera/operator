@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 package esgateway
 
@@ -15,12 +15,14 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	ExternalCertsSecret     = "tigera-secure-external-es-certs"
 	ExternalCertsVolumeName = "tigera-secure-external-es-certs"
+	CloudPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "cloud-es-gateway-access"
 )
 
 type CloudConfig struct {
@@ -112,11 +114,12 @@ func (e *esGateway) getCloudObjects() (toCreate []client.Object) {
 	if e.cfg.Cloud.EsAdminUserSecret != nil {
 		s = append(s, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.Cloud.EsAdminUserSecret)...)...)
 	}
+	s = append(s, e.allowTigeraPolicyForCloud())
 	return s
 }
 
-func (e *esGateway) cloudEgressRules() []v3.Rule {
-	var egressRules []v3.Rule
+func (e *esGateway) allowTigeraPolicyForCloud() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
 	if e.cfg.Cloud.ExternalElastic {
 		egressRules = append(egressRules,
 			v3.Rule{
@@ -129,5 +132,35 @@ func (e *esGateway) cloudEgressRules() []v3.Rule {
 			},
 		)
 	}
-	return egressRules
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				NamespaceSelector: "projectcalico.org/name == 'monitoring'",
+				Selector:          "app == 'prometheus'",
+			},
+			// This matches the default. The metrics are enabled only on cloud (see
+			// ES_GATEWAY_METRICS_ENABLED which is added in this file).
+			Destination: v3.EntityRule{
+				Ports: []numorstring.Port{{MinPort: 9091, MaxPort: 9091}},
+			},
+		},
+	}
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CloudPolicyName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(DeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
 }

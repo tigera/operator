@@ -31,7 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/egressgateway"
-	errors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -99,7 +99,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 // Watching namespaced resources must be avoided as the controller
 // can't differentiate if the request namespaced resource is an
 // Egress Gateway resource or not.
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(_ manager.Manager, c controller.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource Egress Gateway.
@@ -185,16 +185,16 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			reqLogger.Info("EgressGateway object not found")
 			// Since the EGW resource is not found, remove the deployment.
 			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
-			// Get the cumulative Egress Gateway status. Let's say we have 2 EGW resources red and blue.
+			// Get the unready EGW. Let's say we have 2 EGW resources red and blue.
 			// Red has already degraded. When the user deletes Red, TigeraStatus should go back to available
 			// as Blue is healthy. If all the EGWs are ready, clear the degraded TigeraStatus.
 			// If at least one of the EGWs is unhealthy, get the degraded msg from the conditions and
 			// update the TigeraStatus.
-			status, egw := getCumulativeEgressGatewayStatus(egws)
-			if !status {
+			unreadyEGW := getUnreadyEgressGateway(egws)
+			if unreadyEGW != nil {
 				r.status.SetDegraded(operatorv1.ResourceNotReady,
-					fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", egw.Name, egw.Namespace),
-					fmt.Errorf("%s", getDegradedMsg(egw)), reqLogger)
+					fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", unreadyEGW.Name, unreadyEGW.Namespace),
+					fmt.Errorf("%s", getDegradedMsg(unreadyEGW)), reqLogger)
 				return reconcile.Result{}, nil
 			}
 			r.status.ClearDegraded()
@@ -207,8 +207,8 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 	r.status.OnCRFound()
 
-	// Get the status and the degradedEGW
-	status, degradedEGW := getCumulativeEgressGatewayStatus(egws)
+	// Get the unready EGW.
+	unreadyEGW := getUnreadyEgressGateway(egws)
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
@@ -272,7 +272,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		_, err := r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, status, degradedEGW)
+		_, err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, unreadyEGW)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -294,7 +294,7 @@ func (r *ReconcileEgressGateway) setDegraded(ctx context.Context, egw *operatorv
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec, status bool, degradedEGW *operatorv1.EgressGateway) (reconcile.Result, error) {
+	installation *operatorv1.InstallationSpec, unreadyEGW *operatorv1.EgressGateway) (reconcile.Result, error) {
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
@@ -372,10 +372,10 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	// yellow. Though yellow is reconciled and rendered successfully, TigeraStatus should still be degraded as Red, Blue are
 	// degraded. Now lets assume Blue gets updated and gets rendered properly. In this case, TigeraStatus should still be
 	// degraded as Red is unhealthy. "status" represents, the cumulative status of EGWs.
-	if !status && degradedEGW != nil {
+	if unreadyEGW != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError,
-			fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", degradedEGW.Name, degradedEGW.Namespace),
-			fmt.Errorf("%s", getDegradedMsg(degradedEGW)), reqLogger)
+			fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", unreadyEGW.Name, unreadyEGW.Namespace),
+			fmt.Errorf("%s", getDegradedMsg(unreadyEGW)), reqLogger)
 		return reconcile.Result{}, nil
 	}
 
@@ -608,13 +608,13 @@ func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.Eg
 	return fmt.Errorf("IPPool matching CIDR = %s not present", ipPool.CIDR)
 }
 
-func getCumulativeEgressGatewayStatus(egws []operatorv1.EgressGateway) (bool, *operatorv1.EgressGateway) {
+func getUnreadyEgressGateway(egws []operatorv1.EgressGateway) *operatorv1.EgressGateway {
 	for _, egw := range egws {
 		if egw.Status.State != operatorv1.TigeraStatusReady {
-			return false, &egw
+			return &egw
 		}
 	}
-	return true, nil
+	return nil
 }
 
 func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {

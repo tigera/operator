@@ -168,6 +168,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// admission controller resources
 	objs = append(objs,
 		c.admissionControllerClusterRole(),
+		c.crAdaptorClusterRole(),
 	)
 
 	objs = append(objs,

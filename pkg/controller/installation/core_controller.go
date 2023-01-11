@@ -1115,6 +1115,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// a non-default port, and use that value if they are.
 	nodeReporterMetricsPort := defaultNodeReporterPort
 	var nodePrometheusTLS certificatemanagement.KeyPairInterface
+	calicoVersion := components.CalicoRelease
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 
 		// Determine the port to use for nodeReporter metrics.
@@ -1144,6 +1145,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if prometheusClientCert != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
 		}
+		calicoVersion = components.EnterpriseRelease
 
 	}
 
@@ -1479,7 +1481,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, errors.New("The MTU size should be between Max int32 (2147483647) and 0")
 	}
 	instance.Status.MTU = int32(statusMTU)
+	// Variant and CalicoVersion must be updated at the same time.
 	instance.Status.Variant = instance.Spec.Variant
+	instance.Status.CalicoVersion = calicoVersion
 	if imageSet == nil {
 		instance.Status.ImageSet = ""
 	} else {

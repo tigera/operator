@@ -453,6 +453,16 @@ spec:
                 type: string
               endpointReportingEnabled:
                 type: boolean
+              externalNetworkRoutingRulePriority:
+                description: 'ExternalNetworkRoutingRulePriority controls the priority
+                  value to use for the external network routing rule. [Default: 102]'
+                type: integer
+              externalNetworkSupport:
+                description: 'ExternalNetworkSupport defines two different support
+                  modes for external network function. [Default: Disabled] - Disabled:  External
+                  network function is disabled. - Enabled:   External network function
+                  is enabled.'
+                type: string
               externalNodesList:
                 description: ExternalNodesCIDRList is a list of CIDR's of external-non-calico-nodes
                   which may source tunnel traffic and have the tunneled traffic be

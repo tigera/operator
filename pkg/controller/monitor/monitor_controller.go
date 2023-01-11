@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -148,6 +150,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
@@ -275,7 +278,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
-	} {
+		kubecontrollers.KubeControllerPrometheusTLSSecret} {
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)

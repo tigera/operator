@@ -102,6 +102,25 @@ var _ = Describe("Application layer controller tests", func() {
 			r.licenseAPIReady.MarkAsReady()
 		})
 
+		It("should leave TPROXYMode as nil if log collection is disabled", func() {
+			// This test verifies a workaround for upgrade from versions that don't support TPROXY to versions
+			// that do.  Setting an unknown felix config field causes older versions of felix to cyclicly restart,
+			// which causes a disruptive upgrade.
+			By("reconciling before without an app layer resource")
+			mockStatus.On("OnCRNotFound").Return()
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("ensuring that felix configuration TPROXYMode is nil")
+			fc := crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(test.GetResource(c, &fc)).To(BeNil())
+			Expect(fc.Spec.TPROXYMode).To(BeNil())
+		})
+
 		It("should render accurate resources for for log collection", func() {
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
@@ -168,6 +187,11 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("ensuring that felix configuration updated to disabled")
+			fc = crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
 			Expect(test.GetResource(c, &fc)).To(BeNil())
 			Expect(*fc.Spec.TPROXYMode).To(Equal(crdv1.TPROXYModeOptionDisabled))
 		})

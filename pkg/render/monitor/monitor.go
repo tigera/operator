@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -75,7 +76,9 @@ const (
 	calicoNodePrometheusServiceName       = "calico-node-prometheus"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 
-	bearerTokenFile = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	bearerTokenFile                 = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	KubeControllerMetrics           = "calico-kube-controllers-metrics"
+	KubeControllerDefaultMetricPort = 9094
 )
 
 var alertManagerSelector = fmt.Sprintf(
@@ -192,6 +195,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorElasticsearch(),
 		mc.serviceMonitorFluentd(),
 		mc.serviceMonitorQueryServer(),
+		mc.serviceMonitorCalicoKubeControllers(),
 		mc.prometheusHTTPAPIService(),
 		mc.clusterRole(),
 		mc.clusterRoleBinding(),
@@ -896,6 +900,14 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
+				// Egress access for Kube controller port metrics.
+				Ports: networkpolicy.Ports(KubeControllerDefaultMetricPort),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
 				Selector: alertManagerSelector,
 				Ports:    networkpolicy.Ports(AlertmanagerPort),
 			},
@@ -989,6 +1001,31 @@ func allowTigeraPrometheusOperatorPolicy(cfg *Config) *v3.NetworkPolicy {
 			Selector: "operator == 'prometheus'",
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
+		},
+	}
+}
+
+func (mc *monitorComponent) serviceMonitorCalicoKubeControllers() *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KubeControllerMetrics,
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels:    map[string]string{"team": "network-operators"},
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-kube-controllers"}},
+			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"calico-system"}},
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          "metrics-port",
+					ScrapeTimeout: "5s",
+					Scheme:        "https",
+					TLSConfig:     mc.tlsConfig(KubeControllerMetrics),
+				},
+			},
 		},
 	}
 }

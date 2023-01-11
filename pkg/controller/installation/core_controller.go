@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1144,6 +1144,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if prometheusClientCert != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
 		}
+
 	}
 
 	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.
@@ -1159,6 +1160,31 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
 		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
 	}
+
+	// Secure calico kube controller metrics.
+	var kubeControllerTLS certificatemanagement.KeyPairInterface
+
+	// Create or Get TLS certificates for kube controller.
+	kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(
+		r.client,
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
+		common.OperatorNamespace(),
+		dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.clusterDomain))
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "Error finding or creating TLS certificate kube controllers metric", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Add prometheus client certificate to Trusted bundle.
+	kubecontrollerprometheusTLS, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
+		return reconcile.Result{}, err
+	} else if kubecontrollerprometheusTLS == nil {
+		r.status.SetDegraded(operator.ResourceNotFound, "Prometheus secrets are not available yet, waiting until they become available", err, reqLogger)
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+	kubecontrollertrustedBundle := certificateManager.CreateTrustedBundle(kubeControllerTLS, kubecontrollerprometheusTLS)
 
 	nodeAppArmorProfile := ""
 	a := instance.GetObjectMeta().GetAnnotations()
@@ -1307,8 +1333,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagerInternalSecret:       managerInternalTLSSecret,
 		Terminating:                 terminating,
 		UsePSP:                      r.usePSP,
+		MetricsServerTLS:            kubeControllerTLS,
+		TrustedBundle:               kubecontrollertrustedBundle,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
+
+	components = append(components,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       common.CalicoNamespace,
+			ServiceAccounts: []string{kubecontrollers.KubeControllerMetrics},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				// this controller is responsible for rendering the secret.
+				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
+			},
+			TrustedBundle: kubecontrollertrustedBundle,
+		}))
 
 	windowsCfg := render.WindowsConfig{
 		Installation: &instance.Spec,

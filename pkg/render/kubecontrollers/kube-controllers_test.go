@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -373,6 +373,92 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
+
+		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+	})
+	It("should render all calico-kube-controllers resources for a default configuration using TigeraSecureEnterprise", func() {
+		var defaultMode int32 = 420
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: kubecontrollers.KubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: kubecontrollers.KubeControllerPodSecurityPolicy, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
+		}
+
+		expectedEnv := []corev1.EnvVar{
+			{Name: "TLS_KEY_PATH", Value: "/tigera-kube-controller-prometheus-tls/tls.key"},
+			{Name: "TLS_CRT_PATH", Value: "/tigera-kube-controller-prometheus-tls/tls.crt"},
+			{Name: "CLIENT_COMMON_NAME", Value: "calico-node-prometheus-client-tls"},
+			{Name: "CA_CRT_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+		}
+		expectedVolumeMounts := []corev1.VolumeMount{
+			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs/", ReadOnly: true},
+			{Name: "tigera-kube-controller-prometheus-tls", MountPath: "/tigera-kube-controller-prometheus-tls", ReadOnly: true},
+		}
+		expectedVolume := []corev1.Volume{
+			{
+				Name: "tigera-ca-bundle",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-ca-bundle"},
+					},
+				},
+			},
+			{
+				Name: "tigera-kube-controller-prometheus-tls",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  "tigera-kube-controller-prometheus-tls",
+						DefaultMode: &defaultMode,
+					},
+				},
+			},
+		}
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		kubeControllerTLS, err := certificateManager.GetOrCreateKeyPair(cli,
+			kubecontrollers.KubeControllerPrometheusTLSSecret,
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, dns.DefaultClusterDomain))
+		// Override configuration to match expected Enterprise config.
+		instance.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.MetricsPort = 9094
+		cfg.MetricsServerTLS = kubeControllerTLS
+
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		// The Deployment should have the correct configuration.
+		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		envs := dp.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElements(expectedEnv))
+
+		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElements(expectedVolumeMounts))
+
+		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(dp.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolume))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 	})

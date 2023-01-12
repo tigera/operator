@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/monitor"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,7 +34,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
@@ -63,6 +65,7 @@ const (
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
 	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
 	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
+	KubeControllerPrometheusTLSSecret                  = "tigera-kube-controller-prometheus-tls"
 )
 
 type KubeControllersConfiguration struct {
@@ -90,7 +93,8 @@ type KubeControllersConfiguration struct {
 	TrustedBundle                certificatemanagement.TrustedBundle
 
 	// Whether or not the cluster supports pod security policies.
-	UsePSP bool
+	UsePSP           bool
+	MetricsServerTLS certificatemanagement.KeyPairInterface
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -436,6 +440,19 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		}
 	}
 
+	if c.cfg.MetricsServerTLS != nil {
+		env = append(env,
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "CLIENT_COMMON_NAME", Value: monitor.PrometheusClientTLSSecretName},
+		)
+	}
+	if c.cfg.TrustedBundle != nil {
+		env = append(env,
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+		)
+	}
+
 	container := corev1.Container{
 		Name:      c.kubeControllerName,
 		Image:     c.image,
@@ -603,6 +620,9 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 	if c.cfg.TrustedBundle != nil {
 		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 	}
+	if c.cfg.MetricsServerTLS != nil {
+		mounts = append(mounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
+	}
 	return mounts
 }
 
@@ -613,6 +633,9 @@ func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	}
 	if c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+	}
+	if c.cfg.MetricsServerTLS != nil {
+		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
 	}
 	return volumes
 }

@@ -239,9 +239,20 @@ var (
 		Version: "v3.15.0",
 		Image:   "tigera/calico-windows-upgrade",
 	}
+
 	ComponentFlexVolumePrivate = component{
 		Version: "master",
 		Image:   "tigera/pod2daemon-flexvol",
+	}
+
+	ComponentCSIPrivate = component{
+		Version: "master",
+		Image:   "tigera/csi",
+	}
+
+	ComponentCSINodeDriverRegistrarPrivate = component{
+		Version: "master",
+		Image:   "tigera/csi-node-driver-registrar",
 	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.

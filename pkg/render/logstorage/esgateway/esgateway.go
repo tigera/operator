@@ -334,7 +334,6 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 			Destination: render.KibanaEntityRule,
 		},
 	}...)
-	egressRules = append(egressRules, e.cloudEgressRules()...)
 
 	esgatewayIngressDestinationEntityRule := v3.EntityRule{
 		Ports: networkpolicy.Ports(Port),

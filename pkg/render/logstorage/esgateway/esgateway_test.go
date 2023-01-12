@@ -99,6 +99,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+				{CloudPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
 			}
@@ -122,6 +123,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+				{CloudPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
 			}
@@ -169,6 +171,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 				{ExternalCertsSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{CloudPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
 			}

@@ -15,6 +15,7 @@
 package egressgateway
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -61,9 +62,9 @@ type Config struct {
 	OSType       rmeta.OSType
 	EgressGW     *operatorv1.EgressGateway
 
-	egwImage          string
-	EgressGWVxlanVNI  int
-	EgressGWVxlanPort int
+	egwImage  string
+	VXLANVNI  int
+	VXLANPort int
 
 	Openshift bool
 	// Whether or not the cluster supports pod security policies.
@@ -81,10 +82,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 
 	var err error
 	c.config.egwImage, err = components.GetReference(components.ComponentEgressGateway, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (c *component) SupportedOSType() rmeta.OSType {
@@ -232,29 +230,46 @@ func (c *component) egwVolumeMounts() []corev1.VolumeMount {
 }
 
 func (c *component) egwEnvVars() []corev1.EnvVar {
-	icmpProbeIPs, icmpInterval, icmpTimeout := c.getICMPProbe()
-	httpProbeURLs, httpInterval, httpTimeout := c.getHTTPProbe()
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
-	return []corev1.EnvVar{
-		{Name: "HEALTH_TIMEOUT_DATASTORE", Value: c.getHealthTimeoutDs()},
+	envVar := []corev1.EnvVar{
 		{Name: "HEALTH_PORT", Value: fmt.Sprintf("%d", DefaultHealthPort)},
-		{Name: "ICMP_PROBE_IPS", Value: icmpProbeIPs},
-		{Name: "ICMP_PROBE_INTERVAL", Value: icmpInterval},
-		{Name: "ICMP_PROBE_TIMEOUT", Value: icmpTimeout},
-		{Name: "HTTP_PROBE_URLS", Value: httpProbeURLs},
-		{Name: "HTTP_PROBE_INTERVAL", Value: httpInterval},
-		{Name: "HTTP_PROBE_TIMEOUT", Value: httpTimeout},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
-		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanVNI)},
+		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.VXLANVNI)},
 		{Name: "LOG_SEVERITY", Value: c.config.EgressGW.GetLogSeverity()},
 	}
+
+	icmpProbeIPs, icmpInterval, icmpTimeout := c.getICMPProbe()
+	if icmpProbeIPs != "" {
+		icmpEnvVar := []corev1.EnvVar{
+			{Name: "ICMP_PROBE_IPS", Value: icmpProbeIPs},
+			{Name: "ICMP_PROBE_INTERVAL", Value: icmpInterval},
+			{Name: "ICMP_PROBE_TIMEOUT", Value: icmpTimeout},
+		}
+		envVar = append(envVar, icmpEnvVar...)
+	}
+
+	httpProbeURLs, httpInterval, httpTimeout := c.getHTTPProbe()
+	if httpProbeURLs != "" {
+		httpEnvVar := []corev1.EnvVar{
+			{Name: "HTTP_PROBE_URLS", Value: httpProbeURLs},
+			{Name: "HTTP_PROBE_INTERVAL", Value: httpInterval},
+			{Name: "HTTP_PROBE_TIMEOUT", Value: httpTimeout},
+		}
+		envVar = append(envVar, httpEnvVar...)
+	}
+	healthTimeOutDS := c.getHealthTimeoutDs()
+	if healthTimeOutDS != "" {
+		dsEnv := corev1.EnvVar{Name: "HEALTH_TIMEOUT_DATASTORE", Value: healthTimeOutDS}
+		envVar = append(envVar, dsEnv)
+	}
+	return envVar
 }
 
 func (c *component) egwInitEnvVars() []corev1.EnvVar {
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
 	return []corev1.EnvVar{
-		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanVNI)},
-		{Name: "EGRESS_VXLAN_PORT", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanPort)},
+		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.VXLANVNI)},
+		{Name: "EGRESS_VXLAN_PORT", Value: fmt.Sprintf("%d", c.config.VXLANPort)},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
 	}
 }
@@ -343,18 +358,32 @@ func (c *component) egwServiceAccount() *corev1.ServiceAccount {
 }
 
 func (c *component) getICMPProbe() (string, string, string) {
-	icmpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.ICMPProbe
-	probeIPs := strings.Join(icmpProbes.IPs, ",")
-	interval := fmt.Sprintf("%ds", *icmpProbes.IntervalSeconds)
-	timeout := fmt.Sprintf("%ds", *icmpProbes.TimeoutSeconds)
+	probeIPs := ""
+	interval := ""
+	timeout := ""
+	if c.config.EgressGW.Spec.EgressGatewayFailureDetection != nil {
+		if c.config.EgressGW.Spec.EgressGatewayFailureDetection.ICMPProbe != nil {
+			icmpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.ICMPProbe
+			probeIPs = strings.Join(icmpProbes.IPs, ",")
+			interval = fmt.Sprintf("%ds", *icmpProbes.IntervalSeconds)
+			timeout = fmt.Sprintf("%ds", *icmpProbes.TimeoutSeconds)
+		}
+	}
 	return probeIPs, interval, timeout
 }
 
 func (c *component) getHTTPProbe() (string, string, string) {
-	httpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.HTTPProbe
-	probeURLs := strings.Join(httpProbes.URLs, ",")
-	interval := fmt.Sprintf("%ds", *httpProbes.IntervalSeconds)
-	timeout := fmt.Sprintf("%ds", *httpProbes.TimeoutSeconds)
+	probeURLs := ""
+	interval := ""
+	timeout := ""
+	if c.config.EgressGW.Spec.EgressGatewayFailureDetection != nil {
+		if c.config.EgressGW.Spec.EgressGatewayFailureDetection.HTTPProbe != nil {
+			httpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.HTTPProbe
+			probeURLs = strings.Join(httpProbes.URLs, ",")
+			interval = fmt.Sprintf("%ds", *httpProbes.IntervalSeconds)
+			timeout = fmt.Sprintf("%ds", *httpProbes.TimeoutSeconds)
+		}
+	}
 	return probeURLs, interval, timeout
 }
 
@@ -394,8 +423,13 @@ func (c *component) getElasticIPs() string {
 }
 
 func (c *component) getHealthTimeoutDs() string {
-	egw := c.config.EgressGW
-	return fmt.Sprintf("%ds", *egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds)
+	if c.config.EgressGW.Spec.EgressGatewayFailureDetection != nil {
+		if c.config.EgressGW.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds != nil {
+			egw := c.config.EgressGW
+			return fmt.Sprintf("%ds", *egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds)
+		}
+	}
+	return ""
 }
 
 func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
@@ -423,16 +457,9 @@ func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstr
 }
 
 func concatString(arr []string) string {
-	var builder strings.Builder
-	builder.WriteByte('[')
-	for idx, str := range arr {
-		builder.WriteString("\"")
-		builder.WriteString(str)
-		builder.WriteString("\"")
-		if idx != len(arr)-1 {
-			builder.WriteByte(',')
-		}
+	str, err := json.Marshal(arr)
+	if err != nil {
+		return ""
 	}
-	builder.WriteByte(']')
-	return builder.String()
+	return string(str)
 }

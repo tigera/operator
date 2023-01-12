@@ -62,6 +62,7 @@ spec:
                   succeed for Egress gateways to become ready if configured.
                 properties:
                   healthTimeoutDataStoreSeconds:
+                    default: 90
                     description: 'HealthTimeoutDataStoreSeconds defines how long Egress
                       Gateway can fail to connect to the datastore before reporting
                       not ready. This value must be greater than 0. Default: 90'
@@ -76,6 +77,7 @@ spec:
                       interval.
                     properties:
                       intervalSeconds:
+                        default: 10
                         description: 'IntervalSeconds defines the interval of HTTP
                           probes. Used when URLs is non-empty. Default: 10'
                         format: int32
@@ -83,9 +85,12 @@ spec:
                         minimum: 0
                         type: integer
                       timeoutSeconds:
+                        default: 30
                         description: 'TimeoutSeconds defines the timeout value of
                           HTTP probes. Used when URLs is non-empty. Default: 30'
                         format: int32
+                        maximum: 2147483647
+                        minimum: 0
                         type: integer
                       urls:
                         description: URLs define the list of HTTP probe URLs. Egress
@@ -102,6 +107,7 @@ spec:
                       interval.
                     properties:
                       intervalSeconds:
+                        default: 5
                         description: 'IntervalSeconds defines the interval of ICMP
                           probes. Used when IPs is non-empty. Default: 5'
                         format: int32
@@ -116,6 +122,7 @@ spec:
                           type: string
                         type: array
                       timeoutSeconds:
+                        default: 15
                         description: 'TimeoutSeconds defines the timeout value of
                           ICMP probes. Used when IPs is non-empty. Default: 15'
                         format: int32
@@ -141,6 +148,7 @@ spec:
                   type: object
                 type: array
               logSeverity:
+                default: Info
                 description: 'LogSeverity defines the logging level of the Egress
                   Gateway. Default: Info'
                 enum:
@@ -152,6 +160,7 @@ spec:
                 - Fatal
                 type: string
               replicas:
+                default: 1
                 description: Replicas defines how many instances of the Egress Gateway
                   pod will run.
                 format: int32
@@ -1279,7 +1288,6 @@ spec:
                 type: object
             required:
             - ipPools
-            - replicas
             type: object
           status:
             description: EgressGatewayStatus defines the observed state of EgressGateway

@@ -26,7 +26,8 @@ type EgressGatewaySpec struct {
 	// Replicas defines how many instances of the Egress Gateway pod will run.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647
-	// +required
+	// +optional
+	// +kubebuilder:default:=1
 	Replicas *int32 `json:"replicas"`
 
 	// IPPools defines the IP Pools that the Egress Gateway pods should be using.
@@ -39,6 +40,7 @@ type EgressGatewaySpec struct {
 	// Default: Info
 	// +kubebuilder:validation:Enum=Trace;Debug;Info;Warn;Error;Fatal
 	// +optional
+	// +kubebuilder:default:=Info
 	LogSeverity *LogLevel `json:"logSeverity"`
 
 	// Template describes the EGW Deployment pod that will be created.
@@ -147,6 +149,7 @@ type EgressGatewayFailureDetection struct {
 	// Default: 90
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=2147483647
+	// +kubebuilder:default:=90
 	// +optional
 	HealthTimeoutDataStoreSeconds *int32 `json:"healthTimeoutDataStoreSeconds,omitempty"`
 
@@ -167,13 +170,14 @@ type EgressGatewayFailureDetection struct {
 type ICMPProbe struct {
 	// IPs define the list of ICMP probe IPs. Egress Gateway will probe each IP
 	// periodically. If all probes fail, Egress Gateway will report non-ready.
-	// +optional
+	// +required
 	IPs []string `json:"ips,omitempty"`
 
 	// IntervalSeconds defines the interval of ICMP probes. Used when IPs is non-empty.
 	// Default: 5
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647
+	// +kubebuilder:default:=5
 	// +optional
 	IntervalSeconds *int32 `json:"intervalSeconds"`
 
@@ -181,6 +185,7 @@ type ICMPProbe struct {
 	// Default: 15
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647
+	// +kubebuilder:default:=15
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds"`
 }
@@ -189,18 +194,22 @@ type ICMPProbe struct {
 type HTTPProbe struct {
 	// URLs define the list of HTTP probe URLs. Egress Gateway will probe each URL
 	// periodically.If all probes fail, Egress Gateway will report non-ready.
-	// +optional
+	// +required
 	URLs []string `json:"urls,omitempty"`
 
 	// IntervalSeconds defines the interval of HTTP probes. Used when URLs is non-empty.
 	// Default: 10
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647
+	// +kubebuilder:default:=10
 	// +optional
 	IntervalSeconds *int32 `json:"intervalSeconds"`
 
 	// TimeoutSeconds defines the timeout value of HTTP probes. Used when URLs is non-empty.
 	// Default: 30
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
+	// +kubebuilder:default:=30
 	// +optional
 	TimeoutSeconds *int32 `json:"timeoutSeconds"`
 }

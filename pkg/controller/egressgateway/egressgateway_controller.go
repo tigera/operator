@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+
 	"github.com/tigera/operator/pkg/components"
 
 	"github.com/tigera/operator/pkg/controller/options"
@@ -322,25 +323,25 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	// Set the condition to progressing
 	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 
-	egwVxlanPort := egressgateway.DefaultEGWVxlanPort
-	egwVxlanVNI := egressgateway.DefaultEGWVxlanVNI
+	egwVXLANPort := egressgateway.DefaultEGWVxlanPort
+	egwVXLANVNI := egressgateway.DefaultEGWVxlanVNI
 	if fc.Spec.EgressIPVXLANPort != nil {
-		egwVxlanPort = *fc.Spec.EgressIPVXLANPort
+		egwVXLANPort = *fc.Spec.EgressIPVXLANPort
 	}
 	if fc.Spec.EgressIPVXLANVNI != nil {
-		egwVxlanVNI = *fc.Spec.EgressIPVXLANVNI
+		egwVXLANVNI = *fc.Spec.EgressIPVXLANVNI
 	}
 
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	config := &egressgateway.Config{
-		PullSecrets:       pullSecrets,
-		Installation:      installation,
-		OSType:            rmeta.OSTypeLinux,
-		EgressGW:          egw,
-		EgressGWVxlanPort: egwVxlanPort,
-		EgressGWVxlanVNI:  egwVxlanVNI,
-		Openshift:         openshift,
-		UsePSP:            r.usePSP,
+		PullSecrets:  pullSecrets,
+		Installation: installation,
+		OSType:       rmeta.OSTypeLinux,
+		EgressGW:     egw,
+		VXLANPort:    egwVXLANPort,
+		VXLANVNI:     egwVXLANVNI,
+		Openshift:    openshift,
+		UsePSP:       r.usePSP,
 	}
 
 	component := egressgateway.EgressGateway(config)
@@ -421,19 +422,24 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	// Check if ElasticIPs are specified only if NativeIP is enabled.
 	if egw.Spec.AWS != nil {
 		if len(egw.Spec.AWS.ElasticIPs) > 0 && (*egw.Spec.AWS.NativeIP == operatorv1.NativeIPDisabled) {
-			return fmt.Errorf("NativeIP should be enabled when elastic IPs are used")
+			return fmt.Errorf("NativeIP must be enabled when elastic IPs are used")
 		}
 	}
 
 	// Check if ICMP and HTTP probe timeout is greater than interval.
-	if *egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds <
-		*egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds {
-		return fmt.Errorf("ICMP probe timeout must be greater than interval")
-	}
-
-	if *egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds <
-		*egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds {
-		return fmt.Errorf("HTTP probe timeout must be greater than interval")
+	if egw.Spec.EgressGatewayFailureDetection != nil {
+		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe != nil {
+			if *egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds <
+				*egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds {
+				return fmt.Errorf("ICMP probe timeout must be greater than interval")
+			}
+		}
+		if egw.Spec.EgressGatewayFailureDetection.HTTPProbe != nil {
+			if *egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds <
+				*egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds {
+				return fmt.Errorf("HTTP probe timeout must be greater than interval")
+			}
+		}
 	}
 	return nil
 }
@@ -451,62 +457,11 @@ func getEgressGateways(ctx context.Context, cli client.Client) ([]operatorv1.Egr
 
 // fillDefaults sets the default values of the EGW resource.
 func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.InstallationSpec) {
-	defaultLogSeverity := operatorv1.LogLevelInfo
-	var defaultHealthTimeoutDS int32 = 90
-	var defaultIcmpTimeout int32 = 15
-	var defaultIcmpInterval int32 = 5
-	var defaultHttpTimeout int32 = 30
-	var defaultHttpInterval int32 = 10
 	defaultAWSNativeIP := operatorv1.NativeIPDisabled
-
-	// Default value of LogSeverity is "Info"
-	if egw.Spec.LogSeverity == nil {
-		egw.Spec.LogSeverity = &defaultLogSeverity
-	}
 
 	// Default value of Native IP is Disabled.
 	if egw.Spec.AWS != nil && egw.Spec.AWS.NativeIP == nil {
 		egw.Spec.AWS.NativeIP = &defaultAWSNativeIP
-	}
-
-	// Set the default values for EGW failure detection spec.
-	if egw.Spec.EgressGatewayFailureDetection == nil {
-		egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
-			HealthTimeoutDataStoreSeconds: &defaultHealthTimeoutDS,
-			ICMPProbe: &operatorv1.ICMPProbe{IPs: []string{},
-				IntervalSeconds: &defaultIcmpInterval, TimeoutSeconds: &defaultIcmpTimeout},
-			HTTPProbe: &operatorv1.HTTPProbe{URLs: []string{},
-				IntervalSeconds: &defaultHttpInterval, TimeoutSeconds: &defaultHttpTimeout},
-		}
-	} else {
-		if egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds == nil {
-			egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds = &defaultHealthTimeoutDS
-		}
-
-		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe == nil {
-			egw.Spec.EgressGatewayFailureDetection.ICMPProbe = &operatorv1.ICMPProbe{IPs: []string{},
-				IntervalSeconds: &defaultIcmpInterval,
-				TimeoutSeconds:  &defaultIcmpTimeout}
-		} else {
-			if egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds = &defaultIcmpInterval
-			}
-			if egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds = &defaultIcmpTimeout
-			}
-		}
-		if egw.Spec.EgressGatewayFailureDetection.HTTPProbe == nil {
-			egw.Spec.EgressGatewayFailureDetection.HTTPProbe = &operatorv1.HTTPProbe{URLs: []string{},
-				IntervalSeconds: &defaultHttpInterval,
-				TimeoutSeconds:  &defaultHttpTimeout}
-		} else {
-			if egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds = &defaultHttpInterval
-			}
-			if egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds = &defaultHttpTimeout
-			}
-		}
 	}
 
 	// set the default label if not specified.
@@ -618,18 +573,18 @@ func getUnreadyEgressGateway(egws []operatorv1.EgressGateway) *operatorv1.Egress
 }
 
 func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, metav1.ConditionTrue, reason, msg, true)
+	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, metav1.ConditionTrue, reason, msg, true)
 }
 
 func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, metav1.ConditionTrue, reason, msg, false)
+	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, metav1.ConditionTrue, reason, msg, false)
 }
 
 func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, metav1.ConditionTrue, reason, msg, true)
+	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, metav1.ConditionTrue, reason, msg, true)
 }
 
-func updateEgwStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status metav1.ConditionStatus, reason, msg string, updateStatus bool) {
+func updateEGWStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status metav1.ConditionStatus, reason, msg string, updateStatus bool) {
 	found := false
 	for idx, cond := range egw.Status.Conditions {
 		if cond.Type == string(ctype) {

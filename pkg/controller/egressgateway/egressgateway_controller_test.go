@@ -145,10 +145,12 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 			By("applying the Egress Gateway CR with just the required fields to the fake cluster")
 			var replicas int32 = 2
+			logSeverity := operatorv1.LogLevelInfo
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
-					Replicas: &replicas,
+					Replicas:    &replicas,
+					LogSeverity: &logSeverity,
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-1", CIDR: ""},
 						{Name: "", CIDR: "1.2.4.0/24"},
@@ -192,12 +194,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			expectedEgwEnvVar := []corev1.EnvVar{
 				{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
 				{Name: "HEALTH_PORT", Value: "8080"},
-				{Name: "ICMP_PROBE_INTERVAL", Value: "5s"},
-				{Name: "ICMP_PROBE_TIMEOUT", Value: "15s"},
-				{Name: "HTTP_PROBE_INTERVAL", Value: "10s"},
-				{Name: "HTTP_PROBE_TIMEOUT", Value: "30s"},
 				{Name: "LOG_SEVERITY", Value: "Info"},
-				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "90s"},
 			}
 			for _, elem := range expectedEgwEnvVar {
 				Expect(egwContainer.Env).To(ContainElement(elem))
@@ -231,7 +228,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			By("update egw with log level")
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
 			egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{}
-			logSeverity := operatorv1.LogLevelDebug
+			logSeverity = operatorv1.LogLevelDebug
 			egw.Spec.LogSeverity = &logSeverity
 			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -241,39 +238,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			expectedEgwEnvVar = []corev1.EnvVar{
 				{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
 				{Name: "HEALTH_PORT", Value: "8080"},
-				{Name: "ICMP_PROBE_INTERVAL", Value: "5s"},
-				{Name: "ICMP_PROBE_TIMEOUT", Value: "15s"},
-				{Name: "HTTP_PROBE_INTERVAL", Value: "10s"},
-				{Name: "HTTP_PROBE_TIMEOUT", Value: "30s"},
 				{Name: "LOG_SEVERITY", Value: "Debug"},
-				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "90s"},
 			}
-			for _, elem := range expectedEgwEnvVar {
-				Expect(egwContainer.Env).To(ContainElement(elem))
-			}
-
-			By("setting ICMP probe IPs and HTTP URLs, should set default value for other fields")
-			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
-			egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
-				ICMPProbe: &operatorv1.ICMPProbe{IPs: []string{"1.2.3.4"}},
-				HTTPProbe: &operatorv1.HTTPProbe{URLs: []string{"abcd.com"}},
-			}
-			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(test.GetResource(c, &dep)).To(BeNil())
-			egwContainer = dep.Spec.Template.Spec.Containers[0]
-			expectedEgwEnvVar = []corev1.EnvVar{
-				{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
-				{Name: "HEALTH_PORT", Value: "8080"},
-				{Name: "ICMP_PROBE_INTERVAL", Value: "5s"},
-				{Name: "ICMP_PROBE_TIMEOUT", Value: "15s"},
-				{Name: "HTTP_PROBE_INTERVAL", Value: "10s"},
-				{Name: "HTTP_PROBE_TIMEOUT", Value: "30s"},
-				{Name: "LOG_SEVERITY", Value: "Debug"},
-				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "90s"},
-			}
-
 			for _, elem := range expectedEgwEnvVar {
 				Expect(egwContainer.Env).To(ContainElement(elem))
 			}
@@ -290,7 +256,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			egw_blue := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-blue", Namespace: "calico-gw"},
 				Spec: operatorv1.EgressGatewaySpec{
-					Replicas: &replicas,
+					Replicas:    &replicas,
+					LogSeverity: &logSeverity,
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-1"},
 						{Name: "ippool-2"},
@@ -414,7 +381,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when elastic IPs are specified and native IP disabled", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "NativeIP should be enabled when elastic IPs are used", mock.Anything, mock.Anything).Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "NativeIP must be enabled when elastic IPs are used", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -576,13 +543,15 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			installation.Status.CalicoVersion = "3.15"
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
+			logSeverity := operatorv1.LogLevelInfo
 			var requeueInterval time.Duration = 30 * time.Second
 			var wg sync.WaitGroup
 			labels := map[string]string{"egress-code": "red"}
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
-					Replicas: &replicas,
+					Replicas:    &replicas,
+					LogSeverity: &logSeverity,
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-1"},
 					},

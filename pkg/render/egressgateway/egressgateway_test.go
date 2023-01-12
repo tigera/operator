@@ -78,8 +78,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 				},
 				EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
 					HealthTimeoutDataStoreSeconds: &healthTimeoutDS,
-					ICMPProbe:                     &operatorv1.ICMPProbe{IPs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
-					HTTPProbe:                     &operatorv1.HTTPProbe{URLs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
+					ICMPProbe:                     &operatorv1.ICMPProbe{IPs: []string{"1.2.3.4"}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
+					HTTPProbe:                     &operatorv1.HTTPProbe{URLs: []string{"test.com"}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
 				},
 			},
 		}
@@ -100,12 +100,12 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OSType:            rmeta.OSTypeLinux,
-			EgressGW:          egw,
-			EgressGWVxlanVNI:  4097,
-			EgressGWVxlanPort: 4790,
+			PullSecrets:  nil,
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
@@ -200,12 +200,12 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		nativeIP := operatorv1.NativeIPEnabled
 		egw.Spec.AWS = &operatorv1.AWSEgressGateway{NativeIP: &nativeIP, ElasticIPs: []string{"1.2.3.4", "5.6.7.8"}}
 		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OSType:            rmeta.OSTypeLinux,
-			EgressGW:          egw,
-			EgressGWVxlanVNI:  4097,
-			EgressGWVxlanPort: 4790,
+			PullSecrets:  nil,
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
@@ -231,13 +231,13 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OSType:            rmeta.OSTypeLinux,
-			EgressGW:          egw,
-			EgressGWVxlanVNI:  4097,
-			EgressGWVxlanPort: 4790,
-			UsePSP:            true,
+			PullSecrets:  nil,
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+			UsePSP:       true,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -260,13 +260,13 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OSType:            rmeta.OSTypeLinux,
-			EgressGW:          egw,
-			EgressGWVxlanVNI:  4097,
-			EgressGWVxlanPort: 4790,
-			Openshift:         true,
+			PullSecrets:  nil,
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+			Openshift:    true,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -279,13 +279,13 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		egw.Namespace = "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg"
 		egw.Name = "egress-testabcdefghijklmnopqrstuvwxyz1234567890abc"
 		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OSType:            rmeta.OSTypeLinux,
-			EgressGW:          egw,
-			EgressGWVxlanVNI:  4097,
-			EgressGWVxlanPort: 4790,
-			UsePSP:            true,
+			PullSecrets:  nil,
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+			UsePSP:       true,
 		})
 
 		expectedResources := []struct {

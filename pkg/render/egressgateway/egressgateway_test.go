@@ -99,6 +99,17 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}
 
+		expectedResToBeDeleted := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{"test-ns-egress-test", "", rbac, "v1", "ClusterRole"},
+			{"test-ns-egress-test", "", rbac, "v1", "ClusterRoleBinding"},
+		}
+
 		component := egressgateway.EgressGateway(&egressgateway.Config{
 			PullSecrets:  nil,
 			Installation: installation,
@@ -107,11 +118,17 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			VXLANVNI:     4097,
 			VXLANPort:    4790,
 		})
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(2))
+		resources, resToBeDeleted := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(len(resToBeDeleted)).To(Equal(len(expectedResToBeDeleted)))
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+		for i, expectedResToBeDeleted := range expectedResToBeDeleted {
+			rtest.ExpectResource(resToBeDeleted[i], expectedResToBeDeleted.name, expectedResToBeDeleted.ns, expectedResToBeDeleted.group,
+				expectedResToBeDeleted.version, expectedResToBeDeleted.kind)
+		}
+
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(len(dep.Spec.Template.Spec.Containers)).To(Equal(1))
 		Expect(len(dep.Spec.Template.Spec.InitContainers)).To(Equal(1))

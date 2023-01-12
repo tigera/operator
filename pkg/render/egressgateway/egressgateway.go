@@ -91,17 +91,21 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	objects := []client.Object{}
-	objects = append(objects, c.egwServiceAccount())
-	objects = append(objects, c.egwDeployment())
+	objectsToCreate := []client.Object{}
+	objectsToDelete := []client.Object{}
+	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
+	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	if c.config.UsePSP {
-		objects = append(objects, c.egwPodSecurityPolicy())
-		objects = append(objects, c.egwClusterRole())
-		objects = append(objects, c.egwClusterRoleBinding())
+		objectsToCreate = append(objectsToCreate, c.egwPodSecurityPolicy())
+		objectsToCreate = append(objectsToCreate, c.egwClusterRole())
+		objectsToCreate = append(objectsToCreate, c.egwClusterRoleBinding())
 	} else if c.config.Openshift {
-		objects = append(objects, c.egwSecurityContextConstraints())
+		objectsToCreate = append(objectsToCreate, c.egwSecurityContextConstraints())
+	} else {
+		objectsToDelete = append(objectsToDelete, c.egwClusterRole())
+		objectsToDelete = append(objectsToDelete, c.egwClusterRoleBinding())
 	}
-	return objects, nil
+	return objectsToCreate, objectsToDelete
 }
 
 func (c *component) Ready() bool {

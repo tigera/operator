@@ -207,6 +207,15 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
 		)
+
+		// Cloud modifications
+		// add a networkpolicy to talk to the oidc issuer if one is being used.
+		// note this is only required when not using dex if the provider is outside the cluster, but that knowledge
+		// is not currently available in the compliance renderer, so enable it for all oidc providers.
+		if c.cfg.KeyValidatorConfig != nil {
+			complianceObjs = append(complianceObjs, c.cloudComplianceServerAllowTigeraNetworkPolicy(c.cfg.KeyValidatorConfig.Issuer()))
+		}
+
 	} else {
 		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: ComplianceNamespace}})
 		if c.cfg.ManagementClusterConnection != nil { // This is a managed cluster

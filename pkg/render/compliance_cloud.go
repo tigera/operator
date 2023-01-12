@@ -4,6 +4,15 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+)
+
+const (
+	CloudComplianceServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cloud-" + ComplianceServerName
 )
 
 // replaceESIndexFixs adds the ELASTIC_INDEX_MIDFIX env variable as the tenant ID and changes the ELASTIC_INDEX_SUFFIX
@@ -34,4 +43,35 @@ func (c *complianceComponent) replaceESIndexFixsEnvs(container corev1.Container)
 	container.Env = newEnv
 
 	return container
+}
+
+func (c *complianceComponent) cloudComplianceServerAllowTigeraNetworkPolicy(issuerURL string) *v3.NetworkPolicy {
+	issuerDomain := strings.TrimPrefix(issuerURL, "https://")
+	issuerDomain = strings.TrimSuffix(issuerDomain, "/")
+
+	egressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports:   []numorstring.Port{{MinPort: 443, MaxPort: 443}},
+				Domains: []string{issuerDomain},
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CloudComplianceServerPolicyName,
+			Namespace: ComplianceNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ComplianceServerName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
 }

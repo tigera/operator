@@ -216,7 +216,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	installation, installStatus, err := utils.GetInstallationAndStatus(ctx, r.client)
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
@@ -235,7 +235,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	variant := installStatus.Variant
 	if variant != operatorv1.TigeraSecureEnterprise {
 		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
@@ -245,7 +244,18 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, nil
 	}
 
+	installStatus, err := utils.GetInstallationStatus(ctx, r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error querying installation status")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation status", err, reqLogger)
+		for _, egw := range egwsToReconcile {
+			r.setDegraded(ctx, &egw, "Error querying installation status", err)
+		}
+		return reconcile.Result{}, err
+	}
+
 	if installStatus.CalicoVersion != components.EnterpriseRelease {
+		reqLogger.Info("Waiting for expected version of calico to be installed")
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -273,7 +283,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		_, err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, unreadyEGW)
+		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -281,6 +291,19 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 	if len(errMsgs) != 0 {
 		return reconcile.Result{}, fmt.Errorf(strings.Join(errMsgs, ";"))
+	}
+
+	if unreadyEGW != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError,
+			fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", unreadyEGW.Name, unreadyEGW.Namespace),
+			fmt.Errorf("%s", getDegradedMsg(unreadyEGW)), reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	r.status.ClearDegraded()
+	if !r.status.IsAvailable() {
+		// Schedule a kick to check again in the near future, hopefully by then things will be available.
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return reconcile.Result{}, nil
 }
@@ -295,7 +318,7 @@ func (r *ReconcileEgressGateway) setDegraded(ctx context.Context, egw *operatorv
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec, unreadyEGW *operatorv1.EgressGateway) (reconcile.Result, error) {
+	installation *operatorv1.InstallationSpec) error {
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
@@ -308,7 +331,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 			fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		return reconcile.Result{}, err
+		return err
 	}
 
 	if err = r.client.Patch(ctx, egw, preDefaultPatchFrom); err != nil {
@@ -317,7 +340,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 			fmt.Sprintf("Failed to write defaults to egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Failed to write defaults to egress gateway Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		return reconcile.Result{}, err
+		return err
 	}
 
 	// Set the condition to progressing
@@ -352,7 +375,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error with images from ImageSet Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		return reconcile.Result{}, err
+		return err
 	}
 
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
@@ -361,31 +384,13 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 			fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error creating / updating resource Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		return reconcile.Result{}, err
+		return err
 	}
 
 	// Update the status of this CR.
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
-
-	// After the resource is created/updated, TigeraStatus needs to be set by taking the cumulative status of the
-	// available EGW resources. Lets say we create 2 EGW resources Red, Blue. Both are degraded. Now lets create 3rd resource
-	// yellow. Though yellow is reconciled and rendered successfully, TigeraStatus should still be degraded as Red, Blue are
-	// degraded. Now lets assume Blue gets updated and gets rendered properly. In this case, TigeraStatus should still be
-	// degraded as Red is unhealthy. "status" represents, the cumulative status of EGWs.
-	if unreadyEGW != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError,
-			fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", unreadyEGW.Name, unreadyEGW.Namespace),
-			fmt.Errorf("%s", getDegradedMsg(unreadyEGW)), reqLogger)
-		return reconcile.Result{}, nil
-	}
-
-	r.status.ClearDegraded()
-	if !r.status.IsAvailable() {
-		// Schedule a kick to check again in the near future, hopefully by then things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-	return reconcile.Result{}, nil
+	return nil
 }
 
 // getRequestedEgressGateway returns the namespaced EgressGateway instance.
@@ -426,8 +431,13 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 		}
 	}
 
-	// Check if ICMP and HTTP probe timeout is greater than interval.
+	// Check if neither ICMPProbe nor HTTPProbe is configured.
 	if egw.Spec.EgressGatewayFailureDetection != nil {
+		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe == nil &&
+			egw.Spec.EgressGatewayFailureDetection.HTTPProbe == nil {
+			return fmt.Errorf("Either ICMP or HTTP probe must be configured")
+		}
+		// Check if ICMP and HTTP probe timeout is greater than interval.
 		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe != nil {
 			if *egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds <
 				*egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds {

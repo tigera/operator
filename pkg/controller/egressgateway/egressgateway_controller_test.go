@@ -227,7 +227,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 			By("update egw with log level")
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
-			egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{}
 			logSeverity = operatorv1.LogLevelDebug
 			egw.Spec.LogSeverity = &logSeverity
 			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
@@ -394,6 +393,33 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					},
 					AWS:      &operatorv1.AWSEgressGateway{ElasticIPs: []string{"5.6.7.8"}},
 					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+
+		})
+
+		It("Should throw an error when failure detection is specified without ICMP and HTTP probes", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "Either ICMP or HTTP probe must be configured", mock.Anything, mock.Anything).Return()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+					},
+					EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{},
+					Template:                      &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,

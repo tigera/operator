@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -352,27 +352,14 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	return authentication, nil
 }
 
-// GetInstallationAndStatus returns the current installation status, for use by other controllers.
-func GetInstallationAndStatus(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, *operatorv1.InstallationStatus, error) {
+// GetInstallationStatus returns the current installation status, for use by other controllers.
+func GetInstallationStatus(ctx context.Context, client client.Client) (*operatorv1.InstallationStatus, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	spec := instance.Spec
-
-	// update Installation with 'overlay'
-	overlay := operatorv1.Installation{}
-	if err := client.Get(ctx, OverlayInstanceKey, &overlay); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return nil, nil, err
-		}
-	} else {
-		spec = OverrideInstallationSpec(spec, overlay.Spec)
-	}
-
-	return &spec, &instance.Status, nil
+	return &instance.Status, nil
 }
 
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and

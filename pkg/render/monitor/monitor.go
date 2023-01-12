@@ -114,6 +114,7 @@ type Config struct {
 	ClusterDomain            string
 	TrustedCertBundle        certificatemanagement.TrustedBundle
 	Openshift                bool
+	KubeControllerPort       int
 }
 
 type monitorComponent struct {
@@ -901,7 +902,7 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
 				// Egress access for Kube controller port metrics.
-				Ports: networkpolicy.Ports(KubeControllerDefaultMetricPort),
+				Ports: networkpolicy.Ports(uint16(cfg.KubeControllerPort)),
 			},
 		},
 		{

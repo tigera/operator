@@ -583,6 +583,7 @@ var _ = Describe("monitor rendering tests", func() {
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
+				cfg.KubeControllerPort = 9094
 
 				component := monitor.MonitorPolicy(cfg)
 				resourcesToCreate, _ := component.Objects()

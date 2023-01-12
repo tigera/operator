@@ -432,6 +432,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			kubecontrollers.KubeControllerPrometheusTLSSecret,
 			common.OperatorNamespace(),
 			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, dns.DefaultClusterDomain))
+		Expect(err).NotTo(HaveOccurred())
 		// Override configuration to match expected Enterprise config.
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.MetricsPort = 9094

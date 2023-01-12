@@ -563,7 +563,6 @@ func (c *nodeComponent) CNIPluginRole() *rbacv1.ClusterRole {
 				Resources: []string{"pods/status"},
 				Verbs:     []string{"patch"},
 			},
-
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.

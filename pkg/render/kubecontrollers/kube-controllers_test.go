@@ -378,6 +378,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 	It("should render all calico-kube-controllers resources for a default configuration using TigeraSecureEnterprise", func() {
 		var defaultMode int32 = 420
+		var kubeControllerTLS certificatemanagement.KeyPairInterface
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -427,7 +428,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		kubeControllerTLS, err := certificateManager.GetOrCreateKeyPair(cli,
+		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(cli,
 			kubecontrollers.KubeControllerPrometheusTLSSecret,
 			common.OperatorNamespace(),
 			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, dns.DefaultClusterDomain))

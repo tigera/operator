@@ -1089,6 +1089,112 @@ spec:
                                 type: array
                             type: object
                         type: object
+                      containers:
+                        description: Containers is a list of EGW containers. If specified,
+                          this overrides the specified EGW Deployment containers.
+                          If omitted, the EGW Deployment will use its default values
+                          for its containers.
+                        items:
+                          description: EGWDeploymentContainer is a Egress Gateway
+                            Deployment container.
+                          properties:
+                            name:
+                              description: Name is an enum which identifies the EGW
+                                Deployment container by name.
+                              enum:
+                              - calico-egw
+                              type: string
+                            resources:
+                              description: Resources allows customization of limits
+                                and requests for compute resources such as cpu and
+                                memory. If specified, this overrides the named EGW
+                                Deployment container's resources. If omitted, the
+                                EGW Deployment will use its default value for this
+                                container's resources. If used in conjunction with
+                                the deprecated ComponentResources, then this value
+                                takes precedence.
+                              properties:
+                                limits:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  description: 'Limits describes the maximum amount
+                                    of compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                  type: object
+                                requests:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  description: 'Requests describes the minimum amount
+                                    of compute resources required. If Requests is
+                                    omitted for a container, it defaults to Limits
+                                    if that is explicitly specified, otherwise to
+                                    an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                  type: object
+                              type: object
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      initContainers:
+                        description: InitContainers is a list of EGW init containers.
+                          If specified, this overrides the specified EGW Deployment
+                          init containers. If omitted, the EGW Deployment will use
+                          its default values for its init containers.
+                        items:
+                          description: EGWDeploymentInitContainer is a Egress Gateway
+                            Deployment init container.
+                          properties:
+                            name:
+                              description: Name is an enum which identifies the EGW
+                                Deployment init container by name.
+                              enum:
+                              - egress-gateway-init
+                              type: string
+                            resources:
+                              description: Resources allows customization of limits
+                                and requests for compute resources such as cpu and
+                                memory. If specified, this overrides the named EGW
+                                Deployment init container's resources. If omitted,
+                                the EGW Deployment will use its default value for
+                                this init container's resources. If used in conjunction
+                                with the deprecated ComponentResources, then this
+                                value takes precedence.
+                              properties:
+                                limits:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  description: 'Limits describes the maximum amount
+                                    of compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                  type: object
+                                requests:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  description: 'Requests describes the minimum amount
+                                    of compute resources required. If Requests is
+                                    omitted for a container, it defaults to Limits
+                                    if that is explicitly specified, otherwise to
+                                    an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                  type: object
+                              type: object
+                          required:
+                          - name
+                          type: object
+                        type: array
                       nodeSelector:
                         additionalProperties:
                           type: string
@@ -1101,6 +1207,51 @@ spec:
                         format: int64
                         minimum: 0
                         type: integer
+                      tolerations:
+                        description: Tolerations is the egress gateway pod's tolerations.
+                          If specified, this overrides any tolerations that may be
+                          set on the EGW Deployment. If omitted, the EGW Deployment
+                          will use its default value for tolerations.
+                        items:
+                          description: The pod this Toleration is attached to tolerates
+                            any taint that matches the triple <key,value,effect> using
+                            the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: Effect indicates the taint effect to match.
+                                Empty means match all taint effects. When specified,
+                                allowed values are NoSchedule, PreferNoSchedule and
+                                NoExecute.
+                              type: string
+                            key:
+                              description: Key is the taint key that the toleration
+                                applies to. Empty means match all taint keys. If the
+                                key is empty, operator must be Exists; this combination
+                                means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: Operator represents a key's relationship
+                                to the value. Valid operators are Exists and Equal.
+                                Defaults to Equal. Exists is equivalent to wildcard
+                                for value, so that a pod can tolerate all taints of
+                                a particular category.
+                              type: string
+                            tolerationSeconds:
+                              description: TolerationSeconds represents the period
+                                of time the toleration (which must be of effect NoExecute,
+                                otherwise this field is ignored) tolerates the taint.
+                                By default, it is not set, which means tolerate the
+                                taint forever (do not evict). Zero and negative values
+                                will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: Value is the taint value the toleration
+                                matches to. If the operator is Exists, the value should
+                                be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        type: array
                       topologySpreadConstraints:
                         description: TopologySpreadConstraints defines how the Egress
                           Gateway pods should be spread across different AZs.

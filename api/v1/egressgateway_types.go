@@ -17,9 +17,38 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// EGWDeploymentContainer is a Egress Gateway Deployment container.
+type EGWDeploymentContainer struct {
+	// Name is an enum which identifies the EGW Deployment container by name.
+	// +kubebuilder:validation:Enum=calico-egw
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named EGW Deployment container's resources.
+	// If omitted, the EGW Deployment will use its default value for this container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// EGWDeploymentInitContainer is a Egress Gateway Deployment init container.
+type EGWDeploymentInitContainer struct {
+	// Name is an enum which identifies the EGW Deployment init container by name.
+	// +kubebuilder:validation:Enum=egress-gateway-init
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named EGW Deployment init container's resources.
+	// If omitted, the EGW Deployment will use its default value for this init container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
 
 // EgressGatewaySpec defines the desired state of EgressGateway
 type EgressGatewaySpec struct {
@@ -62,6 +91,18 @@ type EgressGatewaySpec struct {
 
 // EgressGatewayDeploymentPodSpec is the Egress Gateway Deployment's PodSpec.
 type EgressGatewayDeploymentPodSpec struct {
+	// InitContainers is a list of EGW init containers.
+	// If specified, this overrides the specified EGW Deployment init containers.
+	// If omitted, the EGW Deployment will use its default values for its init containers.
+	// +optional
+	InitContainers []EGWDeploymentInitContainer `json:"initContainers,omitempty"`
+
+	// Containers is a list of EGW containers.
+	// If specified, this overrides the specified EGW Deployment containers.
+	// If omitted, the EGW Deployment will use its default values for its containers.
+	// +optional
+	Containers []EGWDeploymentContainer `json:"containers,omitempty"`
+
 	// Affinity is a group of affinity scheduling rules for the EGW pods.
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
@@ -78,6 +119,12 @@ type EgressGatewayDeploymentPodSpec struct {
 	// TopologySpreadConstraints defines how the Egress Gateway pods should be spread across different AZs.
 	// +optional
 	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	// Tolerations is the egress gateway pod's tolerations.
+	// If specified, this overrides any tolerations that may be set on the EGW Deployment.
+	// If omitted, the EGW Deployment will use its default value for tolerations.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
 
 // EgressGatewayDeploymentPodTemplateSpec is the EGW Deployment's PodTemplateSpec
@@ -265,20 +312,111 @@ func (c *EgressGateway) GetLogSeverity() string {
 	return string(*c.Spec.LogSeverity)
 }
 
-func (c *EgressGateway) GetTerminationGracePeriod() *int64 {
-	return c.Spec.Template.Spec.TerminationGracePeriodSeconds
+func (c *EgressGateway) GetTerminationGracePeriodSeconds() *int64 {
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			return c.Spec.Template.Spec.TerminationGracePeriodSeconds
+		}
+	}
+	return nil
 }
 
 func (c *EgressGateway) GetNodeSelector() map[string]string {
-	return c.Spec.Template.Spec.NodeSelector
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			return c.Spec.Template.Spec.NodeSelector
+		}
+	}
+	return nil
 }
 
 func (c *EgressGateway) GetAffinity() *v1.Affinity {
-	return c.Spec.Template.Spec.Affinity
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			return c.Spec.Template.Spec.Affinity
+		}
+	}
+	return nil
 }
 
-func (c *EgressGateway) GetTopoConstraints() []v1.TopologySpreadConstraint {
-	return c.Spec.Template.Spec.TopologySpreadConstraints
+func (c *EgressGateway) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			return c.Spec.Template.Spec.TopologySpreadConstraints
+		}
+	}
+	return nil
+}
+
+func (c *EgressGateway) GetInitContainers() []v1.Container {
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			if c.Spec.Template.Spec.InitContainers != nil {
+				cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
+				for i, v := range c.Spec.Template.Spec.InitContainers {
+					// Only copy and return the init container if it has resources set.
+					if v.Resources == nil {
+						continue
+					}
+					c := v1.Container{Name: v.Name, Resources: *v.Resources}
+					cs[i] = c
+				}
+				return cs
+			}
+		}
+	}
+	return nil
+}
+
+func (c *EgressGateway) GetContainers() []v1.Container {
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			if c.Spec.Template.Spec.Containers != nil {
+				cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
+				for i, v := range c.Spec.Template.Spec.Containers {
+					// Only copy and return the container if it has resources set.
+					if v.Resources == nil {
+						continue
+					}
+					c := v1.Container{Name: v.Name, Resources: *v.Resources}
+					cs[i] = c
+				}
+				return cs
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *EgressGateway) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+	return nil
+}
+
+func (c *EgressGateway) GetTolerations() []v1.Toleration {
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			return c.Spec.Template.Spec.Tolerations
+		}
+	}
+
+	return nil
+}
+
+func (c *EgressGateway) GetPodTemplateMetadata() *Metadata {
+	if c.Spec.Template != nil {
+		m := &Metadata{Labels: c.Spec.Template.Metadata.Labels, Annotations: c.Spec.Template.Metadata.Annotations}
+		return m
+	}
+	return nil
+}
+
+func (c *EgressGateway) GetMinReadySeconds() *int32 {
+	return nil
+}
+
+func (c *EgressGateway) GetMetadata() *Metadata {
+	return nil
 }
 
 func init() {

@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	appsv1 "k8s.io/api/apps/v1"
@@ -121,6 +122,11 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
+
+	if overrides := c.config.EgressGW; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(&d, overrides)
+	}
+
 	return &d
 }
 
@@ -132,18 +138,13 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: c.egwBuildAnnotations(),
-			Labels:      c.config.EgressGW.Spec.Template.Metadata.Labels,
 		},
 		Spec: corev1.PodSpec{
-			ImagePullSecrets:              ps,
-			Affinity:                      c.config.EgressGW.GetAffinity(),
-			TopologySpreadConstraints:     c.config.EgressGW.GetTopoConstraints(),
-			NodeSelector:                  c.config.EgressGW.GetNodeSelector(),
-			TerminationGracePeriodSeconds: c.config.EgressGW.GetTerminationGracePeriod(),
-			InitContainers:                []corev1.Container{*c.egwInitContainer()},
-			Containers:                    []corev1.Container{*c.egwContainer()},
-			ServiceAccountName:            c.config.EgressGW.Name,
-			Volumes:                       []corev1.Volume{*c.egwVolume()},
+			ImagePullSecrets:   ps,
+			InitContainers:     []corev1.Container{*c.egwInitContainer()},
+			Containers:         []corev1.Container{*c.egwContainer()},
+			ServiceAccountName: c.config.EgressGW.Name,
+			Volumes:            []corev1.Volume{*c.egwVolume()},
 		},
 	}
 }

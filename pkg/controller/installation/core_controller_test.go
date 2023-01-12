@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -530,8 +530,8 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
-						{Image: "calico/csi", Digest: "sha256:calicocsihash"},
-						{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
+						{Image: "tigera/csi", Digest: "sha256:calicocsihash"},
+						{Image: "tigera/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())

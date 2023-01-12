@@ -346,5 +346,7 @@ var (
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
+        ComponentCSIPrivate,
+        ComponentCSINodeDriverRegistrarPrivate,
 	}
 )

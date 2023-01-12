@@ -198,9 +198,9 @@ func (c *rbacApiComponent) deployment() client.Object {
 					Annotations: c.config.TrustedBundle.HashAnnotations(),
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       c.config.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: RBACApiServiceAccountName,
-					Tolerations:        append(c.config.Installation.ControlPlaneTolerations, rmeta.TolerateAll...),
+					NodeSelector:       c.config.Installation.ControlPlaneNodeSelector,
+					Tolerations:        c.config.Installation.ControlPlaneTolerations,
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
 					RestartPolicy:      corev1.RestartPolicyAlways,
 					Containers:         c.container(),

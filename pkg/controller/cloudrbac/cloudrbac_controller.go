@@ -138,7 +138,7 @@ func (r *ReconcileCloudRBAC) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.status.OnCRNotFound()
 			return ctrl.Result{}, nil
 		}
-		r.SetDegraded(reqLogger, "ResourceNotFound", "Error querying CloudRBAC", err)
+		r.SetDegraded(reqLogger, operatorv1.ResourceReadError, "Error querying CloudRBAC", err)
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
@@ -148,16 +148,16 @@ func (r *ReconcileCloudRBAC) Reconcile(ctx context.Context, req ctrl.Request) (c
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			r.SetDegraded(reqLogger, "ResourceNotFound", "Installation not found", err)
+			r.SetDegraded(reqLogger, operatorv1.ResourceNotFound, "Installation not found", err)
 			return ctrl.Result{}, nil
 		}
-		r.SetDegraded(reqLogger, "ResourceNotFound", "Error querying installation", err)
+		r.SetDegraded(reqLogger, operatorv1.ResourceReadError, "Error querying installation", err)
 		return ctrl.Result{}, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
-		r.SetDegraded(reqLogger, "ResourceCreateError", "Unable to create the Tigera CA", err)
+		r.SetDegraded(reqLogger, operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err)
 		return ctrl.Result{}, err
 	}
 	certificateManager.AddToStatusManager(r.status, cloudrbac.RBACApiNamespace)
@@ -165,50 +165,48 @@ func (r *ReconcileCloudRBAC) Reconcile(ctx context.Context, req ctrl.Request) (c
 	dnsNames := dns.GetServiceDNSNames(cloudrbac.RBACApiName, cloudrbac.RBACApiNamespace, r.clusterDomain)
 	keyPair, err := certificateManager.GetOrCreateKeyPair(r.client, cloudrbac.RBACAPICertSecretName, common.OperatorNamespace(), dnsNames)
 	if err != nil {
-		r.SetDegraded(reqLogger, "ResourceCreateError", fmt.Sprintf("Failed to get %v secret from operator namespace", cloudrbac.RBACAPICertSecretName), err)
+		r.SetDegraded(reqLogger, operatorv1.ResourceCreateError, fmt.Sprintf("Failed to get %v secret from operator namespace", cloudrbac.RBACAPICertSecretName), err)
 		return ctrl.Result{}, err
 	}
 	if keyPair == nil {
-		r.SetDegraded(reqLogger, "ResourceCreateError", fmt.Sprintf("%v secret not found in operator namespace", cloudrbac.RBACAPICertSecretName), nil)
+		r.SetDegraded(reqLogger, operatorv1.ResourceCreateError, fmt.Sprintf("%v secret not found in operator namespace", cloudrbac.RBACAPICertSecretName), nil)
 		return ctrl.Result{}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving image pull secrets")
-		r.status.SetDegraded("Error retrieving image pull secrets", err.Error())
+		r.SetDegraded(reqLogger, operatorv1.ResourceReadError, "Error retrieving image pull secrets", err)
 		return reconcile.Result{}, err
 	}
 
 	managerInternalTLSCert, err := certificateManager.GetCertificate(r.client, oprender.ManagerInternalTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", oprender.ManagerInternalTLSSecretName))
-		r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", oprender.ManagerInternalTLSSecretName), err.Error())
+		r.SetDegraded(reqLogger, operatorv1.ResourceReadError, fmt.Sprintf("failed to retrieve / validate  %s", oprender.ManagerInternalTLSSecretName), err)
 		return reconcile.Result{}, err
 	}
 
 	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(managerInternalTLSCert)
 	if err != nil {
 		log.Error(err, "failed to create trusted bundle")
-		r.status.SetDegraded("failed to create trusted bundle", err.Error())
+		r.SetDegraded(reqLogger, operatorv1.ResourceCreateError, "failed to create trusted bundle", err)
 		return reconcile.Result{}, err
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error querying Authentication", err.Error())
+		r.SetDegraded(reqLogger, operatorv1.ResourceReadError, "Error querying Authentication", err)
 		return reconcile.Result{}, err
 	}
 	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
+		r.SetDegraded(reqLogger, operatorv1.ResourceReadError, fmt.Sprintf("Authentication is not ready, status=%s", authenticationCR.Status.State), nil)
 		return reconcile.Result{}, nil
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
 	if err != nil {
-		log.Error(err, "Failed to process the authentication CR.")
-		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
+		r.SetDegraded(reqLogger, operatorv1.ResourceReadError, "failed to get key validator config", err)
 		return reconcile.Result{}, err
 	}
 
@@ -235,12 +233,12 @@ func (r *ReconcileCloudRBAC) Reconcile(ctx context.Context, req ctrl.Request) (c
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-			r.SetDegraded(reqLogger, "InvalidConfigurationError", "Error with images from ImageSet", err)
+			r.SetDegraded(reqLogger, operatorv1.InvalidConfigurationError, "Error with images from ImageSet", err)
 			return ctrl.Result{}, err
 		}
 
 		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			r.SetDegraded(reqLogger, "ResourceUpdateError", "Error creating / updating resource", err)
+			r.SetDegraded(reqLogger, operatorv1.ResourceUpdateError, "Error creating / updating resource", err)
 			return ctrl.Result{}, err
 		}
 	}
@@ -269,13 +267,13 @@ func (r *ReconcileCloudRBAC) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // SetDegraded sets status as degraded the for the CloudRBAC resource
-func (r *ReconcileCloudRBAC) SetDegraded(reqLogger logr.Logger, reason string, message string, err error) {
-	reqLogger.WithValues(reason, message).Error(err, reason)
+func (r *ReconcileCloudRBAC) SetDegraded(reqLogger logr.Logger, reason operatorv1.TigeraStatusReason, message string, err error) {
+	reqLogger.WithValues(reason, message).Error(err, string(reason))
 	msg := ""
 	if err == nil {
 		msg = message
 	} else {
 		msg = fmt.Sprintf("%s - Error: %s", message, err.Error())
 	}
-	r.status.SetDegraded(reason, msg)
+	r.status.SetDegraded(string(reason), msg)
 }

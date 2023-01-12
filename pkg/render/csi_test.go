@@ -167,4 +167,74 @@ var _ = Describe("CSI rendering tests", func() {
 		ds = rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
 	})
+	Context("With csi-node-driver DaemonSet overrides", func() {
+		It("should handle csiNodeDriverDaemonSet overrides", func() {
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			defaultInstance.CSINodeDriverDaemonSet = &operatorv1.CSINodeDriverDaemonSet{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.CSINodeDriverDaemonSetSpec{
+					Template: &operatorv1.CSINodeDriverDaemonSetPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.CSINodeDriverDaemonSetPodSpec{
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+
+			component := render.CSI(&cfg)
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			ds := dsResource.(*appsv1.DaemonSet)
+
+			Expect(ds.Labels).To(HaveLen(1))
+			Expect(ds.Labels["top-level"]).To(Equal("label1"))
+			Expect(ds.Annotations).To(HaveLen(1))
+			Expect(ds.Annotations["top-level"]).To(Equal("annot1"))
+			// At runtime, the operator will also add some standard labels to the
+			// daemonset such as "k8s-app=csi-node-driver". But the csi-node-driver daemonset object
+			// produced by the render will have 1 label (name) so we expect one plus the one
+			// provided.
+			Expect(ds.Spec.Template.Labels).To(HaveLen(2))
+			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			Expect(ds.Spec.Template.Annotations).To(HaveLen(1))
+			Expect(ds.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(ds.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+	})
 })

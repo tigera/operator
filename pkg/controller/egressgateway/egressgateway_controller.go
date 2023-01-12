@@ -256,7 +256,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if installStatus.CalicoVersion != components.EnterpriseRelease {
-		reqLogger.Info("Waiting for expected version of calico to be installed")
+		reqLogger.Info("Waiting for expected version of Calico to be installed, expectedVersion = %s", components.EnterpriseRelease)
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -337,8 +337,8 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	// Set the condition to progressing
 	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), "Reconciling")
 
-	egwVXLANPort := egressgateway.DefaultEGWVxlanPort
-	egwVXLANVNI := egressgateway.DefaultEGWVxlanVNI
+	egwVXLANPort := egressgateway.DefaultVXLANPort
+	egwVXLANVNI := egressgateway.DefaultVXLANVNI
 	if fc.Spec.EgressIPVXLANPort != nil {
 		egwVXLANPort = *fc.Spec.EgressIPVXLANPort
 	}

@@ -35,14 +35,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	egwPortName               = "health"
-	DefaultEGWVxlanPort int   = 4790
-	DefaultEGWVxlanVNI  int   = 4097
-	DefaultHealthPort   int32 = 8080
+	egwPortName             = "health"
+	DefaultVXLANPort  int   = 4790
+	DefaultVXLANVNI   int   = 4097
+	DefaultHealthPort int32 = 8080
 )
+
+var log = logf.Log.WithName("render")
 
 func EgressGateway(
 	config *Config,
@@ -122,7 +125,6 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.config.EgressGW.Spec.Replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": c.config.EgressGW.Name}},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
@@ -464,6 +466,7 @@ func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstr
 func concatString(arr []string) string {
 	str, err := json.Marshal(arr)
 	if err != nil {
+		log.Info("error marshaling data %v", arr)
 		return ""
 	}
 	return string(str)

@@ -59,6 +59,7 @@ const (
 	CalicoNodeMetricsService      = "calico-node-metrics"
 	NodePrometheusTLSServerSecret = "calico-node-prometheus-server-tls"
 	CalicoNodeObjectName          = "calico-node"
+	CalicoCNIPluginObjectName     = "calico-cni-plugin"
 )
 
 var (
@@ -179,6 +180,9 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
+		c.CNIPluginServiceAccount(),
+		c.CNIPluginRole(),
+		c.CNIPluginRoleBinding(),
 	}
 
 	// These are objects to keep even when we're terminating
@@ -251,6 +255,23 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
+// nodeServiceAccount creates the node's service account.
+func (c *nodeComponent) CNIPluginServiceAccount() *corev1.ServiceAccount {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
+
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       CalicoCNIPluginObjectName,
+			Namespace:  common.CalicoNamespace,
+			Finalizers: finalizer,
+		},
+	}
+}
+
 // nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
 func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
@@ -273,6 +294,38 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      CalicoNodeObjectName,
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
+	if c.cfg.MigrateNamespaces {
+		migration.AddBindingForKubeSystemNode(crb)
+	}
+	return crb
+}
+
+// nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
+func (c *nodeComponent) CNIPluginRoleBinding() *rbacv1.ClusterRoleBinding {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
+	crb := &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       CalicoCNIPluginObjectName,
+			Labels:     map[string]string{},
+			Finalizers: finalizer,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     CalicoCNIPluginObjectName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      CalicoCNIPluginObjectName,
 				Namespace: common.CalicoNamespace,
 			},
 		},
@@ -344,7 +397,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Used for creating service account tokens to be used by the CNI plugin.
 				APIGroups:     []string{""},
 				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{"calico-node"},
+				ResourceNames: []string{"calico-node", "calico-cni-plugin"},
 				Verbs:         []string{"create"},
 			},
 			{
@@ -434,13 +487,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
-			{
-				// Allows Calico to use the K8s TokenRequest API to create the tokens used by the CNI plugin.
-				APIGroups:     []string{""},
-				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{"calico-node"},
-				Verbs:         []string{"create"},
-			},
 		},
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -478,6 +524,100 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{common.NodeDaemonSetName},
+		})
+	}
+	return role
+}
+
+// nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
+func (c *nodeComponent) CNIPluginRole() *rbacv1.ClusterRole {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       CalicoCNIPluginObjectName,
+			Labels:     map[string]string{},
+			Finalizers: finalizer,
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				// The CNI plugin needs to get pods, nodes, namespaces.
+				APIGroups: []string{""},
+				Resources: []string{"pods", "nodes", "namespaces"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// Calico patches the allocated IP onto the pod.
+				APIGroups: []string{""},
+				Resources: []string{"pods/status"},
+				Verbs:     []string{"patch"},
+			},
+
+			{
+				// Most IPAM resources need full CRUD permissions so we can allocate and
+				// release IP addresses for pods.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"blockaffinities",
+					"ipamblocks",
+					"ipamhandles",
+					"ipamconfigs",
+				},
+				Verbs: []string{"get", "list", "create", "update", "delete"},
+			},
+			{
+				// But, we only need to be able to query for IPAM config.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"ipamconfigs"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// Calico creates some configuration on startup.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"clusterinformations",
+					"felixconfigurations",
+					"ippools",
+				},
+				Verbs: []string{"create", "update"},
+			},
+			{
+				// For monitoring Calico-specific configuration.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"bgpconfigurations",
+					"bgppeers",
+					"blockaffinities",
+					"clusterinformations",
+					"felixconfigurations",
+					"globalnetworkpolicies",
+					"stagedglobalnetworkpolicies",
+					"globalnetworksets",
+					"hostendpoints",
+					"ipamblocks",
+					"ippools",
+					"ipreservations",
+					"networkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"stagednetworkpolicies",
+					"networksets",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+		},
+	}
+
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{

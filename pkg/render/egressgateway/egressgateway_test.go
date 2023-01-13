@@ -65,7 +65,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 					{Name: "ippool-1", CIDR: ""},
 					{Name: "ippool-2", CIDR: ""},
 				},
-				LogSeverity: &logSeverity,
+				ExternalNetworks: []string{"one", "two"},
+				LogSeverity:      &logSeverity,
 				Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{
 					Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels},
 					Spec: &operatorv1.EgressGatewayDeploymentPodSpec{
@@ -168,6 +169,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		ipPoolAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/ipv4pools"]
 		expectedIPPoolAnnotation := "[\"ippool-1\",\"ippool-2\"]"
 		Expect(ipPoolAnnotation).To(Equal(expectedIPPoolAnnotation))
+		Expect(dep.Spec.Template.ObjectMeta.Annotations["egress.projectcalico.org/externalNetworkNames"]).To(Equal("[\"one\",\"two\"]"))
 
 		Expect(dep.Spec.Template.ObjectMeta.Labels).To(Equal(labels))
 		expectedPort := corev1.ContainerPort{

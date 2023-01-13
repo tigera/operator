@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -60,6 +60,8 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 		case "Monitor":
 			fallthrough
 		case "ManagementCluster":
+			fallthrough
+		case "EgressGateway":
 			fallthrough
 		case "ManagementClusterConnection":
 			return true, nil

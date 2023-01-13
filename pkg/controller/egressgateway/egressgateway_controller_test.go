@@ -127,6 +127,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			},
 			})).NotTo(HaveOccurred())
 
+			var routeTableIndex uint32 = 1
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "one"}, Spec: crdv1.ExternalNetworkSpec{
+				RouteTableIndex: &routeTableIndex,
+			},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "two"}, Spec: crdv1.ExternalNetworkSpec{
+				RouteTableIndex: &routeTableIndex,
+			},
+			})).NotTo(HaveOccurred())
 			// Mark that the watch for license key was successful.
 			r.licenseAPIReady.MarkAsReady()
 		})
@@ -155,6 +165,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 						{Name: "ippool-1", CIDR: ""},
 						{Name: "", CIDR: "1.2.4.0/24"},
 					},
+					ExternalNetworks: []string{"one", "two"},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,
@@ -215,6 +226,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			}
 			Expect(*dep.Spec.Template.Spec.Affinity).To(Equal(expectedAffinity))
 			Expect(dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/ipv4pools"]).To(Equal("[\"ippool-1\",\"1.2.4.0/24\"]"))
+			Expect(dep.Spec.Template.ObjectMeta.Annotations["egress.projectcalico.org/externalNetworkNames"]).To(Equal("[\"one\",\"two\"]"))
 
 			By("update egw with empty metadata")
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
@@ -543,6 +555,34 @@ var _ = Describe("Egress Gateway controller tests", func() {
 							IntervalSeconds: &interval,
 						},
 					},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+
+		})
+
+		It("Should throw an error when externalNetworks are not present", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "externalnetworks.crd.projectcalico.org \"three\" not found", mock.Anything, mock.Anything).Return()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+					},
+					ExternalNetworks: []string{"one", "three"},
+					Template:         &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,

@@ -413,6 +413,14 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 			return err
 		}
 	}
+
+	for _, externalNetwork := range egw.Spec.ExternalNetworks {
+		err := validateExternalNetwork(ctx, cli, externalNetwork)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Check if ElasticIPs are specified only if NativeIP is enabled.
 	if egw.Spec.AWS != nil {
 		if len(egw.Spec.AWS.ElasticIPs) > 0 && (*egw.Spec.AWS.NativeIP == operatorv1.NativeIPDisabled) {
@@ -524,6 +532,17 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 	} else if egw.Spec.Template.Spec.Affinity == nil {
 		egw.Spec.Template.Spec.Affinity = defAffinity
 	}
+}
+
+// validateExternalNetwork validates if the specified external network exists.
+func validateExternalNetwork(ctx context.Context, cli client.Client, externalNetwork string) error {
+	instance := &crdv1.ExternalNetwork{}
+	key := types.NamespacedName{Name: externalNetwork}
+	err := cli.Get(ctx, key, instance)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // validateIPPool validates if the specified IPPool either by name or cidr, exists. If name and CIDR are provider, the ippool is validated

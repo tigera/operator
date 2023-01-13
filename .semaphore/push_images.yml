@@ -40,11 +40,10 @@ blocks:
   - name: Push Images / Maybe Release
     task:
       secrets:
-        - name: quay-robot-semaphore_v2
-        - name: operator-redhat-connect
+        - name: google-service-account-for-gcr
       prologue:
         commands:
-          - docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+          - gcloud auth activate-service-account --key-file=/home/semaphore/secrets/secret.google-service-account-key.json
           - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
       jobs:
         - name: Build

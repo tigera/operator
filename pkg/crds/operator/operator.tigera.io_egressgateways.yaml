@@ -131,6 +131,13 @@ spec:
                         type: integer
                     type: object
                 type: object
+              externalNetworks:
+                description: ExternalNetworks defines the external network names this
+                  Egress Gateway is associated with. ExternalNetworks must match existing
+                  external networks.
+                items:
+                  type: string
+                type: array
               ipPools:
                 description: IPPools defines the IP Pools that the Egress Gateway
                   pods should be using. Either name or CIDR must be specified. IPPools

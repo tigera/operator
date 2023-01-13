@@ -65,6 +65,12 @@ type EgressGatewaySpec struct {
 	// +required
 	IPPools []EgressGatewayIPPool `json:"ipPools"`
 
+	// ExternalNetworks defines the external network names this Egress Gateway is
+	// associated with.
+	// ExternalNetworks must match existing external networks.
+	// +optional
+	ExternalNetworks []string `json:"externalNetworks"`
+
 	// LogSeverity defines the logging level of the Egress Gateway.
 	// Default: Info
 	// +kubebuilder:validation:Enum=Trace;Debug;Info;Warn;Error;Fatal

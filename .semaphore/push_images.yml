@@ -44,6 +44,7 @@ blocks:
       prologue:
         commands:
           - gcloud auth activate-service-account --key-file=/home/semaphore/secrets/secret.google-service-account-key.json
+          - docker login --username casey@tigera.io -u _json_key -p "$(cat ~/secrets/secret.google-service-account-key.json)" https://gcr.io
           - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
       jobs:
         - name: Build

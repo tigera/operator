@@ -296,6 +296,18 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "csi" }}
+	ComponentCSIPrivate = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar" }}
+	ComponentCSINodeDriverRegistrarPrivate = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []component{
@@ -341,5 +353,7 @@ var (
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
+		ComponentCSIPrivate,
+		ComponentCSINodeDriverRegistrarPrivate,
 	}
 )

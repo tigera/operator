@@ -17,6 +17,7 @@ package authentication
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
@@ -293,9 +294,20 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	issuerURL := ""
 	disableDex := false
 	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == oprv1.OIDCTypeTigera {
 		disableDex = true
+
+		// Cloud modification
+		// get the issuer URL host for use later in dns policy
+		u, err := url.Parse(authentication.Spec.OIDC.IssuerURL)
+		if err != nil {
+			log.Error(err, "Error parsing issuer")
+			r.status.SetDegraded("Error parsing issuer", err.Error())
+			return reconcile.Result{}, err
+		}
+		issuerURL = u.Hostname()
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
@@ -312,6 +324,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		ClusterDomain: r.clusterDomain,
 		DeleteDex:     disableDex,
 		TLSKeyPair:    tlsKeyPair,
+		IssuerDomain:  issuerURL,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

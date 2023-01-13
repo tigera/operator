@@ -158,7 +158,7 @@ var (
 	}
 
 	ComponentEgressGateway = component{
-		Version: "master",
+		Version: "v3.15.0",
 		Image:   "tigera/egress-gateway",
 	}
 

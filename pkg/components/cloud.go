@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import "fmt"
 func cloudRegistry(c component, registry, version string) (string, string) {
 	if registry == "" || registry == UseDefault {
 		switch c {
-		case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
+		case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers, ComponentCloudRBACApi:
 			registry = CloudRegistry
 		case ComponentImageAssuranceApiProxy, ComponentImageAssuranceScanner, ComponentImageAssurancePodWatcher:
 			registry = ImageAssuranceRegistry

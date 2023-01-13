@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/cloudrbac"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -24,6 +25,7 @@ var (
 
 const (
 	ImageAssurancePolicyName = networkpolicy.TigeraComponentPolicyPrefix + "image-assurance-access"
+	CloudRBACAPIPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "cloud-rbac-api"
 )
 
 var ImageAssuranceEntityRule = networkpolicy.CreateEntityRule("tigera-image-assurance", "tigera-image-assurance-api-proxy", 5557)
@@ -31,6 +33,7 @@ var ImageAssuranceEntityRule = networkpolicy.CreateEntityRule("tigera-image-assu
 // ManagerCloudResources contains all the resource needed for cloud manager.
 type ManagerCloudResources struct {
 	TenantID                string
+	CloudRBACResources      *cloudrbac.Resources
 	ImageAssuranceResources *rcimageassurance.Resources
 }
 
@@ -50,6 +53,22 @@ func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Contai
 			},
 		)
 	}
+
+	if c.cfg.CloudResources.CloudRBACResources != nil {
+		container.Env = append(container.Env,
+			corev1.EnvVar{Name: "VOLTRON_ENABLE_CALICO_CLOUD_RBAC_API", Value: "true"},
+			corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_CA_BUNDLE_PATH", Value: cloudrbac.CABundlePath},
+			corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_ENDPOINT", Value: cloudrbac.APIEndpoint},
+		)
+		container.VolumeMounts = append(container.VolumeMounts,
+			corev1.VolumeMount{
+				MountPath: cloudrbac.CAMountPath,
+				Name:      cloudrbac.TLSSecretName,
+				ReadOnly:  true,
+			},
+		)
+	}
+
 	return container
 }
 
@@ -71,6 +90,21 @@ func (c *managerComponent) decorateCloudDeploymentSpec(templateSpec corev1.PodTe
 				},
 			})
 	}
+
+	cloudRBACResources := c.cfg.CloudResources.CloudRBACResources
+	if cloudRBACResources != nil {
+		templateSpec.ObjectMeta.Annotations[cloudrbac.CertHashAnnotation] = rmeta.AnnotationHash(cloudRBACResources.TLSSecret.Data)
+		templateSpec.Spec.Volumes = append(templateSpec.Spec.Volumes,
+			corev1.Volume{
+				Name: cloudrbac.TLSSecretName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: cloudrbac.TLSSecretName,
+					},
+				},
+			})
+	}
+
 	return templateSpec
 }
 
@@ -89,6 +123,19 @@ func (c *managerComponent) addCloudResources(objs []client.Object) []client.Obje
 			c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
 
 		objs = append(objs, c.managerImageAssuranceNetworkPolicy())
+	}
+
+	cloudRBACResources := c.cfg.CloudResources.CloudRBACResources
+	if cloudRBACResources != nil {
+		objs = append(objs, &corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: cloudrbac.TLSSecretName, Namespace: ManagerNamespace},
+			Data: map[string][]byte{
+				corev1.TLSCertKey: cloudRBACResources.TLSSecret.Data[corev1.TLSCertKey],
+			},
+		})
+
+		objs = append(objs, c.managerToCloudRBACAPINetworkPolicy(cloudRBACResources))
 	}
 
 	return objs
@@ -118,6 +165,7 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_DOWNLOAD_URL", Value: rcimageassurance.ScannerCLIDownloadURL},
 		)
 	}
+
 	// move extra env vars into Manager, but sort them alphabetically first,
 	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
 	// which will cause another reconciliation event when Manager is updated.
@@ -172,6 +220,29 @@ func (c *managerComponent) managerImageAssuranceNetworkPolicy() *v3.NetworkPolic
 			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
+		},
+	}
+}
+
+func (c *managerComponent) managerToCloudRBACAPINetworkPolicy(rbacResources *cloudrbac.Resources) *v3.NetworkPolicy {
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CloudRBACAPIPolicyName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress: []v3.Rule{
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: networkpolicy.CreateServiceSelectorEntityRule(rbacResources.NamespaceName, rbacResources.ServiceName),
+				},
+			},
 		},
 	}
 }

@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/cloudrbac"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	networkpolicy "github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -750,6 +751,7 @@ type renderConfig struct {
 	complianceFeatureActive bool
 	imageAssuranceEnabled   bool
 	openshift               bool
+	cloudRBACEnabled        bool
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -801,6 +803,12 @@ func renderObjects(roc renderConfig) []client.Object {
 				},
 			},
 			TLSSecret: voltronTls,
+		}
+	}
+
+	if roc.cloudRBACEnabled {
+		cloudResources.CloudRBACResources = &cloudrbac.Resources{
+			TLSSecret: rtest.CreateCertSecret(cloudrbac.TLSSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain),
 		}
 	}
 

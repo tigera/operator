@@ -148,3 +148,6 @@ components:
   threat-id:
     image: tigera/threat-identification
     version: v1.2.0
+  cloud-rbac-api:
+    image: tigera/cc-rbac-api
+    version: 3295e3f

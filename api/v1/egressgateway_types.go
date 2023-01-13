@@ -69,7 +69,7 @@ type EgressGatewaySpec struct {
 	// associated with.
 	// ExternalNetworks must match existing external networks.
 	// +optional
-	ExternalNetworks []string `json:"externalNetworks"`
+	ExternalNetworks []string `json:"externalNetworks,omitempty"`
 
 	// LogSeverity defines the logging level of the Egress Gateway.
 	// Default: Info

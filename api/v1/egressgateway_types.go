@@ -57,7 +57,7 @@ type EgressGatewaySpec struct {
 	// +kubebuilder:validation:Maximum=2147483647
 	// +optional
 	// +kubebuilder:default:=1
-	Replicas *int32 `json:"replicas"`
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// IPPools defines the IP Pools that the Egress Gateway pods should be using.
 	// Either name or CIDR must be specified.
@@ -76,7 +76,7 @@ type EgressGatewaySpec struct {
 	// +kubebuilder:validation:Enum=Trace;Debug;Info;Warn;Error;Fatal
 	// +optional
 	// +kubebuilder:default:=Info
-	LogSeverity *LogLevel `json:"logSeverity"`
+	LogSeverity *LogLevel `json:"logSeverity,omitempty"`
 
 	// Template describes the EGW Deployment pod that will be created.
 	// +optional
@@ -224,7 +224,7 @@ type ICMPProbe struct {
 	// IPs define the list of ICMP probe IPs. Egress Gateway will probe each IP
 	// periodically. If all probes fail, Egress Gateway will report non-ready.
 	// +required
-	IPs []string `json:"ips,omitempty"`
+	IPs []string `json:"ips"`
 
 	// IntervalSeconds defines the interval of ICMP probes. Used when IPs is non-empty.
 	// Default: 5
@@ -232,7 +232,7 @@ type ICMPProbe struct {
 	// +kubebuilder:validation:Maximum=2147483647
 	// +kubebuilder:default:=5
 	// +optional
-	IntervalSeconds *int32 `json:"intervalSeconds"`
+	IntervalSeconds *int32 `json:"intervalSeconds,omitempty"`
 
 	// TimeoutSeconds defines the timeout value of ICMP probes. Used when IPs is non-empty.
 	// Default: 15
@@ -240,7 +240,7 @@ type ICMPProbe struct {
 	// +kubebuilder:validation:Maximum=2147483647
 	// +kubebuilder:default:=15
 	// +optional
-	TimeoutSeconds *int32 `json:"timeoutSeconds"`
+	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // HTTPProbe defines the HTTP probe configuration for Egress Gateway.
@@ -248,7 +248,7 @@ type HTTPProbe struct {
 	// URLs define the list of HTTP probe URLs. Egress Gateway will probe each URL
 	// periodically.If all probes fail, Egress Gateway will report non-ready.
 	// +required
-	URLs []string `json:"urls,omitempty"`
+	URLs []string `json:"urls"`
 
 	// IntervalSeconds defines the interval of HTTP probes. Used when URLs is non-empty.
 	// Default: 10
@@ -256,7 +256,7 @@ type HTTPProbe struct {
 	// +kubebuilder:validation:Maximum=2147483647
 	// +kubebuilder:default:=10
 	// +optional
-	IntervalSeconds *int32 `json:"intervalSeconds"`
+	IntervalSeconds *int32 `json:"intervalSeconds,omitempty"`
 
 	// TimeoutSeconds defines the timeout value of HTTP probes. Used when URLs is non-empty.
 	// Default: 30
@@ -264,7 +264,7 @@ type HTTPProbe struct {
 	// +kubebuilder:validation:Maximum=2147483647
 	// +kubebuilder:default:=30
 	// +optional
-	TimeoutSeconds *int32 `json:"timeoutSeconds"`
+	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // AWSEgressGateway defines the configurations for deploying EgressGateway in AWS

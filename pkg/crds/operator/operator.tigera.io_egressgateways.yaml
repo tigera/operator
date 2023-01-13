@@ -99,6 +99,8 @@ spec:
                         items:
                           type: string
                         type: array
+                    required:
+                    - urls
                     type: object
                   icmpProbe:
                     description: ICMPProbe define outgoing ICMP probes that Egress
@@ -129,6 +131,8 @@ spec:
                         maximum: 2147483647
                         minimum: 0
                         type: integer
+                    required:
+                    - ips
                     type: object
                 type: object
               externalNetworks:

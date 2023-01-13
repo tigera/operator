@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ package testutils
 
 import (
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -27,7 +26,7 @@ var KubeControllersUserSecret = corev1.Secret{
 		APIVersion: "v1",
 	},
 	ObjectMeta: metav1.ObjectMeta{
-		Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
+		Name:      "tigera-ee-kube-controllers-elasticsearch-access",
 		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{

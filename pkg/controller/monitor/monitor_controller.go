@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -49,9 +50,11 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const ResourceName = "monitor"
@@ -148,6 +151,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
@@ -275,7 +279,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
-	} {
+		kubecontrollers.KubeControllerPrometheusTLSSecret} {
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)
@@ -332,6 +336,20 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers metric port.
+	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Determine the port to use for kube-controllers metrics.
+	kubeControllersMetricsPort := monitor.KubeControllerDefaultMetricPort
+	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
+		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
+	}
+
 	monitorCfg := &monitor.Config{
 		Installation:             install,
 		PullSecrets:              pullSecrets,
@@ -342,6 +360,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		ClusterDomain:            r.clusterDomain,
 		TrustedCertBundle:        trustedBundle,
 		Openshift:                r.provider == operatorv1.ProviderOpenShift,
+		KubeControllerPort:       kubeControllersMetricsPort,
 	}
 
 	// Render prometheus component

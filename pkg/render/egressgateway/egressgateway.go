@@ -161,6 +161,9 @@ func (c *component) egwBuildAnnotations() map[string]string {
 	if c.config.EgressGW.Spec.AWS != nil && len(c.config.EgressGW.Spec.AWS.ElasticIPs) > 0 {
 		annotations["cni.projectcalico.org/awsElasticIPs"] = c.getElasticIPs()
 	}
+	if len(c.config.EgressGW.Spec.ExternalNetworks) > 0 {
+		annotations["egress.projectcalico.org/externalNetworkNames"] = c.getExternalNetworks()
+	}
 	return annotations
 }
 
@@ -427,6 +430,11 @@ func (c *component) getElasticIPs() string {
 		}
 	}
 	return ""
+}
+
+func (c *component) getExternalNetworks() string {
+	egw := c.config.EgressGW
+	return concatString(egw.Spec.ExternalNetworks)
 }
 
 func (c *component) getHealthTimeoutDs() string {

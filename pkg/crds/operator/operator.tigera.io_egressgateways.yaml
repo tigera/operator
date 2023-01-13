@@ -99,6 +99,8 @@ spec:
                         items:
                           type: string
                         type: array
+                    required:
+                    - urls
                     type: object
                   icmpProbe:
                     description: ICMPProbe define outgoing ICMP probes that Egress
@@ -129,8 +131,17 @@ spec:
                         maximum: 2147483647
                         minimum: 0
                         type: integer
+                    required:
+                    - ips
                     type: object
                 type: object
+              externalNetworks:
+                description: ExternalNetworks defines the external network names this
+                  Egress Gateway is associated with. ExternalNetworks must match existing
+                  external networks.
+                items:
+                  type: string
+                type: array
               ipPools:
                 description: IPPools defines the IP Pools that the Egress Gateway
                   pods should be using. Either name or CIDR must be specified. IPPools

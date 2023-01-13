@@ -252,7 +252,7 @@ var (
 
 	ComponentCSINodeDriverRegistrarPrivate = component{
 		Version: "v3.15.0",
-		Image:   "tigera/csi-node-driver-registrar",
+		Image:   "tigera/node-driver-registrar",
 	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
@@ -298,5 +298,7 @@ var (
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
+		ComponentCSIPrivate,
+		ComponentCSINodeDriverRegistrarPrivate,
 	}
 )

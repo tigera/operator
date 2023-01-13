@@ -124,7 +124,7 @@ components:
     image: tigera/csi
     version: v3.15.0
   csi-node-driver-registrar:
-    image: tigera/csi-node-driver-registrar
+    image: tigera/node-driver-registrar
     version: v3.15.0
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.

@@ -68,7 +68,6 @@ type DexComponentConfiguration struct {
 	ClusterDomain string
 	DeleteDex     bool
 	TLSKeyPair    certificatemanagement.KeyPairInterface
-	IssuerDomain  string
 }
 
 type dexComponent struct {
@@ -134,10 +133,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.cfg.DeleteDex {
-		// if not using dex, create a gnp to allow egress directly to the oidc provider
-		// from any tigera namespace
-		objsToCreate := []client.Object{networkpolicy.AllowTigeraEgressIDP(c.cfg.IssuerDomain)}
-		return objsToCreate, objs
+		return nil, objs
 	}
 
 	return objs, nil

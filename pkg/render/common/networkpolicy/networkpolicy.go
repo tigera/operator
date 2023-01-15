@@ -170,38 +170,6 @@ func AllowTigeraDefaultDeny(namespace string) *v3.NetworkPolicy {
 	}
 }
 
-func AllowTigeraEgressIDP(idpDomain string) *v3.GlobalNetworkPolicy {
-	return &v3.GlobalNetworkPolicy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "projectcalico.org/v3",
-			Kind:       "GlobalNetworkPolicy",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: TigeraComponentPolicyPrefix + "allow-external-oidc",
-		},
-		Spec: v3.GlobalNetworkPolicySpec{
-			Order: &HighPrecedenceOrder,
-			Tier:  TigeraComponentTierName,
-			NamespaceSelector: strings.Join([]string{
-				`name == "tigera-compliance"`,
-				`name == "tigera-manager"`,
-				`name == "calico-cloud-rbac"`,
-			}, " || "),
-			Types: []v3.PolicyType{v3.PolicyTypeEgress},
-			Egress: []v3.Rule{{
-				Action:   v3.Allow,
-				Protocol: &TCPProtocol,
-				Destination: v3.EntityRule{
-					Domains: []string{idpDomain},
-					Ports: []numorstring.Port{
-						numorstring.SinglePort(443),
-					},
-				},
-			}},
-		},
-	}
-}
-
 // Entity rules not belonging to Calico/Tigera components.
 var KubeAPIServerEntityRule = v3.EntityRule{
 	NamespaceSelector: "projectcalico.org/name == 'default'",

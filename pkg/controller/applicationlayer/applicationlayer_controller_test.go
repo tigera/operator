@@ -109,6 +109,56 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(c.Delete(ctx, fc)).NotTo(HaveOccurred())
 		})
 
+		It("should set PolicySyncPathPrefix if ALP is enabled", func() {
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+			By("applying the ApplicationLayer CR to the fake cluster")
+			enabled := operatorv1.ApplicationLayerPolicyEnabled
+			alSpec := &operatorv1.ApplicationLayer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ApplicationLayerSpec{
+					ApplicationLayerPolicyStatus: &enabled,
+				},
+			}
+			Expect(c.Create(ctx, alSpec)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("ensuring that felix configuration PolicySyncPathPrefix is set")
+			f1 := crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(test.GetResource(c, &f1)).To(BeNil())
+			Expect(f1.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+
+			Expect(c.Delete(ctx, alSpec)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("ensuring that felix configuration PolicySyncPathPrefix is left as is, even after ALP deletion")
+			f2 := crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(test.GetResource(c, &f2)).To(BeNil())
+			Expect(f2.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+		})
+
 		It("should leave PolicySyncPathPrefix as is if already exists", func() {
 			Expect(c.Delete(ctx, fc)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &crdv1.FelixConfiguration{

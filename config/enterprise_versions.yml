@@ -144,10 +144,10 @@ components:
     version: v1.2.1
   sasha:
     image: tigera/sasha
-    version: v1.2.0
+    version: v1.3.0-0.dev-99-g9c2773542545
   threat-id:
     image: tigera/threat-identification
-    version: v1.2.0
+    version: v1.3.0-0.dev-99-g9c2773542545
   cloud-rbac-api:
     image: tigera/cc-rbac-api
     version: 3295e3f

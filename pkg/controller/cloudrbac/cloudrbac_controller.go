@@ -268,7 +268,7 @@ func (r *ReconcileCloudRBAC) SetupWithManager(mgr ctrl.Manager) error {
 
 // SetDegraded sets status as degraded the for the CloudRBAC resource
 func (r *ReconcileCloudRBAC) SetDegraded(reqLogger logr.Logger, reason operatorv1.TigeraStatusReason, message string, err error) {
-	reqLogger.WithValues(reason, message).Error(err, string(reason))
+	reqLogger.WithValues("reason", string(reason)).Error(err, message)
 	msg := ""
 	if err == nil {
 		msg = message

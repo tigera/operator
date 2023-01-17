@@ -123,6 +123,9 @@ var _ = Describe("CSI rendering tests", func() {
 		serviceAccount := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "", "v1", "ServiceAccount")
 		Expect(serviceAccount).ToNot(BeNil())
 
+		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(*ds.Spec.Template.Spec.AutomountServiceAccountToken).To(BeTrue())
+
 		psp := rtest.GetResource(resources, render.CSIDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy").(*policyv1beta1.PodSecurityPolicy)
 		Expect(psp).ToNot(BeNil())
 		Expect(psp.Spec.Privileged).To(BeTrue())

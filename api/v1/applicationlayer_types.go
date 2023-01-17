@@ -28,7 +28,7 @@ type ApplicationLayerSpec struct {
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
-	// When enabled, Services may opt-in to having ingress traffic examined by L7 DaemonSet.
+	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
 	ApplicationLayerPolicyStatus *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 }
 

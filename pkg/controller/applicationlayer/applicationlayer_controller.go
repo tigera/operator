@@ -476,7 +476,7 @@ func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv
 		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
 }
 
-func (r *ReconcileApplicationLayer) polsyncPathPfx(fcSpec *crdv1.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) (_ string) {
+func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) (_ string) {
 	// respect existing policySyncPathPrefix if it's already set (e.g. EGW)
 	// this will cause policySyncPathPrefix to remain when applicationLayer is disabled
 	existing := fcSpec.PolicySyncPathPrefix
@@ -498,7 +498,7 @@ func (r *ReconcileApplicationLayer) polsyncPathPfx(fcSpec *crdv1.FelixConfigurat
 	return
 }
 
-func (r *ReconcileApplicationLayer) tproxyMode(al *operatorv1.ApplicationLayer) (_ bool, _ crdv1.TPROXYModeOption) {
+func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLayer) (_ bool, _ crdv1.TPROXYModeOption) {
 	if al == nil {
 		return
 	}
@@ -528,7 +528,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
 	var tproxyMode crdv1.TPROXYModeOption
-	if ok, v := r.tproxyMode(al); ok {
+	if ok, v := r.getTProxyMode(al); ok {
 		tproxyMode = v
 	} else {
 		if fc.Spec.TPROXYMode == nil {
@@ -548,7 +548,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
 
-	polsyncPfx := r.polsyncPathPfx(&fc.Spec, al)
+	polsyncPfx := r.getPolicySyncPathPrefix(&fc.Spec, al)
 	policySyncSet := fc.Spec.PolicySyncPathPrefix == polsyncPfx
 	tproxyModeSet := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
 

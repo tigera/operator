@@ -158,6 +158,7 @@ var _ = Describe("CSI rendering tests", func() {
 
 		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
+		Expect(*ds.Spec.Template.Spec.AutomountServiceAccountToken).To(BeFalse())
 
 		cfg.Openshift = true
 		cfg.UsePSP = true
@@ -166,6 +167,7 @@ var _ = Describe("CSI rendering tests", func() {
 
 		ds = rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
+		Expect(*ds.Spec.Template.Spec.AutomountServiceAccountToken).To(BeFalse())
 	})
 	Context("With csi-node-driver DaemonSet overrides", func() {
 		It("should handle csiNodeDriverDaemonSet overrides", func() {

@@ -125,6 +125,7 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.config.EgressGW.Spec.Replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: c.config.EgressGW.Spec.Template.Metadata.Labels},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}

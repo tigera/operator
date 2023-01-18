@@ -567,8 +567,8 @@ func (in *ApplicationLayerSpec) DeepCopyInto(out *ApplicationLayerSpec) {
 		*out = new(LogCollectionSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ApplicationLayerPolicyStatus != nil {
-		in, out := &in.ApplicationLayerPolicyStatus, &out.ApplicationLayerPolicyStatus
+	if in.ApplicationLayerPolicy != nil {
+		in, out := &in.ApplicationLayerPolicy, &out.ApplicationLayerPolicy
 		*out = new(ApplicationLayerPolicyStatusType)
 		**out = **in
 	}

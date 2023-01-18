@@ -330,9 +330,9 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	var (
 		defaultLogIntervalSeconds             int64                                       = 5
 		defaultLogRequestsPerInterval         int64                                       = -1
-		defaultLogCollection          operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
+		defaultLogCollection                  operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
 		defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
-		defaultApplicationLayerPolicy     operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
+		defaultApplicationLayerPolicy         operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
 	)
 
 	if al.Spec.LogCollection == nil {
@@ -340,7 +340,7 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	}
 
 	if al.Spec.LogCollection.CollectLogs == nil {
-		al.Spec.LogCollection.CollectLogs = &defaultLogCollectionDisabled
+		al.Spec.LogCollection.CollectLogs = &defaultLogCollection
 	}
 
 	if *al.Spec.LogCollection.CollectLogs == operatorv1.L7LogCollectionEnabled {
@@ -356,8 +356,8 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 		al.Spec.WebApplicationFirewall = &defaultWebApplicationFirewallDisabled
 	}
 
-	if al.Spec.ApplicationLayerPolicyStatus == nil {
-		al.Spec.ApplicationLayerPolicyStatus = &defaultApplicationLayerPolicySpec
+	if al.Spec.ApplicationLayerPolicy == nil {
+		al.Spec.ApplicationLayerPolicy = &defaultApplicationLayerPolicy
 	}
 }
 
@@ -375,7 +375,7 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 		atLeastOneFeatureDetected = true
 	}
 
-	if *al.Spec.ApplicationLayerPolicyStatus == operatorv1.ApplicationLayerPolicyEnabled {
+	if *al.Spec.ApplicationLayerPolicy == operatorv1.ApplicationLayerPolicyEnabled {
 		log.Info("L7 ALP found enabled")
 		atLeastOneFeatureDetected = true
 	}
@@ -467,8 +467,8 @@ func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(applicationLayerSpec
 }
 
 func (r *ReconcileApplicationLayer) isALPEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
-	return applicationLayerSpec.ApplicationLayerPolicyStatus != nil &&
-		*applicationLayerSpec.ApplicationLayerPolicyStatus == operatorv1.ApplicationLayerPolicyEnabled
+	return applicationLayerSpec.ApplicationLayerPolicy != nil &&
+		*applicationLayerSpec.ApplicationLayerPolicy == operatorv1.ApplicationLayerPolicyEnabled
 }
 
 func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
@@ -562,8 +562,8 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 
 	log.Info(
 		"Patching FelixConfiguration: ",
-		"policySyncPathPrefix=", fc.Spec.PolicySyncPathPrefix,
-		"tproxyMode=", string(tproxyMode),
+		"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+		"tproxyMode", string(tproxyMode),
 	)
 
 	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {

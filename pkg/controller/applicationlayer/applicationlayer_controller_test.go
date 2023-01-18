@@ -127,7 +127,7 @@ var _ = Describe("Application layer controller tests", func() {
 			alSpec := &operatorv1.ApplicationLayer{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.ApplicationLayerSpec{
-					ApplicationLayerPolicyStatus: &enabled,
+					ApplicationLayerPolicy: &enabled,
 				},
 			}
 			Expect(c.Create(ctx, alSpec)).NotTo(HaveOccurred())
@@ -181,7 +181,7 @@ var _ = Describe("Application layer controller tests", func() {
 			alSpec := &operatorv1.ApplicationLayer{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.ApplicationLayerSpec{
-					ApplicationLayerPolicyStatus: &enabled,
+					ApplicationLayerPolicy: &enabled,
 				},
 			}
 			Expect(c.Create(ctx, alSpec)).NotTo(HaveOccurred())

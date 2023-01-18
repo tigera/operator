@@ -125,6 +125,7 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.config.EgressGW.Spec.Replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: c.config.EgressGW.Spec.Template.Metadata.Labels},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
@@ -160,6 +161,9 @@ func (c *component) egwBuildAnnotations() map[string]string {
 	annotations["cni.projectcalico.org/ipv4pools"] = c.getIPPools()
 	if c.config.EgressGW.Spec.AWS != nil && len(c.config.EgressGW.Spec.AWS.ElasticIPs) > 0 {
 		annotations["cni.projectcalico.org/awsElasticIPs"] = c.getElasticIPs()
+	}
+	if len(c.config.EgressGW.Spec.ExternalNetworks) > 0 {
+		annotations["egress.projectcalico.org/externalNetworkNames"] = c.getExternalNetworks()
 	}
 	return annotations
 }
@@ -427,6 +431,11 @@ func (c *component) getElasticIPs() string {
 		}
 	}
 	return ""
+}
+
+func (c *component) getExternalNetworks() string {
+	egw := c.config.EgressGW
+	return concatString(egw.Spec.ExternalNetworks)
 }
 
 func (c *component) getHealthTimeoutDs() string {

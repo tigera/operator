@@ -1726,6 +1726,11 @@ func (in *EgressGatewaySpec) DeepCopyInto(out *EgressGatewaySpec) {
 		*out = make([]EgressGatewayIPPool, len(*in))
 		copy(*out, *in)
 	}
+	if in.ExternalNetworks != nil {
+		in, out := &in.ExternalNetworks, &out.ExternalNetworks
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.LogSeverity != nil {
 		in, out := &in.LogSeverity, &out.LogSeverity
 		*out = new(LogLevel)

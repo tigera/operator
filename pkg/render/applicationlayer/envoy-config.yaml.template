@@ -24,7 +24,7 @@
                         upstream_service_time: "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
 {{- end -}}
 
-{{- define "WAF" -}}
+{{- define "DIKASTES" -}}
                   - name: envoy.filters.http.ext_authz
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
@@ -89,7 +89,7 @@ static_resources:
                           route:
                             cluster: original_dst_cluster
                 http_filters:
-                  {{if .WAFEnabled}}{{template "WAF"}}{{end}}
+                  {{if or .ALPEnabled .WAFEnabled}}{{template "DIKASTES"}}{{end}}
                   - name: envoy.filters.http.router
                     typed_config: {}
                 codec_type: auto
@@ -114,7 +114,7 @@ static_resources:
                           route:
                             cluster: original_dst_cluster_h2c
                 http_filters:
-                  {{if .WAFEnabled}}{{template "WAF"}}{{end}}
+                  {{if or .ALPEnabled .WAFEnabled}}{{template "DIKASTES"}}{{end}}
                   - name: envoy.filters.http.router
                     typed_config: {}
                 codec_type: auto

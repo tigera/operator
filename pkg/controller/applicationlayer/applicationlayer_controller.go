@@ -330,9 +330,9 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	var (
 		defaultLogIntervalSeconds             int64                                       = 5
 		defaultLogRequestsPerInterval         int64                                       = -1
-		defaultLogCollectionDisabled          operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
+		defaultLogCollection          operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
 		defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
-		defaultApplicationLayerPolicySpec     operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
+		defaultApplicationLayerPolicy     operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
 	)
 
 	if al.Spec.LogCollection == nil {

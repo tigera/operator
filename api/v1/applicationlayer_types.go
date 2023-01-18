@@ -29,7 +29,7 @@ type ApplicationLayerSpec struct {
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
 	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
-	ApplicationLayerPolicyStatus *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
+	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 }
 
 type LogCollectionStatusType string

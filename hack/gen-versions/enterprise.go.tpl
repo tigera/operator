@@ -284,6 +284,24 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "flexvol" }}
+	ComponentFlexVolumePrivate = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "csi" }}
+	ComponentCSIPrivate = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar" }}
+	ComponentCSINodeDriverRegistrarPrivate = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "image-assurance-api-proxy" }}
 	ComponentImageAssuranceApiProxy = component{
 		Version: "{{ .Version }}",
@@ -364,6 +382,9 @@ var (
 		ComponentESGateway,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
+		ComponentFlexVolumePrivate,
+		ComponentCSIPrivate,
+		ComponentCSINodeDriverRegistrarPrivate,
 		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssurancePodWatcher,

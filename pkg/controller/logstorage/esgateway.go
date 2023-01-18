@@ -16,6 +16,7 @@ package logstorage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -90,19 +91,21 @@ func (r *ReconcileLogStorage) createEsGateway(
 		return reconcile.Result{}, nil, false, nil
 	}
 
+	// Esgateway.go will render the trusted bundle for the whole namespace, so we want to include also the Prometheus
+	// TLS certificate, which the elasticsearch-metrics server depends on.
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		return reconcile.Result{}, nil, false, err
 	} else if prometheusCertificate == nil {
 		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
-		return reconcile.Result{}, nil, false, err
+		return reconcile.Result{}, nil, false, nil
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, kibanaCertificate, prometheusCertificate, gatewayKeyPair)
 
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
-		r.status.SetDegraded("Elasticsearch admin user secret contains too many entries", "")
-		return reconcile.Result{}, nil, false, nil
+		r.status.SetDegraded("Elasticsearch admin user secret contains has too many entries", "")
+		return reconcile.Result{}, nil, false, fmt.Errorf("elasticsearch admin user secret contains has too many entries")
 	}
 
 	var esAdminUserName string

@@ -92,7 +92,9 @@ func (r *ReconcileLogStorage) createEsMetrics(
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLS, true, true),
 			},
-			TrustedBundle: nil, // The trusted bundle should have already been rendered by the logstorage_controller.go for es-gateway.
+			// The trusted bundle should have already been rendered by the logstorage_controller.go for es-gateway.
+			// It already includes the certificates for es gateway and prometheus server, which es-metrics relies upon.
+			TrustedBundle: nil,
 		}),
 	}
 

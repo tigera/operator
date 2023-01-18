@@ -20,8 +20,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/tigera/api/pkg/lib/numorstring"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/migration/convert/numorstring"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	v1 "k8s.io/api/core/v1"
@@ -177,6 +177,20 @@ var _ = Describe("felix env parser", func() {
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.FailsafeOutboundHostPorts).ToNot(BeNil())
 			Expect(f.Spec.FailsafeOutboundHostPorts).To(Equal(&[]crdv1.ProtoPort{}))
+		})
+
+		It("handles natPortRange", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_NATPORTRANGE",
+				Value: "32768:65535",
+			}}
+
+			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
+
+			f := crdv1.FelixConfiguration{}
+			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
+			Expect(f.Spec.NATPortRange).ToNot(BeNil())
+			Expect(f.Spec.NATPortRange).To(Equal(&numorstring.Port{MinPort: 32768, MaxPort: 65535}))
 		})
 
 		It("sets a duration", func() {

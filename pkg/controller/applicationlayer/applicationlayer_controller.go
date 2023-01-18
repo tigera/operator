@@ -330,9 +330,9 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	var (
 		defaultLogIntervalSeconds             int64                                       = 5
 		defaultLogRequestsPerInterval         int64                                       = -1
-		defaultLogCollection          operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
+		defaultLogCollection                  operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
 		defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
-		defaultApplicationLayerPolicy     operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
+		defaultApplicationLayerPolicy         operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
 	)
 
 	if al.Spec.LogCollection == nil {
@@ -562,8 +562,8 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 
 	log.Info(
 		"Patching FelixConfiguration: ",
-		"policySyncPathPrefix=", fc.Spec.PolicySyncPathPrefix,
-		"tproxyMode=", string(tproxyMode),
+		"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+		"tproxyMode", string(tproxyMode),
 	)
 
 	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {

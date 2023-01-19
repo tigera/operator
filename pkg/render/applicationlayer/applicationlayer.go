@@ -91,12 +91,11 @@ type Config struct {
 	ALPEnabled bool
 
 	// Calculated internal fields.
-	proxyImage           string
-	proxyImagePullPolicy corev1.PullPolicy
-	collectorImage       string
-	dikastesImage        string
-	dikastesEnabled      bool
-	envoyConfigMap       *corev1.ConfigMap
+	proxyImage      string
+	collectorImage  string
+	dikastesImage   string
+	dikastesEnabled bool
+	envoyConfigMap  *corev1.ConfigMap
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -243,9 +242,8 @@ func (c *component) containers() []corev1.Container {
 			RunAsUser:  ptr.Int64ToPtr(0),
 			RunAsGroup: ptr.Int64ToPtr(0),
 		},
-		Env:             c.proxyEnv(),
-		VolumeMounts:    c.proxyVolMounts(),
-		ImagePullPolicy: c.config.proxyImagePullPolicy,
+		Env:          c.proxyEnv(),
+		VolumeMounts: c.proxyVolMounts(),
 	}
 
 	containers = append(containers, proxy)

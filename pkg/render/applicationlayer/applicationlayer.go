@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -87,11 +87,15 @@ type Config struct {
 	LogRequestsPerInterval *int64
 	LogIntervalSeconds     *int64
 
+	// Optional config for ALP
+	ALPEnabled bool
+
 	// Calculated internal fields.
-	proxyImage     string
-	collectorImage string
-	dikastesImage  string
-	envoyConfigMap *corev1.ConfigMap
+	proxyImage      string
+	collectorImage  string
+	dikastesImage   string
+	dikastesEnabled bool
+	envoyConfigMap  *corev1.ConfigMap
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -136,6 +140,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// If l7spec is provided render the required objects.
 	objs = append(objs, c.serviceAccount())
+
+	c.config.dikastesEnabled = false
+	if c.config.WAFEnabled || c.config.ALPEnabled {
+		c.config.dikastesEnabled = true
+	}
 
 	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
 	if c.config.WAFEnabled {
@@ -236,6 +245,7 @@ func (c *component) containers() []corev1.Container {
 		Env:          c.proxyEnv(),
 		VolumeMounts: c.proxyVolMounts(),
 	}
+
 	containers = append(containers, proxy)
 
 	if c.config.LogsEnabled {
@@ -249,27 +259,48 @@ func (c *component) containers() []corev1.Container {
 		containers = append(containers, collector)
 	}
 
-	if c.config.WAFEnabled {
-		// Web Application Firewall (WAF) specific container
+	if c.config.dikastesEnabled {
+		// Web Application Firewall (WAF) and ApplicationLayer Policies (ALP) specific container
+
+		commandArgs := []string{
+			"/dikastes",
+			"server",
+			"--dial", "/var/run/felix/nodeagent/socket",
+			"--listen", "/var/run/dikastes/dikastes.sock",
+		}
+
+		volMounts := []corev1.VolumeMount{
+			{Name: FelixSync, MountPath: "/var/run/felix"},
+			{Name: DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
+		}
+
+		if c.config.WAFEnabled {
+			commandArgs = append(commandArgs, "--rules", "/etc/modsecurity-ruleset")
+			volMounts = append(
+				volMounts,
+				[]corev1.VolumeMount{
+					{
+						Name:      CalicoLogsVolumeName,
+						MountPath: "/var/log/calico",
+					},
+					{
+						Name:      ModSecurityRulesetVolumeName,
+						MountPath: "/etc/modsecurity-ruleset",
+						ReadOnly:  true,
+					},
+				}...,
+			)
+		}
+
 		dikastes := corev1.Container{
-			Name:  DikastesContainerName,
-			Image: c.config.dikastesImage,
-			Command: []string{
-				"/dikastes",
-				"server",
-				"--dial", "/var/run/felix/nodeagent/socket",
-				"--listen", "/var/run/dikastes/dikastes.sock",
-				"--rules", "/etc/modsecurity-ruleset",
-			},
+			Name:    DikastesContainerName,
+			Image:   c.config.dikastesImage,
+			Command: commandArgs,
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},
+				{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
 			},
-			VolumeMounts: []corev1.VolumeMount{
-				{Name: FelixSync, MountPath: "/var/run/felix"},
-				{Name: DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
-				{Name: CalicoLogsVolumeName, MountPath: "/var/log/calico"},
-				{Name: ModSecurityRulesetVolumeName, MountPath: "/etc/modsecurity-ruleset", ReadOnly: true},
-			},
+			VolumeMounts: volMounts,
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(true),
 				RunAsUser:  ptr.Int64ToPtr(0),
@@ -343,20 +374,8 @@ func (c *component) volumes() []corev1.Volume {
 		},
 	})
 
-	if c.config.WAFEnabled {
-		// Web Application Firewall specific volumes.
-
-		// WAF logs need HostPath volume - logs to be consumed by fluentd.
-		hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
-		volumes = append(volumes, corev1.Volume{
-			Name: CalicoLogsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/var/log/calico",
-					Type: &hostPathDirectoryOrCreate,
-				},
-			},
-		})
+	if c.config.dikastesEnabled {
+		// Web Application Firewall + ApplicationLayer Policy specific volumes.
 
 		// Needed for Dikastes' authz check server.
 		volumes = append(volumes, corev1.Volume{
@@ -367,16 +386,31 @@ func (c *component) volumes() []corev1.Volume {
 		})
 
 		// Needed for ModSecurity library - contains rule set.
-		volumes = append(volumes, corev1.Volume{
-			Name: ModSecurityRulesetVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: ModSecurityRulesetConfigMapName,
+		if c.config.WAFEnabled { // WAF-only
+			// WAF logs need HostPath volume - logs to be consumed by fluentd.
+			hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
+			volumes = append(volumes, corev1.Volume{
+				Name: CalicoLogsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log/calico",
+						Type: &hostPathDirectoryOrCreate,
 					},
 				},
-			},
-		})
+			})
+
+			// WAF modsecurity ruleset volume
+			volumes = append(volumes, corev1.Volume{
+				Name: ModSecurityRulesetVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: ModSecurityRulesetConfigMapName,
+						},
+					},
+				},
+			})
+		}
 	}
 
 	return volumes
@@ -388,7 +422,7 @@ func (c *component) proxyVolMounts() []corev1.VolumeMount {
 		{Name: EnvoyLogsVolumeName, MountPath: "/tmp/"},
 	}
 
-	if c.config.WAFEnabled {
+	if c.config.dikastesEnabled {
 		volumes = append(volumes,
 			corev1.VolumeMount{
 				Name:      DikastesSyncVolumeName,

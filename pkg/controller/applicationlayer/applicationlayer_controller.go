@@ -328,11 +328,11 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 // updateApplicationLayerWithDefaults populates the applicationlayer with defaults.
 func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	var (
-		defaultLogIntervalSeconds             int64                                       = 5
-		defaultLogRequestsPerInterval         int64                                       = -1
-		defaultLogCollection                  operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
-		defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
-		defaultApplicationLayerPolicy         operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
+		defaultLogIntervalSeconds               int64                                       = 5
+		defaultLogRequestsPerInterval           int64                                       = -1
+		defaultLogCollectionStatusType          operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
+		defaultWebApplicationFirewallStatusType operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
+		defaultApplicationLayerPolicyStatusType operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
 	)
 
 	if al.Spec.LogCollection == nil {
@@ -340,7 +340,7 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	}
 
 	if al.Spec.LogCollection.CollectLogs == nil {
-		al.Spec.LogCollection.CollectLogs = &defaultLogCollection
+		al.Spec.LogCollection.CollectLogs = &defaultLogCollectionStatusType
 	}
 
 	if *al.Spec.LogCollection.CollectLogs == operatorv1.L7LogCollectionEnabled {
@@ -353,11 +353,11 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	}
 
 	if al.Spec.WebApplicationFirewall == nil {
-		al.Spec.WebApplicationFirewall = &defaultWebApplicationFirewallDisabled
+		al.Spec.WebApplicationFirewall = &defaultWebApplicationFirewallStatusType
 	}
 
 	if al.Spec.ApplicationLayerPolicy == nil {
-		al.Spec.ApplicationLayerPolicy = &defaultApplicationLayerPolicy
+		al.Spec.ApplicationLayerPolicy = &defaultApplicationLayerPolicyStatusType
 	}
 }
 
@@ -477,22 +477,21 @@ func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv
 }
 
 func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) string {
-	// respect existing policySyncPathPrefix if it's already set (e.g. EGW)
-	// this will cause policySyncPathPrefix to remain when applicationLayer is disabled
+	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
+	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
 	existing := fcSpec.PolicySyncPathPrefix
 	if existing != "" {
 		return existing
 	}
 
-	// no existing value, nor applicationLayer enabled
+	// There's no existing value, nor is ApplicationLayer enabled
 	if al == nil {
 		return ""
 	}
 
-	// no existing value, but any of the applicationLayer features are enabled
+	// No existing value. However, at least one of the applicationLayer features are enabled
 	spec := &al.Spec
 	if r.isALPEnabled(spec) || r.isWAFEnabled(spec) || r.isLogsCollectionEnabled(spec) {
-
 		return DefaultPolicySyncPrefix
 	}
 	return ""
@@ -548,17 +547,17 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
 
-	polsyncPfx := r.getPolicySyncPathPrefix(&fc.Spec, al)
-	policySyncSet := fc.Spec.PolicySyncPathPrefix == polsyncPfx
-	tproxyModeSet := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
+	policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al)
+	policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
+	tproxyModeSetDesired := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
 
 	// If tproxy mode is already set to desired state return nil.
-	if policySyncSet && tproxyModeSet {
+	if policySyncPrefixSetDesired && tproxyModeSetDesired {
 		return nil
 	}
 
 	fc.Spec.TPROXYMode = &tproxyMode
-	fc.Spec.PolicySyncPathPrefix = polsyncPfx
+	fc.Spec.PolicySyncPathPrefix = policySyncPrefix
 
 	log.Info(
 		"Patching FelixConfiguration: ",

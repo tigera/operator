@@ -11,6 +11,7 @@ pkg/render/imageassurance/imageassurance.go
 pkg/render/imageassurance/imageassurance_api.go
 pkg/render/imageassurance/imageassurance_api_proxy.go
 pkg/render/imageassurance/imageassurance_migrator.go
+pkg/render/imageassurance/operator.go
 pkg/controller/logstorage/logstorage_controller_cloud_test.go
 pkg/controller/logstorage/cloudmodifications.go
 pkg/render/imageassurance/cr_adaptor.go

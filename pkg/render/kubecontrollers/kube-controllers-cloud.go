@@ -33,6 +33,7 @@ func (c *kubeControllersComponent) cloudDecorateContainer(container corev1.Conta
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_CLUSTER_ROLE_NAME", Value: imageassurance.ScannerCLIClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_TOKEN_SECRET_NAME", Value: rcimageassurance.ScannerCLITokenSecretName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_POD_WATCHER_CLUSTER_ROLE_NAME", Value: imageassurance.PodWatcherClusterRoleName},
+			corev1.EnvVar{Name: "IMAGE_ASSURANCE_OPERATOR_CLUSTER_ROLE_NAME", Value: imageassurance.OperatorAPIClusterRoleName},
 		)
 	}
 

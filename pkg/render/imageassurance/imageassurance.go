@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 package imageassurance
 
@@ -181,6 +181,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.podWatcherClusterRoleBinding(),
 		c.podWatcherAPIAccessTokenSecret(),
 		c.podWatcherDeployment(),
+		c.operatorClusterRole(),
 	)
 
 	if c.config.KeyValidatorConfig != nil {

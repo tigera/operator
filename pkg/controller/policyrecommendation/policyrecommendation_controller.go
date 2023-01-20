@@ -321,11 +321,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	// PolicyRecommendation server is only for Standalone or Management clusters
-	if managementClusterConnection == nil {
-		secretsToWatch = append(secretsToWatch, render.ElasticsearchPolicyRecommendationUserSecret)
-	}
-
 	esSecrets, err := utils.ElasticsearchSecrets(ctx, secretsToWatch, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {

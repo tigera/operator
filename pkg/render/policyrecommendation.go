@@ -15,8 +15,6 @@
 package render
 
 import (
-	"fmt"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -150,18 +148,11 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{"crd.projectcalico.org", "projectcalico.org"},
+			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
 				"tiers",
 				"policyrecommendationscopes",
 				"policyrecommendationscopes/status",
-				"policyrecommendationscope",
-				"policyrecommendationscope/status",
 				"stagednetworkpolicies",
 				"tier.stagednetworkpolicies",
 				"stagednetworkpolicy",
@@ -226,7 +217,7 @@ func (pr *policyRecommendationComponent) controllerContainer() corev1.Container 
 	}
 
 	return corev1.Container{
-		Name:  "controller",
+		Name:  "policy-recommendation-controller",
 		Image: pr.image,
 		Env:   envs,
 		// Needed for permissions to write to the audit log
@@ -309,7 +300,6 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 
 // allowTigeraPolicyForPolicyRecommendation defines an allow-tigera policy for policy recommendation.
 func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfiguration) *v3.NetworkPolicy {
-	kubeSystemEntityRule := networkpolicy.CreateEntityRule("kube-system", "kube-dns", 53)
 	apiserverEntityRule := v3.EntityRule{
 		NamespaceSelector: "projectcalico.org/name == 'default'",
 		Selector: "provider == 'kubernetes' && component == 'apiserver' && " +
@@ -334,34 +324,7 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Destination: DexEntityRule,
 		},
 	}
-
-	if !cfg.Openshift {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.UDPProtocol,
-			Destination: kubeSystemEntityRule,
-		})
-	} else {
-		egressRules = append(egressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.UDPProtocol,
-			Destination: v3.EntityRule{
-				NamespaceSelector: "projectcalico.org/name == 'openshift-dns'",
-				Selector:          "dns.operator.openshift.io/daemonset-dns == 'default'",
-				Ports:             networkpolicy.Ports(5353),
-			},
-		})
-		egressRules = append(egressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				NamespaceSelector: "projectcalico.org/name == 'openshift-dns'",
-				Selector:          "dns.operator.openshift.io/daemonset-dns == 'default'",
-				Ports:             networkpolicy.Ports(5353),
-			},
-		})
-
-	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 
 	ingressRules := []v3.Rule{}
 	if cfg.ManagedCluster {
@@ -398,16 +361,5 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Ingress:  ingressRules,
 			Egress:   egressRules,
 		},
-	}
-}
-
-// Utilities
-
-// CreateNamespaceEntityRule returns an entity rule that matches traffic using label selector based
-// on namespace, and port.
-func CreateNamespaceEntityRule(namespace string, ports ...uint16) v3.EntityRule {
-	return v3.EntityRule{
-		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
-		Ports:             networkpolicy.Ports(ports...),
 	}
 }

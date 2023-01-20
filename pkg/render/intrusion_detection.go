@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -292,7 +292,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 		Spec: corev1.PodSpec{
 			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
-			RestartPolicy:    corev1.RestartPolicyOnFailure,
+			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.cfg.ESClusterConfig.ClusterName(),

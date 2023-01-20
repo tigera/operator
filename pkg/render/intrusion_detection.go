@@ -290,8 +290,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
-			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
+			Tolerations:  c.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector: c.cfg.Installation.ControlPlaneNodeSelector,
+			// This value needs to be set to never. The PodFailurePolicy will still ensure that this job will run until completion.
 			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{

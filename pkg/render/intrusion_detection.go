@@ -292,7 +292,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 		Spec: corev1.PodSpec{
 			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
-			RestartPolicy:    corev1.RestartPolicyOnFailure,
+			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.cfg.ESClusterConfig.ClusterName(),

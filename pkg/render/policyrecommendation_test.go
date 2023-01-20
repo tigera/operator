@@ -130,18 +130,11 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org", "projectcalico.org"},
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"tiers",
 					"policyrecommendationscopes",
 					"policyrecommendationscopes/status",
-					"policyrecommendationscope",
-					"policyrecommendationscope/status",
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagednetworkpolicy",

@@ -1195,8 +1195,6 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"packetcaptures",
 				"policyrecommendationscopes",
 				"policyrecommendationscopes/status",
-				"policyrecommendationscope",
-				"policyrecommendationscope/status",
 				"deeppacketinspections",
 				"deeppacketinspections/status",
 				"uisettingsgroups",

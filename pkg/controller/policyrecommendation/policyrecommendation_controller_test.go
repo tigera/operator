@@ -177,7 +177,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -207,7 +207,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

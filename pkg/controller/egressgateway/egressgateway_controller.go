@@ -480,9 +480,7 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 		if egw.Spec.Template.Metadata == nil {
 			egw.Spec.Template.Metadata = &operatorv1.EgressGatewayMetadata{Labels: defLabel}
 		} else {
-			if len(egw.Spec.Template.Metadata.Labels) > 0 {
-				egw.Spec.Template.Metadata.Labels["projectcalico.org/egw"] = egw.Name
-			} else {
+			if len(egw.Spec.Template.Metadata.Labels) == 0 {
 				egw.Spec.Template.Metadata.Labels = defLabel
 			}
 		}

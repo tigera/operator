@@ -150,7 +150,7 @@ type EgressGatewayMetadata struct {
 	// Labels is a map of string keys and values that may match replica set and
 	// service selectors. Each of these key/value pairs are added to the
 	// object's labels provided the key does not already exist in the object's labels.
-	// If not specified will default to projectcalico.org/egw:<name>, where <name> is
+	// If not specified will default to projectcalico.org/egw:[name], where [name] is
 	// the name of the Egress Gateway resource.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`

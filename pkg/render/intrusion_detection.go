@@ -673,7 +673,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/healthz",
+						"/usr/bin/healthz",
 						"liveness",
 					},
 				},

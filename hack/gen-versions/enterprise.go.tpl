@@ -184,6 +184,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "policy-recommendation" }}
+	ComponentPolicyRecommendation = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "egress-gateway" }}
 	ComponentEgressGateway = component{
 		Version: "{{ .Version }}",
@@ -317,6 +323,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,

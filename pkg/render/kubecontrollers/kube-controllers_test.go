@@ -395,14 +395,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		expectedEnv := []corev1.EnvVar{
-			{Name: "TLS_KEY_PATH", Value: "/tigera-kube-controller-prometheus-tls/tls.key"},
-			{Name: "TLS_CRT_PATH", Value: "/tigera-kube-controller-prometheus-tls/tls.crt"},
+			{Name: "TLS_KEY_PATH", Value: "/calico-kube-controllers-metrics-tls/tls.key"},
+			{Name: "TLS_CRT_PATH", Value: "/calico-kube-controllers-metrics-tls/tls.crt"},
 			{Name: "CLIENT_COMMON_NAME", Value: "calico-node-prometheus-client-tls"},
 			{Name: "CA_CRT_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}
 		expectedVolumeMounts := []corev1.VolumeMount{
 			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs/", ReadOnly: true},
-			{Name: "tigera-kube-controller-prometheus-tls", MountPath: "/tigera-kube-controller-prometheus-tls", ReadOnly: true},
+			{Name: "calico-kube-controllers-metrics-tls", MountPath: "/calico-kube-controllers-metrics-tls", ReadOnly: true},
 		}
 		expectedVolume := []corev1.Volume{
 			{
@@ -414,10 +414,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			},
 			{
-				Name: "tigera-kube-controller-prometheus-tls",
+				Name: "calico-kube-controllers-metrics-tls",
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName:  "tigera-kube-controller-prometheus-tls",
+						SecretName:  "calico-kube-controllers-metrics-tls",
 						DefaultMode: &defaultMode,
 					},
 				},

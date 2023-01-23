@@ -75,9 +75,8 @@ const (
 	calicoNodePrometheusServiceName       = "calico-node-prometheus"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 
-	bearerTokenFile                 = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-	KubeControllerMetrics           = "calico-kube-controllers-metrics"
-	KubeControllerDefaultMetricPort = 9094
+	bearerTokenFile       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	KubeControllerMetrics = "calico-kube-controllers-metrics"
 )
 
 var alertManagerSelector = fmt.Sprintf(

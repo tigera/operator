@@ -38,7 +38,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -54,7 +53,6 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const ResourceName = "monitor"
@@ -336,18 +334,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers metric port.
-	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
-	if err != nil && !apierrors.IsNotFound(err) {
+	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
+	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-
-	// Determine the port to use for kube-controllers metrics.
-	kubeControllersMetricsPort := monitor.KubeControllerDefaultMetricPort
-	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
-		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
 	}
 
 	monitorCfg := &monitor.Config{

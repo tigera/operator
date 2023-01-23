@@ -1148,23 +1148,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.
-	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
-	if err != nil && !apierrors.IsNotFound(err) {
+	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
+	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	// Determine the port to use for kube-controllers metrics.
-	kubeControllersMetricsPort := 0
-	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
-		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
-	}
-
 	// Secure calico kube controller metrics.
 	var kubeControllerTLS certificatemanagement.KeyPairInterface
-	kubeControllerTrustedBundle := certificateManager.CreateTrustedBundle()
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Create or Get TLS certificates for kube controller.
 		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(
@@ -1183,10 +1174,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if kubecontrollerprometheusTLS == nil {
-			r.status.SetDegraded(operator.ResourceNotFound, "Prometheus secrets are not available yet, waiting until they become available", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceNotFound, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
-		kubeControllerTrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
+		typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
 	}
 
 	nodeAppArmorProfile := ""
@@ -1242,7 +1233,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.CalicoNamespace,
-			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
+			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName, kubecontrollers.KubeControllerMetrics},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				// this controller is responsible for rendering the tigera-ca-private secret.
 				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
@@ -1250,6 +1241,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
 				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
@@ -1337,20 +1329,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Terminating:                 terminating,
 		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,
-		TrustedBundle:               kubeControllerTrustedBundle,
+		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
-
-	components = append(components,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       common.CalicoNamespace,
-			ServiceAccounts: []string{kubecontrollers.KubeControllerMetrics},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// this controller is responsible for rendering the secret.
-				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
-			},
-			TrustedBundle: kubeControllerTrustedBundle,
-		}))
 
 	windowsCfg := render.WindowsConfig{
 		Installation: &instance.Spec,

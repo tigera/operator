@@ -64,7 +64,7 @@ const (
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
 	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
 	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
-	KubeControllerPrometheusTLSSecret                  = "tigera-kube-controller-prometheus-tls"
+	KubeControllerPrometheusTLSSecret                  = "calico-kube-controllers-metrics-tls"
 )
 
 type KubeControllersConfiguration struct {
@@ -595,6 +595,10 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		am = c.cfg.TrustedBundle.HashAnnotations()
 	} else {
 		am = make(map[string]string)
+	}
+
+	if c.cfg.MetricsServerTLS != nil {
+		am[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
 	}
 	if c.cfg.ManagerInternalSecret != nil {
 		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()

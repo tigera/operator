@@ -281,7 +281,7 @@ var (
 	}
 
 	ComponentCloudRBACApi = component{
-		Version: "3295e3f",
+		Version: "v0.1.0-0-g30e99e9",
 		Image:   "tigera/cc-rbac-api",
 	}
 

@@ -159,4 +159,4 @@ components:
     version: v1.3.0-0.dev-99-g9c2773542545
   cloud-rbac-api:
     image: tigera/cc-rbac-api
-    version: 3295e3f
+    version: v0.1.0-0-g30e99e9

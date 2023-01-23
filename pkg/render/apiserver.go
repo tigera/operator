@@ -117,6 +117,7 @@ type APIServerConfiguration struct {
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
 	TunnelCASecret              certificatemanagement.KeyPairInterface
+	TrustedBundle               certificatemanagement.TrustedBundle
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -229,6 +230,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Namespaced enterprise-only objects.
 	namespacedEnterpriseObjects := []client.Object{
 		c.auditPolicyConfigMap(),
+	}
+	if c.cfg.TrustedBundle != nil {
+		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.cfg.TrustedBundle.ConfigMap(QueryserverNamespace))
 	}
 
 	// Global OSS-only objects.
@@ -874,6 +878,13 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
+
+		if c.cfg.TrustedBundle != nil {
+			trustedBundleHashAnnotations := c.cfg.TrustedBundle.HashAnnotations()
+			for k, v := range trustedBundleHashAnnotations {
+				d.Spec.Template.ObjectMeta.Annotations[k] = v
+			}
+		}
 	}
 
 	if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
@@ -1010,6 +1021,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
+	if c.cfg.TrustedBundle != nil {
+		env = append(env, corev1.EnvVar{Name: "TRUSTED_BUNDLE_PATH", Value: c.cfg.TrustedBundle.MountPath()})
+	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
 	env = append(env, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
@@ -1020,6 +1034,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	volumeMounts := []corev1.VolumeMount{
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	}
+	if c.cfg.TrustedBundle != nil {
+		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 	}
 
 	container := corev1.Container{
@@ -1076,6 +1093,10 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 				},
 			},
 		)
+
+		if c.cfg.TrustedBundle != nil {
+			volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+		}
 
 		if c.cfg.ManagementCluster != nil {
 			volumes = append(volumes, corev1.Volume{

@@ -56,6 +56,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var log = logf.Log.WithName("controller_logstorage")
@@ -608,7 +609,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil || !proceed {
 			return result, err
 		}
-		result, proceed, err = r.createEsGateway(
+		var trustedBundle certificatemanagement.TrustedBundle
+		result, trustedBundle, proceed, err = r.createEsGateway(
 			install,
 			variant,
 			pullSecrets,
@@ -643,6 +645,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			hdler,
 			r.clusterDomain,
 			r.usePSP,
+			trustedBundle,
 		)
 		if err != nil || !proceed {
 			return result, err

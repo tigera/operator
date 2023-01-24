@@ -31,6 +31,7 @@ import (
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -1144,6 +1145,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		if prometheusClientCert != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
+		}
+
+		// The following certificate is mounted by the es-kube-controllers for accessing Elasticsearch (Gateway).
+		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if esgwCertificate != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
 		}
 		calicoVersion = components.EnterpriseRelease
 	}

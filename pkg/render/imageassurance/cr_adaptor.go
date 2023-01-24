@@ -30,7 +30,7 @@ func (c *component) crAdaptorClusterRole() *rbacv1.ClusterRole {
 			{
 				APIGroups: []string{"imageassurance.tigera.io"},
 				Resources: []string{"pods"},
-				Verbs:     []string{"create", "update", "delete"},
+				Verbs:     []string{"create", "update", "delete", "get"},
 			},
 			{
 				APIGroups: []string{"imageassurance.tigera.io"},

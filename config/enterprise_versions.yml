@@ -144,13 +144,13 @@ components:
     version: v3.15.0-1
   image-assurance-api-proxy:
     image: tigera/image-assurance-api-proxy
-    version: v1.3.1
+    version: v1.3.2
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: v1.3.1
+    version: v1.3.2
   image-assurance-pod-watcher:
     image: tigera/image-assurance-pod-watcher
-    version: v1.3.1
+    version: v1.3.2
   sasha:
     image: tigera/sasha
     version: v1.3.0-0.dev-99-g9c2773542545

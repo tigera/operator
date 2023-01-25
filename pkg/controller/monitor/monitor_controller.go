@@ -49,6 +49,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -148,6 +149,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
@@ -275,6 +277,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
 		render.ProjectCalicoApiServerTLSSecretName(install.Variant),
 	} {
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
@@ -333,6 +336,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	monitorCfg := &monitor.Config{
 		Installation:             install,
 		PullSecrets:              pullSecrets,
@@ -343,6 +352,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		ClusterDomain:            r.clusterDomain,
 		TrustedCertBundle:        trustedBundle,
 		Openshift:                r.provider == operatorv1.ProviderOpenShift,
+		KubeControllerPort:       kubeControllersMetricsPort,
 	}
 
 	// Render prometheus component

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -970,10 +970,6 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--secure-port=%d", APIServerPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
-	}
-
-	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		args = append(args, "--tls-max-version=VersionTLS12")
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

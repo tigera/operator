@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/clusterrole"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -38,10 +37,8 @@ const (
 	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
 	ScannerCLIClusterRoleName          = "tigera-image-assurance-scanner-cli-api-access"
 
-	PodWatcherClusterRoleName             = "tigera-image-assurance-pod-watcher-api-access"
-	PodWatcherClusterRoleBindingName      = "tigera-image-assurance-pod-watcher-api-access"
-	PodWatcherAPIAccessServiceAccountName = "tigera-image-assurance-pod-watcher-api-access"
-	PodWatcherAPIAccessSecretName         = "pod-watcher-image-assurance-api-token"
+	PodWatcherClusterRoleName     = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherAPIAccessSecretName = "pod-watcher-image-assurance-api-token"
 
 	mountPathAPITLSCerts = "/certs/https/"
 
@@ -77,12 +74,9 @@ type Config struct {
 	ScannerAPIAccessToken  []byte
 
 	// Calculated internal fields.
-	tlsHash         string
-	apiProxyImage   string
-	scannerImage    string
-	podWatcherImage string
-
-	PodWatcherAPIAccessToken []byte
+	tlsHash       string
+	apiProxyImage string
+	scannerImage  string
 
 	APIProxyURL string
 }
@@ -109,11 +103,6 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.config.scannerImage, err = components.GetReference(components.ComponentImageAssuranceScanner, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	c.config.podWatcherImage, err = components.GetReference(components.ComponentImageAssurancePodWatcher, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -171,25 +160,18 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.crAdaptorClusterRole(),
 	)
 
-	objs = append(objs,
-		c.podWatcherServiceAccount(),
-		c.podWatcherRole(),
-	)
+	objs = append(objs, c.operatorClusterRole())
+
+	// Keep the cluster roles (now empty) so kube controllers doesn't fail when it can't find them.
+	// TODO Remove once kube controllers no longer relies on this.
 	objs = append(objs, clusterrole.ToRuntimeObjects(c.podWatcherClusterRoles()...)...)
-	objs = append(objs,
-		c.podWatcherRoleBinding(),
-		c.podWatcherClusterRoleBinding(),
-		c.podWatcherAPIAccessTokenSecret(),
-		c.podWatcherDeployment(),
-		c.operatorClusterRole(),
-	)
 
 	if c.config.KeyValidatorConfig != nil {
 		objs = append(objs, secret.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredSecrets(NameSpaceImageAssurance)...)...)
 		objs = append(objs, configmap.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredConfigMaps(NameSpaceImageAssurance)...)...)
 	}
 
-	return objs, []client.Object{
+	objsToDelete := []client.Object{
 		c.cawDeployment(),
 
 		c.migratorServiceAccount(),
@@ -200,6 +182,20 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.apiRole(),
 		c.apiRoleBinding(),
 		c.apiDeployment()}
+
+	objsToDelete = append(objsToDelete,
+		c.podWatcherServiceAccount(),
+		c.podWatcherRole(),
+	)
+
+	objsToDelete = append(objsToDelete,
+		c.podWatcherRoleBinding(),
+		c.podWatcherClusterRoleBinding(),
+		c.podWatcherAPIAccessTokenSecret(),
+		c.podWatcherDeployment(),
+	)
+
+	return objs, objsToDelete
 }
 
 func (c *component) Ready() bool {

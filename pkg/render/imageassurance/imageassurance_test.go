@@ -93,6 +93,13 @@ var _ = Describe("Image Assurance Render", func() {
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
+
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},
+		{name: imageassurance.PodWatcherAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 	}
 
 	var expectedCreatedResources = []expectedResource{
@@ -121,15 +128,10 @@ var _ = Describe("Image Assurance Render", func() {
 		{name: imageassurance.AdmissionControllerAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.CRAdaptorAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
+		{name: imageassurance.OperatorAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+
 		{name: imageassurance.PodWatcherClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},
-		{name: imageassurance.PodWatcherAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
-		{name: imageassurance.OperatorAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 	}
 
 	var apiExpectedCommonENV = []corev1.EnvVar{
@@ -302,48 +304,6 @@ var _ = Describe("Image Assurance Render", func() {
 		Expect(len(scannerVMs)).To(Equal(len(scannerExpectedVMs)))
 		for _, expected := range scannerExpectedVMs {
 			rtest.ExpectVolumeMount(scannerVMs, expected.Name, expected.MountPath)
-		}
-
-		// Check rendering of pod watcher deployment.
-		podWatcherDeployment := rtest.GetResource(createdResources, imageassurance.ResourceNameImageAssurancePodWatcher, imageassurance.NameSpaceImageAssurance,
-			"apps", "v1", "Deployment").(*appsv1.Deployment)
-		podWatcher := podWatcherDeployment.Spec.Template.Spec
-
-		Expect(podWatcher.HostNetwork).To(BeFalse())
-		Expect(podWatcher.HostIPC).To(BeFalse())
-		Expect(podWatcher.DNSPolicy).To(Equal(corev1.DNSClusterFirst))
-		Expect(len(podWatcher.Containers)).To(Equal(1))
-
-		podWatcherEnv := podWatcher.Containers[0].Env
-		podWatcherExpectedENV := []corev1.EnvVar{
-			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			rcimageassurance.EnvOrganizationID(),
-			{Name: "IMAGE_ASSURANCE_API_CA", Value: "/certs/bast/tls.crt"},
-			{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
-			{Name: "IMAGE_ASSURANCE_API_TOKEN", Value: ""},
-			{Name: "IMAGE_ASSURANCE_MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
-		}
-
-		Expect(len(podWatcherExpectedENV)).To(Equal(len(podWatcherEnv)))
-		for _, expected := range podWatcherExpectedENV {
-			rtest.ExpectEnv(podWatcherEnv, expected.Name, expected.Value)
-		}
-
-		podWatcherVMs := podWatcher.Containers[0].VolumeMounts
-		podWatcherExpectedVMs := []corev1.VolumeMount{
-			{
-				Name:      certificatemanagement.TrustedCertConfigMapName,
-				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
-			},
-			{
-				Name:      rcimageassurance.ImageAssuranceSecretName,
-				MountPath: rcimageassurance.CAMountPath,
-			},
-		}
-
-		Expect(len(podWatcherExpectedVMs)).To(Equal(len(podWatcherVMs)))
-		for _, expected := range podWatcherExpectedVMs {
-			rtest.ExpectVolumeMount(podWatcherVMs, expected.Name, expected.MountPath)
 		}
 	})
 

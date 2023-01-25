@@ -265,11 +265,6 @@ var (
 		Image:   "tigera/image-assurance-scanner",
 	}
 
-	ComponentImageAssurancePodWatcher = component{
-		Version: "v1.3.3",
-		Image:   "tigera/image-assurance-pod-watcher",
-	}
-
 	ComponentSasha = component{
 		Version: "v1.4.0",
 		Image:   "tigera/sasha",
@@ -333,7 +328,6 @@ var (
 		ComponentCSINodeDriverRegistrarPrivate,
 		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
-		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 		ComponentThreatId,
 		ComponentCloudRBACApi,

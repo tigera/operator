@@ -39,7 +39,7 @@ import (
 var log = logf.Log.WithName("controller_image_assurance")
 
 // service accounts created by kube-controller for image assurance components for API access
-var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
+var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName}
 
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -126,7 +126,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
 
-	for _, role := range []string{imageassurance.PodWatcherClusterRoleName, imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName} {
+	for _, role := range []string{imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName} {
 		if err = utils.AddClusterRoleWatch(c, role); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", role, err)
 		}
@@ -258,19 +258,6 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	if podWatcherAPIToken == nil {
-		reqLogger.Info("Waiting for pod watcher api access service account secret to be available")
-		r.status.SetDegraded("Waiting for pod watcher api access service account secret to be available", "")
-		return reconcile.Result{}, nil
-	}
-
 	imageSet, err := imageset.GetImageSet(ctx, r.client, variant)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
@@ -306,16 +293,15 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	config := &imageassurance.Config{
-		PullSecrets:              pullSecrets,
-		Installation:             installation,
-		OsType:                   rmeta.OSTypeLinux,
-		ConfigurationConfigMap:   configurationConfigMap,
-		TLSSecret:                tlsSecret,
-		KeyValidatorConfig:       kvc,
-		TrustedCertBundle:        trustedBundle,
-		ScannerAPIAccessToken:    scannerAPIToken,
-		PodWatcherAPIAccessToken: podWatcherAPIToken,
-		APIProxyURL:              ia.Spec.APIProxyURL,
+		PullSecrets:            pullSecrets,
+		Installation:           installation,
+		OsType:                 rmeta.OSTypeLinux,
+		ConfigurationConfigMap: configurationConfigMap,
+		TLSSecret:              tlsSecret,
+		KeyValidatorConfig:     kvc,
+		TrustedCertBundle:      trustedBundle,
+		ScannerAPIAccessToken:  scannerAPIToken,
+		APIProxyURL:            ia.Spec.APIProxyURL,
 	}
 
 	components := []render.Component{

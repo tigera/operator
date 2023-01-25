@@ -314,12 +314,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "image-assurance-pod-watcher" }}
-	ComponentImageAssurancePodWatcher = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 {{ with index .Components "sasha" }}
 	ComponentSasha = component{
 		Version: "{{ .Version }}",
@@ -387,7 +381,6 @@ var (
 		ComponentCSINodeDriverRegistrarPrivate,
 		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
-		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 		ComponentThreatId,
 		ComponentCloudRBACApi,

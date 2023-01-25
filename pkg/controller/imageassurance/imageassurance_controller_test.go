@@ -118,10 +118,6 @@ var _ = Describe("Image Assurance Controller", func() {
 						Image:  "tigera/image-assurance-scanner",
 						Digest: "sha256:123",
 					},
-					{
-						Image:  "tigera/image-assurance-pod-watcher",
-						Digest: "sha256:123",
-					},
 				},
 			},
 		})).NotTo(HaveOccurred())
@@ -129,13 +125,6 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(c.Create(ctx, &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
 			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
-			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherClusterRoleBindingName},
 		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerClusterRoleBindingName},
@@ -190,20 +179,5 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(scanner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
 			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceScanner.Image, "@sha256:123")))
-
-		By("ensuring that ImageAssurance pod watcher resources created properly")
-		podWatcher := appsv1.Deployment{
-			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-		}
-		Expect(test.GetResource(c, &podWatcher)).To(BeNil())
-		Expect(podWatcher.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(podWatcher.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
-			components.ImageAssuranceRegistry,
-			components.ComponentImageAssurancePodWatcher.Image, "@sha256:123")))
-
 	})
 })

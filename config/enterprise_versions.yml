@@ -148,9 +148,6 @@ components:
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
     version: v1.4.0
-  image-assurance-pod-watcher:
-    image: tigera/image-assurance-pod-watcher
-    version: v1.3.3
   sasha:
     image: tigera/sasha
     version: v1.4.0

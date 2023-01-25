@@ -157,8 +157,26 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	egwDeleteResources := func() {
+		if r.usePSP {
+			obj := egressgateway.EGWPodSecurityPolicy(request.Name, request.Namespace)
+			if err := r.deleteResources(ctx, obj); err != nil {
+				reqLogger.Info("error deleting pod security policy")
+			}
+		}
+		if r.provider == operatorv1.ProviderOpenShift {
+			obj := egressgateway.EGWSecurityContextConstraints(request.Name, request.Namespace)
+			if err = r.deleteResources(ctx, obj); err != nil {
+				reqLogger.Info("error deleting security context")
+			}
+		}
+	}
+
 	// If there are no Egress Gateway resources, return.
 	if len(egws) == 0 {
+		if request.Namespace != "" {
+			egwDeleteResources()
+		}
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
@@ -186,6 +204,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			reqLogger.Info("EgressGateway object not found")
 			// Since the EGW resource is not found, remove the deployment.
 			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
+			egwDeleteResources()
 			// Get the unready EGW. Let's say we have 2 EGW resources red and blue.
 			// Red has already degraded. When the user deletes Red, TigeraStatus should go back to available
 			// as Blue is healthy. If all the EGWs are ready, clear the degraded TigeraStatus.
@@ -354,7 +373,6 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		EgressGW:     egw,
 		VXLANPort:    egwVXLANPort,
 		VXLANVNI:     egwVXLANVNI,
-		Openshift:    openshift,
 		UsePSP:       r.usePSP,
 	}
 
@@ -376,9 +394,65 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		return err
 	}
 
+	if r.usePSP {
+		obj := egressgateway.EGWPodSecurityPolicy(egw.Name, egw.Namespace)
+		if err = r.createResources(ctx, obj); err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Error creating pod security policy Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+			r.status.SetDegraded(operatorv1.ResourceUpdateError,
+				fmt.Sprintf("Error creating pod security policy: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
+			setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("Error creating pod security policy err = %s", err.Error()))
+			return err
+		}
+	}
+
+	if openshift {
+		obj := egressgateway.EGWSecurityContextConstraints(egw.Name, egw.Namespace)
+		if err = r.createResources(ctx, obj); err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Error creating security context Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+			r.status.SetDegraded(operatorv1.ResourceUpdateError,
+				fmt.Sprintf("Error creating security context: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
+			setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("Error creating security context err = %s", err.Error()))
+			return err
+		}
+	}
+
 	// Update the status of this CR.
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
+	return nil
+}
+
+func (r *ReconcileEgressGateway) createResources(ctx context.Context, obj client.Object) error {
+	_, ok := obj.(metav1.ObjectMetaAccessor)
+	if !ok {
+		return fmt.Errorf("Object is not ObjectMetaAccessor")
+	}
+
+	cur, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		return fmt.Errorf("Failed converting object %+v", obj)
+	}
+	key := client.ObjectKeyFromObject(obj)
+	err := r.client.Get(ctx, key, cur)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			// Anything other than "Not found" we should retry.
+			return err
+		}
+		// Otherwise, if it was not found, we should create it and move on.
+		err = r.client.Create(ctx, obj)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ReconcileEgressGateway) deleteResources(ctx context.Context, obj client.Object) error {
+	err := r.client.Delete(ctx, obj)
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("error deleting object %v", obj)
+	}
 	return nil
 }
 

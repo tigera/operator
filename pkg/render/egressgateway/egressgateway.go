@@ -70,7 +70,6 @@ type Config struct {
 	VXLANVNI  int
 	VXLANPort int
 
-	Openshift bool
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
 }
@@ -99,14 +98,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	if c.config.UsePSP {
-		objectsToCreate = append(objectsToCreate, c.egwPodSecurityPolicy())
-		objectsToCreate = append(objectsToCreate, c.egwClusterRole())
-		objectsToCreate = append(objectsToCreate, c.egwClusterRoleBinding())
-	} else if c.config.Openshift {
-		objectsToCreate = append(objectsToCreate, c.egwSecurityContextConstraints())
+		objectsToCreate = append(objectsToCreate, c.egwRole())
+		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
 	} else {
-		objectsToDelete = append(objectsToDelete, c.egwClusterRole())
-		objectsToDelete = append(objectsToDelete, c.egwClusterRoleBinding())
+		objectsToDelete = append(objectsToDelete, c.egwRole())
+		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
 	}
 	return objectsToCreate, objectsToDelete
 }
@@ -285,9 +281,9 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 	}
 }
 
-func (c *component) egwPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+func EGWPodSecurityPolicy(name, ns string) *policyv1beta1.PodSecurityPolicy {
 	boolTrue := true
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
+	namespacedName := fmt.Sprintf("%s-%s", name, ns)
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(namespacedName)
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
@@ -317,36 +313,36 @@ func (c *component) egwPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	return psp
 }
 
-func (c *component) egwClusterRole() *rbacv1.ClusterRole {
+func (c *component) egwRole() *rbacv1.Role {
 	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			ResourceNames: []string{namespacedName},
-			Verbs:         []string{"use"},
-		},
-	}
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespacedName,
+			Name:      c.config.EgressGW.Name,
+			Namespace: c.config.EgressGW.Namespace,
 		},
-		Rules: rules,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				ResourceNames: []string{namespacedName},
+				Verbs:         []string{"use"},
+			},
+		},
 	}
 }
 
-func (c *component) egwClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *component) egwRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespacedName,
+			Name:      c.config.EgressGW.Name,
+			Namespace: c.config.EgressGW.Namespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     namespacedName,
+			Kind:     "Role",
+			Name:     c.config.EgressGW.Name,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -448,8 +444,8 @@ func (c *component) getHealthTimeoutDs() string {
 	return ""
 }
 
-func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
+func EGWSecurityContextConstraints(name, ns string) *ocsv1.SecurityContextConstraints {
+	namespacedName := fmt.Sprintf("%s-%s", name, ns)
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
 		ObjectMeta:               metav1.ObjectMeta{Name: namespacedName},
@@ -466,7 +462,7 @@ func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstr
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
 		Users: []string{
-			fmt.Sprintf("system:serviceaccount:%s:%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name),
+			fmt.Sprintf("system:serviceaccount:%s:%s", ns, name),
 		},
 		Volumes: []ocsv1.FSType{"*"},
 	}

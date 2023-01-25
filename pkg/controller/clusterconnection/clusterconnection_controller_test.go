@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -103,11 +103,17 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
+
+		queryServerSecret, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
 		err = c.Create(ctx, secret.Secret(common.OperatorNamespace()))
 		Expect(err).NotTo(HaveOccurred())
 		err = c.Create(ctx, pcSecret.Secret(common.OperatorNamespace()))
 		Expect(err).NotTo(HaveOccurred())
 		err = c.Create(ctx, promSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, queryServerSecret.Secret(common.OperatorNamespace()))
 		Expect(err).NotTo(HaveOccurred())
 
 		By("applying the required prerequisites")

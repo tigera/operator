@@ -70,7 +70,6 @@ type Config struct {
 	VXLANVNI  int
 	VXLANPort int
 
-	Openshift bool
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
 }
@@ -101,8 +100,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	if c.config.UsePSP {
 		objectsToCreate = append(objectsToCreate, c.egwRole())
 		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
-	} else if c.config.Openshift {
-		objectsToCreate = append(objectsToCreate, c.egwSecurityContextConstraints())
 	} else {
 		objectsToDelete = append(objectsToDelete, c.egwRole())
 		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
@@ -447,8 +444,8 @@ func (c *component) getHealthTimeoutDs() string {
 	return ""
 }
 
-func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
+func EGWSecurityContextConstraints(name, ns string) *ocsv1.SecurityContextConstraints {
+	namespacedName := fmt.Sprintf("%s-%s", name, ns)
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
 		ObjectMeta:               metav1.ObjectMeta{Name: namespacedName},
@@ -465,7 +462,7 @@ func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstr
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
 		Users: []string{
-			fmt.Sprintf("system:serviceaccount:%s:%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name),
+			fmt.Sprintf("system:serviceaccount:%s:%s", ns, name),
 		},
 		Volumes: []ocsv1.FSType{"*"},
 	}

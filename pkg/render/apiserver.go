@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1467,7 +1467,13 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"user-settings"},
 		},
-		// Allow the user to read services to configure WAF.
+		// Allow the user to read applicationlayers and services to view WAF configuration.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"applicationlayers"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"tigera-secure"},
+		},
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
@@ -1615,14 +1621,13 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"cluster-settings", "user-settings"},
 		},
-		// Allow the user to read and write the applicationlayers resource to enable/disable WAF.
+		// Allow the user to read and write applicationlayers and services to configure WAF.
 		{
 			APIGroups:     []string{"operator.tigera.io"},
 			Resources:     []string{"applicationlayers"},
 			ResourceNames: []string{"tigera-secure"},
 			Verbs:         []string{"get", "update", "patch", "create"},
 		},
-		// Allow the user to read services to configure WAF.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},

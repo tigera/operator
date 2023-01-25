@@ -972,10 +972,6 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
 
-	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		args = append(args, "--tls-max-version=VersionTLS12")
-	}
-
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		args = append(args,
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",

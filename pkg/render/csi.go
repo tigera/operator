@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -374,12 +374,22 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
 
-	c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.csiImage, err = components.GetReference(components.ComponentCSIPrivate, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivate, reg, path, prefix, is)
+	} else {
+		c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+	}
 
 	return err
 }

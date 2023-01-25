@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -251,9 +251,8 @@ func (c *GuardianComponent) deployment() client.Object {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GuardianDeploymentName,
-			Namespace:   GuardianNamespace,
-			Annotations: c.annotations(),
+			Name:      GuardianDeploymentName,
+			Namespace: GuardianNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -262,8 +261,9 @@ func (c *GuardianComponent) deployment() client.Object {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      GuardianDeploymentName,
-					Namespace: ManagerNamespace,
+					Name:        GuardianDeploymentName,
+					Namespace:   ManagerNamespace,
+					Annotations: c.annotations(),
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,

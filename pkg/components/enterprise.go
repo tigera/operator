@@ -246,17 +246,17 @@ var (
 	}
 
 	ComponentFlexVolumePrivate = component{
-		Version: "master",
+		Version: "v3.15.0",
 		Image:   "tigera/pod2daemon-flexvol",
 	}
 
 	ComponentCSIPrivate = component{
-		Version: "master",
+		Version: "v3.15.0",
 		Image:   "tigera/csi",
 	}
 
 	ComponentCSINodeDriverRegistrarPrivate = component{
-		Version: "master",
+		Version: "v3.15.0",
 		Image:   "tigera/node-driver-registrar",
 	}
 	// Only components that correspond directly to images should be included in this list,

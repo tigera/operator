@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -262,6 +262,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
+		render.ProjectCalicoApiServerTLSSecretName(install.Variant),
 	} {
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
 		if err == nil {

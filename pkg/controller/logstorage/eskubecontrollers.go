@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -65,13 +64,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 			return reconcile.Result{}, false, err
 		}
 	}
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
-		return reconcile.Result{}, false, err
-	}
-	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
 
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
@@ -82,7 +74,7 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		Authentication:               authentication,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,
-		TrustedBundle:                trustedBundle,
+		TrustedBundle:                certificateManager.CreateTrustedBundle(),
 	}
 
 	// Add calico cloud modifications.

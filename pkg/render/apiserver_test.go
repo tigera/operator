@@ -1330,6 +1330,12 @@ var (
 			Verbs: []string{"get"},
 		},
 		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"applicationlayers"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"tigera-secure"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch"},

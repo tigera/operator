@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -295,9 +295,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
-			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
-			RestartPolicy:    corev1.RestartPolicyOnFailure,
+			Tolerations:  c.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector: c.cfg.Installation.ControlPlaneNodeSelector,
+			// This value needs to be set to never. The PodFailurePolicy will still ensure that this job will run until completion.
+			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.cfg.ESClusterConfig.ClusterName(),
@@ -321,6 +322,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				},
 			},
 			Template: *podTemplate,
+			PodFailurePolicy: &batchv1.PodFailurePolicy{
+				Rules: []batchv1.PodFailurePolicyRule{
+					// We don't want the job to fail, so we keep retrying by ignoring incrementing the backoff.
+					{
+						Action: "Ignore",
+						OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
+							Operator: "NotIn",
+							Values:   []int32{0},
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -675,7 +688,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/healthz",
+						"/usr/bin/healthz",
 						"liveness",
 					},
 				},

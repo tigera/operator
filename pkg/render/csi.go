@@ -261,14 +261,20 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 		Labels: templateLabels,
 	}
 	templateSpec := corev1.PodSpec{
-		Tolerations:      c.csiTolerations(),
-		Containers:       c.csiContainers(),
-		ImagePullSecrets: c.cfg.Installation.ImagePullSecrets,
-		Volumes:          c.csiVolumes(),
+		Tolerations:                  c.csiTolerations(),
+		Containers:                   c.csiContainers(),
+		ImagePullSecrets:             c.cfg.Installation.ImagePullSecrets,
+		Volumes:                      c.csiVolumes(),
+		AutomountServiceAccountToken: ptr.BoolToPtr(false),
 	}
 
+	// SA is only used as part of associating PSP.
+	// If PSP is not on then SA is not created.
+	// Default SA will be used and token will not be mounted
+	// as it is not needed.
 	if !c.cfg.Openshift && c.cfg.UsePSP {
 		templateSpec.ServiceAccountName = CSIDaemonSetName
+		templateSpec.AutomountServiceAccountToken = ptr.BoolToPtr(true)
 	}
 
 	return corev1.PodTemplateSpec{

@@ -72,6 +72,7 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	}
 
 	return NewPassthrough(
+		false,
 		guardianAccessPolicy,
 		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
 	), nil

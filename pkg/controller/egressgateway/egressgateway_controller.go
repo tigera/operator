@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/egressgateway"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -159,6 +160,16 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 	// If there are no Egress Gateway resources, return.
 	if len(egws) == 0 {
+		ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+		objects := []client.Object{}
+		if r.usePSP {
+			psp := egressgateway.PodSecurityPolicy()
+			objects = append(objects, psp)
+		}
+		err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(true, objects...), r.status)
+		if err != nil {
+			reqLogger.Error(err, "error deleting cluster scoped resources")
+		}
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
@@ -256,7 +267,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if installStatus.CalicoVersion != components.EnterpriseRelease {
-		reqLogger.Info("Waiting for expected version of Calico to be installed, expectedVersion = %s", components.EnterpriseRelease)
+		reqLogger.Info(fmt.Sprintf("Waiting for expected version of Calico to be installed, expectedVersion = %s", components.EnterpriseRelease))
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 

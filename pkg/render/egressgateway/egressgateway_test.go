@@ -107,6 +107,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"egress-test", "test-ns", rbac, "v1", "Role"},
 			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
 		}
@@ -244,6 +245,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
+			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"egress-test", "test-ns", rbac, "v1", "Role"},
 			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
 		}

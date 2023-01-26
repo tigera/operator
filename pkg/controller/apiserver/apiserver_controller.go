@@ -309,7 +309,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				if err == nil {
 					tunnelCASecret = certificatemanagement.NewKeyPair(tunnelSecret, nil, "")
 					// Creating the voltron tunnel secret is not (yet) supported by certificate mananger.
-					tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret.Secret(common.OperatorNamespace()))
+					tunnelSecretPassthrough = render.NewPassthrough(false, tunnelCASecret.Secret(common.OperatorNamespace()))
 				}
 			}
 			if err != nil {

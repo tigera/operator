@@ -70,6 +70,7 @@ type Config struct {
 	VXLANVNI  int
 	VXLANPort int
 
+	Openshift bool
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
 }
@@ -98,9 +99,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	if c.config.UsePSP {
+		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
 		objectsToCreate = append(objectsToCreate, c.egwRole())
 		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
 	} else {
+		objectsToDelete = append(objectsToDelete, PodSecurityPolicy())
 		objectsToDelete = append(objectsToDelete, c.egwRole())
 		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
 	}
@@ -281,11 +284,10 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 	}
 }
 
-func EGWPodSecurityPolicy(name, ns string) *policyv1beta1.PodSecurityPolicy {
+func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	boolTrue := true
-	namespacedName := fmt.Sprintf("%s-%s", name, ns)
 	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(namespacedName)
+	psp.GetObjectMeta().SetName("tigera-egressgateway")
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
 		corev1.Capability("NET_ADMIN"),
 	}

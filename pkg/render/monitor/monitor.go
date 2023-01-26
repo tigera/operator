@@ -91,6 +91,7 @@ func Monitor(cfg *Config) render.Component {
 
 func MonitorPolicy(cfg *Config) render.Component {
 	return render.NewPassthrough(
+		false,
 		allowTigeraAlertManagerPolicy(cfg),
 		allowTigeraAlertManagerMeshPolicy(cfg),
 		allowTigeraPrometheusPolicy(cfg),

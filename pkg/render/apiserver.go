@@ -101,7 +101,7 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 }
 
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
-	return NewPassthrough(allowTigeraAPIServerPolicy(cfg))
+	return NewPassthrough(false, allowTigeraAPIServerPolicy(cfg))
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.

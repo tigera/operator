@@ -39,10 +39,12 @@ import (
 )
 
 const (
-	egwPortName             = "health"
-	DefaultVXLANPort  int   = 4790
-	DefaultVXLANVNI   int   = 4097
-	DefaultHealthPort int32 = 8080
+	egwPortName                 = "health"
+	DefaultVXLANPort      int   = 4790
+	DefaultVXLANVNI       int   = 4097
+	DefaultHealthPort     int32 = 8080
+	PodSecurityPolicyName       = "tigera-egressgateway"
+	OpenShiftSCCName            = "tigera-egressgateway"
 )
 
 var log = logf.Log.WithName("render")
@@ -70,7 +72,6 @@ type Config struct {
 	VXLANVNI  int
 	VXLANPort int
 
-	Openshift bool
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
 }
@@ -287,7 +288,7 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	boolTrue := true
 	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-egressgateway")
+	psp.GetObjectMeta().SetName(PodSecurityPolicyName)
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
 		corev1.Capability("NET_ADMIN"),
 	}
@@ -446,11 +447,10 @@ func (c *component) getHealthTimeoutDs() string {
 	return ""
 }
 
-func EGWSecurityContextConstraints(name, ns string) *ocsv1.SecurityContextConstraints {
-	namespacedName := fmt.Sprintf("%s-%s", name, ns)
+func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
-		ObjectMeta:               metav1.ObjectMeta{Name: namespacedName},
+		ObjectMeta:               metav1.ObjectMeta{Name: OpenShiftSCCName},
 		AllowHostDirVolumePlugin: true,
 		AllowHostIPC:             false,
 		AllowHostNetwork:         false,
@@ -463,10 +463,8 @@ func EGWSecurityContextConstraints(name, ns string) *ocsv1.SecurityContextConstr
 		ReadOnlyRootFilesystem:   false,
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users: []string{
-			fmt.Sprintf("system:serviceaccount:%s:%s", ns, name),
-		},
-		Volumes: []ocsv1.FSType{"*"},
+		Users:                    []string{},
+		Volumes:                  []ocsv1.FSType{"*"},
 	}
 }
 

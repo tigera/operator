@@ -289,7 +289,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	if passthroughModSecurityRuleSet {
-		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(modSecurityRuleSet), r.status)
+		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(false, modSecurityRuleSet), r.status)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err

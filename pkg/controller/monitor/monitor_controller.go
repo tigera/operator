@@ -360,7 +360,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	if createInOperatorNamespace {
-		components = append(components, render.NewPassthrough(alertmanagerConfigSecret))
+		components = append(components, render.NewPassthrough(false, alertmanagerConfigSecret))
 	}
 
 	// v3 NetworkPolicy will fail to reconcile if the Tier is not created, which can only occur once a License is created.

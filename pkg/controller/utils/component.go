@@ -78,7 +78,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 	default:
-		if c.cr != nil {
+		if c.cr != nil && !skipAddingOwnerReference(c.cr, om.GetObjectMeta()) {
 			if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
 				return err
 			}
@@ -285,6 +285,17 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		status.ReadyToMonitor()
 	}
 	return nil
+}
+
+// skipAddingOwnerReference returns true if owner is a namespaced resource and
+// controlled object is a cluster scoped resource.
+func skipAddingOwnerReference(owner, controlled metav1.Object) bool {
+	ownerNs := owner.GetNamespace()
+	controlledNs := controlled.GetNamespace()
+	if ownerNs != "" && controlledNs == "" {
+		return true
+	}
+	return false
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.

@@ -48,7 +48,7 @@ LABEL name="Calico Operator" \
       maintainer="Laurence Man <laurence@tigera.io>"
 
 ENV OPERATOR=/usr/local/bin/operator \
-    USER_UID=1001
+    USER_UID=10001
 
 # install operator binary
 COPY build/_output/bin/operator-arm64 ${OPERATOR}

@@ -20,13 +20,7 @@ import (
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
-	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -36,6 +30,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -169,17 +172,23 @@ func (c *component) egwBuildAnnotations() map[string]string {
 }
 
 func (c *component) egwInitContainer() *corev1.Container {
+	sc := securitycontext.NewRootContext(true)
+	sc.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
+
 	return &corev1.Container{
 		Name:            "egress-gateway-init",
 		Image:           c.config.egwImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"/init-gateway.sh"},
-		SecurityContext: &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		SecurityContext: sc,
 		Env:             c.egwInitEnvVars(),
 	}
 }
 
 func (c *component) egwContainer() *corev1.Container {
+	sc := securitycontext.NewRootContext(false)
+	sc.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
+
 	return &corev1.Container{
 		Name:            "egress-gateway",
 		Image:           c.config.egwImage,
@@ -190,7 +199,7 @@ func (c *component) egwContainer() *corev1.Container {
 		Ports:           c.egwPorts(),
 		Command:         []string{"/start-gateway.sh"},
 		ReadinessProbe:  c.egwReadinessProbe(),
-		SecurityContext: c.egwSecurityContext(),
+		SecurityContext: sc,
 	}
 }
 
@@ -206,14 +215,6 @@ func (c *component) egwReadinessProbe() *corev1.Probe {
 		TimeoutSeconds:      1,
 		SuccessThreshold:    1,
 		PeriodSeconds:       3,
-	}
-}
-
-func (c *component) egwSecurityContext() *corev1.SecurityContext {
-	return &corev1.SecurityContext{
-		Capabilities: &corev1.Capabilities{
-			Add: []corev1.Capability{"NET_ADMIN"},
-		},
 	}
 }
 
@@ -236,7 +237,7 @@ func (c *component) egwVolume() *corev1.Volume {
 
 func (c *component) egwVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		corev1.VolumeMount{Name: "policysync", MountPath: "/var/run/calico"},
+		{Name: "policysync", MountPath: "/var/run/calico"},
 	}
 }
 

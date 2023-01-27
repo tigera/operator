@@ -47,7 +47,7 @@ LABEL name="Tigera Operator" \
       maintainer="maintainers@tigera.io>"
 
 ENV OPERATOR=/usr/local/bin/operator \
-    USER_UID=1001
+    USER_UID=10001
 
 # Install operator binary
 COPY build/_output/bin/operator-ppc64le ${OPERATOR}

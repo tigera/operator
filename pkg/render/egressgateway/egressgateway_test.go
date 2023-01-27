@@ -107,8 +107,9 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRole"},
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRoleBinding"},
+			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{"egress-test", "test-ns", rbac, "v1", "Role"},
+			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -234,7 +235,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(elasticIPAnnotation).To(Equal("[\"1.2.3.4\",\"5.6.7.8\"]"))
 	})
 
-	It("should create service account, clusterrole, clusterrolebinding and psp if platform uses psp", func() {
+	It("should create service account, role, rolebinding if platform uses psp", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -244,9 +245,9 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
-			{"test-ns-egress-test", "", "policy", "v1beta1", "PodSecurityPolicy"},
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRole"},
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRoleBinding"},
+			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{"egress-test", "test-ns", rbac, "v1", "Role"},
+			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -275,7 +276,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
-			{"test-ns-egress-test", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
+			{"tigera-egressgateway", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -285,41 +286,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			EgressGW:     egw,
 			VXLANVNI:     4097,
 			VXLANPort:    4790,
-			Openshift:    true,
+			OpenShift:    true,
 		})
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-	})
-
-	It("Test with long string lengths for ns and name", func() {
-		egw.Namespace = "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg"
-		egw.Name = "egress-testabcdefghijklmnopqrstuvwxyz1234567890abc"
-		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OSType:       rmeta.OSTypeLinux,
-			EgressGW:     egw,
-			VXLANVNI:     4097,
-			VXLANPort:    4790,
-			UsePSP:       true,
-		})
-
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{"egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg", "", "v1", "ServiceAccount"},
-			{"egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg", "apps", "v1", "Deployment"},
-			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", "policy", "v1beta1", "PodSecurityPolicy"},
-			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", rbac, "v1", "ClusterRole"},
-			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", rbac, "v1", "ClusterRoleBinding"},
-		}
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {

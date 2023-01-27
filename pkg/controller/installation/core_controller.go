@@ -1184,11 +1184,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
 			return reconcile.Result{}, err
-		} else if kubecontrollerprometheusTLS == nil {
-			r.status.SetDegraded(operator.ResourceNotFound, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+		} else if kubecontrollerprometheusTLS != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
 		}
-		typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
 	}
 
 	nodeAppArmorProfile := ""

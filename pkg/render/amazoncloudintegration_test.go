@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -77,8 +77,6 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	})
 
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {
-		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
-		cfg.Openshift = openshift
 		component := render.AmazonCloudIntegration(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -123,7 +121,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		Expect(d.Spec.Template.Name).To(Equal(AwsCIName))
 		Expect(d.Spec.Template.Namespace).To(Equal(AwsCINs))
 
-		Expect(len(d.Spec.Template.Spec.NodeSelector)).To(Equal(0))
+		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(0))
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal(AwsCIName))
 
@@ -131,7 +129,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.ObjectMeta.Annotations).To(HaveKey("hash.operator.tigera.io/credential-secret"))
-		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(1))
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
 		container := d.Spec.Template.Spec.Containers[0]
 		Expect(container.Name).To(Equal(AwsCIName))
 		Expect(container.Image).To(Equal(
@@ -176,13 +174,24 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
 
-		Expect(*(container.SecurityContext.RunAsNonRoot)).To(BeTrue())
-		Expect(*(container.SecurityContext.AllowPrivilegeEscalation)).To(BeFalse())
+		Expect(*container.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*container.SecurityContext.Privileged).To(BeFalse())
+		Expect(*container.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+		Expect(*container.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*container.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+		Expect(container.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(container.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 	})
 
 	It("should set MetadataAccess when configured", func() {
-		cfg.Openshift = openshift
 		cfg.AmazonCloudIntegration.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
 		component := render.AmazonCloudIntegration(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/secret"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -28,8 +26,9 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -51,7 +50,6 @@ type AmazonCloudIntegrationConfiguration struct {
 	Installation           *operatorv1.InstallationSpec
 	Credentials            *AmazonCredential
 	PullSecrets            []*corev1.Secret
-	Openshift              bool
 }
 
 type amazonCloudIntegrationComponent struct {
@@ -79,7 +77,7 @@ type AmazonCredential struct {
 
 func ConvertSecretToCredential(s *corev1.Secret) (*AmazonCredential, error) {
 	if s == nil {
-		return nil, fmt.Errorf("No secret specified")
+		return nil, fmt.Errorf("no secret specified")
 	}
 
 	missingKey := []string{}
@@ -293,14 +291,10 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:  AmazonCloudIntegrationComponentName,
-		Image: c.image,
-		Env:   env,
-		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             ptr.BoolToPtr(true),
-			AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-		},
+		Name:            AmazonCloudIntegrationComponentName,
+		Image:           c.image,
+		Env:             env,
+		SecurityContext: securitycontext.NewNonRootContext(),
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

@@ -327,7 +327,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, getEGWNamespacedNames(egws))
+		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, getEGWNamespaceAndNames(egws))
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -354,7 +354,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec, namespacedNames []string) error {
+	installation *operatorv1.InstallationSpec, namespaceAndNames []string) error {
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
@@ -391,15 +391,15 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	config := &egressgateway.Config{
-		PullSecrets:     pullSecrets,
-		Installation:    installation,
-		OSType:          rmeta.OSTypeLinux,
-		EgressGW:        egw,
-		VXLANPort:       egwVXLANPort,
-		VXLANVNI:        egwVXLANVNI,
-		UsePSP:          r.usePSP,
-		OpenShift:       openshift,
-		NamespacedNames: namespacedNames,
+		PullSecrets:       pullSecrets,
+		Installation:      installation,
+		OSType:            rmeta.OSTypeLinux,
+		EgressGW:          egw,
+		VXLANPort:         egwVXLANPort,
+		VXLANVNI:          egwVXLANVNI,
+		UsePSP:            r.usePSP,
+		OpenShift:         openshift,
+		NamespaceAndNames: namespaceAndNames,
 	}
 
 	component := egressgateway.EgressGateway(config)
@@ -700,7 +700,7 @@ func getDegradedMsg(egw *operatorv1.EgressGateway) string {
 	return ""
 }
 
-func getEGWNamespacedNames(egws []operatorv1.EgressGateway) []string {
+func getEGWNamespaceAndNames(egws []operatorv1.EgressGateway) []string {
 	namespacedName := []string{}
 	for _, egw := range egws {
 		namespacedName = append(namespacedName, fmt.Sprintf("%s:%s", egw.Namespace, egw.Name))

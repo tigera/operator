@@ -75,8 +75,8 @@ type Config struct {
 
 	OpenShift bool
 	// Whether or not the cluster supports pod security policies.
-	UsePSP          bool
-	NamespacedNames []string
+	UsePSP            bool
+	NamespaceAndNames []string
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -454,8 +454,8 @@ func (c *component) getHealthTimeoutDs() string {
 
 func (c *component) getSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 	scc := SecurityContextConstraints()
-	sort.Strings(c.config.NamespacedNames)
-	for _, egwNames := range c.config.NamespacedNames {
+	sort.Strings(c.config.NamespaceAndNames)
+	for _, egwNames := range c.config.NamespaceAndNames {
 		scc.Users = append(scc.Users, fmt.Sprintf("system:serviceaccount:%s", egwNames))
 	}
 	return scc

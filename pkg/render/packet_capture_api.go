@@ -78,7 +78,7 @@ func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
 }
 
 func PacketCaptureAPIPolicy(cfg *PacketCaptureApiConfiguration) Component {
-	return NewPassthrough(allowTigeraPolicy(cfg))
+	return NewPassthrough(false, allowTigeraPolicy(cfg))
 }
 
 func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) error {

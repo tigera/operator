@@ -273,11 +273,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Version:          components.ComponentCoreOSAlertmanager.Version,
 			Tolerations:      mc.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     mc.cfg.Installation.ControlPlaneNodeSelector,
-			SecurityContext: &corev1.PodSecurityContext{
-				RunAsGroup:   &securitycontext.RunAsGroupID,
-				RunAsNonRoot: ptr.BoolToPtr(true),
-				RunAsUser:    &securitycontext.RunAsUserID,
-			},
+			SecurityContext:  securitycontext.NewNonRootPodContext(),
 		},
 	}
 }
@@ -434,11 +430,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					},
 				},
 			},
-			SecurityContext: &corev1.PodSecurityContext{
-				RunAsGroup:   &securitycontext.RunAsGroupID,
-				RunAsNonRoot: ptr.BoolToPtr(true),
-				RunAsUser:    &securitycontext.RunAsUserID,
-			},
+			SecurityContext: securitycontext.NewNonRootPodContext(),
 		},
 	}
 }

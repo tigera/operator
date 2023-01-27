@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,21 +23,22 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const ResourceName = "amazon-cloud-integration"
@@ -57,10 +58,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &ReconcileAmazonCloudIntegration{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: opts.DetectedProvider,
-		status:   status.New(mgr.GetClient(), "amazon-cloud-integration", opts.KubernetesVersion),
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		provider:      opts.DetectedProvider,
+		status:        status.New(mgr.GetClient(), "amazon-cloud-integration", opts.KubernetesVersion),
+		clusterDomain: opts.ClusterDomain,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -71,7 +73,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("amazoncloudintegration-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create amazoncloudintegration-controller: %v", err)
+		return fmt.Errorf("failed to create amazoncloudintegration-controller: %v", err)
 	}
 
 	// Watch for changes to primary resource AmazonCloudIntegration
@@ -112,10 +114,11 @@ var _ reconcile.Reconciler = &ReconcileAmazonCloudIntegration{}
 type ReconcileAmazonCloudIntegration struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	provider operatorv1.Provider
-	status   status.StatusManager
+	client        client.Client
+	scheme        *runtime.Scheme
+	provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconcile reads that state of the cluster for a AmazonCloudIntegration object and makes changes based on the state read
@@ -187,7 +190,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 		return reconcile.Result{}, err
 	}
 	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "", fmt.Errorf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "", fmt.Errorf("waiting for network to be %s", operatorv1.TigeraSecureEnterprise), reqLogger)
 		return reconcile.Result{}, nil
 	}
 
@@ -203,6 +206,19 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 		return reconcile.Result{}, err
 	}
 
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// cloud controllers need to trust a public CA, so we mount all the system certificates.
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -213,7 +229,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 		Installation:           network,
 		Credentials:            awsCredential,
 		PullSecrets:            pullSecrets,
-		Openshift:              r.provider == operatorv1.ProviderOpenShift,
+		TrustedBundle:          trustedBundle,
 	}
 	component := render.AmazonCloudIntegration(amazonCloudIntegrationCfg)
 
@@ -252,7 +268,7 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
-		return nil, fmt.Errorf("Failed to read secret %q: %s", render.AmazonCloudIntegrationCredentialName, err)
+		return nil, fmt.Errorf("failed to read secret %q: %s", render.AmazonCloudIntegrationCredentialName, err)
 	}
 
 	return render.ConvertSecretToCredential(secret)

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/secret"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -28,8 +26,10 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -51,7 +51,7 @@ type AmazonCloudIntegrationConfiguration struct {
 	Installation           *operatorv1.InstallationSpec
 	Credentials            *AmazonCredential
 	PullSecrets            []*corev1.Secret
-	Openshift              bool
+	TrustedBundle          certificatemanagement.TrustedBundle
 }
 
 type amazonCloudIntegrationComponent struct {
@@ -79,7 +79,7 @@ type AmazonCredential struct {
 
 func ConvertSecretToCredential(s *corev1.Secret) (*AmazonCredential, error) {
 	if s == nil {
-		return nil, fmt.Errorf("No secret specified")
+		return nil, fmt.Errorf("no secret specified")
 	}
 
 	missingKey := []string{}
@@ -114,6 +114,7 @@ func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.O
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.credentialSecret(),
+		c.cfg.TrustedBundle.ConfigMap(AmazonCloudIntegrationNamespace),
 		c.deployment(),
 	)
 
@@ -224,6 +225,9 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 
 	annotations := make(map[string]string)
 	annotations[credentialSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.Credentials)
+	for k, v := range c.cfg.TrustedBundle.HashAnnotations() {
+		annotations[k] = v
+	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -249,6 +253,9 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{
 						c.container(),
+					},
+					Volumes: []corev1.Volume{
+						c.cfg.TrustedBundle.Volume(),
 					},
 				},
 			},
@@ -293,14 +300,10 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:  AmazonCloudIntegrationComponentName,
-		Image: c.image,
-		Env:   env,
-		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             ptr.BoolToPtr(true),
-			AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-		},
+		Name:            AmazonCloudIntegrationComponentName,
+		Image:           c.image,
+		Env:             env,
+		SecurityContext: securitycontext.NewNonRootContext(),
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
@@ -314,6 +317,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 			PeriodSeconds:       10,
 			FailureThreshold:    3,
 		},
+		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType())},
 	}
 }
 

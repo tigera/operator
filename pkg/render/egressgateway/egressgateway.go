@@ -44,8 +44,8 @@ const (
 	DefaultVXLANPort      int   = 4790
 	DefaultVXLANVNI       int   = 4097
 	DefaultHealthPort     int32 = 8080
-	PodSecurityPolicyName       = "tigera-egressgateway"
 	OpenShiftSCCName            = "tigera-egressgateway"
+	podSecurityPolicyName       = "tigera-egressgateway"
 )
 
 var log = logf.Log.WithName("render")
@@ -293,7 +293,7 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	boolTrue := true
 	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(PodSecurityPolicyName)
+	psp.GetObjectMeta().SetName(podSecurityPolicyName)
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
 		corev1.Capability("NET_ADMIN"),
 	}

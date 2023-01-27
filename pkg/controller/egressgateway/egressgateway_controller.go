@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	ocsv1 "github.com/openshift/api/security/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/egressgateway"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -158,7 +160,25 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// If there are no Egress Gateway resources, return.
+	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if len(egws) == 0 {
+		objects := []client.Object{}
+		// If PSP is enabled, remove the Pod Security policy.
+		if r.usePSP {
+			psp := egressgateway.PodSecurityPolicy()
+			objects = append(objects, psp)
+		}
+		// If provider is openshift, remove the SCC
+		if r.provider == operatorv1.ProviderOpenShift {
+			scc := egressgateway.SecurityContextConstraints()
+			objects = append(objects, scc)
+		}
+
+		err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(true, objects...), r.status)
+		if err != nil {
+			reqLogger.Error(err, "error deleting cluster scoped resources")
+			return reconcile.Result{}, nil
+		}
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
@@ -186,6 +206,29 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			reqLogger.Info("EgressGateway object not found")
 			// Since the EGW resource is not found, remove the deployment.
 			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
+
+			// In the case of OpenShift, we are using a single SCC.
+			// Whenever a EGW resource is deleted, remove the corresponding user from the SCC
+			// and update the resource.
+			if r.provider == operatorv1.ProviderOpenShift {
+				scc, err := getOpenShiftSCC(ctx, r.client)
+				if err != nil {
+					reqLogger.Error(err, "Error querying SecurityContextConstraints")
+					return reconcile.Result{}, err
+				}
+				userString := fmt.Sprintf("system:serviceaccount:%s:%s", request.Namespace, request.Name)
+				for index, user := range scc.Users {
+					if user == userString {
+						scc.Users = append(scc.Users[:index], scc.Users[index+1:]...)
+						err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(false, scc), r.status)
+						if err != nil {
+							reqLogger.Error(err, "error updating security context constraints")
+						}
+						break
+					}
+				}
+
+			}
 			// Get the unready EGW. Let's say we have 2 EGW resources red and blue.
 			// Red has already degraded. When the user deletes Red, TigeraStatus should go back to available
 			// as Blue is healthy. If all the EGWs are ready, clear the degraded TigeraStatus.
@@ -256,7 +299,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if installStatus.CalicoVersion != components.EnterpriseRelease {
-		reqLogger.Info("Waiting for expected version of Calico to be installed, expectedVersion = %s", components.EnterpriseRelease)
+		reqLogger.WithValues("version", components.EnterpriseRelease).Info("Waiting for expected version of Calico to be installed")
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -284,7 +327,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation)
+		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, getEGWNamespaceAndNames(egws))
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -311,7 +354,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec) error {
+	installation *operatorv1.InstallationSpec, namespaceAndNames []string) error {
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
@@ -348,14 +391,15 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	config := &egressgateway.Config{
-		PullSecrets:  pullSecrets,
-		Installation: installation,
-		OSType:       rmeta.OSTypeLinux,
-		EgressGW:     egw,
-		VXLANPort:    egwVXLANPort,
-		VXLANVNI:     egwVXLANVNI,
-		Openshift:    openshift,
-		UsePSP:       r.usePSP,
+		PullSecrets:       pullSecrets,
+		Installation:      installation,
+		OSType:            rmeta.OSTypeLinux,
+		EgressGW:          egw,
+		VXLANPort:         egwVXLANPort,
+		VXLANVNI:          egwVXLANVNI,
+		UsePSP:            r.usePSP,
+		OpenShift:         openshift,
+		NamespaceAndNames: namespaceAndNames,
 	}
 
 	component := egressgateway.EgressGateway(config)
@@ -460,6 +504,18 @@ func getEgressGateways(ctx context.Context, cli client.Client) ([]operatorv1.Egr
 		return []operatorv1.EgressGateway{}, err
 	}
 	return instance.Items, nil
+}
+
+func getOpenShiftSCC(ctx context.Context, cli client.Client) (*ocsv1.SecurityContextConstraints, error) {
+	scc := &ocsv1.SecurityContextConstraints{
+		TypeMeta:   metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: egressgateway.OpenShiftSCCName},
+	}
+	err := cli.Get(ctx, client.ObjectKey{Name: egressgateway.OpenShiftSCCName}, scc)
+	if err != nil {
+		return nil, err
+	}
+	return scc, nil
 }
 
 // fillDefaults sets the default values of the EGW resource.
@@ -642,4 +698,12 @@ func getDegradedMsg(egw *operatorv1.EgressGateway) string {
 		}
 	}
 	return ""
+}
+
+func getEGWNamespaceAndNames(egws []operatorv1.EgressGateway) []string {
+	namespacedName := []string{}
+	for _, egw := range egws {
+		namespacedName = append(namespacedName, fmt.Sprintf("%s:%s", egw.Namespace, egw.Name))
+	}
+	return namespacedName
 }

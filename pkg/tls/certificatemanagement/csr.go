@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,15 +19,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -81,10 +80,7 @@ func CreateCSRInitContainer(
 				},
 			}},
 		},
-		SecurityContext: &corev1.SecurityContext{
-			Privileged:               ptr.BoolToPtr(false),
-			AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-		},
+		SecurityContext: securitycontext.NewNonRootContext(),
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 func calicoDefaultConfig() []runtime.Object {
@@ -128,7 +130,7 @@ func calicoDefaultConfig() []runtime.Object {
 								{MountPath: "/var/lib/cni/networks", Name: "host-local-net-dir"},
 								{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 							},
-							SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+							SecurityContext: securitycontext.NewRootContext(isPrivileged),
 						}, {
 							Name:    "install-cni",
 							Image:   "calico/cni:v3.15.1",
@@ -162,14 +164,14 @@ func calicoDefaultConfig() []runtime.Object {
 								{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 								{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 							},
-							SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+							SecurityContext: securitycontext.NewRootContext(isPrivileged),
 						}, {
 							Name:  "flexvol-driver",
 							Image: "calico/pod2daemon-flexvol:v3.15.1",
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 							},
-							SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+							SecurityContext: securitycontext.NewRootContext(isPrivileged),
 						}},
 						Containers: []corev1.Container{{
 							Name:  "calico-node",
@@ -241,7 +243,7 @@ func calicoDefaultConfig() []runtime.Object {
 								{Name: "FELIX_LOGSEVERITYSCREEN", Value: "info"},
 								{Name: "FELIX_HEALTHENABLED", Value: "true"},
 							},
-							SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+							SecurityContext: securitycontext.NewRootContext(isPrivileged),
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU: resource.MustParse("250m"),

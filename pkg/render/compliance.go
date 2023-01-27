@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -400,7 +400,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 							},
 						},
 					},
-					SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts: []corev1.VolumeMount{
 						c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 					},
@@ -490,12 +490,6 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
-	privileged := false
-	// On OpenShift reporter needs privileged access to write compliance reports to host path volume
-	if c.cfg.Openshift {
-		privileged = true
-	}
-
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
@@ -537,9 +531,8 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 								},
 								PeriodSeconds: 300,
 							},
-							SecurityContext: &corev1.SecurityContext{
-								Privileged: &privileged,
-							},
+							// On OpenShift reporter needs privileged access to write compliance reports to host path volume
+							SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/var/log/calico", Name: "var-log-calico"},
 								c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
@@ -731,7 +724,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						fmt.Sprintf("-certpath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountCertificateFilePath()),
 						fmt.Sprintf("-keypath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountKeyFilePath()),
 					},
-					SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    c.complianceServerVolumeMounts(),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
@@ -885,7 +878,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 								},
 							},
 						},
-						SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+						SecurityContext: securitycontext.NewNonRootContext(),
 						VolumeMounts: []corev1.VolumeMount{
 							c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 						},
@@ -1038,10 +1031,11 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:         ComplianceBenchmarkerName,
-						Image:        c.benchmarkerImage,
-						Env:          envVars,
-						VolumeMounts: volMounts,
+						Name:            ComplianceBenchmarkerName,
+						Image:           c.benchmarkerImage,
+						Env:             envVars,
+						SecurityContext: securitycontext.NewRootContext(false),
+						VolumeMounts:    volMounts,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{

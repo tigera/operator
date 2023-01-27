@@ -921,12 +921,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		)
 	}
 
-	// On OpenShift apiserver needs privileged access to write audit logs to host path volume
-	isPrivileged := false
-	if c.cfg.Openshift {
-		isPrivileged = true
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
@@ -942,12 +936,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,
-		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &isPrivileged,
-			RunAsUser:  ptr.Int64ToPtr(0),
-		},
-		VolumeMounts: volumeMounts,
+		// OpenShift apiserver needs privileged access to write audit logs to host path volume.
+		// Audit logs are owned by root on hosts so we need to be root user and group.
+		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
+		VolumeMounts:    volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -1050,8 +1042,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		// UID 1001 is used in the queryserver Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
 	}
 	return container

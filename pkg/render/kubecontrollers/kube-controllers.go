@@ -603,6 +603,11 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 	if c.cfg.TrustedBundle != nil {
 		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 	}
+	mounts = append(mounts, corev1.VolumeMount{
+		Name:      "status",
+		MountPath: "/status",
+	})
+
 	return mounts
 }
 
@@ -614,6 +619,13 @@ func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	if c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 	}
+	volumes = append(volumes, corev1.Volume{
+		Name: "status",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: nil,
+		},
+	})
+
 	return volumes
 }
 

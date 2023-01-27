@@ -265,4 +265,34 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
+
+	It("should create security context if platform is openshift", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
+			{"tigera-egressgateway", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
+		}
+
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			PullSecrets:  nil,
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+			OpenShift:    true,
+		})
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+	})
+
 })

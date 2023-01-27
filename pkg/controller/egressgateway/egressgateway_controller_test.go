@@ -446,7 +446,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(test.GetResource(c, &scc)).To(BeNil())
 			Expect(len(scc.Users)).To(Equal(2))
-			Expect(scc.Users[1]).To(Equal("system:serviceaccount:calico-egress:calico-blue"))
+			Expect(scc.Users[0]).To(Equal("system:serviceaccount:calico-egress:calico-blue"))
+			Expect(scc.Users[1]).To(Equal("system:serviceaccount:calico-egress:calico-red"))
 
 			Expect(c.Delete(ctx, egw_red)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}})

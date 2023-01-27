@@ -177,6 +177,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(true, objects...), r.status)
 		if err != nil {
 			reqLogger.Error(err, "error deleting cluster scoped resources")
+			return reconcile.Result{}, nil
 		}
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
@@ -206,26 +207,27 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			// Since the EGW resource is not found, remove the deployment.
 			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
 
-			// In case of openShift, we are using a single SCC.
+			// In the case of OpenShift, we are using a single SCC.
 			// Whenever a EGW resource is deleted, remove the corresponding user from the SCC
 			// and update the resource.
 			if r.provider == operatorv1.ProviderOpenShift {
 				scc, err := getOpenShiftSCC(ctx, r.client)
 				if err != nil {
 					reqLogger.Error(err, "Error querying SecurityContextConstraints")
-				} else {
-					userString := fmt.Sprintf("system:serviceaccount:%s:%s", request.Namespace, request.Name)
-					for index, user := range scc.Users {
-						if user == userString {
-							scc.Users = append(scc.Users[:index], scc.Users[index+1:]...)
-							err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(false, scc), r.status)
-							if err != nil {
-								reqLogger.Error(err, "error updating security context constraints")
-							}
-							break
+					return reconcile.Result{}, err
+				}
+				userString := fmt.Sprintf("system:serviceaccount:%s:%s", request.Namespace, request.Name)
+				for index, user := range scc.Users {
+					if user == userString {
+						scc.Users = append(scc.Users[:index], scc.Users[index+1:]...)
+						err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(false, scc), r.status)
+						if err != nil {
+							reqLogger.Error(err, "error updating security context constraints")
 						}
+						break
 					}
 				}
+
 			}
 			// Get the unready EGW. Let's say we have 2 EGW resources red and blue.
 			// Red has already degraded. When the user deletes Red, TigeraStatus should go back to available
@@ -297,7 +299,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if installStatus.CalicoVersion != components.EnterpriseRelease {
-		reqLogger.Info(fmt.Sprintf("Waiting for expected version of Calico to be installed, expectedVersion = %s", components.EnterpriseRelease))
+		reqLogger.WithValues("version", components.EnterpriseRelease).Info("Waiting for expected version of Calico to be installed")
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -325,7 +327,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation)
+		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, getEGWNamespacedNames(egws))
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -352,7 +354,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec) error {
+	installation *operatorv1.InstallationSpec, namespacedNames []string) error {
 
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
@@ -389,57 +391,33 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	config := &egressgateway.Config{
-		PullSecrets:  pullSecrets,
-		Installation: installation,
-		OSType:       rmeta.OSTypeLinux,
-		EgressGW:     egw,
-		VXLANPort:    egwVXLANPort,
-		VXLANVNI:     egwVXLANVNI,
-		UsePSP:       r.usePSP,
+		PullSecrets:     pullSecrets,
+		Installation:    installation,
+		OSType:          rmeta.OSTypeLinux,
+		EgressGW:        egw,
+		VXLANPort:       egwVXLANPort,
+		VXLANVNI:        egwVXLANVNI,
+		UsePSP:          r.usePSP,
+		OpenShift:       openshift,
+		NamespacedNames: namespacedNames,
 	}
 
-	components := []render.Component{egressgateway.EgressGateway(config)}
-	// In case of openshift, we will use a single SCC and update the users for every EGW resource created, deleted.
-	// Get the current SCC, append the user string if not already present and update the SCC.
-	if openshift {
-		scc, err := getOpenShiftSCC(ctx, r.client)
-		if err != nil {
-			reqLogger.Error(err, "Error getting SecurityContextConstraints")
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Error getting SecurityContextConstraints", err, reqLogger)
-			setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("Error getting SecurityContextConstraints err = %s", err.Error()))
-			return err
-		}
-		found := false
-		userStr := fmt.Sprintf("system:serviceaccount:%s:%s", egw.Namespace, egw.Name)
-		for _, user := range scc.Users {
-			if user == userStr {
-				found = true
-				break
-			}
-		}
-		if !found {
-			scc.Users = append(scc.Users, fmt.Sprintf("system:serviceaccount:%s:%s", egw.Namespace, egw.Name))
-		}
-		components = append(components, render.NewPassthrough(false, scc))
-	}
-
+	component := egressgateway.EgressGateway(config)
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, egw)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("Error with images from ImageSet err = %s", err.Error()))
 		return err
 	}
 
-	for _, component := range components {
-		if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace))
-			r.status.SetDegraded(operatorv1.ResourceUpdateError,
-				fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
-			setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("Error creating / updating resource err = %s", err.Error()))
-			return err
-		}
+	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+		r.status.SetDegraded(operatorv1.ResourceUpdateError,
+			fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
+		setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("Error creating / updating resource err = %s", err.Error()))
+		return err
 	}
 
 	// Update the status of this CR.
@@ -720,4 +698,12 @@ func getDegradedMsg(egw *operatorv1.EgressGateway) string {
 		}
 	}
 	return ""
+}
+
+func getEGWNamespacedNames(egws []operatorv1.EgressGateway) []string {
+	namespacedName := []string{}
+	for _, egw := range egws {
+		namespacedName = append(namespacedName, fmt.Sprintf("%s:%s", egw.Namespace, egw.Name))
+	}
+	return namespacedName
 }

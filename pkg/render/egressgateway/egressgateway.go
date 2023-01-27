@@ -17,6 +17,7 @@ package egressgateway
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
@@ -72,8 +73,10 @@ type Config struct {
 	VXLANVNI  int
 	VXLANPort int
 
+	OpenShift bool
 	// Whether or not the cluster supports pod security policies.
-	UsePSP bool
+	UsePSP          bool
+	NamespacedNames []string
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -103,6 +106,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
 		objectsToCreate = append(objectsToCreate, c.egwRole())
 		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
+	} else if c.config.OpenShift {
+		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
 	} else {
 		objectsToDelete = append(objectsToDelete, PodSecurityPolicy())
 		objectsToDelete = append(objectsToDelete, c.egwRole())
@@ -445,6 +450,15 @@ func (c *component) getHealthTimeoutDs() string {
 		}
 	}
 	return ""
+}
+
+func (c *component) getSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
+	scc := SecurityContextConstraints()
+	sort.Strings(c.config.NamespacedNames)
+	for _, egwNames := range c.config.NamespacedNames {
+		scc.Users = append(scc.Users, fmt.Sprintf("system:serviceaccount:%s", egwNames))
+	}
+	return scc
 }
 
 func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {

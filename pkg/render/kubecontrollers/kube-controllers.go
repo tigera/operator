@@ -132,7 +132,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Component {
-	return render.NewPassthrough(kubeControllersAllowTigeraPolicy(cfg))
+	return render.NewPassthrough(false, kubeControllersAllowTigeraPolicy(cfg))
 }
 
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {

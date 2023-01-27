@@ -507,13 +507,13 @@ func getEgressGateways(ctx context.Context, cli client.Client) ([]operatorv1.Egr
 }
 
 func getOpenShiftSCC(ctx context.Context, cli client.Client) (*ocsv1.SecurityContextConstraints, error) {
-	scc := &ocsv1.SecurityContextConstraints{}
+	scc := &ocsv1.SecurityContextConstraints{
+		TypeMeta:   metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: egressgateway.OpenShiftSCCName},
+	}
 	err := cli.Get(ctx, client.ObjectKey{Name: egressgateway.OpenShiftSCCName}, scc)
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, err
-		}
-		return egressgateway.SecurityContextConstraints(), nil
+		return nil, err
 	}
 	return scc, nil
 }

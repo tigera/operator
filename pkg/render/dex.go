@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -205,18 +205,6 @@ func (c *dexComponent) deployment() client.Object {
 	}
 	annotations[c.cfg.TLSKeyPair.HashAnnotationKey()] = c.cfg.TLSKeyPair.HashAnnotationValue()
 
-	// UID and GID 1001:1001 are used in dex Dockerfile.
-	sc := securitycontext.NewBaseContext(1001, 1001)
-	// Build a security context for the pod that will allow the pod to be deployed. Dex is run in a namespace with a
-	// Baseline pod security standard, which requires that the security context meet certain criteria in order for pods to
-	// be accepted by the API server
-	sc.Capabilities = &corev1.Capabilities{
-		Drop: []corev1.Capability{"ALL"},
-	}
-	sc.SeccompProfile = &corev1.SeccompProfile{
-		Type: corev1.SeccompProfileTypeRuntimeDefault,
-	}
-
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -250,7 +238,7 @@ func (c *dexComponent) deployment() client.Object {
 								},
 								c.cfg.DexConfig.RequiredEnv("")...),
 							LivenessProbe:   c.probe(),
-							SecurityContext: sc,
+							SecurityContext: securitycontext.NewNonRootContext(),
 
 							Command: []string{"/usr/local/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 

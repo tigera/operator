@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -496,16 +497,16 @@ func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {
 // typhaContainer creates the main typha container.
 func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
-
 	return corev1.Container{
-		Name:           TyphaContainerName,
-		Image:          c.typhaImage,
-		Resources:      c.typhaResources(),
-		Env:            c.typhaEnvVars(),
-		VolumeMounts:   c.typhaVolumeMounts(),
-		Ports:          c.typhaPorts(),
-		LivenessProbe:  lp,
-		ReadinessProbe: rp,
+		Name:            TyphaContainerName,
+		Image:           c.typhaImage,
+		Resources:       c.typhaResources(),
+		Env:             c.typhaEnvVars(),
+		VolumeMounts:    c.typhaVolumeMounts(),
+		Ports:           c.typhaPorts(),
+		LivenessProbe:   lp,
+		ReadinessProbe:  rp,
+		SecurityContext: securitycontext.NewNonRootContext(),
 	}
 }
 

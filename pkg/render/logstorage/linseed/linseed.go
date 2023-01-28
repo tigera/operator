@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,6 +86,9 @@ type Config struct {
 
 	// ClusterDomain to use when building service URLs.
 	ClusterDomain string
+
+	// EsAdminUserName is the admin user used to connect to Elastic
+	EsAdminUserName string
 }
 
 func (e *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -183,6 +186,17 @@ func (e linseed) linseedDeployment() *appsv1.Deployment {
 
 		// Configuration for connection to Elasticsearch.
 		{Name: "LINSEED_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
+		{Name: "LINSEED_ELASTIC_USERNAME", Value: e.cfg.EsAdminUserName},
+		{Name: "LINSEED_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: render.ElasticsearchAdminUserSecret,
+				},
+				Key: e.cfg.EsAdminUserName,
+			},
+		}},
+		{Name: "LINSEED_ELASTIC_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "LINSEED_ELASTIC_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
 	}
 
 	var initContainers []corev1.Container

@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
@@ -70,6 +71,11 @@ func (c *awsSGSetupComponent) Ready() bool {
 }
 
 func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
+	// UID 1001 is used in the cloud-controller Dockerfile.
+	sc := securitycontext.NewNonRootContext()
+	sc.RunAsUser = ptr.Int64ToPtr(1001)
+	sc.RunAsGroup = ptr.Int64ToPtr(0)
+
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -110,8 +116,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 								Value: "/etc/kubernetes/kubeconfig",
 							},
 						},
-						// UID 1001 is used in the operator Dockerfile.
-						SecurityContext: securitycontext.NewBaseContext(1001, 0),
+						SecurityContext: sc,
 					}},
 				},
 			},

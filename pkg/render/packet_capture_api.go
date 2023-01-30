@@ -51,8 +51,10 @@ const (
 	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
 )
 
-var PacketCaptureEntityRule = networkpolicy.CreateEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName, PacketCapturePort)
-var PacketCaptureSourceEntityRule = networkpolicy.CreateSourceEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName)
+var (
+	PacketCaptureEntityRule       = networkpolicy.CreateEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName, PacketCapturePort)
+	PacketCaptureSourceEntityRule = networkpolicy.CreateSourceEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName)
+)
 
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.
 type PacketCaptureApiConfiguration struct {
@@ -78,7 +80,7 @@ func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
 }
 
 func PacketCaptureAPIPolicy(cfg *PacketCaptureApiConfiguration) Component {
-	return NewPassthrough(false, allowTigeraPolicy(cfg))
+	return NewPassthrough(allowTigeraPolicy(cfg))
 }
 
 func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) error {

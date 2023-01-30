@@ -55,9 +55,11 @@ const (
 	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 )
 
-var GuardianEntityRule = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
-var GuardianSourceEntityRule = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
-var GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
+var (
+	GuardianEntityRule                = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
+	GuardianSourceEntityRule          = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
+	GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
+)
 
 func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{
@@ -72,7 +74,6 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	}
 
 	return NewPassthrough(
-		false,
 		guardianAccessPolicy,
 		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
 	), nil

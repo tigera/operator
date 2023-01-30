@@ -74,7 +74,7 @@ func allCalicoComponents(
 	if bgpLayout != nil {
 		objs = append(objs, bgpLayout)
 	}
-	secretsAndConfigMaps := render.NewPassthrough(false, objs...)
+	secretsAndConfigMaps := render.NewPassthrough(objs...)
 
 	nodeCfg := &render.NodeConfiguration{
 		K8sServiceEp:            k8sServiceEp,

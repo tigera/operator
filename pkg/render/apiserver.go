@@ -101,7 +101,7 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 }
 
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
-	return NewPassthrough(false, allowTigeraAPIServerPolicy(cfg))
+	return NewPassthrough(allowTigeraAPIServerPolicy(cfg))
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.
@@ -479,7 +479,6 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
-
 			// Kubernetes network policy resources.
 			APIGroups: []string{
 				"networking.k8s.io",

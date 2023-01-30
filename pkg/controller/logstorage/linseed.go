@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package logstorage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -38,6 +39,7 @@ func (r *ReconcileLogStorage) createLinseed(
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,
+	esAdminUserSecret *corev1.Secret,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
@@ -73,12 +75,25 @@ func (r *ReconcileLogStorage) createLinseed(
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, prometheusCertificate)
 
+	// This secret should only ever contain one key.
+	if len(esAdminUserSecret.Data) != 1 {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("secret should have exactly one entry. found %d", len(esAdminUserSecret.Data)), nil, reqLogger)
+		return reconcile.Result{}, false, nil
+	}
+
+	var esAdminUserName string
+	for k := range esAdminUserSecret.Data {
+		esAdminUserName = k
+		break
+	}
+
 	cfg := &linseed.Config{
-		Installation:  install,
-		PullSecrets:   pullSecrets,
-		TrustedBundle: trustedBundle,
-		ClusterDomain: r.clusterDomain,
-		KeyPair:       linseedKeyPair,
+		Installation:    install,
+		PullSecrets:     pullSecrets,
+		TrustedBundle:   trustedBundle,
+		ClusterDomain:   r.clusterDomain,
+		KeyPair:         linseedKeyPair,
+		ESAdminUserName: esAdminUserName,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

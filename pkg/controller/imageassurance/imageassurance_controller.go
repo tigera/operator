@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 package imageassurance
 
@@ -10,6 +10,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/imageassurance/configsync"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -25,7 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -74,6 +74,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
+
+	r.configSyncer = configsync.NewSyncer(opts.ShutdownContext, rcimageassurance.APIEndpoint, r.client)
+
 	r.status.Run(opts.ShutdownContext)
 	return r
 }
@@ -153,6 +156,7 @@ type ReconcileImageAssurance struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	configSyncer    configsync.Syncer
 }
 
 // Reconcile reads that state of the cluster for a ImageAssurance object and makes changes
@@ -245,7 +249,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
+	scannerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
@@ -328,6 +332,10 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		}
 	}
 
+	// Start the period sync of image assurance settings to the config map. Note that this function can be called multiple
+	// times, once started the subsequent calls are no ops.
+	r.configSyncer.StartPeriodicSync()
+
 	// Clear the degraded bit since we've reached this far.
 	r.status.ClearDegraded()
 
@@ -367,30 +375,4 @@ func getAPICertSecret(client client.Client, clusterDomain string) (*corev1.Secre
 	}
 
 	return secret, nil
-}
-
-// getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-// It takes in service account name and uses it to validate the existence of the service account and return the token if present.
-func getAPIAccessToken(c client.Client, serviceAccountName string) ([]byte, error) {
-	sa := &corev1.ServiceAccount{}
-	if err := c.Get(context.Background(), types.NamespacedName{
-		Name:      serviceAccountName,
-		Namespace: common.OperatorNamespace(),
-	}, sa); err != nil {
-		return nil, err
-	}
-
-	if len(sa.Secrets) == 0 {
-		return nil, nil
-	}
-
-	saSecret := &corev1.Secret{}
-	if err := c.Get(context.Background(), types.NamespacedName{
-		Name:      sa.Secrets[0].Name,
-		Namespace: common.OperatorNamespace(),
-	}, saSecret); err != nil {
-		return nil, err
-	}
-
-	return saSecret.Data["token"], nil
 }

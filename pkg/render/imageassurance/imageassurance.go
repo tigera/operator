@@ -40,6 +40,8 @@ const (
 	PodWatcherClusterRoleName     = "tigera-image-assurance-pod-watcher-api-access"
 	PodWatcherAPIAccessSecretName = "pod-watcher-image-assurance-api-token"
 
+	OperatorAPIAccessServiceAccountName = "tigera-image-assurance-operator-api-access"
+
 	mountPathAPITLSCerts = "/certs/https/"
 
 	CalicoCloudAuthSecretName = "tigera-calico-cloud-client-credentials"

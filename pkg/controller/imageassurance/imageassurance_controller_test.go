@@ -15,6 +15,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	mockconfigsync "github.com/tigera/operator/pkg/controller/imageassurance/configsync/mocks"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -40,6 +41,7 @@ var _ = Describe("Image Assurance Controller", func() {
 	var r ReconcileImageAssurance
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
+	var mockConfigSyncer *mockconfigsync.Syncer
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -74,12 +76,15 @@ var _ = Describe("Image Assurance Controller", func() {
 		internalManagerTLS, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 
+		mockConfigSyncer = new(mockconfigsync.Syncer)
+
 		r = ReconcileImageAssurance{
 			client:          c,
 			scheme:          scheme,
 			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
+			configSyncer:    mockConfigSyncer,
 		}
 
 		Expect(c.Create(ctx, &operatorv1.Installation{
@@ -138,6 +143,10 @@ var _ = Describe("Image Assurance Controller", func() {
 		})).NotTo(HaveOccurred())
 	})
 
+	AfterEach(func() {
+		mockConfigSyncer.AssertExpectations(GinkgoT())
+	})
+
 	It("should render accurate resources for image assurance", func() {
 		By("applying the ImageAssurance CR to the fake cluster")
 		//apply image assurance cr
@@ -147,6 +156,8 @@ var _ = Describe("Image Assurance Controller", func() {
 				APIProxyURL: "https://ia-api.dev.calicocloud.io",
 			},
 		})).NotTo(HaveOccurred())
+
+		mockConfigSyncer.On("StartPeriodicSync").Return()
 
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())

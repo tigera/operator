@@ -119,3 +119,29 @@ func AddCloudRBACWatch(c controller.Controller, destNamespace string) error {
 
 	return nil
 }
+
+// GetImageAssuranceAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
+// It takes in service account name and uses it to validate the existence of the service account and return the token if present.
+func GetImageAssuranceAPIAccessToken(c client.Client, serviceAccountName string) ([]byte, error) {
+	sa := &corev1.ServiceAccount{}
+	if err := c.Get(context.Background(), types.NamespacedName{
+		Name:      serviceAccountName,
+		Namespace: common.OperatorNamespace(),
+	}, sa); err != nil {
+		return nil, err
+	}
+
+	if len(sa.Secrets) == 0 {
+		return nil, nil
+	}
+
+	saSecret := &corev1.Secret{}
+	if err := c.Get(context.Background(), types.NamespacedName{
+		Name:      sa.Secrets[0].Name,
+		Namespace: common.OperatorNamespace(),
+	}, saSecret); err != nil {
+		return nil, err
+	}
+
+	return saSecret.Data["token"], nil
+}

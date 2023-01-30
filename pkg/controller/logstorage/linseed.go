@@ -16,6 +16,7 @@ package logstorage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -76,7 +77,7 @@ func (r *ReconcileLogStorage) createLinseed(
 
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch admin user secret contains too many entries", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("secret should have exactly one entry. found %d", len(esAdminUserSecret.Data)), nil, reqLogger)
 		return reconcile.Result{}, false, nil
 	}
 
@@ -92,7 +93,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		TrustedBundle:   trustedBundle,
 		ClusterDomain:   r.clusterDomain,
 		KeyPair:         linseedKeyPair,
-		EsAdminUserName: esAdminUserName,
+		ESAdminUserName: esAdminUserName,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

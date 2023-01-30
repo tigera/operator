@@ -87,25 +87,25 @@ type Config struct {
 	// ClusterDomain to use when building service URLs.
 	ClusterDomain string
 
-	// EsAdminUserName is the admin user used to connect to Elastic
-	EsAdminUserName string
+	// ESAdminUserName is the admin user used to connect to Elastic
+	ESAdminUserName string
 }
 
-func (e *linseed) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := e.cfg.Installation.Registry
-	path := e.cfg.Installation.ImagePath
-	prefix := e.cfg.Installation.ImagePrefix
+func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
+	reg := l.cfg.Installation.Registry
+	path := l.cfg.Installation.ImagePath
+	prefix := l.cfg.Installation.ImagePrefix
 	var err error
 	errMsgs := []string{}
 
 	// Calculate the image(s) to use for Linseed, given user registry configuration.
-	e.linseedImage, err = components.GetReference(components.ComponentLinseed, reg, path, prefix, is)
+	l.linseedImage, err = components.GetReference(components.ComponentLinseed, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if e.cfg.Installation.CertificateManagement != nil {
-		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.cfg.Installation, is)
+	if l.cfg.Installation.CertificateManagement != nil {
+		l.csrImage, err = certificatemanagement.ResolveCSRInitImage(l.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -116,30 +116,30 @@ func (e *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (e *linseed) Objects() (toCreate, toDelete []client.Object) {
-	toCreate = append(toCreate, e.linseedAllowTigeraPolicy())
-	toCreate = append(toCreate, e.linseedService())
-	toCreate = append(toCreate, e.linseedRole())
-	toCreate = append(toCreate, e.linseedRoleBinding())
-	toCreate = append(toCreate, e.linseedServiceAccount())
-	toCreate = append(toCreate, e.linseedDeployment())
+func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
+	toCreate = append(toCreate, l.linseedAllowTigeraPolicy())
+	toCreate = append(toCreate, l.linseedService())
+	toCreate = append(toCreate, l.linseedRole())
+	toCreate = append(toCreate, l.linseedRoleBinding())
+	toCreate = append(toCreate, l.linseedServiceAccount())
+	toCreate = append(toCreate, l.linseedDeployment())
 	return toCreate, toDelete
 }
 
-func (e *linseed) Ready() bool {
+func (l *linseed) Ready() bool {
 	return true
 }
 
-func (e *linseed) SupportedOSType() rmeta.OSType {
+func (l *linseed) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (e linseed) linseedRole() *rbacv1.Role {
+func (l linseed) linseedRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
-			Namespace: e.namespace,
+			Namespace: l.namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -153,12 +153,12 @@ func (e linseed) linseedRole() *rbacv1.Role {
 	}
 }
 
-func (e linseed) linseedRoleBinding() *rbacv1.RoleBinding {
+func (l linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
-			Namespace: e.namespace,
+			Namespace: l.namespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "Role",
@@ -169,70 +169,70 @@ func (e linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      ServiceAccountName,
-				Namespace: e.namespace,
+				Namespace: l.namespace,
 			},
 		},
 	}
 }
 
-func (e linseed) linseedDeployment() *appsv1.Deployment {
+func (l linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 
 		// Configuration for linseed API.
-		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
-		{Name: "LINSEED_HTTPS_CERT", Value: e.cfg.KeyPair.VolumeMountCertificateFilePath()},
-		{Name: "LINSEED_HTTPS_KEY", Value: e.cfg.KeyPair.VolumeMountKeyFilePath()},
+		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
+		{Name: "LINSEED_HTTPS_CERT", Value: l.cfg.KeyPair.VolumeMountCertificateFilePath()},
+		{Name: "LINSEED_HTTPS_KEY", Value: l.cfg.KeyPair.VolumeMountKeyFilePath()},
 
 		// Configuration for connection to Elasticsearch.
 		{Name: "LINSEED_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
-		{Name: "LINSEED_ELASTIC_USERNAME", Value: e.cfg.EsAdminUserName},
+		{Name: "LINSEED_ELASTIC_USERNAME", Value: l.cfg.ESAdminUserName},
 		{Name: "LINSEED_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: render.ElasticsearchAdminUserSecret,
 				},
-				Key: e.cfg.EsAdminUserName,
+				Key: l.cfg.ESAdminUserName,
 			},
 		}},
-		{Name: "LINSEED_ELASTIC_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
-		{Name: "LINSEED_ELASTIC_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "LINSEED_ELASTIC_CLIENT_CERT_PATH", Value: l.cfg.TrustedBundle.MountPath()},
+		{Name: "LINSEED_ELASTIC_CA_BUNDLE_PATH", Value: l.cfg.TrustedBundle.MountPath()},
 	}
 
 	var initContainers []corev1.Container
-	if e.cfg.KeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, e.cfg.KeyPair.InitContainer(e.namespace))
+	if l.cfg.KeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
 	}
 
 	volumes := []corev1.Volume{
-		e.cfg.KeyPair.Volume(),
-		e.cfg.TrustedBundle.Volume(),
+		l.cfg.KeyPair.Volume(),
+		l.cfg.TrustedBundle.Volume(),
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		e.cfg.KeyPair.VolumeMount(e.SupportedOSType()),
-		e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
+		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
+		l.cfg.TrustedBundle.VolumeMount(l.SupportedOSType()),
 	}
 
-	annotations := e.cfg.TrustedBundle.HashAnnotations()
-	annotations[e.cfg.KeyPair.HashAnnotationKey()] = e.cfg.KeyPair.HashAnnotationValue()
+	annotations := l.cfg.TrustedBundle.HashAnnotations()
+	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,
-			Namespace:   e.namespace,
+			Namespace:   l.namespace,
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
-			NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
+			Tolerations:        l.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector:       l.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ServiceAccountName,
-			ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
+			ImagePullSecrets:   secret.GetReferenceList(l.cfg.PullSecrets),
 			Volumes:            volumes,
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:         DeploymentName,
-					Image:        e.linseedImage,
+					Image:        l.linseedImage,
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
 					// UID 1001 is used in the Dockerfile.
@@ -264,15 +264,15 @@ func (e linseed) linseedDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if e.cfg.Installation.ControlPlaneReplicas != nil && *e.cfg.Installation.ControlPlaneReplicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, e.namespace)
+	if l.cfg.Installation.ControlPlaneReplicas != nil && *l.cfg.Installation.ControlPlaneReplicas > 1 {
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
 	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
-			Namespace: e.namespace,
+			Namespace: l.namespace,
 			Labels: map[string]string{
 				"k8s-app": DeploymentName,
 			},
@@ -282,26 +282,26 @@ func (e linseed) linseedDeployment() *appsv1.Deployment {
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: *podTemplate,
-			Replicas: e.cfg.Installation.ControlPlaneReplicas,
+			Replicas: l.cfg.Installation.ControlPlaneReplicas,
 		},
 	}
 }
 
-func (e linseed) linseedServiceAccount() *corev1.ServiceAccount {
+func (l linseed) linseedServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceAccountName,
-			Namespace: e.namespace,
+			Namespace: l.namespace,
 		},
 	}
 }
 
-func (e linseed) linseedService() *corev1.Service {
+func (l linseed) linseedService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName,
-			Namespace: e.namespace,
+			Namespace: l.namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": DeploymentName},
@@ -319,13 +319,13 @@ func (e linseed) linseedService() *corev1.Service {
 }
 
 // Allow access to Linseed from components that need it.
-func (e *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
+func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 	// Egress needs to be allowed to:
 	// - Kubernetes API
 	// - Cluster DNS
 	// - Elasticsearch
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, l.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -347,7 +347,7 @@ func (e *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PolicyName,
-			Namespace: e.namespace,
+			Namespace: l.namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

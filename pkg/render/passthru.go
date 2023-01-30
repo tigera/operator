@@ -6,8 +6,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func NewPassthrough(isDelete bool, objs ...client.Object) Component {
-	return &passthroughComponent{isDelete: isDelete, objs: objs}
+func NewDeletionPassthrough(objs ...client.Object) Component {
+	return &passthroughComponent{isDelete: true, objs: objs}
+}
+
+func NewPassthrough(objs ...client.Object) Component {
+	return &passthroughComponent{isDelete: false, objs: objs}
 }
 
 // passthroughComponent is an implementation of a Component that simply passes back

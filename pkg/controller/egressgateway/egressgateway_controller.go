@@ -63,7 +63,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
@@ -174,7 +174,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			objects = append(objects, scc)
 		}
 
-		err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(true, objects...), r.status)
+		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
 		if err != nil {
 			reqLogger.Error(err, "error deleting cluster scoped resources")
 			return reconcile.Result{}, nil
@@ -220,7 +220,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 				for index, user := range scc.Users {
 					if user == userString {
 						scc.Users = append(scc.Users[:index], scc.Users[index+1:]...)
-						err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(false, scc), r.status)
+						err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(scc), r.status)
 						if err != nil {
 							reqLogger.Error(err, "error updating security context constraints")
 						}
@@ -354,8 +354,8 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec, namespaceAndNames []string) error {
-
+	installation *operatorv1.InstallationSpec, namespaceAndNames []string,
+) error {
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
 	fillDefaults(egw, installation)
@@ -495,7 +495,7 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	return nil
 }
 
-//getEgressGateways returns the egress gateways in all namespaces or in the request's namespace.
+// getEgressGateways returns the egress gateways in all namespaces or in the request's namespace.
 func getEgressGateways(ctx context.Context, cli client.Client) ([]operatorv1.EgressGateway, error) {
 	// Get all the Egress Gateways in all the namespaces.
 	instance := &operatorv1.EgressGatewayList{}

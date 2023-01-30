@@ -89,7 +89,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				KeyPair:         kp,
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
-				EsAdminUserName: "elastic",
+				ESAdminUserName: "elastic",
 			}
 		})
 
@@ -110,9 +110,10 @@ var _ = Describe("Linseed rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				KeyPair:       kp,
-				TrustedBundle: bundle,
-				ClusterDomain: clusterDomain,
+				KeyPair:         kp,
+				TrustedBundle:   bundle,
+				ClusterDomain:   clusterDomain,
+				ESAdminUserName: "elastic",
 			}
 
 			component := Linseed(cfg)
@@ -378,14 +379,12 @@ func expectedContainers() []corev1.Container {
 			},
 			Env: []corev1.EnvVar{
 				{
-					Name:      "LINSEED_LOG_LEVEL",
-					Value:     "INFO",
-					ValueFrom: nil,
+					Name:  "LINSEED_LOG_LEVEL",
+					Value: "INFO",
 				},
 				{
-					Name:      "LINSEED_FIPS_MODE_ENABLED",
-					Value:     "false",
-					ValueFrom: nil,
+					Name:  "LINSEED_FIPS_MODE_ENABLED",
+					Value: "false",
 				},
 				{
 					Name:  "LINSEED_HTTPS_CERT",
@@ -396,40 +395,32 @@ func expectedContainers() []corev1.Container {
 					Value: "/tigera-secure-linseed-cert/tls.key",
 				},
 				{
-					Name:      "LINSEED_ELASTIC_ENDPOINT",
-					Value:     "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200",
-					ValueFrom: nil,
+					Name:  "LINSEED_ELASTIC_ENDPOINT",
+					Value: "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200",
 				},
 				{
-					Name:      "LINSEED_ELASTIC_USERNAME",
-					Value:     "elastic",
-					ValueFrom: nil,
+					Name:  "LINSEED_ELASTIC_USERNAME",
+					Value: "elastic",
 				},
 				{
 					Name:  "LINSEED_ELASTIC_PASSWORD",
 					Value: "",
 					ValueFrom: &corev1.EnvVarSource{
-						FieldRef:         nil,
-						ResourceFieldRef: nil,
-						ConfigMapKeyRef:  nil,
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: "tigera-secure-es-elastic-user",
 							},
-							Key:      "elastic",
-							Optional: nil,
+							Key: "elastic",
 						},
 					},
 				},
 				{
-					Name:      "LINSEED_ELASTIC_CLIENT_CERT_PATH",
-					Value:     "/etc/pki/tls/certs/tigera-ca-bundle.crt",
-					ValueFrom: nil,
+					Name:  "LINSEED_ELASTIC_CLIENT_CERT_PATH",
+					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 				{
-					Name:      "LINSEED_ELASTIC_CA_BUNDLE_PATH",
-					Value:     "/etc/pki/tls/certs/tigera-ca-bundle.crt",
-					ValueFrom: nil,
+					Name:  "LINSEED_ELASTIC_CA_BUNDLE_PATH",
+					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 			},
 			VolumeMounts: []corev1.VolumeMount{

@@ -92,7 +92,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		TrustedBundle:   trustedBundle,
 		ClusterDomain:   r.clusterDomain,
 		KeyPair:         linseedKeyPair,
-		EsAdminUserName: esAdminUserName,
+		ESAdminUserName: esAdminUserName,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

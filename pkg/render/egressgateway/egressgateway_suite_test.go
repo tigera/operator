@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package testutils
+package egressgateway
 
 import (
-	"github.com/tigera/operator/pkg/common"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/reporters"
+	. "github.com/onsi/gomega"
 )
 
-var KubeControllersUserSecret = corev1.Secret{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "Secret",
-		APIVersion: "v1",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      "tigera-ee-kube-controllers-elasticsearch-access",
-		Namespace: common.OperatorNamespace(),
-	},
-	Data: map[string][]byte{
-		"username": []byte("password"),
-		"password": []byte("password"),
-	},
+func TestRender(t *testing.T) {
+	RegisterFailHandler(Fail)
+	junitReporter := reporters.NewJUnitReporter("../../../../report/egressgateway_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/egressgateway/egressgateway Suite", []Reporter{junitReporter})
 }

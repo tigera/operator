@@ -221,13 +221,13 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
-		// GlobalNetworkPolicy and NetworkPolicy is served through the Tigera API Server, which currently restricts List and Watch
-		// operations on NetworkPolicy and GlobalNetworkPolcy  to a single tier only, specified via label or field selector. If no
-		// selector is specified, List and Watch return policies from the 'default' tier. The manager cache
-		// must therefore apply a selector to specify the tier that the operator currently reconciles policy
-		// within so that it can receive the expected resources for List and Watch. If the operator needs to
-		// reconcile policy within multiple tiers, the API Server should be updated to serve policy from all
-		// tiers that the user is authorized for.
+		// GlobalNetworkPolicy and NetworkPolicy are served through the Tigera API Server, which currently
+		// restricts List and Watch operations on NetworkPolicies and GlobalNetworkPolcies to a single tier
+		// only, specified via label or field selector. If no selector is specified, List and Watch return
+		// policies from the 'default' tier. The manager cache must therefore apply a selector to specify
+		// the tier that the operator currently reconciles policy within so that it can receive the expected
+		// resources for List and Watch. If the operator needs to reconcile policy within multiple tiers,
+		// the API Server should be updated to serve policy from all tiers that the user is authorized for.
 		NewCache: cache.BuilderWithOptions(cache.Options{
 			SelectorsByObject: cache.SelectorsByObject{
 				&v3.NetworkPolicy{}:       {Label: policySelector},

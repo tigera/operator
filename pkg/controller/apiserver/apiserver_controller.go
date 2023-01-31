@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -63,7 +64,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	c, err := controller.New("apiserver-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create apiserver-controller: %v", err)
+		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
@@ -157,7 +158,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 
 	for _, secretName := range []string{
 		"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureCertSecret,
-		certificatemanagement.CASecretName, render.DexTLSSecretName,
+		certificatemanagement.CASecretName, render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
@@ -278,6 +279,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Query enterprise-only data.
 	var tunnelCASecret certificatemanagement.KeyPairInterface
+	var trustedBundle certificatemanagement.TrustedBundle
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
@@ -344,6 +346,14 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				includeV3NetworkPolicy = true
 			}
 		}
+
+		prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if prometheusCertificate != nil {
+			trustedBundle = certificatemanagement.CreateTrustedBundle(prometheusCertificate)
+		}
 	}
 
 	err = utils.GetK8sServiceEndPoint(r.client)
@@ -369,6 +379,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		PullSecrets:                 pullSecrets,
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
 		TunnelCASecret:              tunnelCASecret,
+		TrustedBundle:               trustedBundle,
 		UsePSP:                      r.usePSP,
 	}
 
@@ -386,6 +397,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelCASecret, true, true),
 			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 	if tunnelSecretPassthrough != nil {
@@ -501,5 +513,4 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		}
 	}
 	return nil
-
 }

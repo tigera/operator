@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,6 +74,13 @@ func addServiceMonitorFluentdWatch(c controller.Controller) error {
 	})
 }
 
+func addServiceMonitorKubeControllerWatch(c controller.Controller) error {
+	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.KubeControllerMetrics, Namespace: common.TigeraPrometheusNamespace},
+	})
+}
+
 func addWatch(c controller.Controller) error {
 	var err error
 	if err = addAlertmanagerWatch(c); err != nil {
@@ -98,6 +105,10 @@ func addWatch(c controller.Controller) error {
 
 	if err = addServiceMonitorFluentdWatch(c); err != nil {
 		return fmt.Errorf("failed to watch ServiceMonitor fluentd-metrics resource: %w", err)
+	}
+
+	if err = addServiceMonitorKubeControllerWatch(c); err != nil {
+		return fmt.Errorf("failed to watch ServiceMonitor calico-kube-controller-metrics resource: %w", err)
 	}
 
 	if err = utils.AddSecretsWatch(c, monitor.AlertmanagerConfigSecret, common.OperatorNamespace()); err != nil {

@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2017-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -374,6 +374,11 @@ type FelixConfigurationSpec struct {
 	// TPROXYMode sets whether traffic is directed through a transparent proxy for further processing or not
 	// [Default: Disabled]
 	TPROXYMode *TPROXYModeOption `json:"tproxyMode,omitempty"`
+
+	// EgressIPVXLANPort is the port number of vxlan tunnel device for egress traffic. [Default: 4790]
+	EgressIPVXLANPort *int `json:"egressIPVXLANPort,omitempty"`
+	// EgressIPVXLANVNI is the VNI ID of vxlan tunnel device for egress traffic. [Default: 4097]
+	EgressIPVXLANVNI *int `json:"egressIPVXLANVNI,omitempty"`
 }
 
 type RouteTableRange struct {

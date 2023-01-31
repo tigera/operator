@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,15 +26,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -450,6 +451,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 		)
 	}
+	// UID 999 is used in kube-controller Dockerfile.
+	sc := securitycontext.NewNonRootContext()
+	sc.RunAsUser = ptr.Int64ToPtr(999)
+	sc.RunAsGroup = ptr.Int64ToPtr(0)
 
 	container := corev1.Container{
 		Name:      c.kubeControllerName,
@@ -482,7 +487,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 			TimeoutSeconds: 10,
 		},
-		VolumeMounts: c.kubeControllersVolumeMounts(),
+		SecurityContext: sc,
+		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}
 
 	if c.kubeControllerName == EsKubeController {

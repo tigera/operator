@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	appsv1 "k8s.io/api/apps/v1"
@@ -294,11 +295,17 @@ func (c *csiComponent) csiDaemonset() *appsv1.DaemonSet {
 
 	setNodeCriticalPod(&(dsSpec.Template))
 
-	return &appsv1.DaemonSet{
+	ds := appsv1.DaemonSet{
 		TypeMeta:   typeMeta,
 		ObjectMeta: dsMeta,
 		Spec:       dsSpec,
 	}
+
+	if overrides := c.cfg.Installation.CSINodeDriverDaemonSet; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
+	}
+
+	return &ds
 }
 
 func (c *csiComponent) serviceAccount() *corev1.ServiceAccount {
@@ -374,12 +381,22 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
 
-	c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.csiImage, err = components.GetReference(components.ComponentCSIPrivate, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivate, reg, path, prefix, is)
+	} else {
+		c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+	}
 
 	return err
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -162,6 +162,11 @@ var (
 		Image:   "tigera/packetcapture",
 	}
 
+	ComponentEgressGateway = component{
+		Version: "master",
+		Image:   "tigera/egress-gateway",
+	}
+
 	ComponentL7Collector = component{
 		Version: "master",
 		Image:   "tigera/l7-collector",
@@ -244,6 +249,21 @@ var (
 		Version: "master",
 		Image:   "tigera/calico-windows-upgrade",
 	}
+
+	ComponentFlexVolumePrivate = component{
+		Version: "master",
+		Image:   "tigera/pod2daemon-flexvol",
+	}
+
+	ComponentCSIPrivate = component{
+		Version: "master",
+		Image:   "tigera/csi",
+	}
+
+	ComponentCSINodeDriverRegistrarPrivate = component{
+		Version: "master",
+		Image:   "tigera/node-driver-registrar",
+	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []component{
@@ -271,6 +291,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,
@@ -288,5 +309,8 @@ var (
 		ComponentLinseed,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
+		ComponentFlexVolumePrivate,
+		ComponentCSIPrivate,
+		ComponentCSINodeDriverRegistrarPrivate,
 	}
 )

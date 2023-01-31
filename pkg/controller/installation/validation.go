@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020, 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2020, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -405,6 +405,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			return fmt.Errorf("Installation spec.CalicoWindowsUpgradeDaemonSet is not valid: %w", err)
 		}
 	}
+
+	// Verify the CSINodeDriverDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CSINodeDriverDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, validation.NoContainersDefined, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CSINodeDriverDaemonSet is not valid: %w", err)
+		}
+	}
+
 	return nil
 }
 

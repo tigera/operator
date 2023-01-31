@@ -109,7 +109,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	} else if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
 	} else {
-		objectsToDelete = append(objectsToDelete, PodSecurityPolicy())
 		objectsToDelete = append(objectsToDelete, c.egwRole())
 		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
 	}

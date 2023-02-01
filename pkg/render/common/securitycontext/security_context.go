@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,18 +25,54 @@ var (
 	// Non-system UID and GID range is normally from 1000 to 60000 (Debian derived systems define this
 	// in /etc/login.defs). On a normal Linux host, it is unlikely to have more than 10k non-system users.
 	// 10001 is chosen based on this assumption.
-	RunAsUserID  int64 = 10001
-	RunAsGroupID int64 = 10001
+	runAsUserID  int64 = 10001
+	runAsGroupID int64 = 10001
 )
 
-// NewBaseContext returns the non root non privileged security context that most of the containers running should
-// be using.
-func NewBaseContext(uid, gid int64) *corev1.SecurityContext {
+// NewNonRootContext returns the non-root and non-privileged container security context that most of
+// the containers should be using.
+func NewNonRootContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-		Privileged:               ptr.BoolToPtr(false),
-		RunAsGroup:               &gid,
-		RunAsNonRoot:             ptr.BoolToPtr(true),
-		RunAsUser:                &uid,
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		Privileged:   ptr.BoolToPtr(false),
+		RunAsGroup:   &runAsGroupID,
+		RunAsNonRoot: ptr.BoolToPtr(true),
+		RunAsUser:    &runAsUserID,
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
+
+// NewRootContext returns the root container security context for containers that access host files or network.
+func NewRootContext(privileged bool) *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		AllowPrivilegeEscalation: ptr.BoolToPtr(privileged),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		Privileged:   ptr.BoolToPtr(privileged),
+		RunAsGroup:   ptr.Int64ToPtr(0),
+		RunAsNonRoot: ptr.BoolToPtr(false),
+		RunAsUser:    ptr.Int64ToPtr(0),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
+
+// NewNonRootPodContext returns the non-root and non-privileged pod security context for pods that container
+// security context can't be set directly.
+func NewNonRootPodContext() *corev1.PodSecurityContext {
+	return &corev1.PodSecurityContext{
+		RunAsGroup:   &runAsGroupID,
+		RunAsNonRoot: ptr.BoolToPtr(true),
+		RunAsUser:    &runAsUserID,
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
 	}
 }

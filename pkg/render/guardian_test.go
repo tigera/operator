@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,20 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/testutils"
-	"k8s.io/apimachinery/pkg/types"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -40,6 +27,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -131,13 +132,14 @@ var _ = Describe("Rendering tests", func() {
 
 			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
-			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
-			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(BeEquivalentTo(corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}))
-			Expect(deployment.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(BeEquivalentTo(
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+			Expect(deployment.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+				&corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				}))
+			Expect(deployment.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
 				&corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
 				},

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,10 +22,6 @@ import (
 	"net/url"
 	"strings"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -42,12 +38,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -292,12 +290,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		// ECK operator
 		toCreate = append(toCreate,
-			// In order to use restricted, we need to change:
-			// - securityContext.allowPrivilegeEscalation=false
-			// - securityContext.capabilities.drop=["ALL"]
-			// - securityContext.runAsNonRoot=true
-			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline),
+			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
 			es.eckOperatorAllowTigeraPolicy(),
 		)
 
@@ -362,8 +355,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 			// Kibana CRs
-			// In order to use restricted, we need to change:
-			// - securityContext.allowPrivilegeEscalation=false)
+			// In order to use restricted, we need to change elastic-internal-init-config:
+			// - securityContext.allowPrivilegeEscalation=false
 			// - securityContext.capabilities.drop=["ALL"]
 			// - securityContext.runAsNonRoot=true
 			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
@@ -584,6 +577,16 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		})
 	}
 
+	sc := securitycontext.NewRootContext(false)
+	// These capabilities are required for docker-entrypoint.sh.
+	// https://github.com/elastic/elasticsearch/blob/7.17/distribution/docker/src/docker/bin/docker-entrypoint.sh).
+	// TODO Consider removing for Elasticsearch v8+.
+	sc.Capabilities.Add = []corev1.Capability{
+		"SETGID",
+		"SETUID",
+		"SYS_CHROOT",
+	}
+
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
 		ReadinessProbe: &corev1.Probe{
@@ -598,26 +601,14 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			SuccessThreshold:    1,
 			TimeoutSeconds:      5,
 		},
-		Resources: es.resourceRequirements(),
-		Env:       env,
-	}
-
-	// For OpenShift, set the user to run as non-root specifically. This prevents issues with the elasticsearch
-	// image which requires that root users have permissions to run CHROOT which is not given in OpenShift.
-	// TODO: Consider removing for ES >= 8.0.0. See https://github.com/elastic/cloud-on-k8s/issues/2791 for considerations.
-	if es.cfg.Provider == operatorv1.ProviderOpenShift {
-		esContainer.SecurityContext = &corev1.SecurityContext{
-			RunAsUser: ptr.Int64ToPtr(1000),
-		}
+		Resources:       es.resourceRequirements(),
+		SecurityContext: sc,
+		Env:             env,
 	}
 
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
 	initOSSettingsContainer := corev1.Container{
-		Name: "elastic-internal-init-os-settings",
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
-			RunAsUser:  ptr.Int64ToPtr(0),
-		},
+		Name:  "elastic-internal-init-os-settings",
 		Image: es.esImage,
 		Command: []string{
 			"/bin/sh",
@@ -626,6 +617,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			"-c",
 			"echo 262144 > /proc/sys/vm/max_map_count",
 		},
+		SecurityContext: securitycontext.NewRootContext(true),
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
@@ -637,9 +629,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		initKeystore := corev1.Container{
 			Name:  keystoreInitContainerName,
 			Image: es.esImage,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(false),
-			},
 			Env: []corev1.EnvVar{
 				{
 					Name: ElasticsearchKeystoreEnvName,
@@ -657,8 +646,9 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			},
 			// This is a script made by Tigera in our docker image to initialize the JVM keystore and the ES keystore
 			// using the password from env var KEYSTORE_PASSWORD.
-			Command: []string{"/bin/sh"},
-			Args:    []string{"-c", "/usr/bin/initialize_keystore.sh"},
+			Command:         []string{"/bin/sh"},
+			Args:            []string{"-c", "/usr/bin/initialize_keystore.sh"},
+			SecurityContext: securitycontext.NewRootContext(false),
 		}
 		initContainers = append(initContainers, initKeystore)
 		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)
@@ -668,15 +658,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	var autoMountToken bool
 	if es.cfg.Installation.CertificateManagement != nil {
-
 		// If certificate management is used, we need to override a mounting options for this init container.
 		initFSName := "elastic-internal-init-filesystem"
 		initFSContainer := corev1.Container{
-			Name:  initFSName,
-			Image: es.esImage,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(false),
-			},
+			Name:    initFSName,
+			Image:   es.esImage,
 			Command: []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"},
 			Resources: corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
@@ -688,6 +674,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 					"memory": resource.MustParse("50Mi"),
 				},
 			},
+			SecurityContext: securitycontext.NewRootContext(false),
 			VolumeMounts: []corev1.VolumeMount{
 				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
 				{
@@ -780,10 +767,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// always get the correct SELinux labels and guarantees the labels will be correct for the main container.
 
 	initLogContextContainer := corev1.Container{
-		Name: "elastic-internal-init-log-selinux-context",
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(false),
-		},
+		Name:  "elastic-internal-init-log-selinux-context",
 		Image: es.esImage,
 		Command: []string{
 			"/bin/sh",
@@ -792,6 +776,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			"-c",
 			"ls -ldZ /usr/share/elasticsearch",
 		},
+		SecurityContext: securitycontext.NewRootContext(false),
 	}
 	initContainers = append(initContainers, initLogContextContainer)
 
@@ -1302,6 +1287,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 								"memory": memoryRequest,
 							},
 						},
+						SecurityContext: securitycontext.NewNonRootContext(),
 					}},
 					TerminationGracePeriodSeconds: &gracePeriod,
 				},
@@ -1448,13 +1434,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 								},
 							},
 						},
-						VolumeMounts: volumeMounts,
+						SecurityContext: securitycontext.NewNonRootContext(),
+						VolumeMounts:    volumeMounts,
 					}},
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsGroup:   &securitycontext.RunAsGroupID,
-						RunAsNonRoot: ptr.BoolToPtr(true),
-						RunAsUser:    &securitycontext.RunAsUserID,
-					},
 					Volumes: volumes,
 				},
 			},
@@ -1469,8 +1451,6 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 }
 
 func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
-	f := false
-	t := true
 	elasticCuratorLivenessProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
@@ -1517,14 +1497,11 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
 								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:          EsCuratorName,
-									Image:         es.curatorImage,
-									Env:           es.curatorEnvVars(),
-									LivenessProbe: elasticCuratorLivenessProbe,
-									SecurityContext: &corev1.SecurityContext{
-										RunAsNonRoot:             &t,
-										AllowPrivilegeEscalation: &f,
-									},
+									Name:            EsCuratorName,
+									Image:           es.curatorImage,
+									Env:             es.curatorEnvVars(),
+									LivenessProbe:   elasticCuratorLivenessProbe,
+									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts: []corev1.VolumeMount{
 										es.cfg.TrustedBundle.VolumeMount(es.SupportedOSType()),
 									},

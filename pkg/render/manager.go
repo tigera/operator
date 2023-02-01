@@ -494,8 +494,8 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Name:          "tigera-es-proxy",
 		Image:         c.esProxyImage,
 		LivenessProbe: c.managerEsProxyProbe(),
-		// UID 1001 is used in the es-proxy Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		// UID 10001 is used in the es-proxy Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(10001, 0),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

@@ -137,7 +137,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())
 		Expect(*esProxy.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
 		Expect(*esProxy.SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 
 		// voltron container
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{

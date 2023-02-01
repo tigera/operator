@@ -341,7 +341,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 
 	// Ingress needs to be allowed from all clients.
 	linseedIngressDestinationEntityRule := v3.EntityRule{
-		Ports: networkpolicy.Ports(Port),
+		Ports: networkpolicy.Ports(TargetPort),
 	}
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

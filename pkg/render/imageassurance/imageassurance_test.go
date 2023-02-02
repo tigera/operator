@@ -132,6 +132,15 @@ var _ = Describe("Image Assurance Render", func() {
 
 		{name: imageassurance.PodWatcherClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+
+		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
+		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
+		{name: imageassurance.RuntimeCleanerClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
+		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},
+		{name: imageassurance.RuntimeCleanerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
+		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 	}
 
 	var apiExpectedCommonENV = []corev1.EnvVar{
@@ -305,9 +314,52 @@ var _ = Describe("Image Assurance Render", func() {
 		for _, expected := range scannerExpectedVMs {
 			rtest.ExpectVolumeMount(scannerVMs, expected.Name, expected.MountPath)
 		}
+
+		// Check rendering of runtime cleaner deployment
+		runtimeCleanerDeployment := rtest.GetResource(createdResources, imageassurance.ResourceNameImageAssuranceRuntimeCleaner, imageassurance.NameSpaceImageAssurance,
+			"apps", "v1", "Deployment").(*appsv1.Deployment)
+		runtimeCleaner := runtimeCleanerDeployment.Spec.Template.Spec
+
+		Expect(runtimeCleaner.HostNetwork).To(BeFalse())
+		Expect(runtimeCleaner.HostIPC).To(BeFalse())
+		Expect(runtimeCleaner.DNSPolicy).To(Equal(corev1.DNSClusterFirst))
+		Expect(len(runtimeCleaner.Containers)).To(Equal(1))
+
+		runtimeCleanerEnv := runtimeCleaner.Containers[0].Env
+		runtimeCleanerExpectedENV := []corev1.EnvVar{
+			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
+			rcimageassurance.EnvOrganizationID(),
+			{Name: "IMAGE_ASSURANCE_API_CA", Value: "/certs/bast/tls.crt"},
+			{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
+			{Name: "IMAGE_ASSURANCE_API_TOKEN", Value: ""},
+			{Name: "IMAGE_ASSURANCE_MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "IMAGE_ASSURANCE_POLLING_INTERVAL_IN_SECONDS", Value: "300"},
+		}
+
+		Expect(len(runtimeCleanerExpectedENV)).To(Equal(len(runtimeCleanerEnv)))
+		for _, expected := range runtimeCleanerExpectedENV {
+			rtest.ExpectEnv(runtimeCleanerEnv, expected.Name, expected.Value)
+		}
+
+		runtimeCleanerVMs := runtimeCleaner.Containers[0].VolumeMounts
+		runtimeCleanerExpectedVMs := []corev1.VolumeMount{
+			{
+				Name:      certificatemanagement.TrustedCertConfigMapName,
+				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+			},
+			{
+				Name:      rcimageassurance.ImageAssuranceSecretName,
+				MountPath: rcimageassurance.CAMountPath,
+			},
+		}
+
+		Expect(len(runtimeCleanerExpectedVMs)).To(Equal(len(runtimeCleanerVMs)))
+		for _, expected := range runtimeCleanerExpectedVMs {
+			rtest.ExpectVolumeMount(runtimeCleanerVMs, expected.Name, expected.MountPath)
+		}
 	})
 
-	It("should API resource correctly with Authentication Enabled", func() {
+	It("should render API resource correctly with Authentication Enabled", func() {
 		// Should render the correct resources.
 		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{

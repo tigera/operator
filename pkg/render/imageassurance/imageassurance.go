@@ -21,12 +21,13 @@ import (
 )
 
 const (
-	NameSpaceImageAssurance              = "tigera-image-assurance"
-	ResourceNameImageAssuranceAPI        = "tigera-image-assurance-api"
-	ResourceNameImageAssuranceScanner    = "tigera-image-assurance-scanner"
-	ResourceNameImageAssuranceDBMigrator = "tigera-image-assurance-db-migrator"
-	ResourceNameImageAssuranceCAW        = "tigera-image-assurance-caw"
-	ResourceNameImageAssurancePodWatcher = "tigera-image-assurance-pod-watcher"
+	NameSpaceImageAssurance                  = "tigera-image-assurance"
+	ResourceNameImageAssuranceAPI            = "tigera-image-assurance-api"
+	ResourceNameImageAssuranceScanner        = "tigera-image-assurance-scanner"
+	ResourceNameImageAssuranceDBMigrator     = "tigera-image-assurance-db-migrator"
+	ResourceNameImageAssuranceCAW            = "tigera-image-assurance-caw"
+	ResourceNameImageAssurancePodWatcher     = "tigera-image-assurance-pod-watcher"
+	ResourceNameImageAssuranceRuntimeCleaner = "tigera-image-assurance-runtime-cleaner"
 
 	// APICertSecretName is tls certificates for the tigera-manager and the image assurance api.
 	APICertSecretName = "tigera-image-assurance-api-cert-pair"
@@ -39,6 +40,11 @@ const (
 
 	PodWatcherClusterRoleName     = "tigera-image-assurance-pod-watcher-api-access"
 	PodWatcherAPIAccessSecretName = "pod-watcher-image-assurance-api-token"
+
+	RuntimeCleanerClusterRoleName             = "tigera-image-assurance-runtime-cleaner-api-access"
+	RuntimeCleanerClusterRoleBindingName      = "tigera-image-assurance-runtime-cleaner-api-access"
+	RuntimeCleanerAPIAccessServiceAccountName = "tigera-image-assurance-runtime-cleaner-api-access"
+	RuntimeCleanerAPIAccessSecretName         = "runtime-cleaner-image-assurance-api-token"
 
 	OperatorAPIAccessServiceAccountName = "tigera-image-assurance-operator-api-access"
 
@@ -76,9 +82,12 @@ type Config struct {
 	ScannerAPIAccessToken  []byte
 
 	// Calculated internal fields.
-	tlsHash       string
-	apiProxyImage string
-	scannerImage  string
+	tlsHash             string
+	apiProxyImage       string
+	scannerImage        string
+	runtimeCleanerImage string
+
+	RuntimeCleanerAPIAccessToken []byte
 
 	APIProxyURL string
 }
@@ -109,6 +118,11 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	c.config.runtimeCleanerImage, err = components.GetReference(components.ComponentImageAssuranceRuntimeCleaner, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
@@ -116,11 +130,6 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-// Objects returns Image Assurance resources to be created or deleted based c.config.NeedsMigrating and c.config.ComponentsUp.
-// When both c.config.NeedsMigrating and c.config.ComponentsUp are true, we need to clean up the api, scanner and pod watcher deployments
-// before proceeding. When only c.config.NeedsMigrating is true, return just the migrator job and associated resources.
-// When both c.config.NeedsMigrating and c.config.ComponentsUp are false, return all resources.
-// Right now we need to clean up CAW deployment for all circumstances because we stop supporting cloud-based scanning.
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 
@@ -167,6 +176,19 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// Keep the cluster roles (now empty) so kube controllers doesn't fail when it can't find them.
 	// TODO Remove once kube controllers no longer relies on this.
 	objs = append(objs, clusterrole.ToRuntimeObjects(c.podWatcherClusterRoles()...)...)
+
+	// runtime cleaner resources
+	objs = append(objs,
+		c.runtimeCleanerServiceAccount(),
+		c.runtimeCleanerRole(),
+	)
+	objs = append(objs, clusterrole.ToRuntimeObjects(c.runtimeCleanerClusterRoles()...)...)
+	objs = append(objs,
+		c.runtimeCleanerRoleBinding(),
+		c.runtimeCleanerClusterRoleBinding(),
+		c.runtimeCleanerAPIAccessTokenSecret(),
+		c.runtimeCleanerDeployment(),
+	)
 
 	if c.config.KeyValidatorConfig != nil {
 		objs = append(objs, secret.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredSecrets(NameSpaceImageAssurance)...)...)

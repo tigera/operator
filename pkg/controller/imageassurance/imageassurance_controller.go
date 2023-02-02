@@ -39,7 +39,10 @@ import (
 var log = logf.Log.WithName("controller_image_assurance")
 
 // service accounts created by kube-controller for image assurance components for API access
-var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName}
+var apiTokenServiceAccounts = []string{
+	imageassurance.ScannerAPIAccessServiceAccountName,
+	imageassurance.RuntimeCleanerAPIAccessServiceAccountName,
+}
 
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -129,7 +132,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
 
-	for _, role := range []string{imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName} {
+	for _, role := range []string{imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName,
+		imageassurance.RuntimeCleanerClusterRoleName} {
 		if err = utils.AddClusterRoleWatch(c, role); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", role, err)
 		}
@@ -257,8 +261,21 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	if scannerAPIToken == nil {
-		reqLogger.Info("Waiting for scanner api access service account secret to be available")
-		r.status.SetDegraded("Waiting for scanner api access service account secret to be available", "")
+		reqLogger.Info("Waiting for scanner API access service account secret to be available")
+		r.status.SetDegraded("Waiting for scanner API access service account secret to be available", "")
+		return reconcile.Result{}, nil
+	}
+
+	runtimeCleanerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.RuntimeCleanerAPIAccessServiceAccountName)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in retrieving runtime cleaner API access token", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if runtimeCleanerAPIToken == nil {
+		reqLogger.Info("Waiting for runtime cleaner API access service account secret to be available")
+		r.status.SetDegraded("Waiting for runtime cleaner API access service account secret to be available", "")
 		return reconcile.Result{}, nil
 	}
 
@@ -297,15 +314,16 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	config := &imageassurance.Config{
-		PullSecrets:            pullSecrets,
-		Installation:           installation,
-		OsType:                 rmeta.OSTypeLinux,
-		ConfigurationConfigMap: configurationConfigMap,
-		TLSSecret:              tlsSecret,
-		KeyValidatorConfig:     kvc,
-		TrustedCertBundle:      trustedBundle,
-		ScannerAPIAccessToken:  scannerAPIToken,
-		APIProxyURL:            ia.Spec.APIProxyURL,
+		PullSecrets:                  pullSecrets,
+		Installation:                 installation,
+		OsType:                       rmeta.OSTypeLinux,
+		ConfigurationConfigMap:       configurationConfigMap,
+		TLSSecret:                    tlsSecret,
+		KeyValidatorConfig:           kvc,
+		TrustedCertBundle:            trustedBundle,
+		ScannerAPIAccessToken:        scannerAPIToken,
+		RuntimeCleanerAPIAccessToken: runtimeCleanerAPIToken,
+		APIProxyURL:                  ia.Spec.APIProxyURL,
 	}
 
 	components := []render.Component{

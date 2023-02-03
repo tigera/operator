@@ -21,16 +21,16 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/stretchr/testify v1.8.1
-	github.com/tigera/api v0.0.0-20230127214146-13f7c6ab995a
+	github.com/tigera/api v0.0.0-20230203184832-ac80c3cfeb3b
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.4.0
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.25.3
-	k8s.io/apiextensions-apiserver v0.25.3
-	k8s.io/apimachinery v0.25.3
-	k8s.io/client-go v0.25.3
-	k8s.io/kube-aggregator v0.25.3
+	k8s.io/api v0.25.6
+	k8s.io/apiextensions-apiserver v0.25.6
+	k8s.io/apimachinery v0.25.6
+	k8s.io/client-go v0.25.6
+	k8s.io/kube-aggregator v0.25.6
 	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
 	sigs.k8s.io/controller-runtime v0.13.0
 	sigs.k8s.io/kind v0.11.1 // Do not remove, not used by code but used by build
@@ -42,5 +42,5 @@ replace (
 
 	// Scanners flag anything less than v0.3.8 as having a CVE.
 	golang.org/x/text => golang.org/x/text v0.4.0
-	k8s.io/apiserver => k8s.io/apiserver v0.25.3
+	k8s.io/apiserver => k8s.io/apiserver v0.25.6
 )

@@ -117,6 +117,15 @@ components:
   windows-upgrade:
     image: tigera/calico-windows-upgrade
     version: v3.15.0
+  flexvol:
+    image: tigera/pod2daemon-flexvol
+    version: v3.15.0
+  csi:
+    image: tigera/csi
+    version: v3.15.0
+  csi-node-driver-registrar:
+    image: tigera/node-driver-registrar
+    version: v3.15.0
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
@@ -136,3 +145,4 @@ components:
   egress-gateway:
     image: tigera/egress-gateway
     version: v3.15.0
+

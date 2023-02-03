@@ -110,8 +110,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 								Value: "/etc/kubernetes/kubeconfig",
 							},
 						},
-						// UID 10001 is used in the operator Dockerfile.
-						SecurityContext: securitycontext.NewBaseContext(10001, 0),
+						SecurityContext: securitycontext.NewNonRootContext(),
 					}},
 				},
 			},

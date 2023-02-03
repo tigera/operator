@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"reflect"
 	"sync"
 
@@ -128,7 +129,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	logCtx.V(1).Info("Resource already exists, update it")
 
 	// if mergeState returns nil we don't want to update the object
-	if mobj := mergeState(obj, cur); mobj != nil {
+	if mobj := mergeState(obj, cur, c.scheme); mobj != nil {
 		switch obj.(type) {
 		case *batchv1.Job:
 			// Jobs can't be updated, they can only be deleted then created
@@ -299,7 +300,7 @@ func skipAddingOwnerReference(owner, controlled metav1.Object) bool {
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.
-func mergeState(desired client.Object, current runtime.Object) client.Object {
+func mergeState(desired client.Object, current runtime.Object, scheme *runtime.Scheme) client.Object {
 	// Take a copy of the desired object, so we can merge values into it without
 	// adjusting the caller's copy.
 	desired = desired.DeepCopyObject().(client.Object)
@@ -450,8 +451,46 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dui.SetOwnerReferences(cui.GetOwnerReferences())
 		return dui
 	default:
-		// Default to just using the desired state, with an updated RV.
-		return desired
+		// We attempt to generically determine whether the desired Object we have assembled is equivalent to the current
+		// Object stored. To make this determination, we apply the same transforms that the API server will perform to
+		// our desired object, and compare the result to the current object.
+		//
+		// The transforms made by the API server on update are: (1) defaulting, (2) converting, (3) updating managedFields,
+		// (4) applying mutating admission transforms. These transforms can be seen in `k8s.io/apiserver/pkg/endpoints/handlers/update.go`
+
+		originalDesired := desired.DeepCopyObject().(client.Object)
+		desiredGVK := desired.GetObjectKind().GroupVersionKind()
+		groupVersion := schema.GroupVersion{Version: desiredGVK.Version, Group: desiredGVK.Group}
+
+		// In preparation for DeepEqual comparison, explicitly nil any empty maps that we may have created when determining desired state.
+		// These empty maps are omitted when serialized by the API server, so nil them to match the current Object.
+		if len(desiredMeta.GetLabels()) == 0 {
+			desiredMeta.SetLabels(nil)
+		}
+		if len(desiredMeta.GetAnnotations()) == 0 {
+			desiredMeta.SetAnnotations(nil)
+		}
+
+		// Mirror transform (3). The server is responsible for setting this field - assume the current value if not set explicitly.
+		if desiredMeta.GetManagedFields() == nil {
+			desiredMeta.SetManagedFields(currentMeta.GetManagedFields())
+		}
+
+		// Mirror transform (1) and (2). This logic mirrors the Decode logic used by the API server, found in
+		// `k8s.io/apimachinery/pkg/runtime/serializer/versioning/versioning.go`.
+		scheme.Default(desired)
+		transformedDesired, err := scheme.ConvertToVersion(desired, groupVersion)
+		if err != nil {
+			return originalDesired
+		}
+
+		// We are not capable of mirroring transform (4), since it is purely server side.
+		// Perform our deep equal check now.
+		if reflect.DeepEqual(transformedDesired, current) {
+			return nil
+		} else {
+			return originalDesired
+		}
 	}
 }
 

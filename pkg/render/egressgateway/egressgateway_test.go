@@ -17,16 +17,17 @@ package egressgateway_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/egressgateway"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/egressgateway"
 )
 
 var _ = Describe("Egress Gateway rendering tests", func() {
@@ -153,6 +154,20 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		for _, elem := range expectedInitEnvVars {
 			Expect(initContainer.Env).To(ContainElement(elem))
 		}
+		Expect(*initContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+		Expect(*initContainer.SecurityContext.Privileged).To(BeTrue())
+		Expect(*initContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*initContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*initContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(initContainer.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(initContainer.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 		expectedEnvVars := []corev1.EnvVar{
 			{Name: "HEALTH_PORT", Value: "8080"},
 			{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
@@ -179,15 +194,21 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 		Expect(egwContainer.Ports).To(ContainElement(expectedPort))
 		Expect(dep.Spec.Template.Spec.NodeSelector["kubernetes.io/os"]).To(Equal("linux"))
-		expectedSecurityCtx := &corev1.SecurityContext{
-			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"NET_ADMIN"},
+		Expect(*egwContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*egwContainer.SecurityContext.Privileged).To(BeFalse())
+		Expect(*egwContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*egwContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*egwContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(egwContainer.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+				Add:  []corev1.Capability{"NET_ADMIN"},
 			},
-		}
-		Expect(egwContainer.SecurityContext).To(Equal(expectedSecurityCtx))
-		initContainerPrivileges := true
-		expectedInitSecurityCtx := &corev1.SecurityContext{Privileged: &initContainerPrivileges}
-		Expect(initContainer.SecurityContext).To(Equal(expectedInitSecurityCtx))
+		))
+		Expect(egwContainer.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 		expectedRP := &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{

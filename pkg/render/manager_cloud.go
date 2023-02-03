@@ -56,7 +56,6 @@ func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Contai
 
 	if c.cfg.CloudResources.CloudRBACResources != nil {
 		container.Env = append(container.Env,
-			corev1.EnvVar{Name: "VOLTRON_CHECK_MANAGED_CLUSTER_AUTHORIZATION_BEFORE_PROXY", Value: "true"},
 			corev1.EnvVar{Name: "VOLTRON_ENABLE_CALICO_CLOUD_RBAC_API", Value: "true"},
 			corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_CA_BUNDLE_PATH", Value: cloudrbac.CABundlePath},
 			corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_ENDPOINT", Value: cloudrbac.APIEndpoint},

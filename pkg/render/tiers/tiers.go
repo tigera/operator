@@ -46,6 +46,8 @@ var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
 	common.TigeraPrometheusNamespace,
 	"tigera-skraper",
 	rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+	"kube-system",
+	"calico-system",
 )
 
 var defaultTierOrder = 100.0
@@ -131,6 +133,26 @@ func (t tiersComponent) allowTigeraDNSEgressClusterDNSPolicy() *v3.GlobalNetwork
 						},
 					},
 				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Services: &v3.ServiceMatch{
+							Name:      "kube-dns",
+							Namespace: dnsPolicyNamespace,
+						},
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.UDPProtocol,
+					Destination: v3.EntityRule{
+						Services: &v3.ServiceMatch{
+							Name:      "kube-dns",
+							Namespace: dnsPolicyNamespace,
+						},
+					},
+				},
 			},
 		},
 	}
@@ -193,6 +215,17 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 				{
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.UDPProtocol,
+					Source: v3.EntityRule{
+						Services: &v3.ServiceMatch{
+							Name:      nodeLocalDNSServiceName,
+							Namespace: dnsPolicyNamespace,
+						},
+						Ports: networkpolicy.Ports(53),
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
 					Source: v3.EntityRule{
 						Services: &v3.ServiceMatch{
 							Name:      nodeLocalDNSServiceName,

@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	"github.com/tigera/operator/pkg/common"
 
 	apps "k8s.io/api/apps/v1"
@@ -1387,6 +1386,41 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		Expect(err).NotTo(BeNil())
 
 		Expect(mc.Index).To(Equal(4))
+	})
+
+	It("NetworkPolicy updates are omitted if there is no change", func() {
+		np := &v3.NetworkPolicy{
+			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "allow-tigera.test-policy",
+				Namespace: "tigera-namespace",
+			},
+			Spec: v3.NetworkPolicySpec{
+				Tier:     "allow-tigera",
+				Selector: "k8s-app == 'tigera-component'",
+				Egress: []v3.Rule{
+					{
+						Action: "Allow",
+					},
+				},
+				Types: []v3.PolicyType{"Egress"},
+			},
+		}
+
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{np},
+		}
+
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    np,
+		})
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+		Expect(err).To(BeNil())
+		Expect(mc.Index).To(Equal(1))
 	})
 })
 

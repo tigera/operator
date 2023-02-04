@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"text/template"
 
@@ -108,7 +107,7 @@ func GetComponents(versionsPath string) (Release, error) {
 // readComponents opens a versions.yml file and returns a Release
 func readComponents(versionsPath string) (Release, error) {
 	var cr Release
-	f, err := ioutil.ReadFile(versionsPath)
+	f, err := os.ReadFile(versionsPath)
 	if err != nil {
 		return cr, err
 	}

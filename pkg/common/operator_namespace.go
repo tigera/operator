@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 package common
 
 import (
-	"io/ioutil"
 	"os"
 
 	"github.com/cloudflare/cfssl/log"
@@ -29,7 +28,7 @@ func init() {
 		namespace = v
 		return
 	}
-	body, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	body, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		log.Errorf("Failed to read namespace file: %v", err)
 	} else {
@@ -42,10 +41,11 @@ func init() {
 
 // OperatorNamespace returns the namespace the operator is running in.
 // The value returned is based on the following priority (these are evaluated at startup):
-//   If the OPERATOR_NAMESPACE environment variable is non-empty then that is return.
-//   If the file /var/run/secrets/kubernetes.io/serviceaccount/namespace is non-empty
-//   then the contents is returned.
-//   The default "tigera-operator" is returned.
+//
+//	If the OPERATOR_NAMESPACE environment variable is non-empty then that is return.
+//	If the file /var/run/secrets/kubernetes.io/serviceaccount/namespace is non-empty
+//	then the contents is returned.
+//	The default "tigera-operator" is returned.
 func OperatorNamespace() string {
 	return namespace
 }

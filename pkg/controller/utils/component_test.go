@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1291,7 +1291,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		handler = NewComponentHandler(log, c, runtime.NewScheme(), nil)
 	})
 
-	It("if Updating a resource conflicts try the update again", func() {
+	Context("Resource conflicts", func() {
 		ds := apps.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-ds",
@@ -1307,90 +1307,75 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				},
 			},
 		}
-		fc := &fakeComponent{
-			supportedOSType: rmeta.OSTypeLinux,
-			objs:            []client.Object{&ds},
-		}
-
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Get",
-			Return: nil,
-			Obj:    &ds,
-		})
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Update",
-			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
-			Obj:    &ds,
-		})
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Get",
-			Return: nil,
-			Obj:    &ds,
-		})
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Update",
-			Return: nil,
-			Obj:    &ds,
-		})
-
-		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
-		Expect(err).To(BeNil())
-
-		Expect(mc.Index).To(Equal(4))
-
-	})
-
-	It("if Updating a resource conflicts try the update again", func() {
-		ds := apps.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-ds",
-				Namespace: "default",
-			},
-			Spec: apps.DaemonSetSpec{
-				Template: v1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Annotations: map[string]string{
-							fakeComponentAnnotationKey: fakeComponentAnnotationValue,
-						},
-					},
-				},
-			},
+		setToDS := func(object client.Object) {
+			dsToSet := object.(*apps.DaemonSet)
+			ds.DeepCopyInto(dsToSet)
 		}
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
 			objs:            []client.Object{&ds},
 		}
 
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Get",
-			Return: nil,
-			Obj:    &ds,
-		})
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Update",
-			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
-			Obj:    &ds,
-		})
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Get",
-			Return: nil,
-			Obj:    &ds,
-		})
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Update",
-			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
-			Obj:    &ds,
+		It("if Updating a resource conflicts try the update again", func() {
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method: "Update",
+				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Update",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+			Expect(err).To(BeNil())
+
+			Expect(mc.Index).To(Equal(4))
 		})
 
-		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
-		Expect(err).NotTo(BeNil())
+		It("if Updating a resource conflicts try the update again", func() {
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method: "Update",
+				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method: "Update",
+				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			})
 
-		Expect(mc.Index).To(Equal(4))
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+			Expect(err).NotTo(BeNil())
+
+			Expect(mc.Index).To(Equal(4))
+		})
 	})
 
-	It("NetworkPolicy updates are omitted if there is no change", func() {
-		np := &v3.NetworkPolicy{
-			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+	Context("Network Policy updates", func() {
+		baseNP := &v3.NetworkPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "NetworkPolicy",
+				APIVersion: "projectcalico.org/v3",
+			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "allow-tigera.test-policy",
 				Namespace: "tigera-namespace",
@@ -1406,45 +1391,106 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Types: []v3.PolicyType{"Egress"},
 			},
 		}
-
+		setToBaseNP := func(object client.Object) {
+			npToSet := object.(*v3.NetworkPolicy)
+			baseNP.DeepCopyInto(npToSet)
+		}
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs:            []client.Object{np},
+			objs:            []client.Object{baseNP},
 		}
 
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Get",
-			Return: nil,
-			Obj:    np,
+		It("NetworkPolicy updates are omitted if there is no change", func() {
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToBaseNP,
+			})
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+			Expect(err).To(BeNil())
+			Expect(mc.Index).To(Equal(1))
 		})
 
-		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
-		Expect(err).To(BeNil())
-		Expect(mc.Index).To(Equal(1))
+		It("NetworkPolicy updates are applied if there is a change", func() {
+			modifiedNP := baseNP.DeepCopy()
+			modifiedNP.Spec.Selector = "k8s-app == 'invalid-component'"
+			setToModifiedNP := func(object client.Object) {
+				npToSet := object.(*v3.NetworkPolicy)
+				modifiedNP.DeepCopyInto(npToSet)
+			}
+
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToModifiedNP,
+			})
+
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Update",
+				Return:       nil,
+				InputMutator: setToBaseNP,
+			})
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+			Expect(err).To(BeNil())
+			Expect(mc.Index).To(Equal(2))
+		})
 	})
 
-	It("Tier updates are omitted if there is no change", func() {
+	Context("Tier updates", func() {
 		order := 9000.0
-		t := &v3.Tier{
+		baseTier := &v3.Tier{
 			TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
 			ObjectMeta: metav1.ObjectMeta{Name: "test-tier"},
 			Spec:       v3.TierSpec{Order: &order},
 		}
-
+		setToBaseTier := func(object client.Object) {
+			tierToSet := object.(*v3.Tier)
+			baseTier.DeepCopyInto(tierToSet)
+		}
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs:            []client.Object{t},
+			objs:            []client.Object{baseTier},
 		}
 
-		mc.Info = append(mc.Info, mockReturn{
-			Method: "Get",
-			Return: nil,
-			Obj:    t,
+		It("Tier updates are omitted if there is no change", func() {
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToBaseTier,
+			})
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+			Expect(err).To(BeNil())
+			Expect(mc.Index).To(Equal(1))
 		})
 
-		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
-		Expect(err).To(BeNil())
-		Expect(mc.Index).To(Equal(1))
+		It("Tier updates are applied if there is a change", func() {
+			over9000 := 9001.0
+			modifiedTier := baseTier.DeepCopy()
+			modifiedTier.Spec.Order = &over9000
+			setToModifiedTier := func(object client.Object) {
+				tierToSet := object.(*v3.Tier)
+				modifiedTier.DeepCopyInto(tierToSet)
+			}
+
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToModifiedTier,
+			})
+
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Update",
+				Return:       nil,
+				InputMutator: setToBaseTier,
+			})
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+			Expect(err).To(BeNil())
+			Expect(mc.Index).To(Equal(2))
+		})
 	})
 })
 
@@ -1471,9 +1517,9 @@ func (c *fakeComponent) SupportedOSType() rmeta.OSType {
 }
 
 type mockReturn struct {
-	Method string
-	Return interface{}
-	Obj    client.Object
+	Method       string
+	Return       interface{}
+	InputMutator func(object client.Object)
 }
 
 type mockClient struct {
@@ -1491,6 +1537,9 @@ func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
 	}
 	if mc.Info[mc.Index].Return == nil {
+		if mc.Info[mc.Index].InputMutator != nil {
+			mc.Info[mc.Index].InputMutator(obj)
+		}
 		return nil
 	}
 
@@ -1522,8 +1571,9 @@ func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...cli
 		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
 	}
 	if mc.Info[mc.Index].Return == nil {
-		//nolint ignore SA4005 ignore ineffassign
-		obj = mc.Info[mc.Index].Obj
+		if mc.Info[mc.Index].InputMutator != nil {
+			mc.Info[mc.Index].InputMutator(obj)
+		}
 		return nil
 	}
 

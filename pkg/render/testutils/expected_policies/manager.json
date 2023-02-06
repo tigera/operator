@@ -87,7 +87,7 @@
           "selector": "k8s-app == 'tigera-linseed'",
           "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
           "ports": [
-            443
+            8444
           ]
         }
       },

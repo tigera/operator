@@ -93,7 +93,7 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version: "master",
+		Version: "feature-multi-tenant-elasticsearch",
 		Image:   "tigera/es-proxy",
 	}
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1515,7 +1515,6 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 									},
 								},
 							},
-							Command: []string{"/anomaly-detection-api"},
 							VolumeMounts: []corev1.VolumeMount{
 								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),

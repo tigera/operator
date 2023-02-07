@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,13 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 func awsCNIPolicyOnlyConfig() []runtime.Object {
 	fileOrCreate := corev1.HostPathFileOrCreate
 	isPrivileged := true
-	_true := true
-	_false := false
 	var terminationGracePeriod int64 = 0
 	maxUnav := intstr.FromInt(1)
 	updateStrat := appsv1.RollingUpdateDaemonSet{MaxUnavailable: &maxUnav}
@@ -87,7 +87,7 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 								{Name: "IP", Value: ""},
 								{Name: "FELIX_HEALTHENABLED", Value: "true"},
 							},
-							SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+							SecurityContext: securitycontext.NewRootContext(isPrivileged),
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-felix-live"}}},
 								PeriodSeconds:       10,
@@ -179,10 +179,7 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 								PeriodSeconds:       30,
 								InitialDelaySeconds: 30,
 							},
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: &_false,
-								RunAsNonRoot:             &_true,
-							},
+							SecurityContext: securitycontext.NewNonRootContext(),
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{

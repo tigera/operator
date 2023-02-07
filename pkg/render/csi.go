@@ -17,12 +17,6 @@ package render
 import (
 	"path/filepath"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,6 +24,14 @@ import (
 	v1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -91,12 +93,12 @@ func (c *csiComponent) csiDriver() *v1.CSIDriver {
 func (c *csiComponent) csiTolerations() []corev1.Toleration {
 	operator := corev1.TolerationOperator(CSITolerationOperator)
 	tolerations := []corev1.Toleration{
-		corev1.Toleration{
+		{
 			Key:      CSITolerationControlPlaneKey,
 			Operator: operator,
 			Effect:   corev1.TaintEffectNoSchedule,
 		},
-		corev1.Toleration{
+		{
 			Key:      CSITolerationMasterKey,
 			Operator: operator,
 			Effect:   corev1.TaintEffectNoSchedule,
@@ -115,36 +117,35 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 			"--nodeid=$(KUBE_NODE_NAME)",
 			"--loglevel=$(LOG_LEVEL)",
 		},
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
-		},
 		Env: []corev1.EnvVar{
-			corev1.EnvVar{
+			{
 				Name:  "LOG_LEVEL",
 				Value: "warn",
 			},
-			corev1.EnvVar{
+			{
 				Name: "KUBE_NODE_NAME",
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName"},
+						FieldPath: "spec.nodeName",
+					},
 				},
 			},
 		},
+		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts: []corev1.VolumeMount{
-			corev1.VolumeMount{
+			{
 				Name:      "varrun",
 				MountPath: filepath.Clean("/var/run"),
 			},
-			corev1.VolumeMount{
+			{
 				Name:      "etccalico",
 				MountPath: filepath.Clean("/etc/calico"),
 			},
-			corev1.VolumeMount{
+			{
 				Name:      "socket-dir",
 				MountPath: filepath.Clean("/csi"),
 			},
-			corev1.VolumeMount{
+			{
 				Name:             "kubelet-dir",
 				MountPath:        c.cfg.Installation.KubeletVolumePluginPath,
 				MountPropagation: &mountPropagation,
@@ -162,21 +163,18 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 			"--csi-address=$(ADDRESS)",
 			"--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)",
 		},
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
-		},
 		Env: []corev1.EnvVar{
-			corev1.EnvVar{
+			{
 				Name:  "ADDRESS",
 				Value: filepath.Clean("/csi/csi.sock"),
 			},
-			corev1.EnvVar{
+			{
 				Name: "DRIVER_REG_SOCK_PATH",
 				// This path cannot also reference "/csi" because /csi only exists inside of the pod, but this path
 				// is used by the kubelet on the host node to issue CSI operations
 				Value: filepath.Join(c.cfg.Installation.KubeletVolumePluginPath, "plugins/csi.tigera.io/csi.sock"),
 			},
-			corev1.EnvVar{
+			{
 				Name: "KUBE_NODE_NAME",
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{
@@ -185,12 +183,13 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				},
 			},
 		},
+		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts: []corev1.VolumeMount{
-			corev1.VolumeMount{
+			{
 				Name:      "socket-dir",
 				MountPath: filepath.Clean("/csi"),
 			},
-			corev1.VolumeMount{
+			{
 				Name:      "registration-dir",
 				MountPath: filepath.Clean("/registration"),
 			},
@@ -207,7 +206,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 	hostPathTypeDir := corev1.HostPathDirectory
 	hostPathTypeDirOrCreate := corev1.HostPathDirectoryOrCreate
 	return []corev1.Volume{
-		corev1.Volume{
+		{
 			Name: "varrun",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
@@ -215,7 +214,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 				},
 			},
 		},
-		corev1.Volume{
+		{
 			Name: "etccalico",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
@@ -223,7 +222,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 				},
 			},
 		},
-		corev1.Volume{
+		{
 			Name: "kubelet-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
@@ -232,7 +231,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 				},
 			},
 		},
-		corev1.Volume{
+		{
 			Name: "socket-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
@@ -241,7 +240,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 				},
 			},
 		},
-		corev1.Volume{
+		{
 			Name: "registration-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{

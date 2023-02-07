@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,13 @@
 package dpi
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -22,16 +29,9 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -122,7 +122,7 @@ func (d *dpiComponent) Ready() bool {
 }
 
 func (d *dpiComponent) SupportedOSType() meta.OSType {
-	return rmeta.OSTypeLinux
+	return meta.OSTypeLinux
 }
 
 func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
@@ -137,7 +137,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			Annotations: d.dpiAnnotations(),
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:                   rmeta.TolerateAll,
+			Tolerations:                   meta.TolerateAll,
 			ImagePullSecrets:              secret.GetReferenceList(d.cfg.PullSecrets),
 			ServiceAccountName:            DeepPacketInspectionName,
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
@@ -162,27 +162,25 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 }
 
 func (d *dpiComponent) dpiContainer() corev1.Container {
-	privileged := false
-	// On OpenShift Snort needs privileged access to access host network
-	if d.cfg.Openshift {
-		privileged = true
+	sc := securitycontext.NewRootContext(d.cfg.Openshift)
+	sc.Capabilities.Add = []corev1.Capability{
+		"NET_ADMIN",
+		"NET_RAW",
 	}
-
 	dpiContainer := corev1.Container{
 		Name:         DeepPacketInspectionName,
 		Image:        d.dpiImage,
 		Resources:    *d.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
 		Env:          d.dpiEnvVars(),
 		VolumeMounts: d.dpiVolumeMounts(),
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &privileged,
-		},
-		ReadinessProbe: d.dpiReadinessProbes(),
+		// On OpenShift Snort needs privileged access to access host network
+		SecurityContext: sc,
+		ReadinessProbe:  d.dpiReadinessProbes(),
 	}
 
 	return relasticsearch.ContainerDecorateIndexCreator(
 		relasticsearch.ContainerDecorate(dpiContainer, d.cfg.ESClusterConfig.ClusterName(),
-			render.ElasticsearchIntrusionDetectionUserSecret, d.cfg.ClusterDomain, rmeta.OSTypeLinux),
+			render.ElasticsearchIntrusionDetectionUserSecret, d.cfg.ClusterDomain, meta.OSTypeLinux),
 		d.cfg.ESClusterConfig.Replicas(), d.cfg.ESClusterConfig.Shards())
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -200,10 +200,16 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Image: fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-					Privileged:               ptr.BoolToPtr(false),
-					RunAsGroup:               ptr.Int64ToPtr(0),
-					RunAsNonRoot:             ptr.BoolToPtr(true),
-					RunAsUser:                ptr.Int64ToPtr(1001),
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+					Privileged:   ptr.BoolToPtr(false),
+					RunAsGroup:   ptr.Int64ToPtr(10001),
+					RunAsNonRoot: ptr.BoolToPtr(true),
+					RunAsUser:    ptr.Int64ToPtr(10001),
+					SeccompProfile: &corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					},
 				},
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -266,7 +272,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		// Check the namespace.
 		namespace := rtest.GetResource(resources, render.PacketCaptureNamespace, "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
 		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		// Check deployment

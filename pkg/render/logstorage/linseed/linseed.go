@@ -231,12 +231,11 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:         DeploymentName,
-					Image:        l.linseedImage,
-					Env:          envVars,
-					VolumeMounts: volumeMounts,
-					// UID 1001 is used in the Dockerfile.
-					SecurityContext: securitycontext.NewBaseContext(1001, 0),
+					Name:            DeploymentName,
+					Image:           l.linseedImage,
+					Env:             envVars,
+					VolumeMounts:    volumeMounts,
+					SecurityContext: securitycontext.NewRootContext(true),
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{

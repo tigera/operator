@@ -188,7 +188,7 @@ var ESGatewayEntityRule = CreateEntityRule("tigera-elasticsearch", "tigera-secur
 var ESGatewaySourceEntityRule = CreateSourceEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway")
 var ESGatewayServiceSelectorEntityRule = CreateServiceSelectorEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway-http")
 
-var LinseedEntityRule = CreateEntityRule("tigera-elasticsearch", "tigera-linseed", 443)
+var LinseedEntityRule = CreateEntityRule("tigera-elasticsearch", "tigera-linseed", 8444)
 var LinseedSourceEntityRule = CreateSourceEntityRule("tigera-elasticsearch", "tigera-linseed")
 var LinseedServiceSelectorEntityRule = CreateServiceSelectorEntityRule("tigera-elasticsearch", "tigera-linseed")
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -221,16 +221,17 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
-		// NetworkPolicy is served through the Tigera API Server, which currently restricts List and Watch
-		// operations on NetworkPolicy to a single tier only, specified via label or field selector. If no
-		// selector is specified, List and Watch return policies from the 'default' tier. The manager cache
-		// must therefore apply a selector to specify the tier that the operator currently reconciles policy
-		// within so that it can receive the expected resources for List and Watch. If the operator needs to
-		// reconcile policy within multiple tiers, the API Server should be updated to serve policy from all
-		// tiers that the user is authorized for.
+		// GlobalNetworkPolicy and NetworkPolicy are served through the Tigera API Server, which currently
+		// restricts List and Watch operations on NetworkPolicies and GlobalNetworkPolcies to a single tier
+		// only, specified via label or field selector. If no selector is specified, List and Watch return
+		// policies from the 'default' tier. The manager cache must therefore apply a selector to specify
+		// the tier that the operator currently reconciles policy within so that it can receive the expected
+		// resources for List and Watch. If the operator needs to reconcile policy within multiple tiers,
+		// the API Server should be updated to serve policy from all tiers that the user is authorized for.
 		NewCache: cache.BuilderWithOptions(cache.Options{
 			SelectorsByObject: cache.SelectorsByObject{
-				&v3.NetworkPolicy{}: {Label: policySelector},
+				&v3.NetworkPolicy{}:       {Label: policySelector},
+				&v3.GlobalNetworkPolicy{}: {Label: policySelector},
 			},
 		}),
 	})

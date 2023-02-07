@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -218,16 +218,16 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(1001))
+			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
-			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
-			Expect(d.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(BeEquivalentTo(
+			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+			Expect(d.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
 				&corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
 				},
 			))
-			Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(BeEquivalentTo(
-				corev1.SeccompProfile{
+			Expect(d.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
 

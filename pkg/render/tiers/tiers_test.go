@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ var _ = Describe("Tiers rendering tests", func() {
 	var cfg *tiers.Config
 
 	clusterDNSPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns.json")
+	clusterDNSEgressPolicy := testutils.GetExpectedGlobalNetworkPolicyFromFile("../testutils/expected_policies/dns_egress.json")
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
 
 	BeforeEach(func() {
@@ -42,6 +43,10 @@ var _ = Describe("Tiers rendering tests", func() {
 			{Name: "allow-tigera.cluster-dns", Namespace: "openshift-dns"},
 		}
 
+		egressPolicyName := types.NamespacedName{
+			Name: "allow-tigera.cluster-dns-egress",
+		}
+
 		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			if name.Name == "allow-tigera.cluster-dns" &&
 				((scenario.Openshift && name.Namespace == "openshift-dns") || (!scenario.Openshift && name.Namespace == "kube-system")) {
@@ -51,7 +56,7 @@ var _ = Describe("Tiers rendering tests", func() {
 			return nil
 		}
 
-		DescribeTable("should render allow-tigera policy",
+		DescribeTable("should render dns allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
 				component := tiers.Tiers(cfg)
@@ -66,6 +71,11 @@ var _ = Describe("Tiers rendering tests", func() {
 					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
+				}
+
+				if !scenario.Openshift {
+					policy := testutils.GetAllowTigeraGlobalNetworkPolicyFromResources(egressPolicyName, resourcesToCreate)
+					Expect(policy).To(Equal(clusterDNSEgressPolicy))
 				}
 			},
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),

@@ -70,7 +70,10 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
 		t.allowTigeraTier(),
 		t.allowTigeraClusterDNSPolicy(),
-		t.allowTigeraDNSEgressClusterDNSPolicy(),
+	}
+
+	if !t.cfg.Openshift {
+		objsToCreate = append(objsToCreate, t.allowTigeraDNSEgressClusterDNSPolicy())
 	}
 
 	return objsToCreate, nil
@@ -103,6 +106,7 @@ func (t tiersComponent) allowTigeraDNSEgressClusterDNSPolicy() *v3.GlobalNetwork
 	egressDNSNamespaces := append(DNSNamespaceSelector, common.CalicoNamespace)
 
 	return &v3.GlobalNetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ClusterEgressDNSPolicyName,
 		},
@@ -142,6 +146,47 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 		dnsPolicyNamespace = "kube-system"
 	}
 
+	ingressRules := []v3.Rule{
+		{
+			Action: v3.Allow,
+			Source: v3.EntityRule{
+				NamespaceSelector: "all()",
+				Selector:          createDNSNamespaceSelector(DNSNamespaceSelector...),
+			},
+		},
+	}
+
+	if !t.cfg.Openshift {
+		ingressRules = append(ingressRules, []v3.Rule{
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.UDPProtocol,
+				Source: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Name:      nodeLocalDNSServiceName,
+						Namespace: dnsPolicyNamespace,
+					},
+					Ports: networkpolicy.Ports(53),
+				},
+			},
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Name:      nodeLocalDNSServiceName,
+						Namespace: dnsPolicyNamespace,
+					},
+					Ports: networkpolicy.Ports(53),
+				},
+			},
+		}...)
+	}
+
+	ingressRules = append(ingressRules, v3.Rule{
+		Action: v3.Pass,
+	})
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -152,40 +197,7 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: dnsPolicySelector,
-			Ingress: []v3.Rule{
-				{
-					Action: v3.Allow,
-					Source: v3.EntityRule{
-						NamespaceSelector: "all()",
-						Selector:          createDNSNamespaceSelector(DNSNamespaceSelector...),
-					},
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.UDPProtocol,
-					Source: v3.EntityRule{
-						Services: &v3.ServiceMatch{
-							Name:      nodeLocalDNSServiceName,
-							Namespace: dnsPolicyNamespace,
-						},
-						Ports: networkpolicy.Ports(53),
-					},
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						Services: &v3.ServiceMatch{
-							Name:      nodeLocalDNSServiceName,
-							Namespace: dnsPolicyNamespace,
-						},
-						Ports: networkpolicy.Ports(53),
-					},
-				},
-				{
-					Action: v3.Pass,
-				},
-			},
+			Ingress:  ingressRules,
 			Egress: []v3.Rule{
 				{
 					Action: v3.Allow,

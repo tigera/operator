@@ -72,6 +72,8 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 		t.allowTigeraClusterDNSPolicy(),
 	}
 
+	// omitting Openshift for now as OCP has its own caching mechanisms that do
+	// not need any extra policies
 	if !t.cfg.Openshift {
 		objsToCreate = append(objsToCreate, t.allowTigeraDNSEgressClusterDNSPolicy())
 	}
@@ -103,6 +105,8 @@ func (t tiersComponent) allowTigeraTier() *v3.Tier {
 }
 
 func (t tiersComponent) allowTigeraDNSEgressClusterDNSPolicy() *v3.GlobalNetworkPolicy {
+	// adding the calico-system namespace for es-kube-controller to make dns translation for
+	// egress-gateway URL
 	egressDNSNamespaces := append(DNSNamespaceSelector, common.CalicoNamespace)
 
 	return &v3.GlobalNetworkPolicy{

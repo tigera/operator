@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,10 +28,13 @@ import (
 )
 
 const (
-	ClusterDNSPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cluster-dns"
+	ClusterDNSPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "cluster-dns"
+	ClusterEgressDNSPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cluster-dns-egress"
+
+	nodeLocalDNSServiceName = "node-local-dns"
 )
 
-var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
+var DNSNamespaceSelector = []string{
 	render.GuardianNamespace,
 	render.ComplianceNamespace,
 	render.DexNamespace,
@@ -43,7 +46,7 @@ var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
 	common.TigeraPrometheusNamespace,
 	"tigera-skraper",
 	rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
-)
+}
 
 var defaultTierOrder = 100.0
 
@@ -67,6 +70,10 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
 		t.allowTigeraTier(),
 		t.allowTigeraClusterDNSPolicy(),
+	}
+
+	if !t.cfg.Openshift {
+		objsToCreate = append(objsToCreate, t.allowTigeraDNSEgressClusterDNSPolicy())
 	}
 
 	return objsToCreate, nil
@@ -95,6 +102,39 @@ func (t tiersComponent) allowTigeraTier() *v3.Tier {
 	}
 }
 
+func (t tiersComponent) allowTigeraDNSEgressClusterDNSPolicy() *v3.GlobalNetworkPolicy {
+	egressDNSNamespaces := append(DNSNamespaceSelector, common.CalicoNamespace)
+
+	return &v3.GlobalNetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ClusterEgressDNSPolicyName,
+		},
+		Spec: v3.GlobalNetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: createDNSNamespaceSelector(egressDNSNamespaces...),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(53),
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.UDPProtocol,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(53),
+					},
+				},
+			},
+		},
+	}
+}
+
 func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 	var dnsPolicySelector string
 	var dnsPolicyNamespace string
@@ -106,6 +146,47 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 		dnsPolicyNamespace = "kube-system"
 	}
 
+	ingressRules := []v3.Rule{
+		{
+			Action: v3.Allow,
+			Source: v3.EntityRule{
+				NamespaceSelector: "all()",
+				Selector:          createDNSNamespaceSelector(DNSNamespaceSelector...),
+			},
+		},
+	}
+
+	if !t.cfg.Openshift {
+		ingressRules = append(ingressRules, []v3.Rule{
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.UDPProtocol,
+				Source: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Name:      nodeLocalDNSServiceName,
+						Namespace: dnsPolicyNamespace,
+					},
+					Ports: networkpolicy.Ports(53),
+				},
+			},
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Name:      nodeLocalDNSServiceName,
+						Namespace: dnsPolicyNamespace,
+					},
+					Ports: networkpolicy.Ports(53),
+				},
+			},
+		}...)
+	}
+
+	ingressRules = append(ingressRules, v3.Rule{
+		Action: v3.Pass,
+	})
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -116,18 +197,7 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: dnsPolicySelector,
-			Ingress: []v3.Rule{
-				{
-					Action: v3.Allow,
-					Source: v3.EntityRule{
-						NamespaceSelector: "all()",
-						Selector:          DNSIngressNamespaceSelector,
-					},
-				},
-				{
-					Action: v3.Pass,
-				},
-			},
+			Ingress:  ingressRules,
 			Egress: []v3.Rule{
 				{
 					Action: v3.Allow,
@@ -138,7 +208,7 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func createDNSIngressNamespaceSelector(namespaces ...string) string {
+func createDNSNamespaceSelector(namespaces ...string) string {
 	var builder strings.Builder
 	builder.WriteString("projectcalico.org/namespace in {")
 	for idx, namespace := range namespaces {

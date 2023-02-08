@@ -18,6 +18,32 @@
         "destination": {}
       },
       {
+        "action": "Allow",
+        "protocol":"UDP",
+        "source": {
+          "services": {
+            "name": "node-local-dns",
+            "namespace": "kube-system"
+          },
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "services": {
+            "name": "node-local-dns",
+            "namespace": "kube-system"
+          },
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
         "action": "Pass",
         "source": {},
         "destination": {}

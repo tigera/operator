@@ -1,0 +1,35 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "GlobalNetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.cluster-dns-egress"
+  },
+  "spec": {
+    "tier": "allow-tigera",
+    "order": 1,
+    "selector": "projectcalico.org/namespace in {'tigera-guardian','tigera-compliance','tigera-dex','tigera-elasticsearch','tigera-fluentd','tigera-intrusion-detection','tigera-kibana','tigera-manager','tigera-prometheus','tigera-skraper','tigera-system','calico-system'}",
+    "types": [
+      "Egress"
+    ],
+    "egress": [
+       {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol":"UDP",
+        "destination": {
+          "ports": [
+            53
+          ]
+        }
+      }
+    ]
+  }
+}

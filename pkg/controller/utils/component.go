@@ -438,6 +438,20 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		// APIServer.
 		dui.SetOwnerReferences(cui.GetOwnerReferences())
 		return dui
+	case *v3.NetworkPolicy:
+		cnp := current.(*v3.NetworkPolicy)
+		dnp := desired.(*v3.NetworkPolicy)
+		if reflect.DeepEqual(cnp.Spec, dnp.Spec) {
+			return nil
+		}
+		return dnp
+	case *v3.Tier:
+		ct := current.(*v3.Tier)
+		dt := desired.(*v3.Tier)
+		if reflect.DeepEqual(ct.Spec, dt.Spec) {
+			return nil
+		}
+		return dt
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

@@ -23,8 +23,6 @@ func getCloudKeyValidatorOption(ctx context.Context, cli client.Client) (tigerak
 		return nil, fmt.Errorf("missing config map %s/%s: %w", common.OperatorNamespace(), cloudAuthConfig, err)
 	}
 
-	fmt.Println("Read Cloud auth config", cm)
-
 	tenantID, ok := cm.Data["tenantID"]
 	if !ok {
 		return nil, fmt.Errorf("Cloud config map %s/%s is missing the tenantID field", common.OperatorNamespace(), cloudAuthConfig)

@@ -52,13 +52,13 @@ const (
 	ElasticsearchMetrics        = "elasticsearch-metrics"
 	FluentdMetrics              = "fluentd-metrics"
 	TigeraPrometheusObjectName  = "tigera-prometheus"
-	TigeraPrometheusSAName      = "prometheus"
 	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
 	TigeraPrometheusRole        = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
 	PrometheusAPIPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
 	PrometheusClientTLSSecretName = "calico-node-prometheus-client-tls"
+	PrometheusClusterRoleName     = "prometheus"
 	PrometheusDefaultPort         = 9090
 	PrometheusHTTPAPIServiceName  = "prometheus-http-api"
 	PrometheusOperatorPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "prometheus-operator"
@@ -248,7 +248,7 @@ func (mc *monitorComponent) clusterRoleBinding() client.Object {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      TigeraPrometheusSAName,
+				Name:      PrometheusServiceAccountName,
 				Namespace: common.TigeraPrometheusNamespace,
 			},
 		},
@@ -447,10 +447,8 @@ func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {
 
 func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "prometheus",
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: PrometheusClusterRoleName},
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
@@ -487,10 +485,8 @@ func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 
 func (mc *monitorComponent) prometheusClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "prometheus",
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: PrometheusClusterRoleName},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -501,7 +497,7 @@ func (mc *monitorComponent) prometheusClusterRoleBinding() *rbacv1.ClusterRoleBi
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "prometheus",
+			Name:     PrometheusClusterRoleName,
 		},
 	}
 }

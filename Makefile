@@ -258,7 +258,7 @@ endif
 BINDIR?=build/init/bin
 $(BINDIR)/kubectl:
 	mkdir -p $(BINDIR)
-	curl -L https://storage.googleapis.com/kubernetes-release/release/v1.22.0/bin/linux/$(ARCH)/kubectl -o $@
+	curl -L https://storage.googleapis.com/kubernetes-release/release/v1.25.6/bin/linux/$(ARCH)/kubectl -o $@
 	chmod +x $@
 
 kubectl: $(BINDIR)/kubectl
@@ -296,7 +296,7 @@ run-fvs:
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
-K8S_VERSION?=v1.21.2
+K8S_VERSION?=v1.21.14
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy

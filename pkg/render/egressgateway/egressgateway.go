@@ -468,7 +468,7 @@ func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 		AllowHostPorts:           false,
 		AllowPrivilegeEscalation: ptr.BoolToPtr(true),
 		AllowPrivilegedContainer: true,
-		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN"),},
+		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN")},
 		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyMustRunAs},
 		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
 		ReadOnlyRootFilesystem:   false,

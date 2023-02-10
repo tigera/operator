@@ -225,6 +225,13 @@ func (c *fluentdComponent) livenessCmd() []string {
 	return []string{"sh", "-c", "/bin/liveness.sh"}
 }
 
+func (c *fluentdComponent) securityContext(privileged bool) *corev1.SecurityContext {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return nil
+	}
+	return securitycontext.NewRootContext(privileged)
+}
+
 func (c *fluentdComponent) volumeHostPath() string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		return "c:/TigeraCalico"
@@ -548,7 +555,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		Image: c.image,
 		Env:   envs,
 		// On OpenShift Fluentd needs privileged access to access logs on host path volume
-		SecurityContext: securitycontext.NewRootContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
+		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
 		VolumeMounts:    volumeMounts,
 		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),
@@ -995,14 +1002,14 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 						Image:           c.image,
 						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:             envVars,
-						SecurityContext: securitycontext.NewRootContext(false),
+						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
 					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
 						Name:            eksLogForwarderName,
 						Image:           c.image,
 						Env:             envVars,
-						SecurityContext: securitycontext.NewRootContext(false),
+						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
 					Volumes: c.eksLogForwarderVolumes(),

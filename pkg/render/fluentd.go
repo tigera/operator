@@ -747,11 +747,17 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
 		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
 
 		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.FlowShards())},
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 	)
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {

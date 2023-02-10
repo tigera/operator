@@ -469,7 +469,6 @@ func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 		AllowPrivilegeEscalation: ptr.BoolToPtr(true),
 		AllowPrivilegedContainer: true,
 		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN"),},
-		RequiredDropCapabilities: []corev1.Capability{corev1.Capability("KILL"), corev1.Capability("MKNOD"), corev1.Capability("SETUID"), corev1.Capability("SETGID")},
 		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyMustRunAs},
 		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
 		ReadOnlyRootFilesystem:   false,

@@ -104,17 +104,17 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := []client.Object{}
 	objectsToDelete := []client.Object{}
 	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
-	objectsToCreate = append(objectsToCreate, c.egwDeployment())
-	if c.config.UsePSP {
+	if c.config.OpenShift {
+		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
+	} else if c.config.UsePSP {
 		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
 		objectsToCreate = append(objectsToCreate, c.egwRole())
 		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
-	} else if c.config.OpenShift {
-		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
 	} else {
 		objectsToDelete = append(objectsToDelete, c.egwRole())
 		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
 	}
+	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	return objectsToCreate, objectsToDelete
 }
 
@@ -319,7 +319,6 @@ func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 }
 
 func (c *component) egwRole() *rbacv1.Role {
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -330,7 +329,7 @@ func (c *component) egwRole() *rbacv1.Role {
 			{
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
-				ResourceNames: []string{namespacedName},
+				ResourceNames: []string{podSecurityPolicyName},
 				Verbs:         []string{"use"},
 			},
 		},
@@ -462,20 +461,22 @@ func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
 		ObjectMeta:               metav1.ObjectMeta{Name: OpenShiftSCCName},
-		AllowHostDirVolumePlugin: true,
+		AllowHostDirVolumePlugin: false,
 		AllowHostIPC:             false,
 		AllowHostNetwork:         false,
 		AllowHostPID:             false,
 		AllowHostPorts:           false,
 		AllowPrivilegeEscalation: ptr.BoolToPtr(true),
 		AllowPrivilegedContainer: true,
-		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
+		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN")},
+		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyMustRunAs},
 		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
 		ReadOnlyRootFilesystem:   false,
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
 		Users:                    []string{},
 		Volumes:                  []ocsv1.FSType{"*"},
+		SeccompProfiles:          []string{"runtime/default"},
 	}
 }
 

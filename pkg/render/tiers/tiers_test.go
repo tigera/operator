@@ -76,6 +76,9 @@ var _ = Describe("Tiers rendering tests", func() {
 				if !scenario.Openshift {
 					policy := testutils.GetAllowTigeraGlobalNetworkPolicyFromResources(egressPolicyName, resourcesToCreate)
 					Expect(policy).To(Equal(clusterDNSEgressPolicy))
+				} else {
+					policy := testutils.GetAllowTigeraGlobalNetworkPolicyFromResources(egressPolicyName, resourcesToCreate)
+					Expect(policy).To(BeNil())
 				}
 			},
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),

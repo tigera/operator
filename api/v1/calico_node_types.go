@@ -98,11 +98,46 @@ type CalicoNodeDaemonSetPodTemplateSpec struct {
 	Spec *CalicoNodeDaemonSetPodSpec `json:"spec,omitempty"`
 }
 
+type WindowsConfiguration struct {
+	// CalicoNetworkingBackend set Calico values for networking: "vxlan", "windows-bgp"
+	// for non-Calico networking, the only value is "none".
+	// Default: vxlan
+	CalicoNetworkingBackend string `json:"calicoNetworkingBackend,omitempty"`
+
+	// KubernetesServiceHost is the Kubernetes API server host
+	KubernetesServiceHost *string `json:"kubernetesServiceHost,omitempty"`
+
+	// KubernetesServicePort is the Kubernetes API server port
+	KubernetesServicePort *string `json:"kubernetesServicePort,omitempty"`
+
+	// KubernetesServiceCIDR is the Kubernetes service clusterIP range configured in your cluster.
+	// This must match the service-cluster-ip-range used by kube-apiserver.
+	// Default: 10.96.0.0/12
+	KubernetesServiceCIDR string `json:"kubernetesServiceCIDR,omitempty"`
+
+	// DNSNameServers are the DNS nameservers that will be used in the CNI configuration.
+	// Default: 10.96.0.10
+	DNSNameServers string `json:"dnsNameServers,omitempty"`
+
+	// CNIBinDir is CNI binary dir.
+	// This must match the containerd configuration on the Windows nodes.
+	// Default: c:\\opt\\cni\\bin
+	CNIBinDir string `json:"cniBinDir,omitempty"`
+
+	// CNIConfDir is the CNI conf dir.
+	// This must match the containerd configuration on the Windows nodes.
+	// Default: c:\\etc\\cni\\net.d
+	CNIConfDir string `json:"cniConfDir,omitempty"`
+}
+
 // CalicoNodeDaemonSet is the configuration for the calico-node DaemonSet.
 type CalicoNodeDaemonSet struct {
 	// Metadata is a subset of a Kubernetes object's metadata that is added to the DaemonSet.
 	// +optional
 	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// WindowsDaemonSet is used to configure the calico-node-windows DaemonSet
+	WindowsConfiguration *WindowsConfiguration `json:"windowsNodeDamonSet,omitempty"`
 
 	// Spec is the specification of the calico-node DaemonSet.
 	// +optional

@@ -96,7 +96,7 @@ const InstallationName string = "calico"
 
 //// Node and Installation finalizer
 // There is a problem with tearing down the calico resources where removing the calico-node ClusterRoleBinding
-// will block the kube-controller pod from teminating because the CNI plugin no longer has permissions.
+// will block the kube-controller pod from terminating because the CNI plugin no longer has permissions.
 // To ensure this problem does not happen we add a finalizer to the Installation resource and to the
 // calico-node ClusterRoleBinding, ClusterRole, and ServiceAccount.
 // The finalizer on the Installation resource is so that the controller knows that it is time to tear down

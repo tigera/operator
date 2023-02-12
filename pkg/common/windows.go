@@ -31,6 +31,7 @@ var (
 
 const (
 	CalicoWindowsUpgradeResourceName    = "calico-windows-upgrade"
+	CalicoWindowsResourceName           = "calico-node-windows"
 	CalicoWindowsUpgradeVolumePath      = `c:\CalicoUpgrade`
 	CalicoWindowsUpgradeLabel           = "projectcalico.org/windows-upgrade"
 	CalicoWindowsUpgradeLabelInProgress = "in-progress"

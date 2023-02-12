@@ -16,7 +16,6 @@ package render
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,18 +69,21 @@ func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 
 func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
+		c.windowsInstallDaemonset(),
+	}
+	upgradeObjs := []client.Object{
 		c.windowsServiceAccount(),
 		c.windowsUpgradeDaemonset(),
 	}
 
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderAKS {
-		return nil, objs
+		return objs, upgradeObjs
 	}
 
 	if c.cfg.Terminating {
-		return nil, objs
+		return nil, append(objs, upgradeObjs...)
 	}
-	return objs, nil
+	return append(objs, upgradeObjs...), nil
 }
 
 func (c *windowsComponent) Ready() bool {
@@ -189,4 +191,153 @@ func (c *windowsComponent) calicoWindowsVolume() []corev1.Volume {
 	}
 
 	return volumes
+}
+
+func (c *windowsComponent) mapConfigToEnvVars() []corev1.EnvVar {
+	nodeSource := &corev1.EnvVarSource{
+		FieldRef: &corev1.ObjectFieldSelector{
+			APIVersion: "v1",
+			FieldPath:  "spec.NodeName",
+		},
+	}
+	return []corev1.EnvVar{
+		{
+			Value: c.cfg.Installation.CalicoNodeDaemonSet.WindowsConfiguration.CalicoNetworkingBackend,
+			Name:  "CALICO_NETWORKING_BACKEND",
+		},
+		{Name: "NODENAME", ValueFrom: nodeSource},
+		{
+			Name:  "KUBERNETES_SERVICE_HOST",
+			Value: *c.cfg.Installation.CalicoNodeDaemonSet.WindowsConfiguration.KubernetesServiceHost,
+		},
+		{
+			Name:  "KUBERNETES_SERVICE_PORT",
+			Value: *c.cfg.Installation.CalicoNodeDaemonSet.WindowsConfiguration.KubernetesServicePort,
+		},
+		{
+			Name:  "K8S_SERVICE_CIDR",
+			Value: c.cfg.Installation.CalicoNodeDaemonSet.WindowsConfiguration.KubernetesServiceCIDR,
+		},
+		{
+			Name:  "DNS_NAME_SERVERS",
+			Value: c.cfg.Installation.CalicoNodeDaemonSet.WindowsConfiguration.DNSNameServers,
+		},
+		{
+			Name:  "CNI_BIN_DIR",
+			Value: c.cfg.Installation.CalicoNodeDaemonSet.WindowsConfiguration.CNIBinDir,
+		},
+		{
+			Name:  "CNI_CONF_DIR",
+			Value: c.cfg.Installation.CalicoNodeDaemonSet.WindowsConfiguration.CNIConfDir,
+		},
+		{
+			Name:  "FELIX_HEALTHENABLED",
+			Value: "true",
+		},
+	}
+}
+
+func (c *windowsComponent) windowsInitContainers() []corev1.Container {
+	return []corev1.Container{
+		{
+			Name:            "install",
+			Image:           "calico/windows:v3.25.0",
+			Args:            []string{".\\host-process-install.ps1"},
+			ImagePullPolicy: corev1.PullAlways,
+			Env:             c.mapConfigToEnvVars(),
+		},
+	}
+}
+
+func (c *windowsComponent) windowsCalicoContainers() []corev1.Container {
+	return []corev1.Container{
+		{
+			Name:            "node",
+			Image:           "calico/windows:v3.25.0",
+			Args:            []string{".\\node\\node-service.ps1"},
+			WorkingDir:      "..\\..\\CalicoWindows",
+			ImagePullPolicy: corev1.PullAlways,
+			Env:             c.mapConfigToEnvVars(),
+		},
+		{
+			Name:            "node",
+			Image:           "calico/windows:v3.25.0",
+			Args:            []string{".\\felix\\felix-service.ps1"},
+			WorkingDir:      "..\\..\\CalicoWindows",
+			ImagePullPolicy: corev1.PullAlways,
+			Env:             c.mapConfigToEnvVars(),
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					Exec: &corev1.ExecAction{
+						Command: []string{"c:\\CalicoWindows\\calico-node.exe", "-felix-live"},
+					},
+				},
+				PeriodSeconds:       10,
+				InitialDelaySeconds: 10,
+				FailureThreshold:    6,
+				TimeoutSeconds:      10,
+			},
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					Exec: &corev1.ExecAction{
+						Command: []string{"c:\\\\CalicoWindows\\\\calico-node.exe", "-felix-ready"},
+					},
+				},
+				TimeoutSeconds: 10,
+				PeriodSeconds:  10,
+			},
+		},
+	}
+}
+
+func (c *windowsComponent) windowsInstallDaemonset() *appsv1.DaemonSet {
+	hostProcess := true
+	runAs := "NT AUTHORITY\\system"
+
+	podTemplate := &corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      common.CalicoWindowsResourceName,
+			Namespace: "calico-system",
+		},
+		Spec: corev1.PodSpec{
+			ServiceAccountName: "calico-node",
+			SecurityContext: &corev1.PodSecurityContext{
+				WindowsOptions: &corev1.WindowsSecurityContextOptions{
+					HostProcess:   &hostProcess,
+					RunAsUserName: &runAs,
+				},
+			},
+			HostNetwork: true,
+			Affinity: &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      corev1.LabelOSStable,
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"windows"},
+								},
+							},
+						}},
+					},
+				},
+			},
+			Tolerations:      []corev1.Toleration{ /* todo(knabben) fix correct tolerations */ },
+			ImagePullSecrets: c.cfg.Installation.ImagePullSecrets,
+			InitContainers:   c.windowsInitContainers(),
+			Containers:       c.windowsCalicoContainers(),
+		},
+	}
+
+	return &appsv1.DaemonSet{
+		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      common.CalicoWindowsResourceName,
+			Namespace: "calico-system",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: *podTemplate,
+		},
+	}
 }

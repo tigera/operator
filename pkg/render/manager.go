@@ -265,7 +265,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
 	if c.cfg.KeyValidatorConfig != nil {
 		trustedVolumeMount := c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())
-		trustedVolumeMount.MountPath = "/etc/ssl/certs/"
 		return append(c.cfg.KeyValidatorConfig.RequiredVolumeMounts(), trustedVolumeMount)
 	}
 	return []corev1.VolumeMount{}

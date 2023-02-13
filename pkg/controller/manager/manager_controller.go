@@ -358,7 +358,21 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
-	trustedBundle := certificateManager.CreateTrustedBundle()
+	// Create trusted bundle.
+	// Include root certs only if using tigera oidc as voltron may need to connect to
+	// a publicly certified url to download jwks, whereas dex is self-signed.
+	var trustedBundle certificatemanagement.TrustedBundle
+	if authenticationCR != nil && authenticationCR.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
+		var err error
+		trustedBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+		if err != nil {
+			r.status.SetDegraded("failed to create trusted bundle with system root certs", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else {
+		trustedBundle = certificateManager.CreateTrustedBundle()
+	}
+
 	for _, secretName := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
 		if err != nil {

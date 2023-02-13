@@ -180,9 +180,9 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
-		c.CNIPluginServiceAccount(),
-		c.CNIPluginRole(),
-		c.CNIPluginRoleBinding(),
+		c.cniPluginServiceAccount(),
+		c.cniPluginRole(),
+		c.cniPluginRoleBinding(),
 	}
 
 	// These are objects to keep even when we're terminating
@@ -255,8 +255,8 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// nodeServiceAccount creates the node's service account.
-func (c *nodeComponent) CNIPluginServiceAccount() *corev1.ServiceAccount {
+// cniPluginServiceAccount creates the node's service account.
+func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
 		finalizer = []string{NodeFinalizer}
@@ -304,22 +304,22 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	return crb
 }
 
-// nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
-func (c *nodeComponent) CNIPluginRoleBinding() *rbacv1.ClusterRoleBinding {
+// cniPluginRoleBinding creates a rolebinding giving the node service account the required permissions to operate.
+func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.RoleBinding {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
 		finalizer = []string{NodeFinalizer}
 	}
-	crb := &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+	crb := &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       CalicoCNIPluginObjectName,
-			Labels:     map[string]string{},
+			Namespace:  common.CalicoNamespace,
 			Finalizers: finalizer,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
+			Kind:     "Role",
 			Name:     CalicoCNIPluginObjectName,
 		},
 		Subjects: []rbacv1.Subject{
@@ -330,9 +330,7 @@ func (c *nodeComponent) CNIPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 			},
 		},
 	}
-	if c.cfg.MigrateNamespaces {
-		migration.AddBindingForKubeSystemNode(crb)
-	}
+
 	return crb
 }
 
@@ -536,17 +534,17 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	return role
 }
 
-// nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
-func (c *nodeComponent) CNIPluginRole() *rbacv1.ClusterRole {
+// cniPluginRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
+func (c *nodeComponent) cniPluginRole() *rbacv1.Role {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
 		finalizer = []string{NodeFinalizer}
 	}
-	role := &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+	role := &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       CalicoCNIPluginObjectName,
-			Labels:     map[string]string{},
+			Namespace:  common.CalicoNamespace,
 			Finalizers: finalizer,
 		},
 
@@ -617,15 +615,6 @@ func (c *nodeComponent) CNIPluginRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{common.NodeDaemonSetName},
-		})
-	}
 	return role
 }
 

@@ -405,6 +405,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			return fmt.Errorf("Installation spec.CalicoWindowsUpgradeDaemonSet is not valid: %w", err)
 		}
 	}
+
+	// Verify the CSINodeDriverDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CSINodeDriverDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, validation.NoContainersDefined, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CSINodeDriverDaemonSet is not valid: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,14 @@ package render
 import (
 	"net"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -30,13 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -55,9 +56,11 @@ const (
 	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 )
 
-var GuardianEntityRule = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
-var GuardianSourceEntityRule = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
-var GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
+var (
+	GuardianEntityRule                = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
+	GuardianSourceEntityRule          = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
+	GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
+)
 
 func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{
@@ -251,9 +254,8 @@ func (c *GuardianComponent) deployment() client.Object {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        GuardianDeploymentName,
-			Namespace:   GuardianNamespace,
-			Annotations: c.annotations(),
+			Name:      GuardianDeploymentName,
+			Namespace: GuardianNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -262,8 +264,9 @@ func (c *GuardianComponent) deployment() client.Object {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      GuardianDeploymentName,
-					Namespace: ManagerNamespace,
+					Name:        GuardianDeploymentName,
+					Namespace:   ManagerNamespace,
+					Annotations: c.annotations(),
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -293,18 +296,6 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
-	// UID 1001 is used in the guardian Dockerfile.
-	securityContext := securitycontext.NewBaseContext(1001, 0)
-	// Build a security context for the pod that will allow the pod to be deployed. Guardian is run in a namespace with a
-	// Baseline pod security standard, which requires that the security context meet certain criteria in order for pods to
-	// be accepted by the API server
-	securityContext.Capabilities = &corev1.Capabilities{
-		Drop: []corev1.Capability{"ALL"},
-	}
-	securityContext.SeccompProfile = &corev1.SeccompProfile{
-		Type: corev1.SeccompProfileTypeRuntimeDefault,
-	}
-
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
@@ -340,7 +331,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 				InitialDelaySeconds: 10,
 				PeriodSeconds:       5,
 			},
-			SecurityContext: securityContext,
+			SecurityContext: securitycontext.NewNonRootContext(),
 		},
 	}
 }

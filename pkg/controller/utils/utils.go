@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
@@ -352,6 +353,16 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	return authentication, nil
 }
 
+// GetInstallationStatus returns the current installation status, for use by other controllers.
+func GetInstallationStatus(ctx context.Context, client client.Client) (*operatorv1.InstallationStatus, error) {
+	// Fetch the Installation instance. We only support a single instance named "default".
+	instance := &operatorv1.Installation{}
+	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
+		return nil, err
+	}
+	return &instance.Status, nil
+}
+
 // GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
 // returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
 // launch enterprise-dependent components.
@@ -549,4 +560,21 @@ func AddTigeraStatusWatch(c controller.Controller, name string) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: name}}}, &handler.EnqueueRequestForObject{}, predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return object.GetName() == name
 	}))
+}
+
+// GetKubeControllerMetricsPort fetches kube controller metrics port.
+func GetKubeControllerMetricsPort(ctx context.Context, client client.Client) (int, error) {
+	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
+	kubeControllersMetricsPort := 0
+
+	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers metric port.
+	err := client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return 0, err
+	}
+
+	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
+		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
+	}
+	return kubeControllersMetricsPort, nil
 }

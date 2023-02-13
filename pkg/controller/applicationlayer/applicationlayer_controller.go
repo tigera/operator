@@ -58,7 +58,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
@@ -167,7 +167,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	reqLogger.Info("Reconciling ApplicationLayer")
 
 	applicationLayer, err := getApplicationLayer(ctx, r.client)
-
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -219,7 +218,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
-
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -241,7 +239,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
-
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -351,7 +348,6 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 
 // validateApplicationLayer validates ApplicationLayer
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
-
 	// Just a precaution to make sure it is safe to dereference pointers below.
 	// This is already taken care of in updateApplicationLayerWithDefaults.
 	properlyConfigured := al.Spec.LogCollection != nil &&
@@ -467,6 +463,20 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWAFEnabled(&al.Spec)) {
 		tproxyMode = crdv1.TPROXYModeOptionEnabled
 	} else {
+		if fc.Spec.TPROXYMode == nil {
+			// Workaround: we'd like to always force the value to be the correct one, matching the operator's
+			// configuration.  However, during an upgrade from a version that predates the TPROXYMode option,
+			// Felix hits a bug and gets confused by the new config parameter, which in turn triggers a restart.
+			// Work around that by relying on Disabled being the default value for the field instead.
+			//
+			// The felix bug was fixed in v3.16, v3.15.1 and v3.14.4; it should be safe to set new config fields
+			// once we know we're only upgrading from those versions and above.
+			return nil
+		}
+
+		// If the mode is already set, fall through to the normal logic, it's safe to force-set the field now.
+		// This also avoids churning the config if a previous version of the operator set it to Disabled already,
+		// we avoid setting it back to nil.
 		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
 	// If tproxy mode is already set to desired state return nil.

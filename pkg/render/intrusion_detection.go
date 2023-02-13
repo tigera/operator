@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,12 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -36,10 +33,10 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -173,17 +170,12 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
 	// Configure pod security standard. If syslog forwarding is enabled, we
 	// need hostpath volumes which require a privileged PSS.
-	pss := PSSBaseline
+	pss := PSSRestricted
 	if c.syslogForwardingIsEnabled() || c.adAPIPersistentStorageEnabled() {
 		pss = PSSPrivileged
 	}
 
 	objs := []client.Object{
-		// In order to switch to a restricted policy, we need to set the following on all containers in the namespace:
-		// - securityContext.allowPrivilegeEscalation=false)
-		// - securityContext.capabilities.drop=["ALL"]
-		// - securityContext.runAsNonRoot=true)
-		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)),
 		c.intrusionDetectionControllerAllowTigeraPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(IntrusionDetectionNamespace),
@@ -290,9 +282,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
-			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
-			RestartPolicy:    corev1.RestartPolicyOnFailure,
+			Tolerations:  c.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector: c.cfg.Installation.ControlPlaneNodeSelector,
+			// This value needs to be set to never. The PodFailurePolicy will still ensure that this job will run until completion.
+			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.cfg.ESClusterConfig.ClusterName(),
@@ -316,6 +309,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				},
 			},
 			Template: *podTemplate,
+			PodFailurePolicy: &batchv1.PodFailurePolicy{
+				Rules: []batchv1.PodFailurePolicyRule{
+					// We don't want the job to fail, so we keep retrying by ignoring incrementing the backoff.
+					{
+						Action: "Ignore",
+						OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
+							Operator: "NotIn",
+							Values:   []int32{0},
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -362,7 +367,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Value: c.cfg.ESClusterConfig.ClusterName(),
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())},
+		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())},
 	}
 }
 
@@ -626,7 +632,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 	}
 
-	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
+	sc := securitycontext.NewNonRootContext()
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
@@ -641,14 +647,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		// When syslog forwarding is enabled, IDS controller mounts host volume /var/log/calico
 		// and writes events to it. This host path is owned by root user and group so we have to
 		// use privileged UID/GID 0.
-		sc.RunAsGroup = ptr.Int64ToPtr(0)
-		sc.RunAsNonRoot = ptr.BoolToPtr(false)
-		sc.RunAsUser = ptr.Int64ToPtr(0)
 		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
 		// then IDS controller needs privileged access to write event logs to that volume
-		if c.cfg.Openshift {
-			sc.Privileged = ptr.BoolToPtr(true)
-		}
+		sc = securitycontext.NewRootContext(c.cfg.Openshift)
 	}
 
 	return corev1.Container{
@@ -660,7 +661,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/healthz",
+						"/usr/bin/healthz",
 						"liveness",
 					},
 				},
@@ -1415,7 +1416,7 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 
 func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 	var adModelVolumeSource corev1.VolumeSource
-	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
+	sc := securitycontext.NewNonRootContext()
 
 	if c.adAPIPersistentStorageEnabled() {
 		adModelVolumeSource = corev1.VolumeSource{
@@ -1426,9 +1427,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 
 		// When Persistent Storage is configured for AD API, it will use the host path of /mnt/anomaly-detection-api
 		// where it requires root privileges to write to
-		sc.RunAsGroup = ptr.Int64ToPtr(0)
-		sc.RunAsUser = ptr.Int64ToPtr(0)
-		sc.RunAsNonRoot = ptr.BoolToPtr(false)
+		sc = securitycontext.NewRootContext(false)
 	} else {
 		adModelVolumeSource = corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
@@ -1502,7 +1501,6 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 									},
 								},
 							},
-							Command: []string{"/anomaly-detection-api"},
 							VolumeMounts: []corev1.VolumeMount{
 								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
@@ -1627,12 +1625,10 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 	}
 
 	container := corev1.Container{
-		Name:  "adjobs",
-		Image: c.adDetectorsImage,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(false),
-		},
-		Env: envVars,
+		Name:            "adjobs",
+		Image:           c.adDetectorsImage,
+		SecurityContext: securitycontext.NewNonRootContext(),
+		Env:             envVars,
 		VolumeMounts: []corev1.VolumeMount{
 			c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),

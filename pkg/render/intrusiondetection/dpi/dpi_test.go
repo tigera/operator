@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,17 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -30,15 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -384,15 +386,19 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	Expect(dpiDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
 
 	Expect(dpiDaemonSet.Spec.Template.Spec.Containers[0].VolumeMounts).Should(ContainElements(expectedVolumeMounts))
-	if !openshift {
-		privileged := false
-		Expect(dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext).Should(Equal(&corev1.SecurityContext{
-			Privileged: &privileged,
+	Expect(*dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(openshift))
+	Expect(*dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(openshift))
+	Expect(*dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+	Expect(*dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(false))
+	Expect(*dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+	Expect(dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+		&corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+			Add:  []corev1.Capability{"NET_ADMIN", "NET_RAW"},
+		},
+	))
+	Expect(dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+		&corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
 		}))
-	} else {
-		privileged := true
-		Expect(dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext).Should(Equal(&corev1.SecurityContext{
-			Privileged: &privileged,
-		}))
-	}
 }

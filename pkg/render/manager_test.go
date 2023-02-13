@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,21 +18,19 @@ import (
 	"fmt"
 	"strconv"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	networkpolicy "github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/testutils"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -43,8 +41,10 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	networkpolicy "github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -120,6 +120,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
 		Expect(*manager.SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(999))
+		Expect(manager.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(manager.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 		Expect(manager.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: "true"},
 		))
@@ -135,9 +144,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())
-		Expect(*esProxy.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*esProxy.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*esProxy.SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+		Expect(esProxy.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(esProxy.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 		// voltron container
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
@@ -155,13 +173,22 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(*voltron.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*voltron.SecurityContext.Privileged).To(BeFalse())
-		Expect(*voltron.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*voltron.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*voltron.SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*voltron.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+		Expect(*voltron.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+		Expect(voltron.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(voltron.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 		// Check the namespace.
 		ns := rtest.GetResource(resources, "tigera-manager", "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
 		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
@@ -301,6 +328,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services/proxy"},
+				ResourceNames: []string{
+					"https:tigera-api:8080", "calico-node-prometheus:9090",
+				},
+				Verbs: []string{"get", "create"},
 			},
 		}))
 	})
@@ -534,6 +569,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services/proxy"},
+				ResourceNames: []string{
+					"https:tigera-api:8080", "calico-node-prometheus:9090",
+				},
+				Verbs: []string{"get", "create"},
 			},
 		}))
 	})

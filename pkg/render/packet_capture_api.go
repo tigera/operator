@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 package render
 
 import (
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -24,12 +22,14 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -51,8 +51,10 @@ const (
 	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
 )
 
-var PacketCaptureEntityRule = networkpolicy.CreateEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName, PacketCapturePort)
-var PacketCaptureSourceEntityRule = networkpolicy.CreateSourceEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName)
+var (
+	PacketCaptureEntityRule       = networkpolicy.CreateEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName, PacketCapturePort)
+	PacketCaptureSourceEntityRule = networkpolicy.CreateSourceEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName)
+)
 
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.
 type PacketCaptureApiConfiguration struct {
@@ -100,10 +102,7 @@ func (pc *packetCaptureApiComponent) SupportedOSType() rmeta.OSType {
 
 func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		// In order to switch to a restricted namespace, we need to set:
-		// - securityContext.capabilities.drop=["ALL"]
-		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSBaseline),
+		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
 
@@ -273,12 +272,11 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:           PacketCaptureContainerName,
-		Image:          pc.image,
-		LivenessProbe:  pc.healthProbe(),
-		ReadinessProbe: pc.healthProbe(),
-		// UID 1001 is used in the packetcapture Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		Name:            PacketCaptureContainerName,
+		Image:           pc.image,
+		LivenessProbe:   pc.healthProbe(),
+		ReadinessProbe:  pc.healthProbe(),
+		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

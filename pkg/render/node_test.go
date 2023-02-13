@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
-	"github.com/tigera/operator/pkg/ptr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -222,20 +222,66 @@ var _ = Describe("Node rendering tests", func() {
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV6POOL_CIDR", "2001:db8:1::/122")
 				}
 
-				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-
 				// Node image override results in correct image.
+				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
+				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeTrue())
+				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(ds.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(ds.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
+
 				// Validate correct number of init containers.
-				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
+				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 
 				// CNI container uses image override.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
+				Expect(cniContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+
+				Expect(*cniContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+				Expect(*cniContainer.SecurityContext.Privileged).To(BeTrue())
+				Expect(*cniContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*cniContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*cniContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(cniContainer.SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(cniContainer.SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
+				flexvolContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
+				Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
+
+				Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+				Expect(*flexvolContainer.SecurityContext.Privileged).To(BeTrue())
+				Expect(*flexvolContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*flexvolContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*flexvolContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(flexvolContainer.SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(flexvolContainer.SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{
@@ -460,6 +506,21 @@ var _ = Describe("Node rendering tests", func() {
 				mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
 				Expect(mountBpffs.Image).To(Equal(calicoNodeImage))
 				Expect(mountBpffs.Command).To(Equal([]string{"calico-node", "-init"}))
+
+				Expect(*mountBpffs.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+				Expect(*mountBpffs.SecurityContext.Privileged).To(BeTrue())
+				Expect(*mountBpffs.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*mountBpffs.SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*mountBpffs.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(mountBpffs.SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(mountBpffs.SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{
@@ -690,6 +751,9 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
+				// Verify the Flex volume container image.
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentFlexVolumePrivate.Image, components.ComponentFlexVolumePrivate.Version)))
+
 				expectedNodeEnv := []corev1.EnvVar{
 					// Default envvars.
 					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -777,15 +841,25 @@ var _ = Describe("Node rendering tests", func() {
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
 				Expect(nodeContainer).ToNot(BeNil())
 				Expect(nodeContainer.SecurityContext).ToNot(BeNil())
-				Expect(nodeContainer.SecurityContext.RunAsUser).ToNot(BeNil())
-				Expect(*nodeContainer.SecurityContext.RunAsUser).To(Equal(int64(999)))
-				Expect(nodeContainer.SecurityContext.RunAsGroup).ToNot(BeNil())
-				Expect(*nodeContainer.SecurityContext.RunAsGroup).To(Equal(int64(0)))
+				Expect(*nodeContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 				Expect(*nodeContainer.SecurityContext.Privileged).To(BeFalse())
-				Expect(nodeContainer.SecurityContext.Capabilities.Add).To(HaveLen(3))
-				Expect(nodeContainer.SecurityContext.Capabilities.Add[0]).To(Equal(corev1.Capability("NET_RAW")))
-				Expect(nodeContainer.SecurityContext.Capabilities.Add[1]).To(Equal(corev1.Capability("NET_ADMIN")))
-				Expect(nodeContainer.SecurityContext.Capabilities.Add[2]).To(Equal(corev1.Capability("NET_BIND_SERVICE")))
+				Expect(*nodeContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*nodeContainer.SecurityContext.RunAsNonRoot).To(BeTrue())
+				Expect(*nodeContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+				Expect(nodeContainer.SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+						Add: []corev1.Capability{
+							"NET_ADMIN",
+							"NET_BIND_SERVICE",
+							"NET_RAW",
+						},
+					},
+				))
+				Expect(nodeContainer.SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 
 				// hostpath init container should have the correct env and security context.
 				hostPathContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "hostpath-init")
@@ -1777,6 +1851,9 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
+
+				// Verify the Flex volume container image.
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentFlexVolumePrivate.Image, components.ComponentFlexVolumePrivate.Version)))
 
 				expectedNodeEnv := []corev1.EnvVar{
 					// Default envvars.

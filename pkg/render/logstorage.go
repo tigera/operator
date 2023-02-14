@@ -601,7 +601,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitialDelaySeconds: 30,
 			PeriodSeconds:       5,
 			SuccessThreshold:    1,
-			TimeoutSeconds:      10,
+			TimeoutSeconds:      20,
 		},
 		Resources:       es.resourceRequirements(),
 		SecurityContext: sc,

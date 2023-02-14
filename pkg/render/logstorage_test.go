@@ -861,6 +861,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(initContainers[1].SecurityContext.Capabilities).To(Equal(
 				&corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
+					Add:  []corev1.Capability{"CHOWN"},
 				},
 			))
 			Expect(initContainers[1].SecurityContext.SeccompProfile).To(Equal(

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -598,7 +598,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitialDelaySeconds: 30,
 			PeriodSeconds:       5,
 			SuccessThreshold:    1,
-			TimeoutSeconds:      10,
+			TimeoutSeconds:      20,
 		},
 		Resources: es.resourceRequirements(),
 		Env:       env,

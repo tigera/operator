@@ -32,19 +32,15 @@ const (
 	// APICertSecretName is tls certificates for the tigera-manager and the image assurance api.
 	APICertSecretName = "tigera-image-assurance-api-cert-pair"
 
-	ScannerClusterRoleName             = "tigera-image-assurance-scanner-api-access"
-	ScannerClusterRoleBindingName      = "tigera-image-assurance-scanner-api-access"
-	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
-	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
-	ScannerCLIClusterRoleName          = "tigera-image-assurance-scanner-cli-api-access"
+	ScannerAPIAccessResourceName = "tigera-image-assurance-scanner-api-access"
+	ScannerAPIAccessSecretName   = "scanner-image-assurance-api-token"
+	ScannerCLIClusterRoleName    = "tigera-image-assurance-scanner-cli-api-access"
 
 	PodWatcherClusterRoleName     = "tigera-image-assurance-pod-watcher-api-access"
 	PodWatcherAPIAccessSecretName = "pod-watcher-image-assurance-api-token"
 
-	RuntimeCleanerClusterRoleName             = "tigera-image-assurance-runtime-cleaner-api-access"
-	RuntimeCleanerClusterRoleBindingName      = "tigera-image-assurance-runtime-cleaner-api-access"
-	RuntimeCleanerAPIAccessServiceAccountName = "tigera-image-assurance-runtime-cleaner-api-access"
-	RuntimeCleanerAPIAccessSecretName         = "runtime-cleaner-image-assurance-api-token"
+	RuntimeCleanerAPIAccessResourceName = "tigera-image-assurance-runtime-cleaner-api-access"
+	RuntimeCleanerAPIAccessSecretName   = "runtime-cleaner-image-assurance-api-token"
 
 	OperatorAPIAccessServiceAccountName = "tigera-image-assurance-operator-api-access"
 

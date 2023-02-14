@@ -132,25 +132,24 @@ var _ = Describe("Image Assurance Controller", func() {
 		})).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
-			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
-			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerClusterRoleBindingName},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerClusterRoleBindingName},
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
 		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sa-secret",
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{"token": []byte("token")},
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
+			Data:       map[string][]byte{"token": []byte("token")},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
+			Data:       map[string][]byte{"token": []byte("token")},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerAPIAccessResourceName},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessResourceName},
 		})).NotTo(HaveOccurred())
 	})
 

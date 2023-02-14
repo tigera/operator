@@ -62,7 +62,7 @@ func (c *component) runtimeCleanerClusterRoles() []*rbacv1.ClusterRole {
 		{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      RuntimeCleanerClusterRoleName,
+				Name:      RuntimeCleanerAPIAccessResourceName,
 				Namespace: NameSpaceImageAssurance,
 			},
 			Rules: []rbacv1.PolicyRule{

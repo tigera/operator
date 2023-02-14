@@ -38,10 +38,10 @@ import (
 
 var log = logf.Log.WithName("controller_image_assurance")
 
-// service accounts created by kube-controller for image assurance components for API access
-var apiTokenServiceAccounts = []string{
-	imageassurance.ScannerAPIAccessServiceAccountName,
-	imageassurance.RuntimeCleanerAPIAccessServiceAccountName,
+// names of service account, secret tokens created by kube-controller for image assurance components for API access
+var apiAccessResources = []string{
+	imageassurance.ScannerAPIAccessResourceName,
+	imageassurance.RuntimeCleanerAPIAccessResourceName,
 }
 
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
@@ -110,19 +110,18 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
-	// Watch secrets created for postgres in operator namespace.
-	for _, s := range []string{
-		imageassurance.APICertSecretName,
-		render.ManagerInternalTLSSecretName,
-		certificatemanagement.CASecretName,
-	} {
+	// Watch secrets created for postgres and API access (by kube controllers) in operator namespace.
+	var watchedSecrets []string
+	watchedSecrets = append(watchedSecrets, []string{imageassurance.APICertSecretName, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName}...)
+	watchedSecrets = append(watchedSecrets, apiAccessResources...)
+	for _, s := range watchedSecrets {
 		if err = utils.AddSecretsWatch(c, s, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", s, err)
 		}
 	}
 
 	// watch for service accounts created in operator namespace by kube-controllers for image assurance.
-	for _, sa := range apiTokenServiceAccounts {
+	for _, sa := range apiAccessResources {
 		if err = utils.AddServiceAccountWatch(c, sa, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", sa, err)
 		}
@@ -132,8 +131,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
 
-	for _, role := range []string{imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName,
-		imageassurance.RuntimeCleanerClusterRoleName} {
+	for _, role := range []string{imageassurance.ScannerAPIAccessResourceName, imageassurance.AdmissionControllerAPIClusterRoleName,
+		imageassurance.RuntimeCleanerAPIAccessResourceName} {
 		if err = utils.AddClusterRoleWatch(c, role); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", role, err)
 		}
@@ -253,7 +252,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	scannerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
+	scannerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.ScannerAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
@@ -266,7 +265,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	runtimeCleanerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.RuntimeCleanerAPIAccessServiceAccountName)
+	runtimeCleanerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.RuntimeCleanerAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving runtime cleaner API access token", err.Error())

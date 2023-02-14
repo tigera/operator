@@ -119,7 +119,7 @@ var _ = Describe("Image Assurance Render", func() {
 
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
-		{name: imageassurance.ScannerClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+		{name: imageassurance.ScannerAPIAccessResourceName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ScannerCLIClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 		{name: imageassurance.ScannerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
@@ -135,7 +135,7 @@ var _ = Describe("Image Assurance Render", func() {
 
 		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
-		{name: imageassurance.RuntimeCleanerClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+		{name: imageassurance.RuntimeCleanerAPIAccessResourceName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},

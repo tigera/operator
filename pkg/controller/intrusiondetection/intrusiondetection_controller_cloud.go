@@ -5,6 +5,7 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
 
 	"github.com/go-logr/logr"
 
@@ -19,7 +20,7 @@ import (
 )
 
 const (
-	ImageAssuranceAPIServiceAccountName = "tigera-image-assurance-intrusion-detection-controller-api-access"
+	ImageAssuranceAPIAccessResourceName = "tigera-image-assurance-intrusion-detection-controller-api-access"
 )
 
 func addCloudWatch(c controller.Controller) error {
@@ -28,6 +29,10 @@ func addCloudWatch(c controller.Controller) error {
 	}
 
 	if err := utils.AddClusterRoleWatch(c, render.IntrusionDetectionControllerImageAssuranceAPIClusterRoleName); err != nil {
+		return err
+	}
+
+	if err := utils.AddSecretsWatch(c, ImageAssuranceAPIAccessResourceName, common.OperatorNamespace()); err != nil {
 		return err
 	}
 
@@ -68,7 +73,7 @@ func (r *ReconcileIntrusionDetection) handleCloudResources(ctx context.Context, 
 		return idcr, nil, err
 	}
 
-	iaToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, ImageAssuranceAPIServiceAccountName)
+	iaToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, ImageAssuranceAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving image assurance API access token", err.Error())

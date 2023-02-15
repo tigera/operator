@@ -575,45 +575,6 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.Role {
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
-			{
-				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// Calico creates some configuration on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"clusterinformations",
-					"felixconfigurations",
-					"ippools",
-				},
-				Verbs: []string{"create", "update"},
-			},
-			{
-				// For monitoring Calico-specific configuration.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"bgpconfigurations",
-					"bgppeers",
-					"blockaffinities",
-					"clusterinformations",
-					"felixconfigurations",
-					"globalnetworkpolicies",
-					"stagedglobalnetworkpolicies",
-					"globalnetworksets",
-					"hostendpoints",
-					"ipamblocks",
-					"ippools",
-					"ipreservations",
-					"networkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"stagednetworkpolicies",
-					"networksets",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
 		},
 	}
 

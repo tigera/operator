@@ -1011,8 +1011,10 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&monitoringv1.Prometheus{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-prometheus"},
 						Spec: monitoringv1.PrometheusSpec{
-							NodeSelector: map[string]string{
-								"kubernetes.io/a": "b",
+							CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+								NodeSelector: map[string]string{
+									"kubernetes.io/a": "b",
+								},
 							},
 						},
 					}},

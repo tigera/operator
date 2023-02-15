@@ -302,6 +302,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
+
+		Expect(container.SecurityContext).To(BeNil())
 	})
 
 	It("should render with S3 configuration", func() {

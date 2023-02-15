@@ -628,6 +628,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
 
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		sc := securitycontext.NewRootContext(false)
+		// keystore init container converts jdk jks to bcfks and chown the new file to
+		// elasticsearch user and group for the main container to consume.
+		sc.Capabilities.Add = []corev1.Capability{"CHOWN"}
+
 		initKeystore := corev1.Container{
 			Name:  keystoreInitContainerName,
 			Image: es.esImage,
@@ -650,7 +655,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			// using the password from env var KEYSTORE_PASSWORD.
 			Command:         []string{"/bin/sh"},
 			Args:            []string{"-c", "/usr/bin/initialize_keystore.sh"},
-			SecurityContext: securitycontext.NewRootContext(false),
+			SecurityContext: sc,
 		}
 		initContainers = append(initContainers, initKeystore)
 		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)

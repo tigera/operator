@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -114,6 +114,13 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "Tiers", err)
+	}
+	if err := (&PolicyRecommendationReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("PolicyRecommendation"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "PolicyRecommendation", err)
 	}
 	if err := (&EgressGatewayReconciler{
 		Client: mgr.GetClient(),

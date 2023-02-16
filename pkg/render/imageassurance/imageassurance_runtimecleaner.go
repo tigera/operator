@@ -213,24 +213,13 @@ func (c *component) runtimeCleanerDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ResourceNameImageAssuranceRuntimeCleaner,
 			Namespace: NameSpaceImageAssurance,
-			Labels: map[string]string{
-				"k8s-app": ResourceNameImageAssuranceRuntimeCleaner,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": ResourceNameImageAssuranceRuntimeCleaner,
-				},
-			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      ResourceNameImageAssuranceRuntimeCleaner,
-					Namespace: NameSpaceImageAssurance,
-					Labels: map[string]string{
-						"k8s-app": ResourceNameImageAssuranceRuntimeCleaner,
-					},
+					Name:        ResourceNameImageAssuranceRuntimeCleaner,
+					Namespace:   NameSpaceImageAssurance,
 					Annotations: annots,
 				},
 				Spec: podSpec,

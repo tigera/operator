@@ -120,6 +120,8 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		pr.deployment(),
 	)
 
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
+
 	if pr.cfg.KeyValidatorConfig != nil {
 		objs = append(objs, secret.ToRuntimeObjects(pr.cfg.KeyValidatorConfig.RequiredSecrets(PolicyRecommendationNamespace)...)...)
 		objs = append(objs, configmap.ToRuntimeObjects(pr.cfg.KeyValidatorConfig.RequiredConfigMaps(PolicyRecommendationNamespace)...)...)
@@ -156,6 +158,8 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
 				"tiers",
+				"policyrecommendationscope",
+				"policyrecommendationscope/status",
 				"policyrecommendationscopes",
 				"policyrecommendationscopes/status",
 				"stagednetworkpolicies",
@@ -213,7 +217,7 @@ func (pr *policyRecommendationComponent) controllerContainer() corev1.Container 
 		},
 	}
 
-	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
+	sc := securitycontext.NewNonRootContext()
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.

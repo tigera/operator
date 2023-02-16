@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,19 +15,22 @@
 package render_test
 
 import (
+	"fmt"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("CSI rendering tests", func() {
@@ -65,6 +68,39 @@ var _ = Describe("CSI rendering tests", func() {
 		for i, expectedRes := range expectedCreateObjs {
 			rtest.ExpectResource(createObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+
+		ds := rtest.GetResource(createObjs, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(2))
+
+		Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+		Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeTrue())
+		Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(ds.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(ds.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
+
+		Expect(*ds.Spec.Template.Spec.Containers[1].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+		Expect(*ds.Spec.Template.Spec.Containers[1].SecurityContext.Privileged).To(BeTrue())
+		Expect(*ds.Spec.Template.Spec.Containers[1].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*ds.Spec.Template.Spec.Containers[1].SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*ds.Spec.Template.Spec.Containers[1].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(ds.Spec.Template.Spec.Containers[1].SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(ds.Spec.Template.Spec.Containers[1].SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 	})
 
 	It("should render properly when KubeletVolumePluginPath is set to 'None'", func() {
@@ -167,6 +203,7 @@ var _ = Describe("CSI rendering tests", func() {
 		ds = rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
 	})
+
 	Context("With csi-node-driver DaemonSet overrides", func() {
 		It("should handle csiNodeDriverDaemonSet overrides", func() {
 
@@ -236,5 +273,24 @@ var _ = Describe("CSI rendering tests", func() {
 			Expect(ds.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(ds.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
 		})
+	})
+
+	It("should use private images when Variant = enterprise", func() {
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		comp := render.CSI(&cfg)
+		Expect(comp.ResolveImages(nil)).To(BeNil())
+		createObjs, _ := comp.Objects()
+		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentCSIPrivate.Image, components.ComponentCSIPrivate.Version)))
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentCSINodeDriverRegistrarPrivate.Image, components.ComponentCSINodeDriverRegistrarPrivate.Version)))
+	})
+
+	It("should use private images when Variant = Calico", func() {
+		comp := render.CSI(&cfg)
+		Expect(comp.ResolveImages(nil)).To(BeNil())
+		createObjs, _ := comp.Objects()
+		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s:%s", components.CalicoRegistry, components.ComponentCalicoCSI.Image, components.ComponentCalicoCSI.Version)))
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(fmt.Sprintf("%s%s:%s", components.CalicoRegistry, components.ComponentCalicoCSIRegistrar.Image, components.ComponentCalicoCSIRegistrar.Version)))
 	})
 })

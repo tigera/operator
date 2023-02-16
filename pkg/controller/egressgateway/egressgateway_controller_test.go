@@ -17,6 +17,7 @@ package egressgateway
 import (
 	"context"
 	"fmt"
+
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
+	ocsv1 "github.com/openshift/api/security/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -38,6 +40,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -127,6 +130,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			},
 			})).NotTo(HaveOccurred())
 
+			var routeTableIndex uint32 = 1
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "one"}, Spec: crdv1.ExternalNetworkSpec{
+				RouteTableIndex: &routeTableIndex,
+			},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "two"}, Spec: crdv1.ExternalNetworkSpec{
+				RouteTableIndex: &routeTableIndex,
+			},
+			})).NotTo(HaveOccurred())
 			// Mark that the watch for license key was successful.
 			r.licenseAPIReady.MarkAsReady()
 		})
@@ -155,6 +168,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 						{Name: "ippool-1", CIDR: ""},
 						{Name: "", CIDR: "1.2.4.0/24"},
 					},
+					ExternalNetworks: []string{"one", "two"},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,
@@ -215,6 +229,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			}
 			Expect(*dep.Spec.Template.Spec.Affinity).To(Equal(expectedAffinity))
 			Expect(dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/ipv4pools"]).To(Equal("[\"ippool-1\",\"1.2.4.0/24\"]"))
+			Expect(dep.Spec.Template.ObjectMeta.Annotations["egress.projectcalico.org/externalNetworkNames"]).To(Equal("[\"one\",\"two\"]"))
 
 			By("update egw with empty metadata")
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
@@ -300,6 +315,151 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				Expect(initContainer.Env).To(ContainElement(elem))
 				Expect(initContainer_blue.Env).To(ContainElement(elem))
 			}
+		})
+
+		It("should use a single psp when EGW is created with on a psp cluster", func() {
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			logSeverity := operatorv1.LogLevelInfo
+			egw_red := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					LogSeverity: &logSeverity,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1", CIDR: ""},
+						{Name: "", CIDR: "1.2.4.0/24"},
+					},
+					ExternalNetworks: []string{"one", "two"},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw_red)).NotTo(HaveOccurred())
+
+			egw_blue := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-blue", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					LogSeverity: &logSeverity,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1", CIDR: ""},
+						{Name: "", CIDR: "1.2.4.0/24"},
+					},
+					ExternalNetworks: []string{"one", "two"},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw_blue)).NotTo(HaveOccurred())
+
+			r.usePSP = true
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			psp := policyv1beta1.PodSecurityPolicy{
+				TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-egressgateway",
+				},
+			}
+			Expect(test.GetResource(c, &psp)).To(BeNil())
+
+			Expect(c.Delete(ctx, egw_red)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &psp)).To(BeNil())
+
+			Expect(c.Delete(ctx, egw_blue)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &psp)).NotTo(BeNil())
+		})
+
+		It("should use a single scc when EGW is created in openshift", func() {
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("RemoveDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+			r.provider = operatorv1.ProviderOpenShift
+			logSeverity := operatorv1.LogLevelInfo
+			egw_red := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					LogSeverity: &logSeverity,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1", CIDR: ""},
+						{Name: "", CIDR: "1.2.4.0/24"},
+					},
+					ExternalNetworks: []string{"one", "two"},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+
+			egw_blue := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-blue", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					LogSeverity: &logSeverity,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1", CIDR: ""},
+						{Name: "", CIDR: "1.2.4.0/24"},
+					},
+					ExternalNetworks: []string{"one", "two"},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			scc := ocsv1.SecurityContextConstraints{
+				TypeMeta: metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-egressgateway",
+				},
+			}
+
+			Expect(c.Create(ctx, egw_red)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &scc)).To(BeNil())
+			Expect(len(scc.Users)).To(Equal(1))
+			Expect(scc.Users[0]).To(Equal("system:serviceaccount:calico-egress:calico-red"))
+
+			Expect(c.Create(ctx, egw_blue)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &scc)).To(BeNil())
+			Expect(len(scc.Users)).To(Equal(2))
+			Expect(scc.Users[0]).To(Equal("system:serviceaccount:calico-egress:calico-blue"))
+			Expect(scc.Users[1]).To(Equal("system:serviceaccount:calico-egress:calico-red"))
+
+			Expect(c.Delete(ctx, egw_red)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &scc)).To(BeNil())
+			Expect(len(scc.Users)).To(Equal(1))
+			Expect(scc.Users[0]).To(Equal("system:serviceaccount:calico-egress:calico-blue"))
+
+			Expect(c.Delete(ctx, egw_blue)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &scc)).NotTo(BeNil())
 		})
 
 		It("Should throw an error when ippool is not present", func() {
@@ -543,6 +703,34 @@ var _ = Describe("Egress Gateway controller tests", func() {
 							IntervalSeconds: &interval,
 						},
 					},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+
+		})
+
+		It("Should throw an error when externalNetworks are not present", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "externalnetworks.crd.projectcalico.org \"three\" not found", mock.Anything, mock.Anything).Return()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+					},
+					ExternalNetworks: []string{"one", "three"},
+					Template:         &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,

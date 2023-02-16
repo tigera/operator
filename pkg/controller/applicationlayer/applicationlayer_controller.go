@@ -62,7 +62,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
@@ -171,7 +171,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	reqLogger.Info("Reconciling ApplicationLayer")
 
 	applicationLayer, err := getApplicationLayer(ctx, r.client)
-
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -223,7 +222,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
-
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -245,7 +243,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
-
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -177,6 +177,9 @@ var _ = Describe("Manager controller tests", func() {
 			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -389,6 +392,9 @@ var _ = Describe("Manager controller tests", func() {
 			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,14 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -29,12 +37,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
@@ -120,6 +122,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		Expect(envs).Should(ContainElements(
@@ -154,6 +157,21 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(10))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
+
+		Expect(*container.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*container.SecurityContext.Privileged).To(BeFalse())
+		Expect(*container.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*container.SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*container.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(container.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(container.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 		podExecRole := rtest.GetResource(resources, render.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
 		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -284,6 +302,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
+
+		Expect(container.SecurityContext).To(BeNil())
 	})
 
 	It("should render with S3 configuration", func() {
@@ -496,6 +516,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "SYSLOG_CA_FILE", Value: cfg.TrustedBundle.MountPath(), ValueFrom: nil},
 		}))
 	})
+
 	It("should render with Syslog configuration with TLS and Internet CA", func() {
 		cfg.UseSyslogCertificate = false
 		var ps int32 = 180
@@ -806,13 +827,45 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))
 		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: cfg.EKSConfig.AwsRegion}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"}))
 
-		fetchIntervalVal := "900"
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fetchIntervalVal}))
+		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Privileged).To(BeFalse())
+		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
+
+		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(deploy.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(deploy.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
+
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
 	})
 
 	Context("allow-tigera rendering", func() {

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -117,6 +117,7 @@ type APIServerConfiguration struct {
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
 	TunnelCASecret              certificatemanagement.KeyPairInterface
+	TrustedBundle               certificatemanagement.TrustedBundle
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -229,6 +230,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Namespaced enterprise-only objects.
 	namespacedEnterpriseObjects := []client.Object{
 		c.auditPolicyConfigMap(),
+	}
+	if c.cfg.TrustedBundle != nil {
+		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.cfg.TrustedBundle.ConfigMap(QueryserverNamespace))
 	}
 
 	// Global OSS-only objects.
@@ -475,7 +479,6 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
-
 			// Kubernetes network policy resources.
 			APIGroups: []string{
 				"networking.k8s.io",
@@ -874,6 +877,13 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
+
+		if c.cfg.TrustedBundle != nil {
+			trustedBundleHashAnnotations := c.cfg.TrustedBundle.HashAnnotations()
+			for k, v := range trustedBundleHashAnnotations {
+				d.Spec.Template.ObjectMeta.Annotations[k] = v
+			}
+		}
 	}
 
 	if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
@@ -910,12 +920,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		)
 	}
 
-	// On OpenShift apiserver needs privileged access to write audit logs to host path volume
-	isPrivileged := false
-	if c.cfg.Openshift {
-		isPrivileged = true
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
@@ -931,12 +935,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,
-		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &isPrivileged,
-			RunAsUser:  ptr.Int64ToPtr(0),
-		},
-		VolumeMounts: volumeMounts,
+		// OpenShift apiserver needs privileged access to write audit logs to host path volume.
+		// Audit logs are owned by root on hosts so we need to be root user and group.
+		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
+		VolumeMounts:    volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -970,10 +972,6 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--secure-port=%d", APIServerPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
-	}
-
-	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		args = append(args, "--tls-max-version=VersionTLS12")
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -1010,6 +1008,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
+	if c.cfg.TrustedBundle != nil {
+		env = append(env, corev1.EnvVar{Name: "TRUSTED_BUNDLE_PATH", Value: c.cfg.TrustedBundle.MountPath()})
+	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
 	env = append(env, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
@@ -1020,6 +1021,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	volumeMounts := []corev1.VolumeMount{
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	}
+	if c.cfg.TrustedBundle != nil {
+		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 	}
 
 	container := corev1.Container{
@@ -1037,8 +1041,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		// UID 1001 is used in the queryserver Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
 	}
 	return container
@@ -1076,6 +1079,10 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 				},
 			},
 		)
+
+		if c.cfg.TrustedBundle != nil {
+			volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+		}
 
 		if c.cfg.ManagementCluster != nil {
 			volumes = append(volumes, corev1.Volume{
@@ -1467,7 +1474,14 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"user-settings"},
 		},
-		// Allow the user to read services to configure WAF.
+		// Allow the user to read applicationlayers to detect if WAF is enabled/disabled.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"applicationlayers"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"tigera-secure"},
+		},
+		// Allow the user to read services to view WAF configuration.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
@@ -1615,14 +1629,14 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"cluster-settings", "user-settings"},
 		},
-		// Allow the user to read and write the applicationlayers resource to enable/disable WAF.
+		// Allow the user to read and write applicationlayers to enable/disable WAF.
 		{
 			APIGroups:     []string{"operator.tigera.io"},
 			Resources:     []string{"applicationlayers"},
 			ResourceNames: []string{"tigera-secure"},
 			Verbs:         []string{"get", "update", "patch", "create"},
 		},
-		// Allow the user to read services to configure WAF.
+		// Allow the user to read services to view WAF configuration.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},

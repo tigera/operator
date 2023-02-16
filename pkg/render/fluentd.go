@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,6 @@ import (
 	"fmt"
 	"strconv"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -29,13 +26,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
@@ -223,6 +223,13 @@ func (c *fluentdComponent) livenessCmd() []string {
 		return []string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}
 	}
 	return []string{"sh", "-c", "/bin/liveness.sh"}
+}
+
+func (c *fluentdComponent) securityContext(privileged bool) *corev1.SecurityContext {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return nil
+	}
+	return securitycontext.NewRootContext(privileged)
 }
 
 func (c *fluentdComponent) volumeHostPath() string {
@@ -543,17 +550,12 @@ func (c *fluentdComponent) container() corev1.Container {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
 	}
 
-	isPrivileged := false
-	// On OpenShift Fluentd needs privileged access to access logs on host path volume
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
-		isPrivileged = true
-	}
-
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
-		Name:            "fluentd",
-		Image:           c.image,
-		Env:             envs,
-		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
+		Name:  "fluentd",
+		Image: c.image,
+		Env:   envs,
+		// On OpenShift Fluentd needs privileged access to access logs on host path volume
+		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
 		VolumeMounts:    volumeMounts,
 		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),
@@ -996,17 +998,19 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:         eksLogForwarderName + "-startup",
-						Image:        c.image,
-						Command:      []string{c.path("/bin/eks-log-forwarder-startup")},
-						Env:          envVars,
-						VolumeMounts: c.eksLogForwarderVolumeMounts(),
+						Name:            eksLogForwarderName + "-startup",
+						Image:           c.image,
+						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
+						Env:             envVars,
+						SecurityContext: c.securityContext(false),
+						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
 					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:         eksLogForwarderName,
-						Image:        c.image,
-						Env:          envVars,
-						VolumeMounts: c.eksLogForwarderVolumeMounts(),
+						Name:            eksLogForwarderName,
+						Image:           c.image,
+						Env:             envVars,
+						SecurityContext: c.securityContext(false),
+						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
 					Volumes: c.eksLogForwarderVolumes(),
 				},

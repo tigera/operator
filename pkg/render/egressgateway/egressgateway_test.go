@@ -17,16 +17,17 @@ package egressgateway_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/egressgateway"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/egressgateway"
 )
 
 var _ = Describe("Egress Gateway rendering tests", func() {
@@ -65,7 +66,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 					{Name: "ippool-1", CIDR: ""},
 					{Name: "ippool-2", CIDR: ""},
 				},
-				LogSeverity: &logSeverity,
+				ExternalNetworks: []string{"one", "two"},
+				LogSeverity:      &logSeverity,
 				Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{
 					Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels},
 					Spec: &operatorv1.EgressGatewayDeploymentPodSpec{
@@ -106,8 +108,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRole"},
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRoleBinding"},
+			{"egress-test", "test-ns", rbac, "v1", "Role"},
+			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -152,6 +154,20 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		for _, elem := range expectedInitEnvVars {
 			Expect(initContainer.Env).To(ContainElement(elem))
 		}
+		Expect(*initContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+		Expect(*initContainer.SecurityContext.Privileged).To(BeTrue())
+		Expect(*initContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*initContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*initContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(initContainer.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(initContainer.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 		expectedEnvVars := []corev1.EnvVar{
 			{Name: "HEALTH_PORT", Value: "8080"},
 			{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
@@ -168,6 +184,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		ipPoolAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/ipv4pools"]
 		expectedIPPoolAnnotation := "[\"ippool-1\",\"ippool-2\"]"
 		Expect(ipPoolAnnotation).To(Equal(expectedIPPoolAnnotation))
+		Expect(dep.Spec.Template.ObjectMeta.Annotations["egress.projectcalico.org/externalNetworkNames"]).To(Equal("[\"one\",\"two\"]"))
 
 		Expect(dep.Spec.Template.ObjectMeta.Labels).To(Equal(labels))
 		expectedPort := corev1.ContainerPort{
@@ -177,15 +194,21 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 		Expect(egwContainer.Ports).To(ContainElement(expectedPort))
 		Expect(dep.Spec.Template.Spec.NodeSelector["kubernetes.io/os"]).To(Equal("linux"))
-		expectedSecurityCtx := &corev1.SecurityContext{
-			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"NET_ADMIN"},
+		Expect(*egwContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*egwContainer.SecurityContext.Privileged).To(BeFalse())
+		Expect(*egwContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*egwContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*egwContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+		Expect(egwContainer.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+				Add:  []corev1.Capability{"NET_ADMIN"},
 			},
-		}
-		Expect(egwContainer.SecurityContext).To(Equal(expectedSecurityCtx))
-		initContainerPrivileges := true
-		expectedInitSecurityCtx := &corev1.SecurityContext{Privileged: &initContainerPrivileges}
-		Expect(initContainer.SecurityContext).To(Equal(expectedInitSecurityCtx))
+		))
+		Expect(egwContainer.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 		expectedRP := &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -232,7 +255,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(elasticIPAnnotation).To(Equal("[\"1.2.3.4\",\"5.6.7.8\"]"))
 	})
 
-	It("should create service account, clusterrole, clusterrolebinding and psp if platform uses psp", func() {
+	It("should create service account, role, rolebinding if platform uses psp", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -241,10 +264,10 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			kind    string
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{"egress-test", "test-ns", rbac, "v1", "Role"},
+			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
-			{"test-ns-egress-test", "", "policy", "v1beta1", "PodSecurityPolicy"},
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRole"},
-			{"test-ns-egress-test", "", rbac, "v1", "ClusterRoleBinding"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -272,8 +295,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			kind    string
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"tigera-egressgateway", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
-			{"test-ns-egress-test", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -283,41 +306,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			EgressGW:     egw,
 			VXLANVNI:     4097,
 			VXLANPort:    4790,
-			Openshift:    true,
+			OpenShift:    true,
 		})
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-	})
-
-	It("Test with long string lengths for ns and name", func() {
-		egw.Namespace = "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg"
-		egw.Name = "egress-testabcdefghijklmnopqrstuvwxyz1234567890abc"
-		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OSType:       rmeta.OSTypeLinux,
-			EgressGW:     egw,
-			VXLANVNI:     4097,
-			VXLANPort:    4790,
-			UsePSP:       true,
-		})
-
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{"egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg", "", "v1", "ServiceAccount"},
-			{"egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg", "apps", "v1", "Deployment"},
-			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", "policy", "v1beta1", "PodSecurityPolicy"},
-			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", rbac, "v1", "ClusterRole"},
-			{"test-nsabcdefghijklmnopqrstuvwxyz1234567890abcdefg-egress-testabcdefghijklmnopqrstuvwxyz1234567890abc", "", rbac, "v1", "ClusterRoleBinding"},
-		}
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {

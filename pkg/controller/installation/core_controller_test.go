@@ -497,8 +497,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentFlexVolume.Image,
-					components.ComponentFlexVolume.Version)))
+					components.ComponentFlexVolumePrivate.Image,
+					components.ComponentFlexVolumePrivate.Version)))
 			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 			Expect(cni).ToNot(BeNil())
 			Expect(cni.Image).To(Equal(
@@ -527,11 +527,11 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
 						{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
 						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
-						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
+						{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
-						{Image: "calico/csi", Digest: "sha256:calicocsihash"},
-						{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
+						{Image: "tigera/csi", Digest: "sha256:calicocsihash"},
+						{Image: "tigera/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -598,7 +598,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentFlexVolume.Image,
+					components.ComponentFlexVolumePrivate.Image,
 					"sha256:calicoflexvolhash")))
 			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 			Expect(cni).ToNot(BeNil())

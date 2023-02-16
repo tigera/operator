@@ -17,16 +17,11 @@ package egressgateway
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
-	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -36,13 +31,24 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
-	egwPortName             = "health"
-	DefaultVXLANPort  int   = 4790
-	DefaultVXLANVNI   int   = 4097
-	DefaultHealthPort int32 = 8080
+	egwPortName                 = "health"
+	DefaultVXLANPort      int   = 4790
+	DefaultVXLANVNI       int   = 4097
+	DefaultHealthPort     int32 = 8080
+	OpenShiftSCCName            = "tigera-egressgateway"
+	podSecurityPolicyName       = "tigera-egressgateway"
 )
 
 var log = logf.Log.WithName("render")
@@ -70,9 +76,10 @@ type Config struct {
 	VXLANVNI  int
 	VXLANPort int
 
-	Openshift bool
+	OpenShift bool
 	// Whether or not the cluster supports pod security policies.
-	UsePSP bool
+	UsePSP            bool
+	NamespaceAndNames []string
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -97,17 +104,17 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := []client.Object{}
 	objectsToDelete := []client.Object{}
 	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
-	objectsToCreate = append(objectsToCreate, c.egwDeployment())
-	if c.config.UsePSP {
-		objectsToCreate = append(objectsToCreate, c.egwPodSecurityPolicy())
-		objectsToCreate = append(objectsToCreate, c.egwClusterRole())
-		objectsToCreate = append(objectsToCreate, c.egwClusterRoleBinding())
-	} else if c.config.Openshift {
-		objectsToCreate = append(objectsToCreate, c.egwSecurityContextConstraints())
+	if c.config.OpenShift {
+		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
+	} else if c.config.UsePSP {
+		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
+		objectsToCreate = append(objectsToCreate, c.egwRole())
+		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
 	} else {
-		objectsToDelete = append(objectsToDelete, c.egwClusterRole())
-		objectsToDelete = append(objectsToDelete, c.egwClusterRoleBinding())
+		objectsToDelete = append(objectsToDelete, c.egwRole())
+		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
 	}
+	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	return objectsToCreate, objectsToDelete
 }
 
@@ -125,6 +132,7 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.config.EgressGW.Spec.Replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: c.config.EgressGW.Spec.Template.Metadata.Labels},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
@@ -161,6 +169,9 @@ func (c *component) egwBuildAnnotations() map[string]string {
 	if c.config.EgressGW.Spec.AWS != nil && len(c.config.EgressGW.Spec.AWS.ElasticIPs) > 0 {
 		annotations["cni.projectcalico.org/awsElasticIPs"] = c.getElasticIPs()
 	}
+	if len(c.config.EgressGW.Spec.ExternalNetworks) > 0 {
+		annotations["egress.projectcalico.org/externalNetworkNames"] = c.getExternalNetworks()
+	}
 	return annotations
 }
 
@@ -170,12 +181,15 @@ func (c *component) egwInitContainer() *corev1.Container {
 		Image:           c.config.egwImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"/init-gateway.sh"},
-		SecurityContext: &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		SecurityContext: securitycontext.NewRootContext(true),
 		Env:             c.egwInitEnvVars(),
 	}
 }
 
 func (c *component) egwContainer() *corev1.Container {
+	sc := securitycontext.NewRootContext(false)
+	sc.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
+
 	return &corev1.Container{
 		Name:            "egress-gateway",
 		Image:           c.config.egwImage,
@@ -186,7 +200,7 @@ func (c *component) egwContainer() *corev1.Container {
 		Ports:           c.egwPorts(),
 		Command:         []string{"/start-gateway.sh"},
 		ReadinessProbe:  c.egwReadinessProbe(),
-		SecurityContext: c.egwSecurityContext(),
+		SecurityContext: sc,
 	}
 }
 
@@ -202,14 +216,6 @@ func (c *component) egwReadinessProbe() *corev1.Probe {
 		TimeoutSeconds:      1,
 		SuccessThreshold:    1,
 		PeriodSeconds:       3,
-	}
-}
-
-func (c *component) egwSecurityContext() *corev1.SecurityContext {
-	return &corev1.SecurityContext{
-		Capabilities: &corev1.Capabilities{
-			Add: []corev1.Capability{"NET_ADMIN"},
-		},
 	}
 }
 
@@ -232,7 +238,7 @@ func (c *component) egwVolume() *corev1.Volume {
 
 func (c *component) egwVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		corev1.VolumeMount{Name: "policysync", MountPath: "/var/run/calico"},
+		{Name: "policysync", MountPath: "/var/run/calico"},
 	}
 }
 
@@ -281,11 +287,10 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 	}
 }
 
-func (c *component) egwPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	boolTrue := true
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
 	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(namespacedName)
+	psp.GetObjectMeta().SetName(podSecurityPolicyName)
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
 		corev1.Capability("NET_ADMIN"),
 	}
@@ -313,36 +318,35 @@ func (c *component) egwPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	return psp
 }
 
-func (c *component) egwClusterRole() *rbacv1.ClusterRole {
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			ResourceNames: []string{namespacedName},
-			Verbs:         []string{"use"},
-		},
-	}
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *component) egwRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespacedName,
+			Name:      c.config.EgressGW.Name,
+			Namespace: c.config.EgressGW.Namespace,
 		},
-		Rules: rules,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				ResourceNames: []string{podSecurityPolicyName},
+				Verbs:         []string{"use"},
+			},
+		},
 	}
 }
 
-func (c *component) egwClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *component) egwRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespacedName,
+			Name:      c.config.EgressGW.Name,
+			Namespace: c.config.EgressGW.Namespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     namespacedName,
+			Kind:     "Role",
+			Name:     c.config.EgressGW.Name,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -429,6 +433,11 @@ func (c *component) getElasticIPs() string {
 	return ""
 }
 
+func (c *component) getExternalNetworks() string {
+	egw := c.config.EgressGW
+	return concatString(egw.Spec.ExternalNetworks)
+}
+
 func (c *component) getHealthTimeoutDs() string {
 	if c.config.EgressGW.Spec.EgressGatewayFailureDetection != nil {
 		if c.config.EgressGW.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds != nil {
@@ -439,27 +448,35 @@ func (c *component) getHealthTimeoutDs() string {
 	return ""
 }
 
-func (c *component) egwSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
-	namespacedName := fmt.Sprintf("%s-%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name)
+func (c *component) getSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
+	scc := SecurityContextConstraints()
+	sort.Strings(c.config.NamespaceAndNames)
+	for _, egwNames := range c.config.NamespaceAndNames {
+		scc.Users = append(scc.Users, fmt.Sprintf("system:serviceaccount:%s", egwNames))
+	}
+	return scc
+}
+
+func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
-		ObjectMeta:               metav1.ObjectMeta{Name: namespacedName},
-		AllowHostDirVolumePlugin: true,
+		ObjectMeta:               metav1.ObjectMeta{Name: OpenShiftSCCName},
+		AllowHostDirVolumePlugin: false,
 		AllowHostIPC:             false,
 		AllowHostNetwork:         false,
 		AllowHostPID:             false,
 		AllowHostPorts:           false,
 		AllowPrivilegeEscalation: ptr.BoolToPtr(true),
 		AllowPrivilegedContainer: true,
-		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
+		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN")},
+		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyMustRunAs},
 		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
 		ReadOnlyRootFilesystem:   false,
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users: []string{
-			fmt.Sprintf("system:serviceaccount:%s:%s", c.config.EgressGW.Namespace, c.config.EgressGW.Name),
-		},
-		Volumes: []ocsv1.FSType{"*"},
+		Users:                    []string{},
+		Volumes:                  []ocsv1.FSType{"*"},
+		SeccompProfiles:          []string{"runtime/default"},
 	}
 }
 

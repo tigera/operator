@@ -6,14 +6,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func NewDeletionPassthrough(objs ...client.Object) Component {
+	return &passthroughComponent{isDelete: true, objs: objs}
+}
+
 func NewPassthrough(objs ...client.Object) Component {
-	return &passthroughComponent{objs: objs}
+	return &passthroughComponent{isDelete: false, objs: objs}
 }
 
 // passthroughComponent is an implementation of a Component that simply passes back
 // the objects it was given unmodified.
 type passthroughComponent struct {
-	objs []client.Object
+	isDelete bool
+	objs     []client.Object
 }
 
 // ResolveImages should call components.GetReference for all images that the Component
@@ -35,6 +40,9 @@ func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDe
 			continue
 		}
 		objs = append(objs, o)
+	}
+	if p.isDelete {
+		return nil, objs
 	}
 	return objs, nil
 }

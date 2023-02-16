@@ -26,20 +26,20 @@ import (
 
 	ocsv1 "github.com/openshift/api/security/v1"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -227,23 +227,21 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 func (c *component) containers() []corev1.Container {
 	var containers []corev1.Container
 
+	// Daemonset needs root and NET_ADMIN, NET_RAW permission to be able to use netfilter tproxy option.
+	sc := securitycontext.NewRootContext(false)
+	sc.Capabilities.Add = []corev1.Capability{
+		"NET_ADMIN",
+		"NET_RAW",
+	}
 	proxy := corev1.Container{
 		Name:  ProxyContainerName,
 		Image: c.config.proxyImage,
 		Command: []string{
 			"envoy", "-c", "/etc/envoy/envoy-config.yaml",
 		},
-		// Daemonset needs root and NET_ADMIN, NET_RAW permission to be able to use netfilter tproxy option.
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(false),
-			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"NET_ADMIN", "NET_RAW"},
-			},
-			RunAsUser:  ptr.Int64ToPtr(0),
-			RunAsGroup: ptr.Int64ToPtr(0),
-		},
-		Env:          c.proxyEnv(),
-		VolumeMounts: c.proxyVolMounts(),
+		SecurityContext: sc,
+		Env:             c.proxyEnv(),
+		VolumeMounts:    c.proxyVolMounts(),
 	}
 
 	containers = append(containers, proxy)
@@ -251,10 +249,11 @@ func (c *component) containers() []corev1.Container {
 	if c.config.LogsEnabled {
 		// Log collection specific container
 		collector := corev1.Container{
-			Name:         L7CollectorContainerName,
-			Image:        c.config.collectorImage,
-			Env:          c.collectorEnv(),
-			VolumeMounts: c.collectorVolMounts(),
+			Name:            L7CollectorContainerName,
+			Image:           c.config.collectorImage,
+			Env:             c.collectorEnv(),
+			SecurityContext: securitycontext.NewRootContext(false),
+			VolumeMounts:    c.collectorVolMounts(),
 		}
 		containers = append(containers, collector)
 	}
@@ -301,11 +300,7 @@ func (c *component) containers() []corev1.Container {
 				{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
 			},
 			VolumeMounts: volMounts,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(true),
-				RunAsUser:  ptr.Int64ToPtr(0),
-				RunAsGroup: ptr.Int64ToPtr(0),
-			},
+			SecurityContext: securitycontext.NewRootContext(true),
 		}
 		containers = append(containers, dikastes)
 	}

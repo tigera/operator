@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,14 @@ import (
 	"strconv"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -31,14 +39,8 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -153,6 +155,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
 		}
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolumePrivate, reg, path, prefix, is))
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
@@ -160,9 +163,8 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
 		}
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
 	}
-
-	c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
@@ -958,14 +960,12 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         "install-cni",
-		Image:        c.cniImage,
-		Command:      []string{"/opt/cni/bin/install"},
-		Env:          cniEnv,
-		VolumeMounts: cniVolumeMounts,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
-		},
+		Name:            "install-cni",
+		Image:           c.cniImage,
+		Command:         []string{"/opt/cni/bin/install"},
+		Env:             cniEnv,
+		SecurityContext: securitycontext.NewRootContext(true),
+		VolumeMounts:    cniVolumeMounts,
 	}
 }
 
@@ -977,12 +977,10 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         "flexvol-driver",
-		Image:        c.flexvolImage,
-		VolumeMounts: flexVolumeMounts,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
-		},
+		Name:            "flexvol-driver",
+		Image:           c.flexvolImage,
+		SecurityContext: securitycontext.NewRootContext(true),
+		VolumeMounts:    flexVolumeMounts,
 	}
 }
 
@@ -1015,13 +1013,11 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         "mount-bpffs",
-		Image:        c.nodeImage,
-		VolumeMounts: mounts,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
-		},
-		Command: []string{CalicoNodeObjectName, "-init"},
+		Name:            "mount-bpffs",
+		Image:           c.nodeImage,
+		Command:         []string{CalicoNodeObjectName, "-init"},
+		SecurityContext: securitycontext.NewRootContext(true),
+		VolumeMounts:    mounts,
 	}
 }
 
@@ -1064,26 +1060,20 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() corev1.Container {
-	lp, rp := c.nodeLivenessReadinessProbes()
-	sc := &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)}
+	sc := securitycontext.NewRootContext(true)
 	if c.runAsNonPrivileged() {
-		uid := int64(999)
-		guid := int64(0)
-		sc = &corev1.SecurityContext{
-			// Set the user as our chosen user (999)
-			RunAsUser: &uid,
-			// Set the group to be the root user group since all container users should be a member
-			RunAsGroup: &guid,
-			Privileged: ptr.BoolToPtr(false),
-			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{
-					corev1.Capability("NET_RAW"),
-					corev1.Capability("NET_ADMIN"),
-					corev1.Capability("NET_BIND_SERVICE"),
-				},
-			},
+		sc = securitycontext.NewNonRootContext()
+		// Set the group to be the root user group since all container users should be a member
+		sc.RunAsGroup = ptr.Int64ToPtr(0)
+		sc.Capabilities.Add = []corev1.Capability{
+			"NET_ADMIN",
+			"NET_BIND_SERVICE",
+			"NET_RAW",
 		}
 	}
+
+	lp, rp := c.nodeLivenessReadinessProbes()
+
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
@@ -1648,7 +1638,6 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 // hostPathInitContainer creates an init container that changes the permissions on hostPath volumes
 // so that they can be written to by a non-root container.
 func (c *nodeComponent) hostPathInitContainer() corev1.Container {
-	rootUID := int64(0)
 	mounts := []corev1.VolumeMount{
 		{
 			MountPath: "/var/run",
@@ -1668,16 +1657,14 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:  "hostpath-init",
-		Image: c.nodeImage,
+		Name:    "hostpath-init",
+		Image:   c.nodeImage,
+		Command: []string{"sh", "-c", "calico-node -hostpath-init"},
 		Env: []corev1.EnvVar{
 			{Name: "NODE_USER_ID", Value: "999"},
 		},
-		VolumeMounts: mounts,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser: &rootUID,
-		},
-		Command: []string{"sh", "-c", "calico-node -hostpath-init"},
+		SecurityContext: securitycontext.NewRootContext(false),
+		VolumeMounts:    mounts,
 	}
 }
 

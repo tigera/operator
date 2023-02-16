@@ -177,12 +177,11 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 					Name:      "tigera-image-assurance-intrusion-detection-controller-api-access",
 					Namespace: "tigera-operator",
 				},
-				Secrets: []corev1.ObjectReference{{Name: "sa-secret"}},
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "sa-secret",
+					Name:      "tigera-image-assurance-intrusion-detection-controller-api-access",
 					Namespace: "tigera-operator",
 				},
 				Data: map[string][]byte{"token": []byte("token")},

@@ -314,8 +314,8 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "image-assurance-pod-watcher" }}
-	ComponentImageAssurancePodWatcher = component{
+{{ with index .Components "image-assurance-runtime-cleaner" }}
+	ComponentImageAssuranceRuntimeCleaner = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -387,7 +387,7 @@ var (
 		ComponentCSINodeDriverRegistrarPrivate,
 		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
-		ComponentImageAssurancePodWatcher,
+		ComponentImageAssuranceRuntimeCleaner,
 		ComponentSasha,
 		ComponentThreatId,
 		ComponentCloudRBACApi,

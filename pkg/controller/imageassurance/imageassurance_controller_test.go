@@ -15,6 +15,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	mockconfigsync "github.com/tigera/operator/pkg/controller/imageassurance/configsync/mocks"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -40,6 +41,7 @@ var _ = Describe("Image Assurance Controller", func() {
 	var r ReconcileImageAssurance
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
+	var mockConfigSyncer *mockconfigsync.Syncer
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -74,12 +76,15 @@ var _ = Describe("Image Assurance Controller", func() {
 		internalManagerTLS, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 
+		mockConfigSyncer = new(mockconfigsync.Syncer)
+
 		r = ReconcileImageAssurance{
 			client:          c,
 			scheme:          scheme,
 			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
+			configSyncer:    mockConfigSyncer,
 		}
 
 		Expect(c.Create(ctx, &operatorv1.Installation{
@@ -119,7 +124,7 @@ var _ = Describe("Image Assurance Controller", func() {
 						Digest: "sha256:123",
 					},
 					{
-						Image:  "tigera/image-assurance-pod-watcher",
+						Image:  "tigera/image-assurance-runtime-cleaner",
 						Digest: "sha256:123",
 					},
 				},
@@ -127,26 +132,29 @@ var _ = Describe("Image Assurance Controller", func() {
 		})).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
-			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
-			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherClusterRoleBindingName},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerClusterRoleBindingName},
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
 		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sa-secret",
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{"token": []byte("token")},
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
+			Data:       map[string][]byte{"token": []byte("token")},
 		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerAPIAccessResourceName, Namespace: common.OperatorNamespace()},
+			Data:       map[string][]byte{"token": []byte("token")},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.RuntimeCleanerAPIAccessResourceName},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessResourceName},
+		})).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		mockConfigSyncer.AssertExpectations(GinkgoT())
 	})
 
 	It("should render accurate resources for image assurance", func() {
@@ -158,6 +166,8 @@ var _ = Describe("Image Assurance Controller", func() {
 				APIProxyURL: "https://ia-api.dev.calicocloud.io",
 			},
 		})).NotTo(HaveOccurred())
+
+		mockConfigSyncer.On("StartPeriodicSync").Return()
 
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
@@ -191,19 +201,18 @@ var _ = Describe("Image Assurance Controller", func() {
 			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceScanner.Image, "@sha256:123")))
 
-		By("ensuring that ImageAssurance pod watcher resources created properly")
-		podWatcher := appsv1.Deployment{
+		By("ensuring that ImageAssurance runtime cleaner resources created properly")
+		runtimeCleaner := appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
+				Name:      imageassurance.ResourceNameImageAssuranceRuntimeCleaner,
 				Namespace: imageassurance.NameSpaceImageAssurance,
 			},
 		}
-		Expect(test.GetResource(c, &podWatcher)).To(BeNil())
-		Expect(podWatcher.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(podWatcher.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+		Expect(test.GetResource(c, &runtimeCleaner)).To(BeNil())
+		Expect(runtimeCleaner.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(runtimeCleaner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
 			components.ImageAssuranceRegistry,
-			components.ComponentImageAssurancePodWatcher.Image, "@sha256:123")))
-
+			components.ComponentImageAssuranceRuntimeCleaner.Image, "@sha256:123")))
 	})
 })

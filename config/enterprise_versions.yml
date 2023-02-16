@@ -148,9 +148,9 @@ components:
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
     version: v1.3.3
-  image-assurance-pod-watcher:
-    image: tigera/image-assurance-pod-watcher
-    version: v1.3.3
+  image-assurance-runtime-cleaner:
+    image: tigera/image-assurance-runtime-cleaner
+    version: v1.4.0
   sasha:
     image: tigera/sasha
     version: v1.3.0

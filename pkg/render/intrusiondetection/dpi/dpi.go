@@ -229,11 +229,12 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 }
 
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(d.SupportedOSType()),
+	mounts := d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMounts(d.SupportedOSType())
+	mounts = append(mounts,
 		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(d.SupportedOSType()),
-		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
-	}
+		corev1.VolumeMount{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
+	)
+	return mounts
 }
 
 func (d *dpiComponent) dpiReadinessProbes() *corev1.Probe {

@@ -149,6 +149,8 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	} else {
 		annotations[e.cfg.ServerTLS.HashAnnotationKey()] = e.cfg.ServerTLS.HashAnnotationValue()
 	}
+	mounts := e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType())
+	mounts = append(mounts, e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()))
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -179,10 +181,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
-								VolumeMounts: []corev1.VolumeMount{
-									e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
-									e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
-								},
+								VolumeMounts: mounts,
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 								},

@@ -68,7 +68,7 @@ const (
 	SplunkFluentdCertificateSecretName       = "logcollector-splunk-public-certificate"
 	SplunkFluentdSecretCertificateKey        = "ca.pem"
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
-	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
+	SplunkFluentdDefaultCertDir              = "/etc/pki/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 	SysLogPublicCADir                        = "/etc/pki/tls/certs/"
 	SysLogPublicCertKey                      = "ca-bundle.crt"
@@ -544,7 +544,7 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 
 	if c.cfg.MetricsServerTLS != nil {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))

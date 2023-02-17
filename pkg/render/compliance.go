@@ -401,9 +401,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 						},
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
-					VolumeMounts: []corev1.VolumeMount{
-						c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
-					},
+					VolumeMounts:    c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 			Volumes: []corev1.Volume{
@@ -494,6 +492,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
+	mounts := c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())
+	mounts = append(mounts, corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"})
+
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -533,10 +534,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							},
 							// On OpenShift reporter needs privileged access to write compliance reports to host path volume
 							SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
-							VolumeMounts: []corev1.VolumeMount{
-								{MountPath: "/var/log/calico", Name: "var-log-calico"},
-								c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
-							},
+							VolumeMounts:    mounts,
 						}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 					),
 				},
@@ -755,11 +753,8 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 }
 
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
-	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
-		c.cfg.ComplianceServerCertSecret.VolumeMount(c.SupportedOSType()),
-	}
-
+	mounts := c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())
+	mounts = append(mounts, c.cfg.ComplianceServerCertSecret.VolumeMount(c.SupportedOSType()))
 	return mounts
 }
 
@@ -879,9 +874,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 							},
 						},
 						SecurityContext: securitycontext.NewNonRootContext(),
-						VolumeMounts: []corev1.VolumeMount{
-							c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
-						},
+						VolumeMounts:    c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
@@ -981,8 +974,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "etc-systemd", MountPath: "/etc/systemd", ReadOnly: true},
 		{Name: "etc-kubernetes", MountPath: "/etc/kubernetes", ReadOnly: true},
 		{Name: "usr-bin", MountPath: "/usr/local/bin", ReadOnly: true},
-		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 	}
+	volMounts = append(volMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 
 	vols := []corev1.Volume{
 		{

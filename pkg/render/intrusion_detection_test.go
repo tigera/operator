@@ -202,11 +202,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(1))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
 
-		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(1))
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
@@ -247,8 +249,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		// secrets are mounted
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).MountPath))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMounts(rmeta.OSTypeLinux)[0].Name))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMounts(rmeta.OSTypeLinux)[0].MountPath))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).Name))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
 		// emptyDir is expected as the default volume
@@ -520,8 +522,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		// Validate that even with syslog configured we still have the CA configmap Volume
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
 		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 

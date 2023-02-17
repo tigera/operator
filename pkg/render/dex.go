@@ -205,6 +205,10 @@ func (c *dexComponent) deployment() client.Object {
 	}
 	annotations[c.cfg.TLSKeyPair.HashAnnotationKey()] = c.cfg.TLSKeyPair.HashAnnotationValue()
 
+	mounts := c.cfg.DexConfig.RequiredVolumeMounts()
+	mounts = append(mounts, c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()))
+	mounts = append(mounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -248,7 +252,7 @@ func (c *dexComponent) deployment() client.Object {
 									ContainerPort: DexPort,
 								},
 							},
-							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()), c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType())),
+							VolumeMounts: mounts,
 						},
 					},
 					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume(), trustedBundleVolume(c.cfg.TrustedBundle)),

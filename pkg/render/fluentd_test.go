@@ -625,7 +625,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SPLUNK_PROTOCOL", "https", "", ""},
 			{"SPLUNK_FLUSH_INTERVAL", "5s", "", ""},
 			{"SPLUNK_HEC_TOKEN", "", "logcollector-splunk-credentials", "token"},
-			{"SPLUNK_CA_FILE", "/etc/ssl/splunk/ca.pem", "", ""},
+			{"SPLUNK_CA_FILE", "/etc/pki/splunk/ca.pem", "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {

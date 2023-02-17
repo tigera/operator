@@ -204,10 +204,10 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
-								VolumeMounts: []corev1.VolumeMount{
+								VolumeMounts: append(
+									cfg.TrustedBundle.VolumeMounts(meta.OSTypeLinux),
 									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
-									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
-								},
+								),
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
 							Volumes: []corev1.Volume{

@@ -350,11 +350,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -380,7 +380,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -594,11 +594,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -624,7 +624,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
@@ -905,11 +905,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -936,7 +936,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/lib", Name: "var-lib"},
 					{MountPath: "/var/log", Name: "var-log"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -1112,11 +1112,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1142,7 +1142,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -1256,11 +1256,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1285,7 +1285,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1520,11 +1520,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1550,7 +1550,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -1661,11 +1661,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1690,7 +1690,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1753,11 +1753,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{Name: "flexvol-driver-host", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},

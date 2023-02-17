@@ -40,7 +40,6 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/testutils"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var (
@@ -104,11 +103,11 @@ var (
 
 	expectedVolumes = []corev1.Volume{
 		{
-			Name: certificatemanagement.TrustedCertConfigMapName,
+			Name: "tigera-ca-bundle",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 					}}},
 		},
 		{
@@ -131,7 +130,7 @@ var (
 	}
 
 	expectedVolumeMounts = []corev1.VolumeMount{
-		{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+		{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{
 			MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters",

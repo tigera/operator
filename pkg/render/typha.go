@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -475,10 +475,10 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 
 // typhaVolumeMounts creates the typha's volume mounts.
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+	return append(
+		c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 		c.cfg.TLS.TyphaSecret.VolumeMount(c.SupportedOSType()),
-	}
+	)
 }
 
 func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {

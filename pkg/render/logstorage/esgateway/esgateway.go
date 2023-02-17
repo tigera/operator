@@ -200,10 +200,10 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		e.cfg.TrustedBundle.Volume(),
 	}
 
-	volumeMounts := []corev1.VolumeMount{
+	volumeMounts := append(
+		e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType()),
 		e.cfg.ESGatewayKeyPair.VolumeMount(e.SupportedOSType()),
-		e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
-	}
+	)
 
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
 	annotations[e.cfg.ESGatewayKeyPair.HashAnnotationKey()] = e.cfg.ESGatewayKeyPair.HashAnnotationValue()

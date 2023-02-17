@@ -163,17 +163,14 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if len(egws) == 0 {
 		objects := []client.Object{}
-		// If PSP is enabled, remove the Pod Security policy.
-		if r.usePSP {
-			psp := egressgateway.PodSecurityPolicy()
-			objects = append(objects, psp)
-		}
-		// If provider is openshift, remove the SCC
+
 		if r.provider == operatorv1.ProviderOpenShift {
 			scc := egressgateway.SecurityContextConstraints()
 			objects = append(objects, scc)
+		} else if r.usePSP {
+			psp := egressgateway.PodSecurityPolicy()
+			objects = append(objects, psp)
 		}
-
 		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
 		if err != nil {
 			reqLogger.Error(err, "error deleting cluster scoped resources")
@@ -198,6 +195,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// egwsToReconcile is the list of Egress Gateway resources that needs to be reconciled.
 	// To start with all EGW resources must be reconciled.
 	egwsToReconcile := egws
+	namespaceAndNames := getEGWNamespaceAndNames(egws)
 	if request.Namespace != "" {
 		requestedEGW, idx := getRequestedEgressGateway(egws, request)
 		if requestedEGW == nil {
@@ -206,7 +204,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			reqLogger.Info("EgressGateway object not found")
 			// Since the EGW resource is not found, remove the deployment.
 			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
-
 			// In the case of OpenShift, we are using a single SCC.
 			// Whenever a EGW resource is deleted, remove the corresponding user from the SCC
 			// and update the resource.
@@ -327,7 +324,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, getEGWNamespaceAndNames(egws))
+		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, namespaceAndNames)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())

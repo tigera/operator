@@ -268,10 +268,10 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			kind    string
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
-			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"egress-test", "test-ns", rbac, "v1", "Role"},
 			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
+			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -299,8 +299,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			kind    string
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
-			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 			{"tigera-egressgateway", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
+			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{

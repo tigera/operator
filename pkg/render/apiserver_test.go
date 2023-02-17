@@ -291,7 +291,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPropagation).To(BeNil())
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].SubPathExpr).To(Equal(""))
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[1].Name).To(Equal("tigera-ca-bundle"))
-		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath).To(Equal("/etc/pki/tls/certs/"))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPath).To(Equal("/etc/pki/tls/certs"))
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[1].ReadOnly).To(BeTrue())
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[1].SubPath).To(Equal(""))
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[1].MountPropagation).To(BeNil())

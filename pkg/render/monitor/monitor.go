@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -353,11 +353,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		mc.cfg.ClientTLSSecret.Volume(),
 		mc.cfg.TrustedCertBundle.Volume(),
 	}
-	volumeMounts := []corev1.VolumeMount{
+	volumeMounts := append(
+		mc.cfg.TrustedCertBundle.VolumeMounts(mc.SupportedOSType()),
 		mc.cfg.ServerTLSSecret.VolumeMount(mc.SupportedOSType()),
 		mc.cfg.ClientTLSSecret.VolumeMount(mc.SupportedOSType()),
-		mc.cfg.TrustedCertBundle.VolumeMount(mc.SupportedOSType()),
-	}
+	)
 
 	if mc.cfg.KeyValidatorConfig != nil {
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)

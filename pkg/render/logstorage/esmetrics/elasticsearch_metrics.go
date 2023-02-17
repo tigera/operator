@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -180,10 +180,10 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
-								VolumeMounts: []corev1.VolumeMount{
+								VolumeMounts: append(
+									e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType()),
 									e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
-									e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
-								},
+								),
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 								},

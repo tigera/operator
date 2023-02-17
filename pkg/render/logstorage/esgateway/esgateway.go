@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -201,10 +201,10 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		e.cfg.TrustedBundle.Volume(),
 	}
 
-	volumeMounts := []corev1.VolumeMount{
+	volumeMounts := append(
+		e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType()),
 		e.cfg.ESGatewayKeyPair.VolumeMount(e.SupportedOSType()),
-		e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
-	}
+	)
 
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
 	annotations[e.cfg.ESGatewayKeyPair.HashAnnotationKey()] = e.cfg.ESGatewayKeyPair.HashAnnotationValue()

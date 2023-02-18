@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -258,7 +258,7 @@ var _ = Describe("Rendering tests", func() {
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
 
 			// Certificate Management objects
-			{certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{"tigera-ca-bundle", common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.ManagerInternalTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},

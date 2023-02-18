@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -604,7 +604,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SPLUNK_PROTOCOL", "https", "", ""},
 			{"SPLUNK_FLUSH_INTERVAL", "5s", "", ""},
 			{"SPLUNK_HEC_TOKEN", "", "logcollector-splunk-credentials", "token"},
-			{"SPLUNK_CA_FILE", "/etc/ssl/splunk/ca.pem", "", ""},
+			{"SPLUNK_CA_FILE", "/etc/pki/splunk/ca.pem", "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {

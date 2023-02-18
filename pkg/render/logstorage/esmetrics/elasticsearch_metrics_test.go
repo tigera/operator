@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -203,10 +203,10 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
-								VolumeMounts: []corev1.VolumeMount{
+								VolumeMounts: append(
+									cfg.TrustedBundle.VolumeMounts(meta.OSTypeLinux),
 									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
-									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
-								},
+								),
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
 							Volumes: []corev1.Volume{

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,15 +18,21 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
 	// RHELRootCertificateBundleName is the name of the system CA bundle as present in UBI/RHEL systems.
 	RHELRootCertificateBundleName = "ca-bundle.crt"
+	// SSLCertFile is the symbolic link to the system CA bundle used by libssl SSL_CERT_FILE.
+	SSLCertFile = "cert.pem"
+
+	sslCertDir = "certs"
 )
 
 type trustedBundle struct {
@@ -112,18 +118,34 @@ func (t *trustedBundle) HashAnnotations() map[string]string {
 	return annotations
 }
 
-func (t *trustedBundle) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
+func (t *trustedBundle) VolumeMounts(osType rmeta.OSType) []corev1.VolumeMount {
 	var mountPath string
 	if osType == rmeta.OSTypeWindows {
 		mountPath = TrustedCertVolumeMountPathWindows
 	} else {
 		mountPath = TrustedCertVolumeMountPath
 	}
-	return corev1.VolumeMount{
-		Name:      TrustedCertConfigMapName,
-		MountPath: mountPath,
-		ReadOnly:  true,
+
+	// golang stdlib reads this path
+	mounts := []corev1.VolumeMount{
+		{
+			Name:      TrustedCertConfigMapName,
+			MountPath: path.Join(mountPath, sslCertDir),
+			ReadOnly:  true,
+		},
 	}
+	if len(t.systemCertificates) > 0 {
+		// apps linking libssl need this file (SSL_CERT_FILE)
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      TrustedCertConfigMapName,
+				MountPath: path.Join(mountPath, SSLCertFile),
+				SubPath:   RHELRootCertificateBundleName,
+				ReadOnly:  true,
+			},
+		)
+	}
+	return mounts
 }
 
 func (t *trustedBundle) Volume() corev1.Volume {

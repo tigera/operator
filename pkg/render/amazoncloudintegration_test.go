@@ -156,7 +156,8 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		}
 		Expect(container.VolumeMounts).To(Equal(
 			[]corev1.VolumeMount{
-				{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs/", ReadOnly: true},
+				{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+				{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/cert.pem", SubPath: "ca-bundle.crt", ReadOnly: true},
 			}))
 		Expect(d.Spec.Template.Spec.Volumes).To(Equal(
 			[]corev1.Volume{

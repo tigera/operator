@@ -337,16 +337,10 @@ func (c *GuardianComponent) container() []corev1.Container {
 }
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
-	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
-		{
-			Name:      GuardianVolumeName,
-			MountPath: "/certs/",
-			ReadOnly:  true,
-		},
-	}
-
-	return mounts
+	return append(
+		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
+		corev1.VolumeMount{Name: GuardianVolumeName, MountPath: "/certs/", ReadOnly: true},
+	)
 }
 
 func (c *GuardianComponent) annotations() map[string]string {

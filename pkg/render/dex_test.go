@@ -70,7 +70,8 @@ var _ = Describe("dex rendering tests", func() {
 			{Name: "config", MountPath: "/etc/dex/baseCfg", ReadOnly: true},
 			{Name: "secrets", MountPath: "/etc/dex/secrets", ReadOnly: true},
 			{Name: "tigera-dex-tls", MountPath: "/tigera-dex-tls", ReadOnly: true},
-			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs/", ReadOnly: true},
+			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
+			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/cert.pem", SubPath: "ca-bundle.crt", ReadOnly: true},
 		}
 
 		var expectedVolumes = []corev1.Volume{

@@ -1023,7 +1023,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
 
 	container := corev1.Container{

@@ -1104,13 +1104,13 @@ func (c *nodeComponent) nodeResources() corev1.ResourceRequirements {
 
 // nodeVolumeMounts creates the node's volume mounts.
 func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
-	nodeVolumeMounts := []corev1.VolumeMount{
-		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
-		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
-		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+	nodeVolumeMounts := c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType())
+	nodeVolumeMounts = append(nodeVolumeMounts,
+		corev1.VolumeMount{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+		corev1.VolumeMount{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
+		corev1.VolumeMount{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
-	}
+	)
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
 			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},

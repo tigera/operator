@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -211,9 +209,9 @@ var _ = Describe("apiserver controller tests", func() {
 					MountPath: fmt.Sprintf("/%s", packetCaptureSecret.Name),
 				},
 				{
-					Name:      certificatemanagement.TrustedCertConfigMapName,
+					Name:      "tigera-ca-bundle",
 					ReadOnly:  true,
-					MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+					MountPath: "/etc/pki/tls/certs",
 				},
 			}))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")

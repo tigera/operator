@@ -299,7 +299,7 @@ func (c *component) containers() []corev1.Container {
 				{Name: "LOG_LEVEL", Value: "Info"},
 				{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
 			},
-			VolumeMounts: volMounts,
+			VolumeMounts:    volMounts,
 			SecurityContext: securitycontext.NewRootContext(true),
 		}
 		containers = append(containers, dikastes)

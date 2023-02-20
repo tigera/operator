@@ -35,6 +35,12 @@ spec:
           spec:
             description: ApplicationLayerSpec defines the desired state of ApplicationLayer
             properties:
+              applicationLayerPolicy:
+                description: Application Layer Policy controls whether or not ALP
+                  enforcement is enabled for the cluster. When enabled, NetworkPolicies
+                  with HTTP Match rules may be defined to opt-in workloads for traffic
+                  enforcement on the application layer.
+                type: string
               logCollection:
                 description: Specification for application layer (L7) log collection.
                 properties:

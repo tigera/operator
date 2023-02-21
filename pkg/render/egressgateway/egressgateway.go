@@ -188,7 +188,7 @@ func (c *component) egwInitContainer() *corev1.Container {
 
 func (c *component) egwContainer() *corev1.Container {
 	sc := securitycontext.NewRootContext(false)
-	sc.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
+	sc.Capabilities.Add = []corev1.Capability{"NET_ADMIN", "NET_RAW"}
 
 	return &corev1.Container{
 		Name:            "egress-gateway",

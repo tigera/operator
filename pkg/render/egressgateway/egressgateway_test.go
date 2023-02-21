@@ -202,7 +202,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(egwContainer.SecurityContext.Capabilities).To(Equal(
 			&corev1.Capabilities{
 				Drop: []corev1.Capability{"ALL"},
-				Add:  []corev1.Capability{"NET_ADMIN"},
+				Add:  []corev1.Capability{"NET_ADMIN", "NET_RAW"},
 			},
 		))
 		Expect(egwContainer.SecurityContext.SeccompProfile).To(Equal(

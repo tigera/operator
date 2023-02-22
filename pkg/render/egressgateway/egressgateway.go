@@ -103,6 +103,7 @@ func (c *component) SupportedOSType() rmeta.OSType {
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := []client.Object{}
 	objectsToDelete := []client.Object{}
+	objectsToCreate = append(objectsToCreate, c.egwPullSecrets()...)
 	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
 	if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
@@ -455,6 +456,21 @@ func (c *component) getSecurityContextConstraints() *ocsv1.SecurityContextConstr
 		scc.Users = append(scc.Users, fmt.Sprintf("system:serviceaccount:%s", egwNames))
 	}
 	return scc
+}
+
+func (c *component) egwPullSecrets() []client.Object {
+	pullSecrets := []client.Object{}
+	for _, secret := range c.config.PullSecrets {
+		newSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      secret.Name,
+			Namespace: c.config.EgressGW.Namespace,
+		},
+			Type: secret.Type,
+			Data: secret.Data,
+		}
+		pullSecrets = append(pullSecrets, newSecret)
+	}
+	return pullSecrets
 }
 
 func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {

@@ -61,7 +61,7 @@ func (c *component) scannerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ScannerAPIAccessResourceName,
+			Name:      ScannerClusterRoleName,
 			Namespace: NameSpaceImageAssurance,
 		},
 		Rules: []rbacv1.PolicyRule{

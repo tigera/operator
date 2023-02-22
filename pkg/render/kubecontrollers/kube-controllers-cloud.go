@@ -29,12 +29,10 @@ func (c *kubeControllersComponent) cloudDecorateContainer(container corev1.Conta
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_ADMISSION_CONTROLLER_CLUSTER_ROLE_NAME", Value: imageassurance.AdmissionControllerAPIClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_CR_ADAPTOR_CLUSTER_ROLE_NAME", Value: imageassurance.CRAdaptorAPIClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_INTRUSION_DETECTION_CONTROLLER_CLUSTER_ROLE_NAME", Value: render.IntrusionDetectionControllerImageAssuranceAPIClusterRoleName},
-			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLUSTER_ROLE_NAME", Value: imageassurance.ScannerAPIAccessResourceName},
+			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLUSTER_ROLE_NAME", Value: imageassurance.ScannerClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_CLUSTER_ROLE_NAME", Value: imageassurance.ScannerCLIClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_TOKEN_SECRET_NAME", Value: rcimageassurance.ScannerCLITokenSecretName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_POD_WATCHER_CLUSTER_ROLE_NAME", Value: imageassurance.PodWatcherClusterRoleName},
-			corev1.EnvVar{Name: "IMAGE_ASSURANCE_OPERATOR_CLUSTER_ROLE_NAME", Value: imageassurance.OperatorAPIClusterRoleName},
-			corev1.EnvVar{Name: "IMAGE_ASSURANCE_RUNTIME_CLEANER_CLUSTER_ROLE_NAME", Value: imageassurance.RuntimeCleanerAPIAccessResourceName},
 		)
 	}
 

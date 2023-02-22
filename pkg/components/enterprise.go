@@ -201,7 +201,7 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.15.2-0",
+		Version: "v3.15.1",
 		Image:   "tigera/kube-controllers",
 	}
 
@@ -265,9 +265,9 @@ var (
 		Image:   "tigera/image-assurance-scanner",
 	}
 
-	ComponentImageAssuranceRuntimeCleaner = component{
-		Version: "v1.4.0",
-		Image:   "tigera/image-assurance-runtime-cleaner",
+	ComponentImageAssurancePodWatcher = component{
+		Version: "v1.3.3",
+		Image:   "tigera/image-assurance-pod-watcher",
 	}
 
 	ComponentSasha = component{
@@ -333,7 +333,7 @@ var (
 		ComponentCSINodeDriverRegistrarPrivate,
 		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
-		ComponentImageAssuranceRuntimeCleaner,
+		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 		ComponentThreatId,
 		ComponentCloudRBACApi,

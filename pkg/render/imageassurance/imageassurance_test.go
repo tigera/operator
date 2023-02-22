@@ -93,13 +93,6 @@ var _ = Describe("Image Assurance Render", func() {
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
-
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},
-		{name: imageassurance.PodWatcherAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 	}
 
 	var expectedCreatedResources = []expectedResource{
@@ -119,7 +112,7 @@ var _ = Describe("Image Assurance Render", func() {
 
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
-		{name: imageassurance.ScannerAPIAccessResourceName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+		{name: imageassurance.ScannerClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ScannerCLIClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 		{name: imageassurance.ScannerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
@@ -128,19 +121,14 @@ var _ = Describe("Image Assurance Render", func() {
 		{name: imageassurance.AdmissionControllerAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.CRAdaptorAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 
-		{name: imageassurance.OperatorAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
-
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
 		{name: imageassurance.PodWatcherClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
-
-		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
-		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
-		{name: imageassurance.RuntimeCleanerAPIAccessResourceName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
-		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
-		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
-		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},
-		{name: imageassurance.RuntimeCleanerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-		{name: imageassurance.ResourceNameImageAssuranceRuntimeCleaner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},
+		{name: imageassurance.PodWatcherAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
+		{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 	}
 
 	var apiExpectedCommonENV = []corev1.EnvVar{
@@ -315,34 +303,33 @@ var _ = Describe("Image Assurance Render", func() {
 			rtest.ExpectVolumeMount(scannerVMs, expected.Name, expected.MountPath)
 		}
 
-		// Check rendering of runtime cleaner deployment
-		runtimeCleanerDeployment := rtest.GetResource(createdResources, imageassurance.ResourceNameImageAssuranceRuntimeCleaner, imageassurance.NameSpaceImageAssurance,
+		// Check rendering of pod watcher deployment.
+		podWatcherDeployment := rtest.GetResource(createdResources, imageassurance.ResourceNameImageAssurancePodWatcher, imageassurance.NameSpaceImageAssurance,
 			"apps", "v1", "Deployment").(*appsv1.Deployment)
-		runtimeCleaner := runtimeCleanerDeployment.Spec.Template.Spec
+		podWatcher := podWatcherDeployment.Spec.Template.Spec
 
-		Expect(runtimeCleaner.HostNetwork).To(BeFalse())
-		Expect(runtimeCleaner.HostIPC).To(BeFalse())
-		Expect(runtimeCleaner.DNSPolicy).To(Equal(corev1.DNSClusterFirst))
-		Expect(len(runtimeCleaner.Containers)).To(Equal(1))
+		Expect(podWatcher.HostNetwork).To(BeFalse())
+		Expect(podWatcher.HostIPC).To(BeFalse())
+		Expect(podWatcher.DNSPolicy).To(Equal(corev1.DNSClusterFirst))
+		Expect(len(podWatcher.Containers)).To(Equal(1))
 
-		runtimeCleanerEnv := runtimeCleaner.Containers[0].Env
-		runtimeCleanerExpectedENV := []corev1.EnvVar{
+		podWatcherEnv := podWatcher.Containers[0].Env
+		podWatcherExpectedENV := []corev1.EnvVar{
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 			rcimageassurance.EnvOrganizationID(),
 			{Name: "IMAGE_ASSURANCE_API_CA", Value: "/certs/bast/tls.crt"},
 			{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
 			{Name: "IMAGE_ASSURANCE_API_TOKEN", Value: ""},
 			{Name: "IMAGE_ASSURANCE_MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "IMAGE_ASSURANCE_POLLING_INTERVAL_IN_SECONDS", Value: "300"},
 		}
 
-		Expect(len(runtimeCleanerExpectedENV)).To(Equal(len(runtimeCleanerEnv)))
-		for _, expected := range runtimeCleanerExpectedENV {
-			rtest.ExpectEnv(runtimeCleanerEnv, expected.Name, expected.Value)
+		Expect(len(podWatcherExpectedENV)).To(Equal(len(podWatcherEnv)))
+		for _, expected := range podWatcherExpectedENV {
+			rtest.ExpectEnv(podWatcherEnv, expected.Name, expected.Value)
 		}
 
-		runtimeCleanerVMs := runtimeCleaner.Containers[0].VolumeMounts
-		runtimeCleanerExpectedVMs := []corev1.VolumeMount{
+		podWatcherVMs := podWatcher.Containers[0].VolumeMounts
+		podWatcherExpectedVMs := []corev1.VolumeMount{
 			{
 				Name:      certificatemanagement.TrustedCertConfigMapName,
 				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
@@ -353,13 +340,13 @@ var _ = Describe("Image Assurance Render", func() {
 			},
 		}
 
-		Expect(len(runtimeCleanerExpectedVMs)).To(Equal(len(runtimeCleanerVMs)))
-		for _, expected := range runtimeCleanerExpectedVMs {
-			rtest.ExpectVolumeMount(runtimeCleanerVMs, expected.Name, expected.MountPath)
+		Expect(len(podWatcherExpectedVMs)).To(Equal(len(podWatcherVMs)))
+		for _, expected := range podWatcherExpectedVMs {
+			rtest.ExpectVolumeMount(podWatcherVMs, expected.Name, expected.MountPath)
 		}
 	})
 
-	It("should render API resource correctly with Authentication Enabled", func() {
+	It("should API resource correctly with Authentication Enabled", func() {
 		// Should render the correct resources.
 		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{

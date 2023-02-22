@@ -3,9 +3,9 @@ package utils
 import (
 	"context"
 	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -118,35 +118,4 @@ func AddCloudRBACWatch(c controller.Controller, destNamespace string) error {
 	}
 
 	return nil
-}
-
-// GetImageAssuranceAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-// It takes in service account name and uses it to validate the existence of the service account and return the token if present.
-func GetImageAssuranceAPIAccessToken(c client.Client, resourceName string) ([]byte, error) {
-	// Ensure that the service account is present.
-	sa := &corev1.ServiceAccount{}
-	if err := c.Get(context.Background(), types.NamespacedName{
-		Name:      resourceName,
-		Namespace: common.OperatorNamespace(),
-	}, sa); err != nil {
-		return nil, err
-	}
-
-	// Ensure that there is a secret present against the service account with the same resource name.
-	// This secret is created by kube-controllers along with the creation of service account, this secret is created
-	// explicitly using authv1.TokenRequest (previously they were created automatically for k8s versions below v1.24)
-	saSecret := &corev1.Secret{}
-	err := c.Get(context.Background(), types.NamespacedName{
-		Name:      resourceName,
-		Namespace: common.OperatorNamespace()},
-		saSecret)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return saSecret.Data["token"], nil
 }

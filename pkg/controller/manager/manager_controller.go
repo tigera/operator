@@ -316,6 +316,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Get or create a certificate for clients of the manager pod es-proxy container.
 	svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), "localhost")
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
@@ -327,8 +328,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedSecretNames := []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, relasticsearch.PublicCertSecret, render.ProjectCalicoApiServerTLSSecretName(installation.Variant)}
-
+	// Determine if compliance is enabled.
 	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
 	complianceCR, err := compliance.GetCompliance(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -336,6 +336,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Build a trusted bundle containing all of the certificates of components that communicate with the manager pod.
+	trustedSecretNames := []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, relasticsearch.PublicCertSecret, render.ProjectCalicoApiServerTLSSecretName(installation.Variant)}
 	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
 		if complianceCR.Status.State != operatorv1.TigeraStatusReady {
@@ -372,7 +374,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedBundle.AddCertificates(certificate)
 	}
 	certificateManager.AddToStatusManager(r.status, render.ManagerNamespace)
-	// check that prometheus is running
+
+	// Check that Prometheus is running
 	ns := &corev1.Namespace{}
 	if err = r.client.Get(ctx, client.ObjectKey{Name: common.TigeraPrometheusNamespace}, ns); err != nil {
 		if errors.IsNotFound(err) {
@@ -400,6 +403,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Get secrets used by the manager to authenticate with Elasticsearch.
 	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchManagerUserSecret}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {

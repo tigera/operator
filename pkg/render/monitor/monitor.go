@@ -685,7 +685,7 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 					TLSConfig: &monitoringv1.TLSConfig{
 						CAFile: mc.cfg.TrustedCertBundle.MountPath(),
 						SafeTLSConfig: monitoringv1.SafeTLSConfig{
-							ServerName: render.ProjectCalicoApiServerServiceName(mc.cfg.Installation.Variant),
+							ServerName: render.ProjectCalicoAPIServerServiceName(mc.cfg.Installation.Variant),
 						},
 					},
 				},

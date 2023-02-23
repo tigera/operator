@@ -64,7 +64,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp.json")
 
-		var expectedResources = []resourceTestObj{
+		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 			{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 			{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
@@ -308,7 +308,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}))
-
 }
 
 func expectedVolumes(useCSR bool) []corev1.Volume {
@@ -344,6 +343,7 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 	})
 	return volumes
 }
+
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{

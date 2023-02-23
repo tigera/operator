@@ -28,6 +28,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -36,14 +37,18 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
 	APLName                          = "application-layer"
+	RoleName                         = "application-layer"
+	PodSecurityPolicyName            = "application-layer"
 	ApplicationLayerDaemonsetName    = "l7-log-collector"
 	L7CollectorContainerName         = "l7-collector"
 	ProxyContainerName               = "envoy-proxy"
@@ -96,6 +101,9 @@ type Config struct {
 	dikastesImage   string
 	dikastesEnabled bool
 	envoyConfigMap  *corev1.ConfigMap
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -166,6 +174,14 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.config.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		objs = append(objs, c.securityContextConstraints())
+	}
+
+	if c.config.UsePSP {
+		objs = append(objs,
+			c.role(),
+			c.roleBinding(),
+			c.podSecurityPolicy(),
+		)
 	}
 
 	return objs, nil
@@ -507,6 +523,63 @@ func (c *component) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding 
 			},
 		},
 	}
+}
+
+func (c *component) role() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      RoleName,
+			Namespace: common.CalicoNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{PodSecurityPolicyName},
+			},
+		},
+	}
+}
+
+func (c *component) roleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      RoleName,
+			Namespace: common.CalicoNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "Role",
+			Name:     RoleName,
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      APLName,
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
+}
+
+func (c *component) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := podsecuritypolicy.NewBasePolicy(PodSecurityPolicyName)
+	psp.Spec.Privileged = true
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+	psp.Spec.RequiredDropCapabilities = nil
+	psp.Spec.AllowedCapabilities = []corev1.Capability{
+		"NET_ADMIN",
+		"NET_RAW",
+	}
+	psp.Spec.HostIPC = true
+	psp.Spec.HostNetwork = true
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.CSI, policyv1beta1.FlexVolume)
+	return psp
 }
 
 // securityContextConstraints returns SCC needed for daemonset to run on Openshift.

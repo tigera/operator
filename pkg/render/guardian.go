@@ -31,7 +31,6 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -129,7 +128,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		// Add tigera-manager service account for impersonation
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(),
-		managerClusterRole(false, true, c.cfg.Openshift),
+		managerClusterRole(false, true, c.cfg.UsePSP),
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
@@ -137,10 +136,9 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterWideDefaultView(),
 	)
 
-	if !c.cfg.Openshift && c.cfg.UsePSP {
-		objs = append(objs, c.podsecuritypolicy())
+	if c.cfg.UsePSP {
+		objs = append(objs, c.podSecurityPolicy())
 	}
-
 	return objs, nil
 }
 
@@ -182,24 +180,18 @@ func (c *GuardianComponent) service() *corev1.Service {
 	}
 }
 
-func (c *GuardianComponent) serviceAccount() client.Object {
+func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianServiceAccountName, Namespace: GuardianNamespace},
 	}
 }
 
-func (c *GuardianComponent) podsecuritypolicy() client.Object {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(GuardianPodSecurityPolicyName)
-	psp.Spec.Privileged = false
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyMustRunAsNonRoot
-
-	return psp
+func (c *GuardianComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(GuardianPodSecurityPolicyName)
 }
 
-func (c *GuardianComponent) clusterRole() client.Object {
+func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	policyRules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -208,7 +200,7 @@ func (c *GuardianComponent) clusterRole() client.Object {
 		},
 	}
 
-	if !c.cfg.Openshift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		policyRules = append(policyRules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -227,7 +219,7 @@ func (c *GuardianComponent) clusterRole() client.Object {
 	}
 }
 
-func (c *GuardianComponent) clusterRoleBinding() client.Object {
+func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -248,7 +240,7 @@ func (c *GuardianComponent) clusterRoleBinding() client.Object {
 	}
 }
 
-func (c *GuardianComponent) deployment() client.Object {
+func (c *GuardianComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	return &appsv1.Deployment{

@@ -324,6 +324,13 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
+		// Check if there are pull secrets in the EGW namespace.
+		// If present, use the existing pull secrets as owner references need to 
+		// be updated.
+		nsSecrets, err := r.getNetworkingPullSecrets(pullSecrets, egw.Namespace)
+		if err == nil {
+			pullSecrets = nsSecrets
+		}
 		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, namespaceAndNames)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
@@ -421,6 +428,20 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
 	return nil
+}
+
+func (r *ReconcileEgressGateway) getNetworkingPullSecrets(pullSecrets []*v1.Secret, ns string) ([]*v1.Secret, error) {
+	secrets := []*v1.Secret{}
+	for _, ps := range pullSecrets {
+		s := &v1.Secret{}
+		err := r.client.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: ns}, s)
+		if err != nil {
+			return nil, err
+		}
+		secrets = append(secrets, s)
+	}
+
+	return secrets, nil
 }
 
 func (r *ReconcileEgressGateway) patchFelixConfig(ctx context.Context) (*crdv1.FelixConfiguration, error) {

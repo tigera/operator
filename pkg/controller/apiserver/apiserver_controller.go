@@ -450,6 +450,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ClusterDomain:               r.clusterDomain,
 			ManagementClusterConnection: managementClusterConnection,
 			TrustedBundle:               trustedBundle,
+			UsePSP:                      r.usePSP,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
 		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)

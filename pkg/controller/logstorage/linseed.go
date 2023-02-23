@@ -45,7 +45,9 @@ func (r *ReconcileLogStorage) createLinseed(
 	ctx context.Context,
 	certificateManager certificatemanager.CertificateManager,
 ) (reconcile.Result, bool, error) {
-	// Create a KeyPair for Linseed to present to clients.
+	// Create a server KeyPair for Linseed to present to clients.
+	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+	// It will be provisoined into the cluster in the render stage later on.
 	svcDNSNames := dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 	linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), svcDNSNames)
 	if err != nil {
@@ -104,6 +106,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		return reconcile.Result{}, false, err
 	}
 
+	// Create a render.Component to provision Linseed's server certificate if it doesn't exist, or update it if needed.
 	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       render.ElasticsearchNamespace,
 		ServiceAccounts: []string{linseed.ServiceAccountName},
@@ -113,7 +116,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		TrustedBundle: trustedBundle,
 	})
 
-	for _, comp := range []render.Component{linseedComponent, certificateComponent} {
+	for _, comp := range []render.Component{certificateComponent, linseedComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, false, err

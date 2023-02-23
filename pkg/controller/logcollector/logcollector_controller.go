@@ -787,6 +787,7 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 		FetchInterval: interval,
 	}, nil
 }
+
 func getSysLogCertificate(client client.Client) (certificatemanagement.CertificateInterface, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{

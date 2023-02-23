@@ -119,8 +119,8 @@ type ManagerConfiguration struct {
 	Installation       *operatorv1.InstallationSpec
 	ManagementCluster  *operatorv1.ManagementCluster
 
-	// If provided, the KeyPair to used for external connections to Voltron.
-	// If not provided, a self-signed certificate will be used.
+	// If provided, the KeyPair to used for external connections terminated by Voltron,
+	// and connections from the manager pod to Linseed.
 	TLSKeyPair certificatemanagement.KeyPairInterface
 
 	// KeyPair used for establishing mTLS tunnel with Guardian.

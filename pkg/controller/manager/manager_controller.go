@@ -337,7 +337,15 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Build a trusted bundle containing all of the certificates of components that communicate with the manager pod.
-	trustedSecretNames := []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, relasticsearch.PublicCertSecret, render.ProjectCalicoApiServerTLSSecretName(installation.Variant)}
+	// This bundle contains the root CA used to sign all operator-generated certificates, as well as the explicitly named
+	// certificates, in case the user has provided their own cert in lieu of the default certificate.
+	trustedSecretNames := []string{
+		render.PacketCaptureCertSecret,
+		monitor.PrometheusTLSSecretName,
+		relasticsearch.PublicCertSecret,
+		render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
+		render.TigeraLinseedSecret,
+	}
 	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
 		if complianceCR.Status.State != operatorv1.TigeraStatusReady {

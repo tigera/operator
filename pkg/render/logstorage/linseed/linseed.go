@@ -50,7 +50,6 @@ const (
 	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
 	PortName                   = "tigera-linseed"
 	TargetPort                 = 8444
-	healthPort                 = TargetPort + 1
 	Port                       = 443
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
@@ -244,10 +243,8 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 					SecurityContext: securitycontext.NewRootContext(true),
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/readiness",
-								Port:   intstr.FromInt(healthPort),
-								Scheme: corev1.URISchemeHTTP,
+							Exec: &corev1.ExecAction{
+								Command: []string{"/linseed", "-ready"},
 							},
 						},
 						InitialDelaySeconds: 10,
@@ -255,10 +252,8 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 					},
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/liveness",
-								Port:   intstr.FromInt(healthPort),
-								Scheme: corev1.URISchemeHTTP,
+							Exec: &corev1.ExecAction{
+								Command: []string{"/linseed", "-live"},
 							},
 						},
 						InitialDelaySeconds: 10,

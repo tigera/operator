@@ -45,15 +45,15 @@ func (r *ReconcileLogStorage) createLinseed(
 	ctx context.Context,
 	certificateManager certificatemanager.CertificateManager,
 ) (reconcile.Result, bool, error) {
-	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
-
+	// Create a KeyPair for Linseed to present to clients.
+	svcDNSNames := dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 	linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), svcDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
+	// Get certificate for TLS on the metrics endpoint.
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
@@ -64,6 +64,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		return reconcile.Result{}, false, nil
 	}
 
+	// Add the Elasticsearch certificate to Linseed's trusted bundle for authenticating the connection ES.
 	esInternalCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch tls certificate secret", err, reqLogger)

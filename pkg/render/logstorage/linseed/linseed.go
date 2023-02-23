@@ -50,6 +50,7 @@ const (
 	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
 	PortName                   = "tigera-linseed"
 	TargetPort                 = 8444
+	healthPort                 = TargetPort + 1
 	Port                       = 443
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 )
@@ -178,11 +179,14 @@ func (l linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 func (l linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
-
-		// Configuration for linseed API.
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
+
+		// Configure for Linseed server certificate.
 		{Name: "LINSEED_HTTPS_CERT", Value: l.cfg.KeyPair.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_HTTPS_KEY", Value: l.cfg.KeyPair.VolumeMountKeyFilePath()},
+
+		// Configure the CA certificate used for verifying client certs.
+		{Name: "LINSEED_CA_CERT", Value: l.cfg.TrustedBundle.MountPath()},
 
 		// Configuration for connection to Elasticsearch.
 		{Name: "LINSEED_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
@@ -195,6 +199,8 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 				Key: l.cfg.ESAdminUserName,
 			},
 		}},
+
+		// Certificates to use when authenticating with Elasticsearch.
 		{Name: "LINSEED_ELASTIC_CLIENT_CERT_PATH", Value: l.cfg.TrustedBundle.MountPath()},
 		{Name: "LINSEED_ELASTIC_CA_BUNDLE_PATH", Value: l.cfg.TrustedBundle.MountPath()},
 	}
@@ -239,9 +245,9 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/health",
-								Port:   intstr.FromInt(TargetPort),
-								Scheme: corev1.URISchemeHTTPS,
+								Path:   "/readiness",
+								Port:   intstr.FromInt(healthPort),
+								Scheme: corev1.URISchemeHTTP,
 							},
 						},
 						InitialDelaySeconds: 10,
@@ -250,9 +256,9 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/health",
-								Port:   intstr.FromInt(TargetPort),
-								Scheme: corev1.URISchemeHTTPS,
+								Path:   "/liveness",
+								Port:   intstr.FromInt(healthPort),
+								Scheme: corev1.URISchemeHTTP,
 							},
 						},
 						InitialDelaySeconds: 10,

@@ -39,6 +39,7 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
@@ -103,6 +104,7 @@ func (c *component) SupportedOSType() rmeta.OSType {
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := []client.Object{}
 	objectsToDelete := []client.Object{}
+	objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(c.config.EgressGW.Namespace, c.config.PullSecrets...)...)...)
 	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
 	if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())

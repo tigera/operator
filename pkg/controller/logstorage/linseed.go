@@ -41,6 +41,7 @@ func (r *ReconcileLogStorage) createLinseed(
 	ctx context.Context,
 	linseedKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
+	usePSP bool,
 ) (reconcile.Result, bool, error) {
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
@@ -61,6 +62,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		ClusterDomain:   r.clusterDomain,
 		KeyPair:         linseedKeyPair,
 		ESAdminUserName: esAdminUserName,
+		UsePSP:          usePSP,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

@@ -18,34 +18,33 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/ptr"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/testutils"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 type resourceTestObj struct {
@@ -71,6 +70,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
+			{"tigera-linseed", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 		}
 
 		BeforeEach(func() {
@@ -90,6 +90,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				ESAdminUserName: "elastic",
+				UsePSP:          true,
 			}
 		})
 
@@ -98,6 +99,18 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources, false)
+		})
+
+		It("should render properly when PSP is not supported by the cluster", func() {
+			cfg.UsePSP = false
+			component := Linseed(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			// Should not contain any PodSecurityPolicies
+			for _, r := range resources {
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+			}
 		})
 
 		It("should render an Linseed deployment and all supporting resources when CertificateManagement is enabled", func() {
@@ -114,6 +127,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				ESAdminUserName: "elastic",
+				UsePSP:          true,
 			}
 
 			component := Linseed(cfg)
@@ -242,7 +256,7 @@ func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.Ke
 }
 
 func compareResources(resources []client.Object, expectedResources []resourceTestObj, useCSR bool) {
-	Expect(len(resources)).To(Equal(len(expectedResources)))
+	Expect(resources).To(HaveLen(len(expectedResources)))
 	for i, expectedResource := range expectedResources {
 		resource := resources[i]
 		actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
@@ -295,6 +309,12 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Resources:     []string{"subjectaccessreview"},
 			ResourceNames: []string{},
 			Verbs:         []string{"create"},
+		},
+		{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			ResourceNames: []string{"tigera-linseed"},
+			Verbs:         []string{"use"},
 		},
 	}))
 	clusterRoleBinding := rtest.GetResource(resources, RoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)

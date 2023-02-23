@@ -1305,7 +1305,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
 		Terminating:  terminating,
-		Openshift:    r.autoDetectedProvider == operator.ProviderOpenShift,
 		UsePSP:       r.usePSP,
 	}
 	components = append(components, render.CSI(&csiCfg))

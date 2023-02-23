@@ -109,6 +109,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		prometheusReady: prometheusReady,
 		tierWatchReady:  tierWatchReady,
 		clusterDomain:   opts.ClusterDomain,
+		usePSP:          opts.UsePSP,
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
@@ -178,6 +179,7 @@ type ReconcileMonitor struct {
 	prometheusReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	clusterDomain   string
+	usePSP          bool
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -258,7 +260,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
+	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -343,6 +345,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		ClusterDomain:            r.clusterDomain,
 		TrustedCertBundle:        trustedBundle,
 		Openshift:                r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:                   r.usePSP,
 	}
 
 	// Render prometheus component

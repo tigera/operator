@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -45,6 +46,7 @@ const (
 	PacketCaptureClusterRoleBindingName = PacketCaptureName
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
+	PacketCapturePodSecurityPolicyName  = PacketCaptureName
 	PacketCapturePolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PacketCaptureName
 	PacketCapturePort                   = 8444
 
@@ -66,6 +68,9 @@ type PacketCaptureApiConfiguration struct {
 	TrustedBundle               certificatemanagement.TrustedBundle
 	ClusterDomain               string
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type packetCaptureApiComponent struct {
@@ -121,6 +126,10 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 
 	if pc.cfg.TrustedBundle != nil {
 		objs = append(objs, pc.cfg.TrustedBundle.ConfigMap(PacketCaptureNamespace))
+	}
+
+	if pc.cfg.UsePSP {
+		objs = append(objs, pc.podSecurityPolicy())
 	}
 	return objs, nil
 }
@@ -183,6 +192,15 @@ func (pc *packetCaptureApiComponent) clusterRole() client.Object {
 		},
 	}
 
+	if pc.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PacketCapturePodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -211,6 +229,10 @@ func (pc *packetCaptureApiComponent) clusterRoleBinding() client.Object {
 			},
 		},
 	}
+}
+
+func (pc *packetCaptureApiComponent) podSecurityPolicy() client.Object {
+	return podsecuritypolicy.NewBasePolicy(PacketCapturePodSecurityPolicyName)
 }
 
 func (pc *packetCaptureApiComponent) deployment() client.Object {

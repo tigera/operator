@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -195,7 +195,7 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 }
 
 // SupportsPodSecurityPolicies returns true if the cluster contains the policy/v1beta1 PodSecurityPolicy API,
-// and false otherwise. This API is scheuled to be removed in Kubernetes v1.25, but should still be used
+// and false otherwise. This API is scheduled to be removed in Kubernetes v1.25, but should still be used
 // in earlier Kubernetes versions.
 func SupportsPodSecurityPolicies(c kubernetes.Interface) (bool, error) {
 	resources, err := c.Discovery().ServerResourcesForGroupVersion("policy/v1beta1")

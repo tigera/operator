@@ -180,7 +180,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.Openshift),
+		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP),
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
@@ -195,8 +195,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
 		objs = append(objs, c.securityContextConstraints())
-	} else if c.cfg.UsePSP {
-		// If we're not running openshift, we need to add pod security policies.
+	}
+
+	if c.cfg.UsePSP {
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
@@ -537,7 +538,7 @@ func managerServiceAccount() *corev1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbacv1.ClusterRole {
+func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -648,7 +649,7 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 		)
 	}
 
-	if !openshift {
+	if usePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
@@ -717,9 +718,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 }
 
 func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-manager")
-	return psp
+	return podsecuritypolicy.NewBasePolicy("tigera-manager")
 }
 
 // Allow users to access Calico Enterprise Manager.

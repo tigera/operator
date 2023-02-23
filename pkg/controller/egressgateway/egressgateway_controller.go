@@ -325,7 +325,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
 		// Check if there are pull secrets in the EGW namespace.
-		// If present, use the existing pull secrets as owner references need to 
+		// If present, use the existing pull secrets, as owner references need to
 		// be updated.
 		nsSecrets, err := r.getNetworkingPullSecrets(pullSecrets, egw.Namespace)
 		if err == nil {

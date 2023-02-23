@@ -117,7 +117,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaPodDisruptionBudget(),
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
@@ -338,7 +338,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -642,8 +642,7 @@ func (c *typhaComponent) typhaService() *corev1.Service {
 }
 
 func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(common.TyphaDeploymentName)
+	psp := podsecuritypolicy.NewBasePolicy(common.TyphaDeploymentName)
 	psp.Spec.HostNetwork = true
 	return psp
 }

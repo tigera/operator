@@ -276,13 +276,12 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
-		if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+		if c.cfg.UsePSP {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
-				c.eksLogForwarderClusterRoleBinding())
-			if c.cfg.UsePSP {
-				objs = append(objs, c.eksLogForwarderPodSecurityPolicy())
-			}
+				c.eksLogForwarderClusterRoleBinding(),
+				c.eksLogForwarderPodSecurityPolicy(),
+			)
 		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
@@ -291,13 +290,12 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.OSType == rmeta.OSTypeLinux {
+	if c.cfg.UsePSP && c.cfg.OSType == rmeta.OSTypeLinux {
 		objs = append(objs,
 			c.fluentdClusterRole(),
-			c.fluentdClusterRoleBinding())
-		if c.cfg.UsePSP {
-			objs = append(objs, c.fluentdPodSecurityPolicy())
-		}
+			c.fluentdClusterRoleBinding(),
+			c.fluentdPodSecurityPolicy(),
+		)
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
@@ -876,12 +874,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 }
 
 func (c *fluentdComponent) fluentdPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(c.fluentdName())
-	psp.Spec.RequiredDropCapabilities = nil
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("CAP_CHOWN"),
-	}
+	psp := podsecuritypolicy.NewBasePolicy(c.fluentdName())
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
 		{
@@ -1070,8 +1063,7 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 }
 
 func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(eksLogForwarderName)
+	psp := podsecuritypolicy.NewBasePolicy(eksLogForwarderName)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }
@@ -1103,7 +1095,6 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: eksLogForwarderName,
 		},
-
 		Rules: []rbacv1.PolicyRule{
 			{
 				// Allow access to the pod security policy in case this is enforced on the cluster

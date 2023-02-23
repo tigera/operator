@@ -81,8 +81,10 @@ const (
 	defaultTunnelVoltronPort = "9449"
 )
 
-var ManagerEntityRule = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
-var ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
+var (
+	ManagerEntityRule       = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
+	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
+)
 
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
@@ -109,17 +111,28 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig      authentication.KeyValidatorConfig
-	ESSecrets               []*corev1.Secret
-	TrustedCertBundle       certificatemanagement.TrustedBundle
-	ESClusterConfig         *relasticsearch.ClusterConfig
-	TLSKeyPair              certificatemanagement.KeyPairInterface
-	PullSecrets             []*corev1.Secret
-	Openshift               bool
-	Installation            *operatorv1.InstallationSpec
-	ManagementCluster       *operatorv1.ManagementCluster
-	TunnelSecret            certificatemanagement.KeyPairInterface
-	InternalTrafficSecret   certificatemanagement.KeyPairInterface
+	KeyValidatorConfig authentication.KeyValidatorConfig
+	ESSecrets          []*corev1.Secret
+	ESClusterConfig    *relasticsearch.ClusterConfig
+	PullSecrets        []*corev1.Secret
+	Openshift          bool
+	Installation       *operatorv1.InstallationSpec
+	ManagementCluster  *operatorv1.ManagementCluster
+
+	// If provided, the KeyPair to used for external connections terminated by Voltron,
+	// and connections from the manager pod to Linseed.
+	TLSKeyPair certificatemanagement.KeyPairInterface
+
+	// KeyPair used for establishing mTLS tunnel with Guardian.
+	TunnelSecret certificatemanagement.KeyPairInterface
+
+	// TLS KeyPair used by Voltron within the cluster when operating as a management cluster.
+	InternalTrafficSecret certificatemanagement.KeyPairInterface
+
+	// Certificate bundle used by the manager pod to verify certificates presented
+	// by clients as part of mTLS authentication.
+	TrustedCertBundle certificatemanagement.TrustedBundle
+
 	ClusterDomain           string
 	ESLicenseType           ElasticsearchLicenseType
 	Replicas                *int32
@@ -475,13 +488,23 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
+	var keyPath, certPath string
+	if c.cfg.TLSKeyPair != nil {
+		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
+	}
+
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 	}
 
-	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	}
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
 	}

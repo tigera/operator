@@ -64,14 +64,16 @@ const (
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
-	// TigeraLinseedSecret is the TLS key pair that is mounted into Linseed, used in mTLS establishment
-	// with its clients.
+	// TigeraLinseedSecret is the name of the secret that holds the TLS key pair mounted into Linseed.
+	// The secret contains server key and certificate.
 	TigeraLinseedSecret = "tigera-secure-linseed-cert"
 
 	// TigeraElasticsearchGatewaySecret is the TLS key pair that is mounted by Elasticsearch gateway.
 	TigeraElasticsearchGatewaySecret = "tigera-secure-elasticsearch-cert"
+
 	// TigeraElasticsearchInternalCertSecret is the TLS key pair that is mounted by the Elasticsearch pods.
 	TigeraElasticsearchInternalCertSecret = "tigera-secure-internal-elasticsearch-cert"
+
 	// TigeraKibanaCertSecret is the TLS key pair that is mounted by the Kibana pods.
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 

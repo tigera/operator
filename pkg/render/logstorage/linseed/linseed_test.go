@@ -357,10 +357,8 @@ func expectedContainers() []corev1.Container {
 			},
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path:   "/health",
-						Port:   intstr.FromInt(TargetPort),
-						Scheme: corev1.URISchemeHTTPS,
+					Exec: &corev1.ExecAction{
+						Command: []string{"/linseed", "-ready"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -368,10 +366,8 @@ func expectedContainers() []corev1.Container {
 			},
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path:   "/health",
-						Port:   intstr.FromInt(TargetPort),
-						Scheme: corev1.URISchemeHTTPS,
+					Exec: &corev1.ExecAction{
+						Command: []string{"/linseed", "-live"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -393,6 +389,10 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:  "LINSEED_HTTPS_KEY",
 					Value: "/tigera-secure-linseed-cert/tls.key",
+				},
+				{
+					Name:  "LINSEED_CA_CERT",
+					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 				{
 					Name:  "LINSEED_ELASTIC_ENDPOINT",

@@ -310,13 +310,13 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// Fetch any existing default FelixConfiguration object.
-	fc := &crdv1.FelixConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading FelixConfiguration", err, reqLogger)
+	// patch and get the felix configuration
+	fc, err := r.patchFelixConfig(ctx)
+	if err != nil {
+		reqLogger.Error(err, "Error patching felix configuration")
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
 		for _, egw := range egwsToReconcile {
-			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error reading felix configuration err = %s", err.Error()))
+			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
 		}
 		return reconcile.Result{}, err
 	}
@@ -324,6 +324,13 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
+		// Check if there are pull secrets in the EGW namespace.
+		// If present, use the existing pull secrets, as owner references need to
+		// be updated.
+		nsSecrets, err := r.getNetworkingPullSecrets(pullSecrets, egw.Namespace)
+		if err == nil {
+			pullSecrets = nsSecrets
+		}
 		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, namespaceAndNames)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
@@ -421,6 +428,40 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
 	return nil
+}
+
+func (r *ReconcileEgressGateway) getNetworkingPullSecrets(pullSecrets []*v1.Secret, ns string) ([]*v1.Secret, error) {
+	secrets := []*v1.Secret{}
+	for _, ps := range pullSecrets {
+		s := &v1.Secret{}
+		err := r.client.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: ns}, s)
+		if err != nil {
+			return nil, err
+		}
+		secrets = append(secrets, s)
+	}
+
+	return secrets, nil
+}
+
+func (r *ReconcileEgressGateway) patchFelixConfig(ctx context.Context) (*crdv1.FelixConfiguration, error) {
+	// Fetch any existing default FelixConfiguration object.
+	fc := &crdv1.FelixConfiguration{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, log)
+		return nil, err
+	}
+
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+	if fc.Spec.PolicySyncPathPrefix == "" {
+		fc.Spec.PolicySyncPathPrefix = "/var/run/nodeagent"
+	}
+	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+		return nil, err
+	}
+	return fc, nil
 }
 
 // getRequestedEgressGateway returns the namespaced EgressGateway instance.

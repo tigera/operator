@@ -19,7 +19,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -32,7 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 )
 
-func (r *ReconcileLogStorage) createEsGateway(
+func (r *ReconcileLogStorage) createESGateway(
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,
@@ -46,9 +45,6 @@ func (r *ReconcileLogStorage) createEsGateway(
 	gatewayKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, error) {
-	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
-
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch admin user secret contains too many entries", nil, reqLogger)

@@ -355,6 +355,7 @@ func setLogStorageFinalizer(ls *operatorv1.LogStorage) {
 // A helper struct for managing the multitude of secrets that are managed by or
 // used by this controller.
 type keyPairCollection struct {
+	log           logr.Logger
 	prometheus    certificatemanagement.CertificateInterface
 	elastic       certificatemanagement.KeyPairInterface
 	kibana        certificatemanagement.KeyPairInterface
@@ -364,6 +365,7 @@ type keyPairCollection struct {
 }
 
 func (c *keyPairCollection) trustedBundle(cm certificatemanager.CertificateManager) certificatemanagement.TrustedBundle {
+	c.log.V(1).WithValues("keyPairs", c).Info("Generating a trusted bundle for tigera-elasticsearch")
 	return cm.CreateTrustedBundle(
 		c.prometheus,
 		c.elastic,
@@ -376,10 +378,10 @@ func (c *keyPairCollection) trustedBundle(cm certificatemanager.CertificateManag
 
 func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle) render.Component {
 	// Create a render.Component to provision or update key pairs and the trusted bundle.
+	c.log.V(1).WithValues("keyPairs", c).Info("Generating a certificate management component for tigera-elasticsearch")
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace: render.ElasticsearchNamespace,
 		ServiceAccounts: []string{
-			// TODO: If any of these SA need a CSR binding, all of them get it. Is this OK?
 			render.ElasticsearchName,
 			linseed.ServiceAccountName,
 			esgateway.ServiceAccountName,
@@ -403,7 +405,7 @@ func (r *ReconcileLogStorage) generateSecrets(
 	cm certificatemanager.CertificateManager,
 	fipsMode *operatorv1.FIPSMode,
 ) (*keyPairCollection, error) {
-	collection := keyPairCollection{}
+	collection := keyPairCollection{log: log}
 
 	// Get certificate for TLS on Prometheus metrics endpoints. This is created in the monitor controller, so we just
 	// need to wait for it to exist.
@@ -446,8 +448,8 @@ func (r *ReconcileLogStorage) generateSecrets(
 	// Create a server key pair for Linseed to present to clients.
 	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
 	// It will be provisioned into the cluster in the render stage later on.
-	svcDNSNames := dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), svcDNSNames)
+	linseedDNSNames := dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), linseedDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err
@@ -455,8 +457,8 @@ func (r *ReconcileLogStorage) generateSecrets(
 	collection.linseed = linseedKeyPair
 
 	// Create a server key pair for the ES metrics server.
-	dnsNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, r.clusterDomain)
-	metricsServerKeyPair, err := cm.GetOrCreateKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), dnsNames)
+	metricsDNSNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, r.clusterDomain)
+	metricsServerKeyPair, err := cm.GetOrCreateKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), metricsDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate", err, log)
 		return nil, err
@@ -464,7 +466,9 @@ func (r *ReconcileLogStorage) generateSecrets(
 	collection.metricsServer = metricsServerKeyPair
 
 	// ES gateway keypair.
-	gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), svcDNSNames)
+	gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
+	gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), gatewayDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err
@@ -739,18 +743,26 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, patchErr
 		}
 	}
-	if err != nil || !proceed {
+	log.WithValues("proceed", proceed, "error", err).V(1).Info("createLogStorage result")
+	if err != nil {
 		return result, err
 	}
 
 	if managementClusterConnection == nil {
-		// Create secrets in the tigera-elasticsearch namespace.
+		// Create secrets in the tigera-elasticsearch namespace. We need to do this before the proceed check below,
+		// since ES becoming ready is dependent on the secrets created by this component.
 		if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
 
-		result, proceed, err = r.createEsKubeControllers(
+	if !proceed {
+		return result, err
+	}
+
+	if managementClusterConnection == nil {
+		result, proceed, err = r.createESKubeControllers(
 			install,
 			hdler,
 			reqLogger,
@@ -762,7 +774,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil || !proceed {
 			return result, err
 		}
-		result, proceed, err = r.createEsGateway(
+		result, proceed, err = r.createESGateway(
 			install,
 			variant,
 			pullSecrets,
@@ -806,7 +818,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return result, err
 		}
 
-		result, proceed, err = r.createEsMetrics(
+		result, proceed, err = r.createESMetrics(
 			install,
 			variant,
 			pullSecrets,

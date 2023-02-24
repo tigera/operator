@@ -31,7 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 )
 
-func (r *ReconcileLogStorage) createEsMetrics(
+func (r *ReconcileLogStorage) createESMetrics(
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,

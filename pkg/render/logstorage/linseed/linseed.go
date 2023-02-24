@@ -178,11 +178,14 @@ func (l linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 func (l linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
-
-		// Configuration for linseed API.
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
+
+		// Configure for Linseed server certificate.
 		{Name: "LINSEED_HTTPS_CERT", Value: l.cfg.KeyPair.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_HTTPS_KEY", Value: l.cfg.KeyPair.VolumeMountKeyFilePath()},
+
+		// Configure the CA certificate used for verifying client certs.
+		{Name: "LINSEED_CA_CERT", Value: l.cfg.TrustedBundle.MountPath()},
 
 		// Configuration for connection to Elasticsearch.
 		{Name: "LINSEED_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
@@ -195,6 +198,8 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 				Key: l.cfg.ESAdminUserName,
 			},
 		}},
+
+		// Certificates to use when authenticating with Elasticsearch.
 		{Name: "LINSEED_ELASTIC_CLIENT_CERT_PATH", Value: l.cfg.TrustedBundle.MountPath()},
 		{Name: "LINSEED_ELASTIC_CA_BUNDLE_PATH", Value: l.cfg.TrustedBundle.MountPath()},
 	}
@@ -238,10 +243,8 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 					SecurityContext: securitycontext.NewRootContext(true),
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/health",
-								Port:   intstr.FromInt(TargetPort),
-								Scheme: corev1.URISchemeHTTPS,
+							Exec: &corev1.ExecAction{
+								Command: []string{"/linseed", "-ready"},
 							},
 						},
 						InitialDelaySeconds: 10,
@@ -249,10 +252,8 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 					},
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/health",
-								Port:   intstr.FromInt(TargetPort),
-								Scheme: corev1.URISchemeHTTPS,
+							Exec: &corev1.ExecAction{
+								Command: []string{"/linseed", "-live"},
 							},
 						},
 						InitialDelaySeconds: 10,

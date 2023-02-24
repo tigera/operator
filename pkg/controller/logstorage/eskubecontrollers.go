@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func (r *ReconcileLogStorage) createEsKubeControllers(
+func (r *ReconcileLogStorage) createESKubeControllers(
 	install *operatorv1.InstallationSpec,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,

@@ -64,7 +64,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp.json")
 
-		var expectedResources = []resourceTestObj{
+		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 			{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 			{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
@@ -308,7 +308,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}))
-
 }
 
 func expectedVolumes(useCSR bool) []corev1.Volume {
@@ -344,6 +343,7 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 	})
 	return volumes
 }
+
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{
@@ -357,10 +357,8 @@ func expectedContainers() []corev1.Container {
 			},
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path:   "/health",
-						Port:   intstr.FromInt(TargetPort),
-						Scheme: corev1.URISchemeHTTPS,
+					Exec: &corev1.ExecAction{
+						Command: []string{"/linseed", "-ready"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -368,10 +366,8 @@ func expectedContainers() []corev1.Container {
 			},
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path:   "/health",
-						Port:   intstr.FromInt(TargetPort),
-						Scheme: corev1.URISchemeHTTPS,
+					Exec: &corev1.ExecAction{
+						Command: []string{"/linseed", "-live"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -393,6 +389,10 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:  "LINSEED_HTTPS_KEY",
 					Value: "/tigera-secure-linseed-cert/tls.key",
+				},
+				{
+					Name:  "LINSEED_CA_CERT",
+					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 				{
 					Name:  "LINSEED_ELASTIC_ENDPOINT",

@@ -69,7 +69,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Create a new controller
 	controller, err := controller.New(render.PolicyRecommendationControllerName, mgr,
 		controller.Options{
-			Reconciler: reconcile.Reconciler(reconciler),
+			Reconciler: reconciler,
 		})
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func newReconciler(
 }
 
 // add adds watches for resources that are available at startup.
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(_ manager.Manager, c controller.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource PolicyRecommendation

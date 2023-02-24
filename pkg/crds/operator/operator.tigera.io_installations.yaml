@@ -5460,6 +5460,35 @@ spec:
                 - DockerEnterprise
                 - RKE2
                 type: string
+              logging:
+                description: Logging Configuration for Components
+                properties:
+                  cniLogging:
+                    description: Customized logging specification for calico-cni plugin
+                    properties:
+                      logFileMaxAge:
+                        description: 'Default: 30 d'
+                        type: string
+                      logFileMaxCount:
+                        description: 'Default: 10'
+                        type: integer
+                      logFileMaxSize:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: 'Default: 100 m'
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      logSeverity:
+                        description: 'Default: Info'
+                        enum:
+                        - Error
+                        - Warning
+                        - Debug
+                        - Info
+                        type: string
+                    type: object
+                type: object
               nodeMetricsPort:
                 description: NodeMetricsPort specifies which port calico/node serves
                   prometheus metrics on. By default, metrics are not enabled. If specified,
@@ -13170,6 +13199,36 @@ spec:
                     - DockerEnterprise
                     - RKE2
                     type: string
+                  logging:
+                    description: Logging Configuration for Components
+                    properties:
+                      cniLogging:
+                        description: Customized logging specification for calico-cni
+                          plugin
+                        properties:
+                          logFileMaxAge:
+                            description: 'Default: 30 d'
+                            type: string
+                          logFileMaxCount:
+                            description: 'Default: 10'
+                            type: integer
+                          logFileMaxSize:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: 'Default: 100 m'
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          logSeverity:
+                            description: 'Default: Info'
+                            enum:
+                            - Error
+                            - Warning
+                            - Debug
+                            - Info
+                            type: string
+                        type: object
+                    type: object
                   nodeMetricsPort:
                     description: NodeMetricsPort specifies which port calico/node
                       serves prometheus metrics on. By default, metrics are not enabled.

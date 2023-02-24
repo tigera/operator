@@ -25,12 +25,8 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 )
@@ -44,6 +40,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	ctx context.Context,
 	hdler utils.ComponentHandler,
 	clusterDomain string,
+	serverKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, error) {
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
@@ -56,55 +53,24 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		return reconcile.Result{}, false, nil
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
-		return reconcile.Result{}, false, err
-	}
-
-	serverTLS, err := certificateManager.GetOrCreateKeyPair(
-		r.client,
-		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, clusterDomain))
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, false, err
-	}
-
 	esMetricsCfg := &esmetrics.Config{
 		Installation:         install,
 		PullSecrets:          pullSecrets,
 		ESConfig:             clusterConfig,
 		ESMetricsCredsSecret: esMetricsSecret,
 		ClusterDomain:        r.clusterDomain,
-		ServerTLS:            serverTLS,
+		ServerTLS:            serverKeyPair,
 		TrustedBundle:        trustedBundle,
 	}
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
-	components := []render.Component{esMetricsComponent,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.ElasticsearchNamespace,
-			ServiceAccounts: []string{esmetrics.ElasticsearchMetricsName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(serverTLS, true, true),
-			},
-			// The trusted bundle should have already been rendered by the logstorage_controller.go for es-gateway.
-			// It already includes the certificates for es gateway and prometheus server, which es-metrics relies upon.
-			TrustedBundle: nil,
-		}),
-	}
-
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
-	for _, comp := range components {
-		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, false, err
-		}
+	if err := hdler.CreateOrUpdateOrDelete(ctx, esMetricsComponent, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, false, err
 	}
 
 	return reconcile.Result{}, true, nil

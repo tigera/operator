@@ -22,7 +22,6 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/dns"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	apps "k8s.io/api/apps/v1"
@@ -76,11 +75,12 @@ func (r *ReconcileLogStorage) createLogStorage(
 	certificateManager certificatemanager.CertificateManager,
 	applyTrial bool,
 	keyStoreSecret *corev1.Secret,
+	elasticKeyPair certificatemanagement.KeyPairInterface,
+	kibanaKeyPair certificatemanagement.KeyPairInterface,
+	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, bool, error) {
-	var elasticKeyPair, kibanaKeyPair certificatemanagement.KeyPairInterface
 	var err error
 	finalizerCleanup := false
-	var trustedBundle certificatemanagement.TrustedBundle
 
 	if managementClusterConnection == nil {
 		// Check if there is a StorageClass available to run Elasticsearch on.
@@ -92,23 +92,6 @@ func (r *ReconcileLogStorage) createLogStorage(
 			}
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get storage class", err, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, err
-		}
-
-		esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-		if elasticKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, reqLogger)
-			return reconcile.Result{}, false, finalizerCleanup, err
-		}
-
-		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair)
-		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
-			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-			if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
-				reqLogger.Error(err, err.Error())
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, reqLogger)
-				return reconcile.Result{}, false, finalizerCleanup, err
-			}
-			trustedBundle.AddCertificates(kibanaKeyPair)
 		}
 	}
 
@@ -197,28 +180,12 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
-	components = append(components, component,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.ElasticsearchNamespace,
-			ServiceAccounts: []string{render.ElasticsearchName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// We do not want to delete the secret from the tigera-elasticsearch namespace when CertificateManagement is
-				// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation
-				// checks.
-				rcertificatemanagement.NewKeyPairOption(elasticKeyPair, true, elasticKeyPair != nil && !elasticKeyPair.UseCertificateManagement()),
-			},
-			TrustedBundle: trustedBundle,
-		}),
-	)
 	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.KibanaNamespace,
 				ServiceAccounts: []string{render.KibanaName},
 				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-					// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
-					// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation
-					// checks.
 					rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, kibanaKeyPair != nil && !kibanaKeyPair.UseCertificateManagement()),
 				},
 				TrustedBundle: trustedBundle,

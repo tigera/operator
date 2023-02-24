@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -173,13 +173,14 @@ func (r *ReconcileLogStorage) createLogStorage(
 		KeyStoreSecret:              keyStoreSecret,
 	}
 
-	component := render.LogStorage(logStorageCfg)
+	logStorageComponent := render.LogStorage(logStorageCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, logStorageComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
+	components = append(components, logStorageComponent)
 	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		// Render the key pair and trusted bundle into the Kibana namespace, which should be created by the log storage component above.
 		components = append(components,

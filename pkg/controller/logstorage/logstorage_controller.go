@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/dns"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -349,6 +352,128 @@ func setLogStorageFinalizer(ls *operatorv1.LogStorage) {
 	}
 }
 
+// A helper struct for managing the multitude of secrets that are managed by or
+// used by this controller.
+type keyPairCollection struct {
+	prometheus    certificatemanagement.CertificateInterface
+	elastic       certificatemanagement.KeyPairInterface
+	kibana        certificatemanagement.KeyPairInterface
+	linseed       certificatemanagement.KeyPairInterface
+	metricsServer certificatemanagement.KeyPairInterface
+	gateway       certificatemanagement.KeyPairInterface
+}
+
+func (c *keyPairCollection) trustedBundle(cm certificatemanager.CertificateManager) certificatemanagement.TrustedBundle {
+	return cm.CreateTrustedBundle(
+		c.prometheus,
+		c.elastic,
+		c.kibana,
+		c.linseed,
+		c.metricsServer,
+		c.gateway,
+	)
+}
+
+func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle) render.Component {
+	// Create a render.Component to provision or update key pairs and the trusted bundle.
+	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		Namespace: render.ElasticsearchNamespace,
+		ServiceAccounts: []string{
+			// TODO: If any of these SA need a CSR binding, all of them get it. Is this OK?
+			render.ElasticsearchName,
+			linseed.ServiceAccountName,
+			esgateway.ServiceAccountName,
+			esmetrics.ElasticsearchMetricsName,
+		},
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(c.elastic, true, c.elastic != nil && !c.elastic.UseCertificateManagement()),
+			rcertificatemanagement.NewKeyPairOption(c.linseed, true, true),
+			rcertificatemanagement.NewKeyPairOption(c.gateway, true, true),
+			rcertificatemanagement.NewKeyPairOption(c.metricsServer, true, true),
+		},
+		TrustedBundle: bundle,
+	})
+}
+
+// generateSecrets generates all the necessary secrets for the tigera-elasticsearch namespace. Namely:
+// - A trusted certificate bundle used by all components created in the tigera-elasticsearch namespace.
+// - Individual keypairs for Linseed, es-gateway, es-metrics, and Elasticsearch itself.
+func (r *ReconcileLogStorage) generateSecrets(
+	log logr.Logger,
+	cm certificatemanager.CertificateManager,
+	fipsMode *operatorv1.FIPSMode,
+) (*keyPairCollection, error) {
+	collection := keyPairCollection{}
+
+	// Get certificate for TLS on Prometheus metrics endpoints. This is created in the monitor controller, so we just
+	// need to wait for it to exist.
+	prometheusCertificate, err := cm.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
+		return nil, err
+	} else if prometheusCertificate == nil {
+		log.Info("Prometheus secrets are not available yet, waiting until they become available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus secrets are not available yet, waiting until they become available", nil, log)
+		return nil, nil
+	}
+	collection.prometheus = prometheusCertificate
+
+	// Generate a keypair for elasticsearch.
+	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+	// It will be provisioned into the cluster in the render stage later on.
+	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	elasticKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
+		return nil, err
+	}
+	collection.elastic = elasticKeyPair
+
+	// Generate a keypair for Kibana.
+	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+	// It will be provisioned into the cluster in the render stage later on.
+	if !operatorv1.IsFIPSModeEnabled(fipsMode) {
+		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+		kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
+			return nil, err
+		}
+		collection.kibana = kibanaKeyPair
+	}
+
+	// Create a server key pair for Linseed to present to clients.
+	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+	// It will be provisioned into the cluster in the render stage later on.
+	svcDNSNames := dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), svcDNSNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return nil, err
+	}
+	collection.linseed = linseedKeyPair
+
+	// Create a server key pair for the ES metrics server.
+	dnsNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, r.clusterDomain)
+	metricsServerKeyPair, err := cm.GetOrCreateKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), dnsNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate", err, log)
+		return nil, err
+	}
+	collection.metricsServer = metricsServerKeyPair
+
+	// ES gateway keypair.
+	gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), svcDNSNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return nil, err
+	}
+	collection.gateway = gatewayKeyPair
+
+	return &collection, nil
+}
+
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
 // and what is in the LogStorage.Spec
 // Note:
@@ -488,6 +613,21 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	certificateManager.AddToStatusManager(r.status, render.ElasticsearchNamespace)
+
+	// Gather all the secrets we need.
+	keyPairs, err := r.generateSecrets(reqLogger, certificateManager, install.FIPSMode)
+	if err != nil {
+		// Status manager is handled in r.generateSecrets, so we can just return
+		return reconcile.Result{}, err
+	}
+	trustedBundle := keyPairs.trustedBundle(certificateManager)
+
 	var esAdminUserSecret *corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var curatorSecrets []*corev1.Secret
@@ -561,13 +701,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	certificateManager.AddToStatusManager(r.status, render.ElasticsearchNamespace)
-
 	result, proceed, finalizerCleanup, err := r.createLogStorage(
 		ls,
 		install,
@@ -588,8 +721,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		certificateManager,
 		applyTrial,
 		keyStoreSecret,
+		keyPairs.elastic,
+		keyPairs.kibana,
+		trustedBundle,
 	)
-
 	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup {
 		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
 
@@ -600,12 +735,17 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, patchErr
 		}
 	}
-
 	if err != nil || !proceed {
 		return result, err
 	}
 
 	if managementClusterConnection == nil {
+		// Create secrets in the tigera-elasticsearch namespace.
+		if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle), r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		result, proceed, err = r.createEsKubeControllers(
 			install,
 			hdler,
@@ -618,8 +758,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil || !proceed {
 			return result, err
 		}
-		var trustedBundle certificatemanagement.TrustedBundle
-		result, trustedBundle, proceed, err = r.createEsGateway(
+		result, proceed, err = r.createEsGateway(
 			install,
 			variant,
 			pullSecrets,
@@ -628,6 +767,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger,
 			ctx,
 			certificateManager,
+			keyPairs.elastic,
+			keyPairs.kibana,
+			keyPairs.gateway,
+			trustedBundle,
 		)
 		if err != nil || !proceed {
 			return result, err
@@ -642,6 +785,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger,
 			ctx,
 			certificateManager,
+			keyPairs.linseed,
+			trustedBundle,
 		)
 		if err != nil || !proceed {
 			return result, err
@@ -666,6 +811,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			ctx,
 			hdler,
 			r.clusterDomain,
+			keyPairs.metricsServer,
 			trustedBundle,
 		)
 		if err != nil || !proceed {

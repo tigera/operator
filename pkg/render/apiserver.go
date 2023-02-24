@@ -73,21 +73,21 @@ var TigeraAPIServerEntityRule = v3.EntityRule{
 
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
-func ProjectCalicoApiServerTLSSecretName(v operatorv1.ProductVariant) string {
+func ProjectCalicoAPIServerTLSSecretName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return calicoAPIServerTLSSecretName
 	}
 	return tigeraAPIServerTLSSecretName
 }
 
-func ProjectCalicoApiServerServiceName(v operatorv1.ProductVariant) string {
+func ProjectCalicoAPIServerServiceName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-api"
 	}
 	return "tigera-api"
 }
 
-func ApiServerServiceAccountName(v operatorv1.ProductVariant) string {
+func APIServerServiceAccountName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-apiserver"
 	}
@@ -285,7 +285,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
-				Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
+				Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 			Version:  "v3",
@@ -321,7 +321,7 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -370,7 +370,7 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -390,7 +390,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+			Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 		},
 	}
@@ -556,7 +556,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.C
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 		},
@@ -654,7 +654,7 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -741,7 +741,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -763,7 +763,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
+			Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			Labels:    map[string]string{"k8s-app": QueryserverServiceName},
 		},
@@ -858,7 +858,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					DNSPolicy:          dnsPolicy,
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
-					ServiceAccountName: ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					ServiceAccountName: APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
@@ -1004,8 +1004,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
-		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
-		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 	if c.cfg.TrustedBundle != nil {
@@ -1243,7 +1243,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRoleBinding() *rbacv1.C
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 		},

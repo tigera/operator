@@ -104,7 +104,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
-		queryServerSecret, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{"a"})
+		queryServerSecret, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
 		err = c.Create(ctx, secret.Secret(common.OperatorNamespace()))

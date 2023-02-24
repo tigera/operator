@@ -626,6 +626,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		// Status manager is handled in r.generateSecrets, so we can just return
 		return reconcile.Result{}, err
 	}
+	if keyPairs == nil {
+		// Waiting for keys to be ready.
+		return reconcile.Result{}, nil
+	}
 	trustedBundle := keyPairs.trustedBundle(certificateManager)
 
 	var esAdminUserSecret *corev1.Secret

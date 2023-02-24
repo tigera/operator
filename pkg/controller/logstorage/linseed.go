@@ -19,17 +19,14 @@ import (
 	"fmt"
 
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
-	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/dns"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
@@ -44,37 +41,9 @@ func (r *ReconcileLogStorage) createLinseed(
 	reqLogger logr.Logger,
 	ctx context.Context,
 	certificateManager certificatemanager.CertificateManager,
+	linseedKeyPair certificatemanagement.KeyPairInterface,
+	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, error) {
-	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
-
-	linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), svcDNSNames)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, false, err
-	}
-
-	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
-		return reconcile.Result{}, false, err
-	} else if prometheusCertificate == nil {
-		reqLogger.Info("Prometheus secrets are not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, false, nil
-	}
-
-	esInternalCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch tls certificate secret", err, reqLogger)
-		return reconcile.Result{}, false, err
-	} else if esInternalCertificate == nil {
-		reqLogger.Info("Waiting for internal Elasticsearch tls certificate secret to be available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for internal Elasticsearch tls certificate secret to be available", nil, reqLogger)
-		return reconcile.Result{}, false, nil
-	}
-	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, prometheusCertificate)
-
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("secret should have exactly one entry. found %d", len(esAdminUserSecret.Data)), nil, reqLogger)
@@ -98,21 +67,12 @@ func (r *ReconcileLogStorage) createLinseed(
 
 	linseedComponent := linseed.Linseed(cfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {
+	if err := imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
-	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		Namespace:       render.ElasticsearchNamespace,
-		ServiceAccounts: []string{linseed.ServiceAccountName},
-		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-			rcertificatemanagement.NewKeyPairOption(linseedKeyPair, true, true),
-		},
-		TrustedBundle: trustedBundle,
-	})
-
-	for _, comp := range []render.Component{linseedComponent, certificateComponent} {
+	for _, comp := range []render.Component{linseedComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, false, err

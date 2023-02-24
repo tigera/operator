@@ -277,8 +277,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
-		render.ProjectCalicoApiServerTLSSecretName(install.Variant),
-		kubecontrollers.KubeControllerPrometheusTLSSecret} {
+		render.ProjectCalicoAPIServerTLSSecretName(install.Variant),
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
+	} {
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)

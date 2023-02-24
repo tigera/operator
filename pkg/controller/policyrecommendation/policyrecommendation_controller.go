@@ -140,8 +140,9 @@ func add(_ manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the policy-recommendation and operator namespaces
 	for _, namespace := range []string{common.OperatorNamespace(), render.PolicyRecommendationNamespace} {
 		for _, secretName := range []string{
-			render.TigeraElasticsearchGatewaySecret, render.ElasticsearchPolicyRecommendationUserSecret,
-			render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+			relasticsearch.PublicCertSecret,
+			render.ElasticsearchPolicyRecommendationUserSecret,
+			certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("policy-recommendation-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)

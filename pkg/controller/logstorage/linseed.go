@@ -22,7 +22,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -40,7 +39,6 @@ func (r *ReconcileLogStorage) createLinseed(
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
-	certificateManager certificatemanager.CertificateManager,
 	linseedKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, error) {

@@ -376,7 +376,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	fluentdPrometheusTLS, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
+
+	// fluentdKeyPair is the key pair fluentd presents to identify itself
+	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -545,7 +547,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Installation:         installation,
 		ClusterDomain:        r.clusterDomain,
 		OSType:               rmeta.OSTypeLinux,
-		MetricsServerTLS:     fluentdPrometheusTLS,
+		FluentdKeyPair:       fluentdKeyPair,
 		TrustedBundle:        trustedBundle,
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
@@ -559,7 +561,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			Namespace:       render.LogCollectorNamespace,
 			ServiceAccounts: []string{render.FluentdNodeName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(fluentdPrometheusTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

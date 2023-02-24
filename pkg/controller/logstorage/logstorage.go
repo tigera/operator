@@ -21,7 +21,6 @@ import (
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	apps "k8s.io/api/apps/v1"
@@ -72,7 +71,6 @@ func (r *ReconcileLogStorage) createLogStorage(
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
-	certificateManager certificatemanager.CertificateManager,
 	applyTrial bool,
 	keyStoreSecret *corev1.Secret,
 	elasticKeyPair certificatemanagement.KeyPairInterface,
@@ -188,6 +186,9 @@ func (r *ReconcileLogStorage) createLogStorage(
 				Namespace:       render.KibanaNamespace,
 				ServiceAccounts: []string{render.KibanaName},
 				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+					// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
+					// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation
+					// checks.
 					rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, kibanaKeyPair != nil && !kibanaKeyPair.UseCertificateManagement()),
 				},
 				TrustedBundle: trustedBundle,

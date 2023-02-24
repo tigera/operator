@@ -66,9 +66,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
-			MetricsServerTLS: metricsSecret,
-			TrustedBundle:    certificateManager.CreateTrustedBundle(),
-			UsePSP:           true,
+			FluentdKeyPair: metricsSecret,
+			TrustedBundle:  certificateManager.CreateTrustedBundle(),
+			UsePSP:         true,
 		}
 	})
 
@@ -230,7 +230,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
-		cfg.MetricsServerTLS = nil
+		cfg.FluentdKeyPair = nil
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()

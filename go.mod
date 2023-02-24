@@ -13,7 +13,7 @@ require (
 	github.com/hashicorp/go-version v1.2.1
 	github.com/olivere/elastic/v7 v7.0.6
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.24.2
+	github.com/onsi/gomega v1.27.1
 	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
@@ -40,7 +40,7 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
 
-	// Scanners flag anything less than v0.3.8 as having a CVE.
-	golang.org/x/text => golang.org/x/text v0.4.0
+	// Scanners flag anything less than v0.7.0 as having a CVE.
+	golang.org/x/text => golang.org/x/text v0.7.0
 	k8s.io/apiserver => k8s.io/apiserver v0.25.6
 )

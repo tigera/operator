@@ -32,7 +32,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -186,7 +185,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
-	if !c.cfg.Openshift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
@@ -524,7 +523,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -1125,15 +1124,11 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client
 		nameToDelete = enterpriseName
 	}
 
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(name)
-	psp.Spec.Privileged = false
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
+	psp := podsecuritypolicy.NewBasePolicy(name)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 
-	pspToDelete := podsecuritypolicy.NewBasePolicy()
-	pspToDelete.GetObjectMeta().SetName(nameToDelete)
+	pspToDelete := podsecuritypolicy.NewBasePolicy(nameToDelete)
 
 	return psp, pspToDelete
 }
@@ -1211,7 +1206,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},

@@ -419,6 +419,7 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	var keyPath, certPath, intKeyPath, intCertPath, tunnelKeyPath, tunnelCertPath string
 	if c.cfg.TLSKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
 		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
 	}
 	if c.cfg.InternalTrafficSecret != nil {
@@ -490,6 +491,7 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	var keyPath, certPath string
 	if c.cfg.TLSKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
 		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
 	}
 

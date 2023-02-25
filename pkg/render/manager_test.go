@@ -138,9 +138,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		))
 
-		Expect(esProxy.VolumeMounts).To(HaveLen(1))
+		Expect(esProxy.VolumeMounts).To(HaveLen(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
 
 		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())
@@ -355,9 +357,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	Describe("public ca bundle", func() {
-		var (
-			cfg *render.ManagerConfiguration
-		)
+		var cfg *render.ManagerConfiguration
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -407,7 +407,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 			rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", "true")
 		})
-
 	})
 
 	It("should render multicluster settings properly", func() {
@@ -455,9 +454,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
 		rtest.ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
-		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
+		Expect(esProxy.VolumeMounts).To(HaveLen(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
 
 		Expect(len(voltron.VolumeMounts)).To(Equal(4))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))

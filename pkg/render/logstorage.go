@@ -64,10 +64,16 @@ const (
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
+	// TigeraLinseedSecret is the name of the secret that holds the TLS key pair mounted into Linseed.
+	// The secret contains server key and certificate.
+	TigeraLinseedSecret = "tigera-secure-linseed-cert"
+
 	// TigeraElasticsearchGatewaySecret is the TLS key pair that is mounted by Elasticsearch gateway.
 	TigeraElasticsearchGatewaySecret = "tigera-secure-elasticsearch-cert"
+
 	// TigeraElasticsearchInternalCertSecret is the TLS key pair that is mounted by the Elasticsearch pods.
 	TigeraElasticsearchInternalCertSecret = "tigera-secure-internal-elasticsearch-cert"
+
 	// TigeraKibanaCertSecret is the TLS key pair that is mounted by the Kibana pods.
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 
@@ -153,21 +159,27 @@ const (
 	caVolumeName = "elasticsearch-certs"
 )
 
-var ElasticsearchSelector = fmt.Sprintf("elasticsearch.k8s.elastic.co/cluster-name == '%s'", ElasticsearchName)
-var ElasticsearchEntityRule = v3.EntityRule{
-	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
-	Selector:          ElasticsearchSelector,
-	Ports:             []numorstring.Port{{MinPort: ElasticsearchDefaultPort, MaxPort: ElasticsearchDefaultPort}},
-}
+var (
+	ElasticsearchSelector   = fmt.Sprintf("elasticsearch.k8s.elastic.co/cluster-name == '%s'", ElasticsearchName)
+	ElasticsearchEntityRule = v3.EntityRule{
+		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+		Selector:          ElasticsearchSelector,
+		Ports:             []numorstring.Port{{MinPort: ElasticsearchDefaultPort, MaxPort: ElasticsearchDefaultPort}},
+	}
+)
+
 var InternalElasticsearchEntityRule = v3.EntityRule{
 	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
 	Selector:          ElasticsearchSelector,
 	Ports:             []numorstring.Port{{MinPort: ElasticsearchInternalPort, MaxPort: ElasticsearchInternalPort}},
 }
-var KibanaEntityRule = networkpolicy.CreateEntityRule(KibanaNamespace, KibanaName, KibanaPort)
-var KibanaSourceEntityRule = networkpolicy.CreateSourceEntityRule(KibanaNamespace, KibanaName)
-var ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
-var ESCuratorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, EsCuratorName)
+
+var (
+	KibanaEntityRule            = networkpolicy.CreateEntityRule(KibanaNamespace, KibanaName, KibanaPort)
+	KibanaSourceEntityRule      = networkpolicy.CreateSourceEntityRule(KibanaNamespace, KibanaName)
+	ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
+	ESCuratorSourceEntityRule   = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, EsCuratorName)
+)
 
 var log = logf.Log.WithName("render")
 
@@ -536,7 +548,6 @@ func (es elasticsearchComponent) javaOpts() string {
 			"-Djavax.net.ssl.trustStoreType=BCFKS "+
 			"-Djavax.net.ssl.trustStorePassword=%s "+
 			"-Dorg.bouncycastle.fips.approved_only=true", javaOpts, es.cfg.KeyStoreSecret.Data[ElasticsearchKeystoreEnvName])
-
 	}
 	return javaOpts
 }
@@ -1358,7 +1369,6 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 
 		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-
 			Name:      csrVolumeNameHTTP,
 			MountPath: "/mnt/elastic-internal/http-certs/",
 		})
@@ -1792,6 +1802,11 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}...)
@@ -1821,6 +1836,12 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Destination: elasticSearchIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.LinseedSourceEntityRule,
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{

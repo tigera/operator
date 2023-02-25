@@ -102,6 +102,11 @@ var (
 		Image:   "tigera/es-gateway",
 	}
 
+	ComponentLinseed = component{
+		Version: "feature-multi-tenant-elasticsearch",
+		Image:   "tigera/linseed",
+	}
+
 	ComponentFluentd = component{
 		Version: "master",
 		Image:   "tigera/fluentd",
@@ -301,6 +306,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentLinseed,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,

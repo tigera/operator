@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName,
+		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
@@ -376,7 +376,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	fluentdPrometheusTLS, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
+
+	// fluentdKeyPair is the key pair fluentd presents to identify itself
+	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -401,8 +403,18 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraLinseedSecret, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Linseed certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate, linseedCertificate)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
@@ -535,7 +547,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Installation:         installation,
 		ClusterDomain:        r.clusterDomain,
 		OSType:               rmeta.OSTypeLinux,
-		MetricsServerTLS:     fluentdPrometheusTLS,
+		FluentdKeyPair:       fluentdKeyPair,
 		TrustedBundle:        trustedBundle,
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
@@ -549,7 +561,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			Namespace:       render.LogCollectorNamespace,
 			ServiceAccounts: []string{render.FluentdNodeName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(fluentdPrometheusTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -777,6 +789,7 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 		FetchInterval: interval,
 	}, nil
 }
+
 func getSysLogCertificate(client client.Client) (certificatemanagement.CertificateInterface, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{

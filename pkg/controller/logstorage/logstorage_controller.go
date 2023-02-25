@@ -862,7 +862,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			clusterConfig,
 			ctx,
 			hdler,
-			r.clusterDomain,
 			keyPairs.metricsServer,
 			trustedBundle,
 		)

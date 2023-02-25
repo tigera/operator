@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,21 +16,22 @@ package logstorage
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 )
 
-func (r *ReconcileLogStorage) createESGateway(
+func (r *ReconcileLogStorage) createLinseed(
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,
@@ -38,12 +39,12 @@ func (r *ReconcileLogStorage) createESGateway(
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
-	gatewayKeyPair certificatemanagement.KeyPairInterface,
+	linseedKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, error) {
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch admin user secret contains too many entries", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("secret should have exactly one entry. found %d", len(esAdminUserSecret.Data)), nil, reqLogger)
 		return reconcile.Result{}, false, nil
 	}
 
@@ -53,30 +54,23 @@ func (r *ReconcileLogStorage) createESGateway(
 		break
 	}
 
-	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create kube-controllers secrets for Elasticsearch gateway", err, reqLogger)
-		return reconcile.Result{}, false, err
+	cfg := &linseed.Config{
+		Installation:    install,
+		PullSecrets:     pullSecrets,
+		TrustedBundle:   trustedBundle,
+		ClusterDomain:   r.clusterDomain,
+		KeyPair:         linseedKeyPair,
+		ESAdminUserName: esAdminUserName,
 	}
 
-	cfg := &esgateway.Config{
-		Installation:               install,
-		PullSecrets:                pullSecrets,
-		TrustedBundle:              trustedBundle,
-		KubeControllersUserSecrets: []*corev1.Secret{kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret},
-		ClusterDomain:              r.clusterDomain,
-		EsAdminUserName:            esAdminUserName,
-		ESGatewayKeyPair:           gatewayKeyPair,
-	}
+	linseedComponent := linseed.Linseed(cfg)
 
-	esGatewayComponent := esgateway.EsGateway(cfg)
-
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
+	if err := imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
-	for _, comp := range []render.Component{esGatewayComponent} {
+	for _, comp := range []render.Component{linseedComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, false, err

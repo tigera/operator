@@ -41,13 +41,17 @@ import (
 )
 
 const (
-	LogCollectorNamespace                    = "tigera-fluentd"
-	FluentdFilterConfigMapName               = "fluentd-filters"
-	FluentdFilterFlowName                    = "flow"
-	FluentdFilterDNSName                     = "dns"
-	S3FluentdSecretName                      = "log-collector-s3-credentials"
-	S3KeyIdName                              = "key-id"
-	S3KeySecretName                          = "key-secret"
+	LogCollectorNamespace      = "tigera-fluentd"
+	FluentdFilterConfigMapName = "fluentd-filters"
+	FluentdFilterFlowName      = "flow"
+	FluentdFilterDNSName       = "dns"
+	S3FluentdSecretName        = "log-collector-s3-credentials"
+	S3KeyIdName                = "key-id"
+	S3KeySecretName            = "key-secret"
+
+	// FluentdPrometheusTLSSecretName is the name of the secret containing the key pair fluentd presents to identify itself.
+	// Somewhat confusingly, this is named the prometheus TLS key pair because that was the first
+	// use-case for this credential. However, it is used on all TLS connections served by fluentd.
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
@@ -144,20 +148,20 @@ type EksCloudwatchLogConfig struct {
 
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
-	LogCollector     *operatorv1.LogCollector
-	ESSecrets        []*corev1.Secret
-	ESClusterConfig  *relasticsearch.ClusterConfig
-	S3Credential     *S3Credential
-	SplkCredential   *SplunkCredential
-	Filters          *FluentdFilters
-	EKSConfig        *EksCloudwatchLogConfig
-	PullSecrets      []*corev1.Secret
-	Installation     *operatorv1.InstallationSpec
-	ClusterDomain    string
-	OSType           rmeta.OSType
-	MetricsServerTLS certificatemanagement.KeyPairInterface
-	TrustedBundle    certificatemanagement.TrustedBundle
-	ManagedCluster   bool
+	LogCollector    *operatorv1.LogCollector
+	ESSecrets       []*corev1.Secret
+	ESClusterConfig *relasticsearch.ClusterConfig
+	S3Credential    *S3Credential
+	SplkCredential  *SplunkCredential
+	Filters         *FluentdFilters
+	EKSConfig       *EksCloudwatchLogConfig
+	PullSecrets     []*corev1.Secret
+	Installation    *operatorv1.InstallationSpec
+	ClusterDomain   string
+	OSType          rmeta.OSType
+	FluentdKeyPair  certificatemanagement.KeyPairInterface
+	TrustedBundle   certificatemanagement.TrustedBundle
+	ManagedCluster  bool
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -446,8 +450,8 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 
 	annots := c.cfg.TrustedBundle.HashAnnotations()
 
-	if c.cfg.MetricsServerTLS != nil {
-		annots[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
+	if c.cfg.FluentdKeyPair != nil {
+		annots[c.cfg.FluentdKeyPair.HashAnnotationKey()] = c.cfg.FluentdKeyPair.HashAnnotationValue()
 	}
 	if c.cfg.S3Credential != nil {
 		annots[s3CredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.S3Credential)
@@ -459,8 +463,8 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.cfg.Filters)
 	}
 	var initContainers []corev1.Container
-	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(LogCollectorNamespace))
+	if c.cfg.FluentdKeyPair != nil && c.cfg.FluentdKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.FluentdKeyPair.InitContainer(LogCollectorNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -546,8 +550,8 @@ func (c *fluentdComponent) container() corev1.Container {
 
 	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 
-	if c.cfg.MetricsServerTLS != nil {
-		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
+	if c.cfg.FluentdKeyPair != nil {
+		volumeMounts = append(volumeMounts, c.cfg.FluentdKeyPair.VolumeMount(c.SupportedOSType()))
 	}
 
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
@@ -596,6 +600,9 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
+		{Name: "LINSEED_ENABLED", Value: "true"},
+		{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+		{Name: "LINSEED_CA_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
@@ -770,8 +777,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
-			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
-			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.FluentdKeyPair.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.FluentdKeyPair.VolumeMountCertificateFilePath()},
 		)
 	}
 	return envs
@@ -860,8 +867,8 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-	if c.cfg.MetricsServerTLS != nil {
-		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
+	if c.cfg.FluentdKeyPair != nil {
+		volumes = append(volumes, c.cfg.FluentdKeyPair.Volume())
 	}
 	volumes = append(volumes, trustedBundleVolume(c.cfg.TrustedBundle))
 
@@ -1131,6 +1138,16 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
 				Selector:          networkpolicy.KubernetesAppSelector("tigera-secure-es-gateway"),
 				NotPorts:          networkpolicy.Ports(5554),
+			},
+		})
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Deny,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{},
+			Destination: v3.EntityRule{
+				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+				Selector:          networkpolicy.KubernetesAppSelector("tigera-linseed"),
+				NotPorts:          networkpolicy.Ports(8444),
 			},
 		})
 		egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)

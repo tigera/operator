@@ -64,7 +64,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp.json")
 
-		var expectedResources = []resourceTestObj{
+		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 			{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 			{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
@@ -261,7 +261,16 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	Expect(deployment).NotTo(BeNil())
 
 	// Check containers
-	Expect(deployment.Spec.Template.Spec.Containers).To(ConsistOf(expectedContainers()))
+	expected := expectedContainers()
+	actual := deployment.Spec.Template.Spec.Containers
+	Expect(len(actual)).To(Equal(len(expected)))
+	Expect(actual[0].Env).To(ConsistOf(expected[0].Env))
+	Expect(actual[0].VolumeMounts).To(ConsistOf(expected[0].VolumeMounts))
+	Expect(actual[0].ReadinessProbe).To(Equal(expected[0].ReadinessProbe))
+	Expect(actual[0].LivenessProbe).To(Equal(expected[0].LivenessProbe))
+	Expect(actual[0].SecurityContext).To(Equal(expected[0].SecurityContext))
+	Expect(actual[0].Name).To(Equal(expected[0].Name))
+	Expect(actual).To(ConsistOf(expected))
 
 	// Check init containers
 	if useCSR {
@@ -308,7 +317,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}))
-
 }
 
 func expectedVolumes(useCSR bool) []corev1.Volume {
@@ -344,23 +352,24 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 	})
 	return volumes
 }
+
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{
 			Name: DeploymentName,
 			SecurityContext: &corev1.SecurityContext{
+				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 				AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 				Privileged:               ptr.BoolToPtr(false),
-				RunAsGroup:               ptr.Int64ToPtr(0),
 				RunAsNonRoot:             ptr.BoolToPtr(true),
-				RunAsUser:                ptr.Int64ToPtr(1001),
+				RunAsGroup:               ptr.Int64ToPtr(10001),
+				RunAsUser:                ptr.Int64ToPtr(10001),
+				SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 			},
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path:   "/health",
-						Port:   intstr.FromInt(TargetPort),
-						Scheme: corev1.URISchemeHTTPS,
+					Exec: &corev1.ExecAction{
+						Command: []string{"/linseed", "-ready"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -368,10 +377,8 @@ func expectedContainers() []corev1.Container {
 			},
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path:   "/health",
-						Port:   intstr.FromInt(TargetPort),
-						Scheme: corev1.URISchemeHTTPS,
+					Exec: &corev1.ExecAction{
+						Command: []string{"/linseed", "-live"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -393,6 +400,10 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:  "LINSEED_HTTPS_KEY",
 					Value: "/tigera-secure-linseed-cert/tls.key",
+				},
+				{
+					Name:  "LINSEED_CA_CERT",
+					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 				{
 					Name:  "LINSEED_ELASTIC_ENDPOINT",

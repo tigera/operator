@@ -93,7 +93,7 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version: "feature-multi-tenant-elasticsearch",
+		Version: "master",
 		Image:   "tigera/es-proxy",
 	}
 
@@ -108,7 +108,7 @@ var (
 	}
 
 	ComponentFluentd = component{
-		Version: "feature-multi-tenant-elasticsearch",
+		Version: "master",
 		Image:   "tigera/fluentd",
 	}
 

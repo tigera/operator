@@ -268,7 +268,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
 	}
 	if pc.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount(pc.SupportedOSType()))
+		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMounts(pc.SupportedOSType())...)
 	}
 
 	return corev1.Container{

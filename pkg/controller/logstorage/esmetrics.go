@@ -39,7 +39,6 @@ func (r *ReconcileLogStorage) createESMetrics(
 	clusterConfig *relasticsearch.ClusterConfig,
 	ctx context.Context,
 	hdler utils.ComponentHandler,
-	clusterDomain string,
 	serverKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, error) {

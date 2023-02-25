@@ -451,6 +451,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 		)
 	}
+
 	// UID 999 is used in kube-controller Dockerfile.
 	sc := securitycontext.NewNonRootContext()
 	sc.RunAsUser = ptr.Int64ToPtr(999)

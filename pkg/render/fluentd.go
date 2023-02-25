@@ -596,6 +596,9 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
+		{Name: "LINSEED_ENABLED", Value: "true"},
+		{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+		{Name: "LINSEED_CA_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
@@ -1131,6 +1134,16 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
 				Selector:          networkpolicy.KubernetesAppSelector("tigera-secure-es-gateway"),
 				NotPorts:          networkpolicy.Ports(5554),
+			},
+		})
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Deny,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{},
+			Destination: v3.EntityRule{
+				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+				Selector:          networkpolicy.KubernetesAppSelector("tigera-linseed"),
+				NotPorts:          networkpolicy.Ports(8444),
 			},
 		})
 		egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)

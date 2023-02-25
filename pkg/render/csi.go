@@ -126,7 +126,8 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				Name: "KUBE_NODE_NAME",
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName"},
+						FieldPath: "spec.nodeName",
+					},
 				},
 			},
 		},

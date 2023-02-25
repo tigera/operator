@@ -93,7 +93,7 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version: "master",
+		Version: "feature-multi-tenant-elasticsearch",
 		Image:   "tigera/es-proxy",
 	}
 
@@ -102,8 +102,13 @@ var (
 		Image:   "tigera/es-gateway",
 	}
 
+	ComponentLinseed = component{
+		Version: "feature-multi-tenant-elasticsearch",
+		Image:   "tigera/linseed",
+	}
+
 	ComponentFluentd = component{
-		Version: "master",
+		Version: "feature-multi-tenant-elasticsearch",
 		Image:   "tigera/fluentd",
 	}
 
@@ -301,6 +306,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentLinseed,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,

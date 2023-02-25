@@ -48,9 +48,13 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		LabelSelector:     &metav1.LabelSelector{MatchLabels: labels},
 	}
 
-	weightedPodAffinity := corev1.WeightedPodAffinityTerm{Weight: 100,
-		PodAffinityTerm: corev1.PodAffinityTerm{LabelSelector: &metav1.LabelSelector{MatchLabels: labels},
-			TopologyKey: "topology.kuberneted.io/zone"}}
+	weightedPodAffinity := corev1.WeightedPodAffinityTerm{
+		Weight: 100,
+		PodAffinityTerm: corev1.PodAffinityTerm{
+			LabelSelector: &metav1.LabelSelector{MatchLabels: labels},
+			TopologyKey:   "topology.kuberneted.io/zone",
+		},
+	}
 
 	affinity := &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{weightedPodAffinity}}}
 
@@ -314,5 +318,4 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
-
 })

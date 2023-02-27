@@ -60,7 +60,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
 
@@ -876,7 +875,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			secret := &corev1.Secret{}
 			cfgMap := &corev1.ConfigMap{}
 
-			Expect(c.Get(ctx, client.ObjectKey{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: common.CalicoNamespace}, cfgMap)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, client.ObjectKey{Name: "tigera-ca-bundle", Namespace: common.CalicoNamespace}, cfgMap)).ShouldNot(HaveOccurred())
 			Expect(cfgMap.GetOwnerReferences()).To(HaveLen(1))
 
 			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())

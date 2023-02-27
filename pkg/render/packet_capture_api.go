@@ -17,6 +17,7 @@ package render
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -30,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -45,6 +47,7 @@ const (
 	PacketCaptureClusterRoleBindingName = PacketCaptureName
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
+	PacketCapturePodSecurityPolicyName  = PacketCaptureName
 	PacketCapturePolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PacketCaptureName
 	PacketCapturePort                   = 8444
 
@@ -66,6 +69,9 @@ type PacketCaptureApiConfiguration struct {
 	TrustedBundle               certificatemanagement.TrustedBundle
 	ClusterDomain               string
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type packetCaptureApiComponent struct {
@@ -122,6 +128,10 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 	if pc.cfg.TrustedBundle != nil {
 		objs = append(objs, pc.cfg.TrustedBundle.ConfigMap(PacketCaptureNamespace))
 	}
+
+	if pc.cfg.UsePSP {
+		objs = append(objs, pc.podSecurityPolicy())
+	}
 	return objs, nil
 }
 
@@ -152,7 +162,7 @@ func (pc *packetCaptureApiComponent) service() *corev1.Service {
 	}
 }
 
-func (pc *packetCaptureApiComponent) serviceAccount() client.Object {
+func (pc *packetCaptureApiComponent) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: PacketCaptureServiceAccountName, Namespace: PacketCaptureNamespace},
@@ -183,6 +193,15 @@ func (pc *packetCaptureApiComponent) clusterRole() client.Object {
 		},
 	}
 
+	if pc.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PacketCapturePodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -192,7 +211,7 @@ func (pc *packetCaptureApiComponent) clusterRole() client.Object {
 	}
 }
 
-func (pc *packetCaptureApiComponent) clusterRoleBinding() client.Object {
+func (pc *packetCaptureApiComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -213,7 +232,11 @@ func (pc *packetCaptureApiComponent) clusterRoleBinding() client.Object {
 	}
 }
 
-func (pc *packetCaptureApiComponent) deployment() client.Object {
+func (pc *packetCaptureApiComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(PacketCapturePodSecurityPolicyName)
+}
+
+func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -268,7 +291,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
 	}
 	if pc.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount(pc.SupportedOSType()))
+		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMounts(pc.SupportedOSType())...)
 	}
 
 	return corev1.Container{

@@ -1,4 +1,4 @@
-// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/render/logstorage/linseed"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -29,6 +26,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 func (r *ReconcileLogStorage) createLinseed(
@@ -41,6 +40,7 @@ func (r *ReconcileLogStorage) createLinseed(
 	ctx context.Context,
 	linseedKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
+	usePSP bool,
 ) (reconcile.Result, bool, error) {
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
@@ -61,6 +61,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		ClusterDomain:   r.clusterDomain,
 		KeyPair:         linseedKeyPair,
 		ESAdminUserName: esAdminUserName,
+		UsePSP:          usePSP,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

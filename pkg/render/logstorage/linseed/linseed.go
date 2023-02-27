@@ -1,4 +1,4 @@
-// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,27 +18,26 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
-
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -47,6 +46,7 @@ const (
 	ServiceAccountName         = "tigera-linseed"
 	RoleName                   = "tigera-linseed"
 	ServiceName                = "tigera-linseed"
+	PodSecurityPolicyName      = "tigera-linseed"
 	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
 	PortName                   = "tigera-linseed"
 	TargetPort                 = 8444
@@ -89,6 +89,9 @@ type Config struct {
 
 	// ESAdminUserName is the admin user used to connect to Elastic
 	ESAdminUserName string
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -123,6 +126,9 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedRoleBinding())
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
+	if l.cfg.UsePSP {
+		toCreate = append(toCreate, l.linseedPodSecurityPolicy())
+	}
 	return toCreate, toDelete
 }
 
@@ -134,26 +140,37 @@ func (l *linseed) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (l linseed) linseedRole() *rbacv1.Role {
+func (l *linseed) linseedRole() *rbacv1.Role {
+	rules := []rbacv1.PolicyRule{
+		{
+			// Linseed uses subject access review to perform authorization of clients.
+			APIGroups:     []string{"authorization.k8s.io"},
+			Resources:     []string{"subjectaccessreview"},
+			ResourceNames: []string{},
+			Verbs:         []string{"create"},
+		},
+	}
+
+	if l.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
 			Namespace: l.namespace,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Linseed uses subject access review to perform authorization of clients.
-				APIGroups:     []string{"authorization.k8s.io"},
-				Resources:     []string{"subjectaccessreview"},
-				ResourceNames: []string{},
-				Verbs:         []string{"create"},
-			},
-		},
+		Rules: rules,
 	}
 }
 
-func (l linseed) linseedRoleBinding() *rbacv1.RoleBinding {
+func (l *linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -175,7 +192,11 @@ func (l linseed) linseedRoleBinding() *rbacv1.RoleBinding {
 	}
 }
 
-func (l linseed) linseedDeployment() *appsv1.Deployment {
+func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(PodSecurityPolicyName)
+}
+
+func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
@@ -214,10 +235,10 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.TrustedBundle.Volume(),
 	}
 
-	volumeMounts := []corev1.VolumeMount{
+	volumeMounts := append(
+		l.cfg.TrustedBundle.VolumeMounts(l.SupportedOSType()),
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
-		l.cfg.TrustedBundle.VolumeMount(l.SupportedOSType()),
-	}
+	)
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
@@ -287,7 +308,7 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 	}
 }
 
-func (l linseed) linseedServiceAccount() *corev1.ServiceAccount {
+func (l *linseed) linseedServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceAccountName,
@@ -296,7 +317,7 @@ func (l linseed) linseedServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (l linseed) linseedService() *corev1.Service {
+func (l *linseed) linseedService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

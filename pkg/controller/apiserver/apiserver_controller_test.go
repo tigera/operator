@@ -46,7 +46,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
 
@@ -211,9 +210,9 @@ var _ = Describe("apiserver controller tests", func() {
 					MountPath: fmt.Sprintf("/%s", packetCaptureSecret.Name),
 				},
 				{
-					Name:      certificatemanagement.TrustedCertConfigMapName,
+					Name:      "tigera-ca-bundle",
 					ReadOnly:  true,
-					MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+					MountPath: "/etc/pki/tls/certs",
 				},
 			}))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")

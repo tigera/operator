@@ -74,6 +74,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				ClusterDomain: "cluster.local",
 				ServerTLS:     secret,
 				TrustedBundle: bundle,
+				UsePSP:        true,
 			}
 		})
 
@@ -102,8 +103,11 @@ var _ = Describe("Elasticsearch metrics", func() {
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "ServiceAccount"},
+				{"tigera-elasticsearch-metrics", "tigera-elasticsearch", "rbac.authorization.k8s.io", "v1", "Role"},
+				{"tigera-elasticsearch-metrics", "tigera-elasticsearch", "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+				{"tigera-elasticsearch-metrics", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
-			Expect(len(resources)).To(Equal(len(expectedResources)))
+			Expect(resources).To(HaveLen(len(expectedResources)))
 			for i, expectedRes := range expectedResources {
 				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
@@ -204,10 +208,10 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
-								VolumeMounts: []corev1.VolumeMount{
+								VolumeMounts: append(
+									cfg.TrustedBundle.VolumeMounts(meta.OSTypeLinux),
 									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
-									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
-								},
+								),
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
 							Volumes: []corev1.Volume{
@@ -241,6 +245,18 @@ var _ = Describe("Elasticsearch metrics", func() {
 				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
+		})
+
+		It("should render properly when PSP is not supported by the cluster", func() {
+			cfg.UsePSP = false
+			component := ElasticsearchMetrics(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			// Should not contain any PodSecurityPolicies
+			for _, r := range resources {
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+			}
 		})
 
 		It("should apply controlPlaneNodeSelector correctly", func() {

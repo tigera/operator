@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	"github.com/openshift/library-go/pkg/crypto"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -42,7 +43,6 @@ import (
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -80,7 +80,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
@@ -463,21 +463,23 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("creating and validating a trusted certificate bundle")
 			trustedBundle := certificateManager.CreateTrustedBundle(cert, cert2, byo, legacy)
 			Expect(trustedBundle.Volume()).To(Equal(corev1.Volume{
-				Name: certificatemanagement.TrustedCertConfigMapName,
+				Name: "tigera-ca-bundle",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: certificatemanagement.TrustedCertConfigMapName},
+						LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-ca-bundle"},
 					},
 				},
 			}))
-			Expect(trustedBundle.VolumeMount(rmeta.OSTypeLinux)).To(Equal(corev1.VolumeMount{
-				Name:      certificatemanagement.TrustedCertConfigMapName,
-				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
-				ReadOnly:  true,
+			Expect(trustedBundle.VolumeMounts(rmeta.OSTypeLinux)).To(Equal([]corev1.VolumeMount{
+				{
+					Name:      "tigera-ca-bundle",
+					MountPath: "/etc/pki/tls/certs",
+					ReadOnly:  true,
+				},
 			}))
 			Expect(trustedBundle.MountPath()).To(Equal(certificatemanagement.TrustedCertBundleMountPath))
 			configMap := trustedBundle.ConfigMap(appNs)
-			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: appNs}))
+			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: appNs}))
 			Expect(configMap.TypeMeta).To(Equal(metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}))
 			By("counting the number of pem blocks in the configmap")
 			bundle := configMap.Data[certificatemanagement.TrustedCertConfigMapKeyName]
@@ -498,7 +500,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 			Expect(err).NotTo(HaveOccurred())
 			configMap := trustedBundle.ConfigMap(appNs)
-			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: appNs}))
+			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: appNs}))
 			Expect(configMap.TypeMeta).To(Equal(metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}))
 			By("counting the number of pem blocks in the configmap")
 			bundle := configMap.Data[certificatemanagement.RHELRootCertificateBundleName]

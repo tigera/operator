@@ -193,7 +193,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.Openshift),
+		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP),
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
@@ -208,8 +208,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
 		objs = append(objs, c.securityContextConstraints())
-	} else if c.cfg.UsePSP {
-		// If we're not running openshift, we need to add pod security policies.
+	}
+
+	if c.cfg.UsePSP {
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
@@ -277,11 +278,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
 	if c.cfg.KeyValidatorConfig != nil {
-		trustedVolumeMount := c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())
-		trustedVolumeMount.MountPath = "/etc/ssl/certs/"
-		return append(c.cfg.KeyValidatorConfig.RequiredVolumeMounts(), trustedVolumeMount)
+		return c.cfg.KeyValidatorConfig.RequiredVolumeMounts()
 	}
-	return []corev1.VolumeMount{}
+	return nil
 }
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
@@ -474,10 +473,8 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 }
 
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
-	mounts := []corev1.VolumeMount{
-		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
-		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
-	}
+	mounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
 
 	if c.cfg.ManagementCluster != nil {
 		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()))
@@ -503,10 +500,10 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 	}
 
-	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+	volumeMounts := append(
+		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
-	}
+	)
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
 	}
@@ -562,7 +559,7 @@ func managerServiceAccount() *corev1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbacv1.ClusterRole {
+func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -673,7 +670,7 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 		)
 	}
 
-	if !openshift {
+	if usePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
@@ -742,9 +739,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 }
 
 func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-manager")
-	return psp
+	return podsecuritypolicy.NewBasePolicy("tigera-manager")
 }
 
 // Allow users to access Calico Enterprise Manager.

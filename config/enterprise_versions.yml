@@ -35,7 +35,7 @@ components:
     version: master
   linseed:
     image: tigera/linseed
-    version: feature-multi-tenant-elasticsearch
+    version: master
   es-gateway:
     image: tigera/es-gateway
     version: master

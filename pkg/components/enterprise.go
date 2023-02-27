@@ -103,7 +103,7 @@ var (
 	}
 
 	ComponentLinseed = component{
-		Version: "feature-multi-tenant-elasticsearch",
+		Version: "master",
 		Image:   "tigera/linseed",
 	}
 

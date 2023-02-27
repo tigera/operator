@@ -30,12 +30,23 @@ import (
 )
 
 var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
-	var installation *operatorv1.InstallationSpec
+	var (
+		installation *operatorv1.InstallationSpec
+		cfg          *applicationlayer.Config
+	)
 
 	BeforeEach(func() {
 		// Initialize a default installation spec.
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
+		}
+
+		cfg = &applicationlayer.Config{
+			PullSecrets:  nil,
+			Installation: installation,
+			OsType:       rmeta.OSTypeLinux,
+			LogsEnabled:  true,
+			UsePSP:       true,
 		}
 	})
 
@@ -50,21 +61,17 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "application-layer", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 		// Should render the correct resources.
-		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OsType:       rmeta.OSTypeLinux,
-			LogsEnabled:  true,
-		})
+		component := applicationlayer.ApplicationLayer(cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
 
-		i := 0
-		for _, expectedRes := range expectedResources {
+		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
 		}
 
 		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -192,6 +199,18 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(len(collectorVolMounts)).To(Equal(len(expectedCollectorVolMounts)))
 		for _, expected := range expectedCollectorVolMounts {
 			Expect(collectorVolMounts).To(ContainElement(expected))
+		}
+	})
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := applicationlayer.ApplicationLayer(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 

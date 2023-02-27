@@ -162,14 +162,12 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// If there are no Egress Gateway resources, return.
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if len(egws) == 0 {
-		objects := []client.Object{}
-
+		var objects []client.Object
 		if r.provider == operatorv1.ProviderOpenShift {
-			scc := egressgateway.SecurityContextConstraints()
-			objects = append(objects, scc)
-		} else if r.usePSP {
-			psp := egressgateway.PodSecurityPolicy()
-			objects = append(objects, psp)
+			objects = append(objects, egressgateway.SecurityContextConstraints())
+		}
+		if r.usePSP {
+			objects = append(objects, egressgateway.PodSecurityPolicy())
 		}
 		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
 		if err != nil {

@@ -215,13 +215,16 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Openshift {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
-	} else if c.cfg.UsePSP {
+	}
+
+	if c.cfg.UsePSP {
 		complianceObjs = append(complianceObjs,
 			c.complianceBenchmarkerPodSecurityPolicy(),
 			c.complianceControllerPodSecurityPolicy(),
 			c.complianceReporterPodSecurityPolicy(),
 			c.complianceServerPodSecurityPolicy(),
-			c.complianceSnapshotterPodSecurityPolicy())
+			c.complianceSnapshotterPodSecurityPolicy(),
+		)
 	}
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
@@ -271,7 +274,7 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -432,9 +435,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 }
 
 func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceControllerName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(ComplianceControllerName)
 }
 
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
@@ -453,7 +454,7 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -558,8 +559,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 }
 
 func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("compliance-reporter")
+	psp := podsecuritypolicy.NewBasePolicy("compliance-reporter")
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
@@ -595,7 +595,7 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -749,9 +749,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 }
 
 func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceServerName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(ComplianceServerName)
 }
 
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
@@ -811,7 +809,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -908,9 +906,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 }
 
 func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceSnapshotterName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(ComplianceSnapshotterName)
 }
 
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
@@ -934,7 +930,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -1089,8 +1085,7 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 }
 
 func (c *complianceComponent) complianceBenchmarkerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("compliance-benchmarker")
+	psp := podsecuritypolicy.NewBasePolicy("compliance-benchmarker")
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
 		{

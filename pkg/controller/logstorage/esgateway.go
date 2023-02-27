@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 func (r *ReconcileLogStorage) createESGateway(
@@ -40,6 +40,7 @@ func (r *ReconcileLogStorage) createESGateway(
 	ctx context.Context,
 	gatewayKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
+	usePSP bool,
 ) (reconcile.Result, bool, error) {
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
@@ -67,6 +68,7 @@ func (r *ReconcileLogStorage) createESGateway(
 		ClusterDomain:              r.clusterDomain,
 		EsAdminUserName:            esAdminUserName,
 		ESGatewayKeyPair:           gatewayKeyPair,
+		UsePSP:                     usePSP,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

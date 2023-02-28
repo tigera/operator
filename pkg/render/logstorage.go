@@ -1519,9 +1519,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 									Env:             es.curatorEnvVars(),
 									LivenessProbe:   elasticCuratorLivenessProbe,
 									SecurityContext: securitycontext.NewNonRootContext(),
-									VolumeMounts: []corev1.VolumeMount{
-										es.cfg.TrustedBundle.VolumeMount(es.SupportedOSType()),
-									},
+									VolumeMounts:    es.cfg.TrustedBundle.VolumeMounts(es.SupportedOSType()),
 								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.cfg.ClusterDomain, es.SupportedOSType()),
 							},
 							ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),

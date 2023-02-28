@@ -1,4 +1,4 @@
-// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,14 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
-
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -33,12 +25,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -214,10 +211,10 @@ func (l linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.TrustedBundle.Volume(),
 	}
 
-	volumeMounts := []corev1.VolumeMount{
+	volumeMounts := append(
+		l.cfg.TrustedBundle.VolumeMounts(l.SupportedOSType()),
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
-		l.cfg.TrustedBundle.VolumeMount(l.SupportedOSType()),
-	}
+	)
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()

@@ -1,4 +1,4 @@
-// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,34 +18,32 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/ptr"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/testutils"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type resourceTestObj struct {
@@ -436,13 +434,13 @@ func expectedContainers() []corev1.Container {
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
-					Name:      render.TigeraLinseedSecret,
-					MountPath: "/tigera-secure-linseed-cert",
+					Name:      "tigera-ca-bundle",
+					MountPath: "/etc/pki/tls/certs",
 					ReadOnly:  true,
 				},
 				{
-					Name:      "tigera-ca-bundle",
-					MountPath: "/etc/pki/tls/certs/",
+					Name:      render.TigeraLinseedSecret,
+					MountPath: "/tigera-secure-linseed-cert",
 					ReadOnly:  true,
 				},
 			},

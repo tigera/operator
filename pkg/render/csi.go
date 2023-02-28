@@ -35,14 +35,11 @@ import (
 )
 
 const (
-	CSIDriverName                = "csi.tigera.io"
-	CSITolerationControlPlaneKey = "node-role.kubernetes.io/control-plane"
-	CSITolerationMasterKey       = "node-role.kubernetes.io/master"
-	CSITolerationOperator        = "Exists"
-	CSIDaemonSetName             = "csi-node-driver"
-	CSIDaemonSetNamespace        = "calico-system"
-	CSIContainerName             = "calico-csi"
-	CSIRegistrarContainerName    = "csi-node-driver-registrar"
+	CSIDriverName             = "csi.tigera.io"
+	CSIDaemonSetName          = "csi-node-driver"
+	CSIDaemonSetNamespace     = "calico-system"
+	CSIContainerName          = "calico-csi"
+	CSIRegistrarContainerName = "csi-node-driver-registrar"
 )
 
 type CSIConfiguration struct {
@@ -91,20 +88,7 @@ func (c *csiComponent) csiDriver() *v1.CSIDriver {
 }
 
 func (c *csiComponent) csiTolerations() []corev1.Toleration {
-	operator := corev1.TolerationOperator(CSITolerationOperator)
-	tolerations := []corev1.Toleration{
-		{
-			Key:      CSITolerationControlPlaneKey,
-			Operator: operator,
-			Effect:   corev1.TaintEffectNoSchedule,
-		},
-		{
-			Key:      CSITolerationMasterKey,
-			Operator: operator,
-			Effect:   corev1.TaintEffectNoSchedule,
-		},
-	}
-	return tolerations
+	return rmeta.TolerateAll
 }
 
 func (c *csiComponent) csiContainers() []corev1.Container {

@@ -24,6 +24,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -84,6 +85,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				},
 				ClusterDomain:   clusterDomain,
 				EsAdminUserName: "elastic",
+				UsePSP:          true,
 			}
 		})
 
@@ -99,6 +101,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
+				{"tigera-esgateway", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 			}
 
 			component := EsGateway(cfg)
@@ -141,12 +144,25 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
+				{"tigera-esgateway", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 			}
 
 			component := EsGateway(cfg)
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
+		})
+
+		It("should render properly when PSP is not supported by the cluster", func() {
+			cfg.UsePSP = false
+			component := EsGateway(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			// Should not contain any PodSecurityPolicies
+			for _, r := range resources {
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+			}
 		})
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {

@@ -96,7 +96,7 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSBaseline),
+		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
 		allowTigeraPolicyForPolicyRecommendation(pr.cfg),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)

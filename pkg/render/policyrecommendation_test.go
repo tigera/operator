@@ -194,43 +194,4 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})
-
-	// TODO(dimitrin): Add test back
-	// Context("allow-tigera rendering", func() {
-	// 	policyNames := []types.NamespacedName{
-	// 		{Name: "allow-tigera.tigera-policy-recommendation", Namespace: "tigera-policy-recommendation"},
-	// 	}
-
-	// 	getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-	// 		if policyName.Name == "allow-tigera.tigera-policy-recommendation" {
-	// 			return testutils.SelectPolicyByClusterTypeAndProvider(scenario,
-	// 				expectedPRPolicyForUnmanaged,
-	// 				expectedPRPolicyForUnmanagedOCP,
-	// 				expectedPRPolicyForManaged,
-	// 				expectedPRPolicyForManagedOCP,
-	// 			)
-	// 		}
-
-	// 		return nil
-	// 	}
-
-	// 	DescribeTable("should render allow-tigera policy",
-	// 		func(scenario testutils.AllowTigeraScenario) {
-	// 			cfg.Openshift = scenario.Openshift
-	// 			cfg.ManagedCluster = scenario.ManagedCluster
-	// 			component := render.PolicyRecommendation(cfg)
-	// 			resources, _ := component.Objects()
-
-	// 			for _, policyName := range policyNames {
-	// 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
-	// 				expectedPolicy := getExpectedPolicy(policyName, scenario)
-	// 				Expect(policy).To(Equal(expectedPolicy))
-	// 			}
-	// 		},
-	// 		Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-	// 		Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
-	// 		Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-	// 		Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
-	// 	)
-	// })
 })

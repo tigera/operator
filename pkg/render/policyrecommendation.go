@@ -16,6 +16,7 @@ package render
 
 import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	appsv1 "k8s.io/api/apps/v1"
@@ -26,8 +27,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/authentication"
-	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -46,14 +45,9 @@ const (
 	PolicyRecommendationNamespace              = PolicyRecommendationName
 	PolicyRecommendationServiceAccountName     = PolicyRecommendationName
 	PolicyRecommendationPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
-	PolicyRecommendationPort                   = 8444
 
-	PolicyRecommendationCertSecret     = "tigera-policy-recommendation-server-tls"
 	PolicyRecommendationControllerName = "policy-recommendation-controller"
 	PolicyRecommendationInstallerName  = "policy-recommendation-es-installer"
-
-	PolicyRecommendationControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationControllerName
-	PolicyRecommendationInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "policy-recommendation-elastic"
 )
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
@@ -61,10 +55,7 @@ type PolicyRecommendationConfiguration struct {
 	ClusterDomain                        string
 	ESClusterConfig                      *relasticsearch.ClusterConfig
 	ESSecrets                            []*corev1.Secret
-	HasNoLicense                         bool
 	Installation                         *operatorv1.InstallationSpec
-	KeyValidatorConfig                   authentication.KeyValidatorConfig
-	ManagementClusterConnection          *operatorv1.ManagementClusterConnection
 	ManagedCluster                       bool
 	Openshift                            bool
 	PolicyRecommendationServerCertSecret certificatemanagement.KeyPairInterface
@@ -105,9 +96,6 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		// In order to switch to a restricted namespace, we need to set:
-		// - securityContext.capabilities.drop=["ALL"]
-		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSBaseline),
 		allowTigeraPolicyForPolicyRecommendation(pr.cfg),
 	}
@@ -122,14 +110,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
 
-	if pr.cfg.KeyValidatorConfig != nil {
-		objs = append(objs, secret.ToRuntimeObjects(pr.cfg.KeyValidatorConfig.RequiredSecrets(PolicyRecommendationNamespace)...)...)
-		objs = append(objs, configmap.ToRuntimeObjects(pr.cfg.KeyValidatorConfig.RequiredConfigMaps(PolicyRecommendationNamespace)...)...)
-	}
-
-	if pr.cfg.TrustedBundle != nil {
-		objs = append(objs, pr.cfg.TrustedBundle.ConfigMap(PolicyRecommendationNamespace))
-	}
 	return objs, nil
 }
 
@@ -219,36 +199,21 @@ func (pr *policyRecommendationComponent) controllerContainer() corev1.Container 
 
 	sc := securitycontext.NewNonRootContext()
 
-	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
-	// write logs for Fluentd.
 	volumeMounts := []corev1.VolumeMount{
 		pr.cfg.TrustedBundle.VolumeMount(pr.SupportedOSType()),
+		pr.cfg.PolicyRecommendationServerCertSecret.VolumeMount(pr.SupportedOSType()),
 	}
 
 	return corev1.Container{
-		Name:  "policy-recommendation-controller",
-		Image: pr.image,
-		Env:   envs,
-		// Needed for permissions to write to the audit log
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/healthz",
-						"liveness",
-					},
-				},
-			},
-			InitialDelaySeconds: 5,
-		},
+		Name:            "policy-recommendation-controller",
+		Image:           pr.image,
+		Env:             envs,
 		SecurityContext: sc,
 		VolumeMounts:    volumeMounts,
 	}
 }
 
 func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
-	var replicas int32 = 1
-
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -256,7 +221,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Namespace: PolicyRecommendationNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: ptr.Int32ToPtr(1),
 			Template: *pr.deploymentPodTemplate(),
 		},
 	}
@@ -270,6 +235,7 @@ func (pr *policyRecommendationComponent) deploymentPodTemplate() *corev1.PodTemp
 
 	volumes := []corev1.Volume{
 		pr.cfg.TrustedBundle.Volume(),
+		pr.cfg.PolicyRecommendationServerCertSecret.Volume(),
 	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(
@@ -281,7 +247,7 @@ func (pr *policyRecommendationComponent) deploymentPodTemplate() *corev1.PodTemp
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        PolicyRecommendationName,
 			Namespace:   PolicyRecommendationNamespace,
-			Annotations: pr.intrusionDetectionAnnotations(),
+			Annotations: pr.policyRecommendationAnnotations(),
 		},
 		Spec: corev1.PodSpec{
 			Tolerations:        pr.cfg.Installation.ControlPlaneTolerations,
@@ -296,8 +262,14 @@ func (pr *policyRecommendationComponent) deploymentPodTemplate() *corev1.PodTemp
 	}, pr.cfg.ESClusterConfig, pr.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 }
 
-func (pr *policyRecommendationComponent) intrusionDetectionAnnotations() map[string]string {
-	return pr.cfg.TrustedBundle.HashAnnotations()
+func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[string]string {
+	annotations := pr.cfg.TrustedBundle.HashAnnotations()
+
+	pr.cfg.TrustedBundle.HashAnnotations()
+	if pr.cfg.PolicyRecommendationServerCertSecret != nil {
+		annotations[pr.cfg.PolicyRecommendationServerCertSecret.HashAnnotationKey()] = pr.cfg.PolicyRecommendationServerCertSecret.HashAnnotationValue()
+	}
+	return annotations
 }
 
 func (pr *policyRecommendationComponent) serviceAccount() client.Object {
@@ -335,27 +307,6 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 
-	ingressRules := []v3.Rule{}
-	if cfg.ManagedCluster {
-		ingressRules = append(ingressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   GuardianSourceEntityRule,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(PolicyRecommendationPort),
-			},
-		})
-	} else {
-		ingressRules = append(ingressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   ManagerSourceEntityRule,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(PolicyRecommendationPort),
-			},
-		})
-	}
-
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -366,8 +317,8 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(PolicyRecommendationName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress:  ingressRules,
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Ingress:  []v3.Rule{},
 			Egress:   egressRules,
 		},
 	}

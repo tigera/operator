@@ -31,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -63,10 +62,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	licenseAPIReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
 
-	// Create the reconciler
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
-	// Create a new controller
 	controller, err := controller.New(render.PolicyRecommendationControllerName, mgr,
 		controller.Options{
 			Reconciler: reconciler,
@@ -360,56 +357,23 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 
-	var policyRecommendationServerCertSecret certificatemanagement.KeyPairInterface
-	if managementClusterConnection == nil {
-		policyRecommendationServerCertSecret, err = certificateManager.GetOrCreateKeyPair(
-			r.client,
-			render.PolicyRecommendationCertSecret,
-			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(render.PolicyRecommendationName, render.PolicyRecommendationNamespace, r.clusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.PolicyRecommendationCertSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
 	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
-
-	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authenticationCR status: %s", authenticationCR.Status.State), nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
-
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, reqLogger)
-		return reconcile.Result{}, err
-	}
 
 	reqLogger.V(3).Info("rendering components")
 	hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:                        r.clusterDomain,
-		ESClusterConfig:                      esClusterConfig,
-		ESSecrets:                            esSecrets,
-		HasNoLicense:                         hasNoLicense,
-		Installation:                         network,
-		KeyValidatorConfig:                   keyValidatorConfig,
-		ManagementClusterConnection:          managementClusterConnection,
-		PolicyRecommendationServerCertSecret: policyRecommendationServerCertSecret,
-		PullSecrets:                          pullSecrets,
-		TrustedBundle:                        trustedBundle,
-		Openshift:                            openshift,
-		UsePSP:                               r.usePSP,
+		ClusterDomain:   r.clusterDomain,
+		ESClusterConfig: esClusterConfig,
+		ESSecrets:       esSecrets,
+		Installation:    network,
+		PullSecrets:     pullSecrets,
+		TrustedBundle:   trustedBundle,
+		Openshift:       openshift,
+		UsePSP:          r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -432,17 +396,17 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		}),
 	}
 
+	if hasNoLicense {
+		log.V(4).Info("PolicyRecommendation is not activated as part of this license")
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	for _, cmp := range components {
 		if err := handler.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	}
-
-	if hasNoLicense {
-		log.V(4).Info("PolicyRecommendation is not activated as part of this license")
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	// Clear the degraded bit if we've reached this far.

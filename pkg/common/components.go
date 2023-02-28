@@ -14,6 +14,10 @@
 
 package common
 
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
 // MergeMaps merges current and desired maps. If both current and desired maps contain the same key, the
 // desired map's value is used.
 func MergeMaps(current, desired map[string]string) map[string]string {
@@ -32,4 +36,18 @@ func MapExistsOrInitialize(m map[string]string) map[string]string {
 		return m
 	}
 	return make(map[string]string)
+}
+
+// MergeOwnerReferences merges desired and current owner references, removing the duplicates.
+func MergeOwnerReferences(desired, current []metav1.OwnerReference) []metav1.OwnerReference {
+	mergedOwnerReferences := append(desired, current...)
+	allKeys := make(map[metav1.OwnerReference]bool)
+	refList := []metav1.OwnerReference{}
+	for _, item := range mergedOwnerReferences {
+		if _, ok := allKeys[item]; !ok {
+			refList = append(refList, item)
+			allKeys[item] = true
+		}
+	}
+	return refList
 }

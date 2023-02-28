@@ -33,4 +33,6 @@ const (
 	TiersFeature = "tiers"
 	// EgressAccessControl enables creation/update of NetworkPolicy with Domains
 	EgressAccessControlFeature = "egress-access-control"
+	// MultipleOwnersLabel used to indicate multiple owner references.
+	MultipleOwnersLabel = "operator.tigera.io/multipleOwners"
 )

@@ -130,6 +130,12 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			},
 			})).NotTo(HaveOccurred())
 
+			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			})).NotTo(HaveOccurred())
+
 			var routeTableIndex uint32 = 1
 			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "one"}, Spec: crdv1.ExternalNetworkSpec{
 				RouteTableIndex: &routeTableIndex,
@@ -257,6 +263,9 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			for _, elem := range expectedEgwEnvVar {
 				Expect(egwContainer.Env).To(ContainElement(elem))
 			}
+			fc := &crdv1.FelixConfiguration{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, fc)).NotTo(HaveOccurred())
+			Expect(fc.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
 
 			By("setting AWS elastic IPs")
 			nativeIP := operatorv1.NativeIPEnabled
@@ -282,17 +291,13 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				},
 			}
 			Expect(c.Create(ctx, egw_blue)).NotTo(HaveOccurred())
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, fc)).NotTo(HaveOccurred())
 			vxlanPort := 4800
 			vxlanVni := 4100
-			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-				Spec: crdv1.FelixConfigurationSpec{
-					EgressIPVXLANPort: &vxlanPort,
-					EgressIPVXLANVNI:  &vxlanVni,
-				},
-			})).NotTo(HaveOccurred())
+			fc.Spec.EgressIPVXLANPort = &vxlanPort
+			fc.Spec.EgressIPVXLANVNI = &vxlanVni
+			Expect(c.Update(ctx, fc)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())

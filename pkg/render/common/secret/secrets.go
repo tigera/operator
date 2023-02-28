@@ -85,7 +85,6 @@ func CopyToNamespace(ns string, oSecrets ...*corev1.Secret) []*corev1.Secret {
 	for _, s := range oSecrets {
 		x := s.DeepCopy()
 		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
-		x.ObjectMeta.OwnerReferences = append(x.ObjectMeta.OwnerReferences, s.ObjectMeta.OwnerReferences...)
 
 		secrets = append(secrets, x)
 	}

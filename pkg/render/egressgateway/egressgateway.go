@@ -33,6 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
@@ -104,7 +105,7 @@ func (c *component) SupportedOSType() rmeta.OSType {
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := []client.Object{}
 	objectsToDelete := []client.Object{}
-	objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(c.config.EgressGW.Namespace, c.config.PullSecrets...)...)...)
+	objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.egwPullSecrets()...)...)
 	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
 	if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
@@ -287,6 +288,18 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 		{Name: "EGRESS_VXLAN_PORT", Value: fmt.Sprintf("%d", c.config.VXLANPort)},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
 	}
+}
+
+func (c *component) egwPullSecrets() []*corev1.Secret {
+	var secrets []*corev1.Secret
+	for _, secret := range c.config.PullSecrets {
+		x := secret.DeepCopy()
+		x.ObjectMeta = metav1.ObjectMeta{Name: secret.Name, Namespace: c.config.EgressGW.Namespace}
+		x.ObjectMeta.Labels = common.MapExistsOrInitialize(x.ObjectMeta.Labels)
+		x.ObjectMeta.Labels[common.MultipleOwnersLabel] = "true"
+		secrets = append(secrets, x)
+	}
+	return secrets
 }
 
 func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {

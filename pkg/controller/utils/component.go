@@ -37,7 +37,6 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
@@ -73,13 +72,14 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 		return fmt.Errorf("Object is not ObjectMetaAccessor")
 	}
 
+	multipleOwners := checkIfMultipleOwnersLabel(om.GetObjectMeta())
 	// Add owner ref for controller owned resources,
 	switch obj.(type) {
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 	default:
 		if c.cr != nil && !skipAddingOwnerReference(c.cr, om.GetObjectMeta()) {
-			if skipAddingControllerReference(c.cr, obj) {
+			if multipleOwners {
 				if err := controllerutil.SetOwnerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
 					return err
 				}
@@ -119,6 +119,11 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 
 		// Otherwise, if it was not found, we should create it and move on.
 		logCtx.V(2).Info("Object does not exist, creating it", "error", err)
+		if multipleOwners {
+			labels := om.GetObjectMeta().GetLabels()
+			delete(labels, common.MultipleOwnersLabel)
+			om.GetObjectMeta().SetLabels(labels)
+		}
 		err = c.client.Create(ctx, obj)
 		if err != nil {
 			return err
@@ -304,21 +309,10 @@ func skipAddingOwnerReference(owner, controlled metav1.Object) bool {
 	return false
 }
 
-// skipAddingControllerReference returns true if a owner, controlled object should
-// add owner reference and not controller reference. This is needed when a controlled
-// object can have multiple owners.
-func skipAddingControllerReference(owner metav1.Object, controlled client.Object) bool {
-	switch owner.(type) {
-	case *operatorv1.EgressGateway:
-		switch controlled.(type) {
-		case *v1.Secret:
-			return true
-		default:
-			return false
-		}
-	default:
-		return false
-	}
+func checkIfMultipleOwnersLabel(controlled metav1.Object) bool {
+	labels := controlled.GetLabels()
+	_, ok := labels[common.MultipleOwnersLabel]
+	return ok
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.
@@ -354,6 +348,16 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	desiredLabels := common.MapExistsOrInitialize(desiredMeta.GetLabels())
 	mergedLabels := common.MergeMaps(currentLabels, desiredLabels)
 	desiredMeta.SetLabels(mergedLabels)
+
+	if checkIfMultipleOwnersLabel(desiredMeta) {
+		currentOwnerReferences := currentMeta.GetOwnerReferences()
+		desiredOwnerReferences := desiredMeta.GetOwnerReferences()
+		mergedOwnerReferences := common.MergeOwnerReferences(desiredOwnerReferences, currentOwnerReferences)
+		desiredMeta.SetOwnerReferences(mergedOwnerReferences)
+		labels := desiredMeta.GetLabels()
+		delete(labels, common.MultipleOwnersLabel)
+		desiredMeta.SetLabels(labels)
+	}
 
 	switch desired.(type) {
 	case *v1.Service:

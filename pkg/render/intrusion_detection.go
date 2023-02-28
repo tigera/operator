@@ -375,7 +375,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Value: c.cfg.ESClusterConfig.ClusterName(),
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())},
+		VolumeMounts: c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 	}
 }
 
@@ -643,9 +643,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
-	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
-	}
+	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	if c.syslogForwardingIsEnabled() {
 		envs = append(envs,
 			corev1.EnvVar{Name: "IDS_ENABLE_EVENT_FORWARDING", Value: "true"},
@@ -1516,15 +1514,11 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 								},
 							},
 							Command: []string{"/anomaly-detection-api"},
-							VolumeMounts: []corev1.VolumeMount{
-								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+							VolumeMounts: append(
+								c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
-								{
-									MountPath: adAPIStoragePath,
-									Name:      adAPIStorageVolumeName,
-									ReadOnly:  false,
-								},
-							},
+								corev1.VolumeMount{MountPath: adAPIStoragePath, Name: adAPIStorageVolumeName, ReadOnly: false},
+							),
 						},
 					},
 				},
@@ -1646,10 +1640,10 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 			Privileged: ptr.BoolToPtr(false),
 		},
 		Env: envVars,
-		VolumeMounts: []corev1.VolumeMount{
-			c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+		VolumeMounts: append(
+			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
-		},
+		),
 	}
 
 	return corev1.PodTemplate{

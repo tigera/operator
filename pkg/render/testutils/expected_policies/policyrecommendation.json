@@ -1,0 +1,80 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.tigera-policy-recommendation",
+    "namespace": "tigera-policy-recommendation"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "k8s-app == 'tigera-policy-recommendation'",
+    "types": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-manager'",
+          "namespaceSelector": "name == 'tigera-manager'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      }
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'default'",
+          "selector": "provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes'",
+          "ports": [
+            443,
+            6443,
+            12388
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
+          "selector": "k8s-app == 'tigera-secure-es-gateway'",
+          "ports": [
+            5554
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'tigera-dex'",
+          "selector": "k8s-app == 'tigera-dex'",
+          "ports": [
+            5556
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      }
+    ]
+  }
+}

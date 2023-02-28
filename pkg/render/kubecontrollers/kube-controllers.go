@@ -608,7 +608,7 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 		mounts = append(mounts, c.cfg.ManagerInternalSecret.VolumeMount(c.SupportedOSType()))
 	}
 	if c.cfg.TrustedBundle != nil {
-		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
 	return mounts
 }

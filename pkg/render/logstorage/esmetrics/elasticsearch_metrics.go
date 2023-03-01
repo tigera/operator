@@ -19,6 +19,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,17 +33,20 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	ElasticsearchMetricsSecret          = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
-	ElasticsearchMetricsServerTLSSecret = "tigera-ee-elasticsearch-metrics-tls"
-	ElasticsearchMetricsName            = "tigera-elasticsearch-metrics"
-	ElasticsearchMetricsPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-metrics"
-	ElasticsearchMetricsPort            = 9081
+	ElasticsearchMetricsSecret                = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
+	ElasticsearchMetricsServerTLSSecret       = "tigera-ee-elasticsearch-metrics-tls"
+	ElasticsearchMetricsName                  = "tigera-elasticsearch-metrics"
+	ElasticsearchMetricsRoleName              = "tigera-elasticsearch-metrics"
+	ElasticsearchMetricsPodSecurityPolicyName = "tigera-elasticsearch-metrics"
+	ElasticsearchMetricsPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-metrics"
+	ElasticsearchMetricsPort                  = 9081
 )
 
 var ESMetricsSourceEntityRule = networkpolicy.CreateSourceEntityRule(render.ElasticsearchNamespace, ElasticsearchMetricsName)
@@ -60,6 +65,9 @@ type Config struct {
 	ClusterDomain        string
 	ServerTLS            certificatemanagement.KeyPairInterface
 	TrustedBundle        certificatemanagement.TrustedBundle
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type elasticsearchMetrics struct {
@@ -89,6 +97,13 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
+	if e.cfg.UsePSP {
+		toCreate = append(toCreate,
+			e.metricsRole(),
+			e.metricsRoleBinding(),
+			e.metricsPodSecurityPolicy(),
+		)
+	}
 	return toCreate, objsToDelete
 }
 
@@ -108,6 +123,50 @@ func (e *elasticsearchMetrics) Ready() bool {
 
 func (e *elasticsearchMetrics) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
+}
+
+func (e *elasticsearchMetrics) metricsRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchMetricsRoleName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{ElasticsearchMetricsPodSecurityPolicyName},
+			},
+		},
+	}
+}
+
+func (e *elasticsearchMetrics) metricsRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchMetricsRoleName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "Role",
+			Name:     ElasticsearchMetricsRoleName,
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ElasticsearchMetricsName,
+				Namespace: render.ElasticsearchNamespace,
+			},
+		},
+	}
+}
+
+func (e *elasticsearchMetrics) metricsPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(ElasticsearchMetricsPodSecurityPolicyName)
 }
 
 func (e *elasticsearchMetrics) metricsService() *corev1.Service {

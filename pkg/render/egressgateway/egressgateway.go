@@ -296,6 +296,9 @@ func (c *component) egwPullSecrets() []*corev1.Secret {
 		x := secret.DeepCopy()
 		x.ObjectMeta = metav1.ObjectMeta{Name: secret.Name, Namespace: c.config.EgressGW.Namespace}
 		x.ObjectMeta.Labels = common.MapExistsOrInitialize(x.ObjectMeta.Labels)
+		// Each pull secret is shared across all of the EGW deployments in this namespace.
+		// As such, we mark it as having multiple owners so that we maintain multiple owner references
+		// when creating the secret so that it will only be GC'd when all of its owners have been deleted.
 		x.ObjectMeta.Labels[common.MultipleOwnersLabel] = "true"
 		secrets = append(secrets, x)
 	}

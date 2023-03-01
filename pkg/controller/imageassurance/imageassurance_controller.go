@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 package imageassurance
 
@@ -10,6 +10,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/imageassurance/configsync"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -25,7 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -38,8 +38,11 @@ import (
 
 var log = logf.Log.WithName("controller_image_assurance")
 
-// service accounts created by kube-controller for image assurance components for API access
-var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
+// names of service account, secret tokens created by kube-controller for image assurance components for API access
+var apiAccessResources = []string{
+	imageassurance.ScannerAPIAccessResourceName,
+	imageassurance.RuntimeCleanerAPIAccessResourceName,
+}
 
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -74,6 +77,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
+
+	r.configSyncer = configsync.NewSyncer(opts.ShutdownContext, rcimageassurance.APIEndpoint, r.client)
+
 	r.status.Run(opts.ShutdownContext)
 	return r
 }
@@ -104,19 +110,18 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
-	// Watch secrets created for postgres in operator namespace.
-	for _, s := range []string{
-		imageassurance.APICertSecretName,
-		render.ManagerInternalTLSSecretName,
-		certificatemanagement.CASecretName,
-	} {
+	// Watch secrets created for postgres and API access (by kube controllers) in operator namespace.
+	var watchedSecrets []string
+	watchedSecrets = append(watchedSecrets, []string{imageassurance.APICertSecretName, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName}...)
+	watchedSecrets = append(watchedSecrets, apiAccessResources...)
+	for _, s := range watchedSecrets {
 		if err = utils.AddSecretsWatch(c, s, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", s, err)
 		}
 	}
 
 	// watch for service accounts created in operator namespace by kube-controllers for image assurance.
-	for _, sa := range apiTokenServiceAccounts {
+	for _, sa := range apiAccessResources {
 		if err = utils.AddServiceAccountWatch(c, sa, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", sa, err)
 		}
@@ -126,7 +131,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
 
-	for _, role := range []string{imageassurance.PodWatcherClusterRoleName, imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName} {
+	for _, role := range []string{imageassurance.ScannerAPIAccessResourceName, imageassurance.AdmissionControllerAPIClusterRoleName,
+		imageassurance.RuntimeCleanerAPIAccessResourceName} {
 		if err = utils.AddClusterRoleWatch(c, role); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", role, err)
 		}
@@ -153,6 +159,7 @@ type ReconcileImageAssurance struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	configSyncer    configsync.Syncer
 }
 
 // Reconcile reads that state of the cluster for a ImageAssurance object and makes changes
@@ -245,7 +252,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
+	scannerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.ScannerAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
@@ -253,21 +260,21 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	if scannerAPIToken == nil {
-		reqLogger.Info("Waiting for scanner api access service account secret to be available")
-		r.status.SetDegraded("Waiting for scanner api access service account secret to be available", "")
+		reqLogger.Info("Waiting for scanner API access service account secret to be available")
+		r.status.SetDegraded("Waiting for scanner API access service account secret to be available", "")
 		return reconcile.Result{}, nil
 	}
 
-	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName)
+	runtimeCleanerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.RuntimeCleanerAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
+		r.status.SetDegraded("Error in retrieving runtime cleaner API access token", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if podWatcherAPIToken == nil {
-		reqLogger.Info("Waiting for pod watcher api access service account secret to be available")
-		r.status.SetDegraded("Waiting for pod watcher api access service account secret to be available", "")
+	if runtimeCleanerAPIToken == nil {
+		reqLogger.Info("Waiting for runtime cleaner API access service account secret to be available")
+		r.status.SetDegraded("Waiting for runtime cleaner API access service account secret to be available", "")
 		return reconcile.Result{}, nil
 	}
 
@@ -306,16 +313,16 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	config := &imageassurance.Config{
-		PullSecrets:              pullSecrets,
-		Installation:             installation,
-		OsType:                   rmeta.OSTypeLinux,
-		ConfigurationConfigMap:   configurationConfigMap,
-		TLSSecret:                tlsSecret,
-		KeyValidatorConfig:       kvc,
-		TrustedCertBundle:        trustedBundle,
-		ScannerAPIAccessToken:    scannerAPIToken,
-		PodWatcherAPIAccessToken: podWatcherAPIToken,
-		APIProxyURL:              ia.Spec.APIProxyURL,
+		PullSecrets:                  pullSecrets,
+		Installation:                 installation,
+		OsType:                       rmeta.OSTypeLinux,
+		ConfigurationConfigMap:       configurationConfigMap,
+		TLSSecret:                    tlsSecret,
+		KeyValidatorConfig:           kvc,
+		TrustedCertBundle:            trustedBundle,
+		ScannerAPIAccessToken:        scannerAPIToken,
+		RuntimeCleanerAPIAccessToken: runtimeCleanerAPIToken,
+		APIProxyURL:                  ia.Spec.APIProxyURL,
 	}
 
 	components := []render.Component{
@@ -341,6 +348,10 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 			return reconcile.Result{}, err
 		}
 	}
+
+	// Start the period sync of image assurance settings to the config map. Note that this function can be called multiple
+	// times, once started the subsequent calls are no ops.
+	r.configSyncer.StartPeriodicSync()
 
 	// Clear the degraded bit since we've reached this far.
 	r.status.ClearDegraded()
@@ -381,30 +392,4 @@ func getAPICertSecret(client client.Client, clusterDomain string) (*corev1.Secre
 	}
 
 	return secret, nil
-}
-
-// getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-// It takes in service account name and uses it to validate the existence of the service account and return the token if present.
-func getAPIAccessToken(c client.Client, serviceAccountName string) ([]byte, error) {
-	sa := &corev1.ServiceAccount{}
-	if err := c.Get(context.Background(), types.NamespacedName{
-		Name:      serviceAccountName,
-		Namespace: common.OperatorNamespace(),
-	}, sa); err != nil {
-		return nil, err
-	}
-
-	if len(sa.Secrets) == 0 {
-		return nil, nil
-	}
-
-	saSecret := &corev1.Secret{}
-	if err := c.Get(context.Background(), types.NamespacedName{
-		Name:      sa.Secrets[0].Name,
-		Namespace: common.OperatorNamespace(),
-	}, saSecret); err != nil {
-		return nil, err
-	}
-
-	return saSecret.Data["token"], nil
 }

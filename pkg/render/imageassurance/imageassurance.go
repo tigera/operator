@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 package imageassurance
 
@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/clusterrole"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -22,26 +21,28 @@ import (
 )
 
 const (
-	NameSpaceImageAssurance              = "tigera-image-assurance"
-	ResourceNameImageAssuranceAPI        = "tigera-image-assurance-api"
-	ResourceNameImageAssuranceScanner    = "tigera-image-assurance-scanner"
-	ResourceNameImageAssuranceDBMigrator = "tigera-image-assurance-db-migrator"
-	ResourceNameImageAssuranceCAW        = "tigera-image-assurance-caw"
-	ResourceNameImageAssurancePodWatcher = "tigera-image-assurance-pod-watcher"
+	NameSpaceImageAssurance                  = "tigera-image-assurance"
+	ResourceNameImageAssuranceAPI            = "tigera-image-assurance-api"
+	ResourceNameImageAssuranceScanner        = "tigera-image-assurance-scanner"
+	ResourceNameImageAssuranceDBMigrator     = "tigera-image-assurance-db-migrator"
+	ResourceNameImageAssuranceCAW            = "tigera-image-assurance-caw"
+	ResourceNameImageAssurancePodWatcher     = "tigera-image-assurance-pod-watcher"
+	ResourceNameImageAssuranceRuntimeCleaner = "tigera-image-assurance-runtime-cleaner"
 
 	// APICertSecretName is tls certificates for the tigera-manager and the image assurance api.
 	APICertSecretName = "tigera-image-assurance-api-cert-pair"
 
-	ScannerClusterRoleName             = "tigera-image-assurance-scanner-api-access"
-	ScannerClusterRoleBindingName      = "tigera-image-assurance-scanner-api-access"
-	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
-	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
-	ScannerCLIClusterRoleName          = "tigera-image-assurance-scanner-cli-api-access"
+	ScannerAPIAccessResourceName = "tigera-image-assurance-scanner-api-access"
+	ScannerAPIAccessSecretName   = "scanner-image-assurance-api-token"
+	ScannerCLIClusterRoleName    = "tigera-image-assurance-scanner-cli-api-access"
 
-	PodWatcherClusterRoleName             = "tigera-image-assurance-pod-watcher-api-access"
-	PodWatcherClusterRoleBindingName      = "tigera-image-assurance-pod-watcher-api-access"
-	PodWatcherAPIAccessServiceAccountName = "tigera-image-assurance-pod-watcher-api-access"
-	PodWatcherAPIAccessSecretName         = "pod-watcher-image-assurance-api-token"
+	PodWatcherClusterRoleName     = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherAPIAccessSecretName = "pod-watcher-image-assurance-api-token"
+
+	RuntimeCleanerAPIAccessResourceName = "tigera-image-assurance-runtime-cleaner-api-access"
+	RuntimeCleanerAPIAccessSecretName   = "runtime-cleaner-image-assurance-api-token"
+
+	OperatorAPIAccessServiceAccountName = "tigera-image-assurance-operator-api-access"
 
 	mountPathAPITLSCerts = "/certs/https/"
 
@@ -77,12 +78,12 @@ type Config struct {
 	ScannerAPIAccessToken  []byte
 
 	// Calculated internal fields.
-	tlsHash         string
-	apiProxyImage   string
-	scannerImage    string
-	podWatcherImage string
+	tlsHash             string
+	apiProxyImage       string
+	scannerImage        string
+	runtimeCleanerImage string
 
-	PodWatcherAPIAccessToken []byte
+	RuntimeCleanerAPIAccessToken []byte
 
 	APIProxyURL string
 }
@@ -113,7 +114,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.podWatcherImage, err = components.GetReference(components.ComponentImageAssurancePodWatcher, reg, path, prefix, is)
+	c.config.runtimeCleanerImage, err = components.GetReference(components.ComponentImageAssuranceRuntimeCleaner, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -125,11 +126,6 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-// Objects returns Image Assurance resources to be created or deleted based c.config.NeedsMigrating and c.config.ComponentsUp.
-// When both c.config.NeedsMigrating and c.config.ComponentsUp are true, we need to clean up the api, scanner and pod watcher deployments
-// before proceeding. When only c.config.NeedsMigrating is true, return just the migrator job and associated resources.
-// When both c.config.NeedsMigrating and c.config.ComponentsUp are false, return all resources.
-// Right now we need to clean up CAW deployment for all circumstances because we stop supporting cloud-based scanning.
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 
@@ -171,16 +167,23 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.crAdaptorClusterRole(),
 	)
 
-	objs = append(objs,
-		c.podWatcherServiceAccount(),
-		c.podWatcherRole(),
-	)
+	objs = append(objs, c.operatorClusterRole())
+
+	// Keep the cluster roles (now empty) so kube controllers doesn't fail when it can't find them.
+	// TODO Remove once kube controllers no longer relies on this.
 	objs = append(objs, clusterrole.ToRuntimeObjects(c.podWatcherClusterRoles()...)...)
+
+	// runtime cleaner resources
 	objs = append(objs,
-		c.podWatcherRoleBinding(),
-		c.podWatcherClusterRoleBinding(),
-		c.podWatcherAPIAccessTokenSecret(),
-		c.podWatcherDeployment(),
+		c.runtimeCleanerServiceAccount(),
+		c.runtimeCleanerRole(),
+	)
+	objs = append(objs, clusterrole.ToRuntimeObjects(c.runtimeCleanerClusterRoles()...)...)
+	objs = append(objs,
+		c.runtimeCleanerRoleBinding(),
+		c.runtimeCleanerClusterRoleBinding(),
+		c.runtimeCleanerAPIAccessTokenSecret(),
+		c.runtimeCleanerDeployment(),
 	)
 
 	if c.config.KeyValidatorConfig != nil {
@@ -188,7 +191,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredConfigMaps(NameSpaceImageAssurance)...)...)
 	}
 
-	return objs, []client.Object{
+	objsToDelete := []client.Object{
 		c.cawDeployment(),
 
 		c.migratorServiceAccount(),
@@ -199,6 +202,20 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.apiRole(),
 		c.apiRoleBinding(),
 		c.apiDeployment()}
+
+	objsToDelete = append(objsToDelete,
+		c.podWatcherServiceAccount(),
+		c.podWatcherRole(),
+	)
+
+	objsToDelete = append(objsToDelete,
+		c.podWatcherRoleBinding(),
+		c.podWatcherClusterRoleBinding(),
+		c.podWatcherAPIAccessTokenSecret(),
+		c.podWatcherDeployment(),
+	)
+
+	return objs, objsToDelete
 }
 
 func (c *component) Ready() bool {

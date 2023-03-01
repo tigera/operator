@@ -5,16 +5,14 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
 
 	"github.com/go-logr/logr"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
@@ -22,7 +20,7 @@ import (
 )
 
 const (
-	ImageAssuranceAPIServiceAccountName = "tigera-image-assurance-intrusion-detection-controller-api-access"
+	ImageAssuranceAPIAccessResourceName = "tigera-image-assurance-intrusion-detection-controller-api-access"
 )
 
 func addCloudWatch(c controller.Controller) error {
@@ -31,6 +29,10 @@ func addCloudWatch(c controller.Controller) error {
 	}
 
 	if err := utils.AddClusterRoleWatch(c, render.IntrusionDetectionControllerImageAssuranceAPIClusterRoleName); err != nil {
+		return err
+	}
+
+	if err := utils.AddSecretsWatch(c, ImageAssuranceAPIAccessResourceName, common.OperatorNamespace()); err != nil {
 		return err
 	}
 
@@ -71,32 +73,23 @@ func (r *ReconcileIntrusionDetection) handleCloudResources(ctx context.Context, 
 		return idcr, nil, err
 	}
 
-	sa := &corev1.ServiceAccount{}
-	if err := r.client.Get(context.Background(), types.NamespacedName{
-		Name:      ImageAssuranceAPIServiceAccountName,
-		Namespace: common.OperatorNamespace(),
-	}, sa); err != nil {
+	iaToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, ImageAssuranceAPIAccessResourceName)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in retrieving image assurance API access token", err.Error())
 		return idcr, nil, err
 	}
 
-	if len(sa.Secrets) == 0 {
-		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", ImageAssuranceAPIServiceAccountName))
-		r.status.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", ImageAssuranceAPIServiceAccountName), "")
+	if iaToken == nil {
+		reqLogger.Info("Waiting for image assurance API access token to be available")
+		r.status.SetDegraded("Waiting for image assurance API access token to be available", "")
 		return idcr, &reconcile.Result{}, nil
-	}
-
-	saSecret := &corev1.Secret{}
-	if err := r.client.Get(context.Background(), types.NamespacedName{
-		Name:      sa.Secrets[0].Name,
-		Namespace: common.OperatorNamespace(),
-	}, saSecret); err != nil {
-		return idcr, nil, err
 	}
 
 	idcr.ImageAssuranceResources = &rcimageassurance.Resources{
 		ConfigurationConfigMap: cm,
 		TLSSecret:              secret,
-		ImageAssuranceToken:    saSecret.Data["token"],
+		ImageAssuranceToken:    iaToken,
 	}
 	reqLogger.Info("Successfully processed resources for Image Assurance")
 

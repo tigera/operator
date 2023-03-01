@@ -33,4 +33,9 @@ const (
 	TiersFeature = "tiers"
 	// EgressAccessControl enables creation/update of NetworkPolicy with Domains
 	EgressAccessControlFeature = "egress-access-control"
+	// MultipleOwnersLabel used to indicate multiple owner references.
+	// If the render code places this label on an object, the object mergeState machinery will merge owner
+	// references with any that already exist on the object rather than replace the owner references. Further
+	// the controller in the owner reference will not be set.
+	MultipleOwnersLabel = "operator.tigera.io/multipleOwners"
 )

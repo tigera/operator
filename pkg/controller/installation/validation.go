@@ -436,6 +436,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify CNILogging to not exist for non-calico cni
+	if cni := instance.Spec.CNI.Type; cni != operatorv1.PluginCalico {
+		if instance.Spec.Logging != nil && instance.Spec.Logging.CNILogging != nil {
+			return fmt.Errorf("Installation spec.Logging.cniLogging is not valid and should not be provided when spec.cni.type is Not Calico")
+		}
+	}
 	return nil
 }
 

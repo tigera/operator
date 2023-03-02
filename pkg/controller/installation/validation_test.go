@@ -485,19 +485,13 @@ var _ = Describe("Installation validation tests", func() {
 				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(30))
+				Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(uint32(30)))
 			})
 			It("with invalid LogFileMaxAgeDays", func() {
-				instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = new(int)
-				*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = -1
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
-				err := validateCustomResource(instance)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError("spec.Logging.cniLogging.logFileMaxAgeDays should be a positive non-zero integer"))
-
+				instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = new(uint32)
 				*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = 0
 				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
-				err = validateCustomResource(instance)
+				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cniLogging.logFileMaxAgeDays should be a positive non-zero integer"))
 			})
@@ -505,19 +499,13 @@ var _ = Describe("Installation validation tests", func() {
 				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(10))
+				Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(uint32(10)))
 			})
 			It("with invalid LogFileMaxCount", func() {
-				instance.Spec.Logging.CNILogging.LogFileMaxCount = new(int)
-				*instance.Spec.Logging.CNILogging.LogFileMaxCount = -1
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
-				err := validateCustomResource(instance)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError("spec.loggingConfig.cniLoggingConfig.logFileMaxCount value should be greater than zero"))
-
+				instance.Spec.Logging.CNILogging.LogFileMaxCount = new(uint32)
 				*instance.Spec.Logging.CNILogging.LogFileMaxCount = 0
 				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
-				err = validateCustomResource(instance)
+				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.loggingConfig.cniLoggingConfig.logFileMaxCount value should be greater than zero"))
 			})

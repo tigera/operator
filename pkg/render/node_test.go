@@ -54,8 +54,8 @@ var (
 	bgpDisabled          = operatorv1.BGPDisabled
 	nonPrivilegedEnabled = operatorv1.NonPrivilegedEnabled
 	logSeverity          = operatorv1.LogLevelDebug
-	logFileMaxAgeDays    = 5
-	logFileMaxCount      = 5
+	logFileMaxAgeDays    = uint32(5)
+	logFileMaxCount      = uint32(5)
 	logFileMaxSize       = resource.MustParse("1Mi")
 )
 

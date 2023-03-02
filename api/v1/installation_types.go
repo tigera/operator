@@ -203,11 +203,11 @@ type CNILogging struct {
 
 	// Default: 30 (days)
 	// +optional
-	LogFileMaxAgeDays *int `json:"logFileMaxAge,omitempty"`
+	LogFileMaxAgeDays *uint32 `json:"logFileMaxAgeDays,omitempty"`
 
 	// Default: 10
 	// +optional
-	LogFileMaxCount *int `json:"logFileMaxCount,omitempty"`
+	LogFileMaxCount *uint32 `json:"logFileMaxCount,omitempty"`
 }
 
 type FIPSMode string

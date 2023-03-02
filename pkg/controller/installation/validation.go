@@ -28,6 +28,8 @@ import (
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -54,6 +56,26 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				),
 			)
 		}
+
+		// validate logging config for calico-cni
+		if instance.Spec.Logging != nil && instance.Spec.Logging.CNILogging != nil {
+			if instance.Spec.Logging.CNILogging.LogFileMaxCount != nil &&
+				*instance.Spec.Logging.CNILogging.LogFileMaxCount <= 0 {
+				return fmt.Errorf("spec.loggingConfig.cniLoggingConfig.logFileMaxCount value should be greater than zero")
+			}
+
+			if instance.Spec.Logging.CNILogging.LogFileMaxSize != nil &&
+				(instance.Spec.Logging.CNILogging.LogFileMaxSize.Format != resource.BinarySI ||
+					instance.Spec.Logging.CNILogging.LogFileMaxSize.Value() <= 0) {
+				return fmt.Errorf("spec.Logging.cniLogging.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei")
+			}
+
+			if instance.Spec.Logging.CNILogging.LogFileMaxAgeDays != nil &&
+				*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays <= 0 {
+				return fmt.Errorf("spec.Logging.cniLogging.logFileMaxAgeDays should be a positive non-zero integer")
+			}
+		}
+
 	case operatorv1.PluginGKE:
 		// The GKE CNI plugin is only supported on GKE or BYO.
 		switch instance.Spec.KubernetesProvider {
@@ -414,6 +436,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify CNILogging to not exist for non-calico cni
+	if cni := instance.Spec.CNI.Type; cni != operatorv1.PluginCalico {
+		if instance.Spec.Logging != nil && instance.Spec.Logging.CNILogging != nil {
+			return fmt.Errorf("Installation spec.Logging.cniLogging is not valid and should not be provided when spec.cni.type is Not Calico")
+		}
+	}
 	return nil
 }
 

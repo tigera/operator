@@ -90,7 +90,7 @@ type KubeControllersConfiguration struct {
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundle
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -238,7 +238,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
 	}
 
@@ -313,7 +313,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 		},
 	}
 
-	if cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -597,9 +597,7 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 }
 
 func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(c.kubeControllerName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(c.kubeControllerName)
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {

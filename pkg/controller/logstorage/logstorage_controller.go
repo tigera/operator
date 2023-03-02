@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,20 +19,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"k8s.io/client-go/kubernetes"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -43,9 +39,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -53,20 +50,22 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
-const ResourceName = "log-storage"
-
 var log = logf.Log.WithName("controller_logstorage")
 
 const (
-	defaultEckOperatorMemorySetting  = "512Mi"
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
 	LogStorageFinalizer              = "tigera.io/eck-cleanup"
+	ResourceName                     = "log-storage"
+
+	defaultEckOperatorMemorySetting = "512Mi"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -609,7 +608,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil || !proceed {
 			return result, err
 		}
-
 		result, proceed, err = r.createEsGateway(
 			install,
 			variant,
@@ -619,6 +617,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger,
 			ctx,
 			certificateManager,
+			r.usePSP,
 		)
 		if err != nil || !proceed {
 			return result, err
@@ -643,6 +642,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			ctx,
 			hdler,
 			r.clusterDomain,
+			r.usePSP,
 		)
 		if err != nil || !proceed {
 			return result, err

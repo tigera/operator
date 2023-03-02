@@ -44,7 +44,6 @@ const (
 type CSIConfiguration struct {
 	Installation *operatorv1.InstallationSpec
 	Terminating  bool
-	Openshift    bool
 	UsePSP       bool
 }
 
@@ -248,7 +247,7 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 		Volumes:          c.csiVolumes(),
 	}
 
-	if !c.cfg.Openshift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		templateSpec.ServiceAccountName = CSIDaemonSetName
 	}
 
@@ -296,36 +295,29 @@ func (c *csiComponent) serviceAccount() *corev1.ServiceAccount {
 // podSecurityPolicy sets up a PodSecurityPolicy for CSI Driver to allow usage of privileged
 // securityContext and hostPath volume.
 func (c *csiComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(CSIDaemonSetName)
+	psp := podsecuritypolicy.NewBasePolicy(CSIDaemonSetName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-
 	return psp
 }
 
 func (c *csiComponent) role() *rbacv1.Role {
-	policyRules := []rbacv1.PolicyRule{}
-
-	// Allow access to the pod security policy in case this is enforced on the cluster
-	if !c.cfg.Openshift && c.cfg.UsePSP {
-		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{CSIDaemonSetName},
-		})
-	}
-
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CSIDaemonSetName,
 			Namespace: CSIDaemonSetNamespace,
 		},
-		Rules: policyRules,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{CSIDaemonSetName},
+			},
+		},
 	}
 }
 
@@ -377,20 +369,17 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objs := []client.Object{}
-
-	objs = append(objs, c.csiDriver())
-	objs = append(objs, c.csiDaemonset())
+	objs := []client.Object{c.csiDriver(), c.csiDaemonset()}
 
 	// create PSP and corresponding clusterrole if it allows, clusterroles are currently
 	// only for attaching the PSP to CSI's DaemonSet, do not render them if the PSPs
 	// are also not rendered
-	if !c.cfg.Openshift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		objs = append(objs,
 			c.serviceAccount(),
-			c.podSecurityPolicy(),
 			c.role(),
 			c.roleBinding(),
+			c.podSecurityPolicy(),
 		)
 	}
 

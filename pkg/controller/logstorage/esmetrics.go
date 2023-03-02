@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	ctx context.Context,
 	hdler utils.ComponentHandler,
 	clusterDomain string,
+	usePSP bool,
 ) (reconcile.Result, bool, error) {
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
 	if err != nil {
@@ -99,6 +100,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		ClusterDomain:        r.clusterDomain,
 		ServerTLS:            serverTLS,
 		TrustedBundle:        trustedBundle,
+		UsePSP:               usePSP,
 	}
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
 	components := []render.Component{esMetricsComponent,

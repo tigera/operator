@@ -5468,17 +5468,19 @@ spec:
                   cniLogging:
                     description: Customized logging specification for calico-cni plugin
                     properties:
-                      logFileMaxAge:
-                        description: 'Default: 30 d'
-                        type: string
+                      logFileMaxAgeDays:
+                        description: 'Default: 30 (days)'
+                        format: int32
+                        type: integer
                       logFileMaxCount:
                         description: 'Default: 10'
+                        format: int32
                         type: integer
                       logFileMaxSize:
                         anyOf:
                         - type: integer
                         - type: string
-                        description: 'Default: 100 m'
+                        description: 'Default: 100Mi'
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                       logSeverity:
@@ -13208,17 +13210,19 @@ spec:
                         description: Customized logging specification for calico-cni
                           plugin
                         properties:
-                          logFileMaxAge:
-                            description: 'Default: 30 d'
-                            type: string
+                          logFileMaxAgeDays:
+                            description: 'Default: 30 (days)'
+                            format: int32
+                            type: integer
                           logFileMaxCount:
                             description: 'Default: 10'
+                            format: int32
                             type: integer
                           logFileMaxSize:
                             anyOf:
                             - type: integer
                             - type: string
-                            description: 'Default: 100 m'
+                            description: 'Default: 100Mi'
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             x-kubernetes-int-or-string: true
                           logSeverity:

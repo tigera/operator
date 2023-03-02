@@ -138,8 +138,8 @@ var _ = Describe("Rendering tests", func() {
 	var internalManagerKeyPair certificatemanagement.KeyPairInterface
 	var logSeverity = operatorv1.LogLevelInfo
 	var logFileMaxSize = resource.MustParse("100Mi")
-	var logFileMaxAgeDays = 30
-	var logFileMaxCount = 10
+	var logFileMaxAgeDays uint32 = 30
+	var logFileMaxCount uint32 = 10
 	one := intstr.FromInt(1)
 	miMode := operatorv1.MultiInterfaceModeNone
 	k8sServiceEp := k8sapi.ServiceEndpoint{}

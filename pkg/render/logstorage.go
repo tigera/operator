@@ -43,6 +43,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -215,7 +216,7 @@ type ElasticsearchConfiguration struct {
 	ApplyTrial                  bool
 	KeyStoreSecret              *corev1.Secret
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -319,25 +320,19 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, es.eckOperatorClusterAdminClusterRoleBinding())
 		}
 
-		// Apply the pod security policies for all providers except OpenShift
-		if es.cfg.Provider != operatorv1.ProviderOpenShift {
+		if es.cfg.UsePSP {
 			toCreate = append(toCreate,
 				es.elasticsearchClusterRoleBinding(),
-				es.elasticsearchClusterRole())
-
-			if es.cfg.UsePSP {
-				toCreate = append(toCreate,
-					es.eckOperatorPodSecurityPolicy(),
-					es.elasticsearchPodSecurityPolicy())
-			}
-
+				es.elasticsearchClusterRole(),
+				es.eckOperatorPodSecurityPolicy(),
+				es.elasticsearchPodSecurityPolicy(),
+			)
 			if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 				toCreate = append(toCreate,
 					es.kibanaClusterRoleBinding(),
-					es.kibanaClusterRole())
-				if es.cfg.UsePSP {
-					toCreate = append(toCreate, es.kibanaPodSecurityPolicy())
-				}
+					es.kibanaClusterRole(),
+					es.kibanaPodSecurityPolicy(),
+				)
 			}
 		}
 
@@ -394,14 +389,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
 				toCreate = append(toCreate, es.esCuratorServiceAccount())
 
-				// If the provider is not OpenShift apply the pod security policy for the curator.
-				if es.cfg.Provider != operatorv1.ProviderOpenShift {
+				if es.cfg.UsePSP {
 					toCreate = append(toCreate,
 						es.curatorClusterRole(),
-						es.curatorClusterRoleBinding())
-					if es.cfg.UsePSP {
-						toCreate = append(toCreate, es.curatorPodSecurityPolicy())
-					}
+						es.curatorClusterRoleBinding(),
+						es.curatorPodSecurityPolicy(),
+					)
 				}
 
 				toCreate = append(toCreate, es.curatorCronJob())
@@ -1102,7 +1095,7 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if es.cfg.Provider != operatorv1.ProviderOpenShift {
+	if es.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -1276,9 +1269,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 }
 
 func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ECKOperatorName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(ECKOperatorName)
 }
 
 func (es elasticsearchComponent) kibanaServiceAccount() *corev1.ServiceAccount {
@@ -1548,9 +1539,7 @@ func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRole
 }
 
 func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(EsCuratorName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(EsCuratorName)
 }
 
 // Applying this in the eck namespace will start a trial license for enterprise features.
@@ -1607,15 +1596,14 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 }
 
 func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	trueBool := true
-	ptrBoolTrue := &trueBool
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-elasticsearch")
+	psp := podsecuritypolicy.NewBasePolicy("tigera-elasticsearch")
 	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.RequiredDropCapabilities = nil
 	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("CAP_CHOWN"),
+		"SETGID",
+		"SETUID",
+		"SYS_CHROOT",
 	}
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
@@ -1659,9 +1647,7 @@ func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleB
 }
 
 func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-kibana")
-	return psp
+	return podsecuritypolicy.NewBasePolicy("tigera-kibana")
 }
 
 func (es elasticsearchComponent) oidcUserRole() client.Object {

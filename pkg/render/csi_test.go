@@ -61,8 +61,8 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(comp.ResolveImages(nil)).To(BeNil())
 		createObjs, delObjs := comp.Objects()
 
-		Expect(len(delObjs)).To(Equal(0))
-		Expect(len(createObjs)).To(Equal(len(expectedCreateObjs)))
+		Expect(createObjs).To(HaveLen(len(expectedCreateObjs)))
+		Expect(delObjs).To(HaveLen(0))
 
 		for i, expectedRes := range expectedCreateObjs {
 			rtest.ExpectResource(createObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
@@ -150,10 +150,12 @@ var _ = Describe("CSI rendering tests", func() {
 	})
 
 	It("should render CSI's PSP and the corresponding clusterroles when UsePSP is set true", func() {
-		cfg.Openshift = false
 		cfg.UsePSP = true
-
 		resources, _ := render.CSI(&cfg).Objects()
+
+		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds).NotTo(BeNil())
+		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal("csi-node-driver"))
 
 		serviceAccount := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "", "v1", "ServiceAccount")
 		Expect(serviceAccount).ToNot(BeNil())
@@ -185,21 +187,11 @@ var _ = Describe("CSI rendering tests", func() {
 		))
 	})
 
-	It("should not add ServiceAccountName field when UsePSP is false or not on Openshift", func() {
-		cfg.Openshift = false
+	It("should not add ServiceAccountName field when UsePSP is false", func() {
 		cfg.UsePSP = false
-
 		resources, _ := render.CSI(&cfg).Objects()
 
 		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
-
-		cfg.Openshift = true
-		cfg.UsePSP = true
-
-		resources, _ = render.CSI(&cfg).Objects()
-
-		ds = rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
 	})
 

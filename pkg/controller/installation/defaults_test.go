@@ -57,8 +57,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal(filepath.Clean("/var/lib/kubelet")))
 		Expect(*instance.Spec.Logging.CNILogging.LogSeverity).To(Equal(operator.LogLevelInfo))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(10))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(30))
+		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(uint32(10)))
+		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(uint32(30)))
 		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
 
 	})
@@ -96,8 +96,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
-		var logFileMaxCount = 5
-		var logFileMaxAgeDays = 10
+		var logFileMaxCount uint32 = 5
+		var logFileMaxAgeDays uint32 = 10
 		var logFileMaxSize = resource.MustParse("50Mi")
 		var logSeverity = operator.LogLevelError
 
@@ -186,8 +186,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
-		var logFileMaxCount = 5
-		var logFileMaxAgeDays = 10
+		var logFileMaxCount uint32 = 5
+		var logFileMaxAgeDays uint32 = 10
 		var logFileMaxSize = resource.MustParse("50Mi")
 		var logSeverity = operator.LogLevelError
 
@@ -509,8 +509,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 		Expect(*instance.Spec.Logging.CNILogging.LogSeverity).To(Equal(operator.LogLevelInfo))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(10))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(30))
+		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(uint32(10)))
+		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(uint32(30)))
 		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})

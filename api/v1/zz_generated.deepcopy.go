@@ -822,12 +822,12 @@ func (in *CNILogging) DeepCopyInto(out *CNILogging) {
 	}
 	if in.LogFileMaxAgeDays != nil {
 		in, out := &in.LogFileMaxAgeDays, &out.LogFileMaxAgeDays
-		*out = new(int)
+		*out = new(uint32)
 		**out = **in
 	}
 	if in.LogFileMaxCount != nil {
 		in, out := &in.LogFileMaxCount, &out.LogFileMaxCount
-		*out = new(int)
+		*out = new(uint32)
 		**out = **in
 	}
 }

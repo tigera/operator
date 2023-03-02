@@ -710,13 +710,13 @@ func fillDefaults(instance *operator.Installation) error {
 
 		// set LogFileMaxCount default to 10
 		if instance.Spec.Logging.CNILogging.LogFileMaxCount == nil {
-			instance.Spec.Logging.CNILogging.LogFileMaxCount = new(int)
+			instance.Spec.Logging.CNILogging.LogFileMaxCount = new(uint32)
 			*instance.Spec.Logging.CNILogging.LogFileMaxCount = 10
 		}
 
 		// set LogFileMaxAge default to 30 days
 		if instance.Spec.Logging.CNILogging.LogFileMaxAgeDays == nil {
-			instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = new(int)
+			instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = new(uint32)
 			*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = 30
 		}
 

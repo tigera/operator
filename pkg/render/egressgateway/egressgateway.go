@@ -79,7 +79,7 @@ type Config struct {
 	VXLANPort int
 
 	OpenShift bool
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP            bool
 	NamespaceAndNames []string
 }
@@ -103,20 +103,31 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	objectsToCreate := []client.Object{}
-	objectsToDelete := []client.Object{}
-	objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.egwPullSecrets()...)...)
-	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
+	objectsToCreate := append(
+		secret.ToRuntimeObjects(c.egwPullSecrets()...),
+		c.egwServiceAccount(),
+	)
 	if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
-	} else if c.config.UsePSP {
-		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
-		objectsToCreate = append(objectsToCreate, c.egwRole())
-		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
-	} else {
-		objectsToDelete = append(objectsToDelete, c.egwRole())
-		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
 	}
+
+	var objectsToDelete []client.Object
+	if c.config.UsePSP {
+		objectsToCreate = append(objectsToCreate,
+			PodSecurityPolicy(),
+			c.egwRole(),
+			c.egwRoleBinding(),
+		)
+	} else {
+		// It is possible to have multiple egress gateway resources in different namespaces.
+		// We only delete namespaced role and role binding here. The cluster-level psp is
+		// deleted in egressgateway_controller when no egress gateway is in the cluster.
+		objectsToDelete = append(objectsToDelete,
+			c.egwRole(),
+			c.egwRoleBinding(),
+		)
+	}
+
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	return objectsToCreate, objectsToDelete
 }
@@ -306,22 +317,15 @@ func (c *component) egwPullSecrets() []*corev1.Secret {
 }
 
 func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	boolTrue := true
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(podSecurityPolicyName)
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("NET_ADMIN"),
-	}
-	psp.Spec.AllowPrivilegeEscalation = &boolTrue
+	psp := podsecuritypolicy.NewBasePolicy(podSecurityPolicyName)
+	psp.Spec.AllowedCapabilities = []corev1.Capability{"NET_ADMIN", "NET_RAW"}
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.HostIPC = true
 	psp.Spec.HostNetwork = true
 	psp.Spec.HostPID = true
 	psp.Spec.Privileged = true
 	psp.Spec.RunAsUser = policyv1beta1.RunAsUserStrategyOptions{
 		Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-	}
-	psp.Spec.SELinux = policyv1beta1.SELinuxStrategyOptions{
-		Rule: policyv1beta1.SELinuxStrategyRunAsAny,
 	}
 	psp.Spec.SupplementalGroups = policyv1beta1.SupplementalGroupsStrategyOptions{
 		Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,

@@ -122,6 +122,11 @@ type InstallationSpec struct {
 	// +optional
 	TyphaMetricsPort *int32 `json:"typhaMetricsPort,omitempty"`
 
+	// DataVolumePath optionally specifies a custom path for Calico to persist data. If not specified, the path will
+	// default to /etc/calico.
+	// +optional
+	DataVolumePath string `json:"dataVolumePath"`
+
 	// FlexVolumePath optionally specifies a custom path for FlexVolume. If not specified, FlexVolume will be
 	// enabled by default. If set to 'None', FlexVolume will be disabled. The default is based on the
 	// kubernetesProvider.

@@ -43,6 +43,7 @@ pkg/controller/runtimesecurity/runtimesecurity_controller_test.go
 pkg/render/runtimesecurity/runtimesecurity_suite_test.go
 pkg/render/runtimesecurity/runtimesecurity_test.go
 pkg/render/runtimesecurity/old.go
+pkg/render/intrusion_detection_cloud.go
 pkg/render/intrusion_detection_cloud_test.go
 pkg/render/logstorage/esgateway/cloud.go
 pkg/render/logstorage/externalelasticsearch/externalelasticsearch.go

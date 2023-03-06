@@ -16,9 +16,9 @@ package logstorage
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -33,7 +33,6 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 func (r *ReconcileLogStorage) createEsMetrics(
@@ -46,6 +45,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	hdler utils.ComponentHandler,
 	clusterDomain string,
 	usePSP bool,
+	trustedBundle certificatemanagement.TrustedBundle,
 ) (reconcile.Result, bool, error) {
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
 	if err != nil {
@@ -62,25 +62,6 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
-	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
-		return reconcile.Result{}, false, err
-	} else if prometheusCertificate == nil {
-		reqLogger.Info("Prometheus secrets are not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, false, nil
-	}
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, false, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, false, nil
-	}
-	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate, esgwCertificate)
 
 	serverTLS, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
@@ -110,7 +91,9 @@ func (r *ReconcileLogStorage) createEsMetrics(
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLS, true, true),
 			},
-			TrustedBundle: trustedBundle,
+			// The trusted bundle should have already been rendered by the logstorage_controller.go for es-gateway.
+			// It already includes the certificates for es gateway and prometheus server, which es-metrics relies upon.
+			TrustedBundle: nil,
 		}),
 	}
 

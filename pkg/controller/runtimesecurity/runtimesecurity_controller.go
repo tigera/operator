@@ -1,4 +1,16 @@
 // Copyright (c) 2022 Tigera, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package runtimesecurity
 
@@ -111,6 +123,17 @@ type ReconcileRuntimeSecurity struct {
 	licenseAPIReady *utils.ReadyFlag
 }
 
+// Deprecated.
+// This adapter was created to resolve merge conflicts.
+// All calls in rs controller should be updated to use r.status.SetDegraded directly.
+func (r *ReconcileRuntimeSecurity) SetDegraded(message, errStr string) {
+	var err error
+	if errStr != "" {
+		err = fmt.Errorf(errStr)
+	}
+	r.status.SetDegraded(operatorv1.Unknown, message, err, log.WithName(""))
+}
+
 // Reconcile reads that state of the cluster for a RuntimeSecurity object and makes changes
 // based on the state read and what is in the RuntimeSecurity.Spec.
 func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -128,7 +151,7 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying for RuntimeSecurity")
-		r.status.SetDegraded("Error querying for RuntimeSecurity", err.Error())
+		r.SetDegraded("Error querying for RuntimeSecurity", err.Error())
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
@@ -139,17 +162,17 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
-			r.status.SetDegraded("Installation not found", err.Error())
+			r.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying installation")
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if variant != operatorv1.TigeraSecureEnterprise {
 		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
+		r.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	}
 
@@ -157,7 +180,7 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		r.SetDegraded("Error retrieving pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -165,11 +188,11 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
-			r.status.SetDegraded("Elasticsearch cluster configuration is not available, waiting for it to become available", err.Error())
+			r.SetDegraded("Elasticsearch cluster configuration is not available, waiting for it to become available", err.Error())
 			return reconcile.Result{}, nil
 		}
 		log.Error(err, "Failed to get the elasticsearch cluster configuration")
-		r.status.SetDegraded("Failed to get the elasticsearch cluster configuration", err.Error())
+		r.SetDegraded("Failed to get the elasticsearch cluster configuration", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -178,28 +201,28 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
-			r.status.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
+			r.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
+		r.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		r.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		r.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
 		return reconcile.Result{}, err
 	} else if esgwCertificate == nil {
 		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		r.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
 		return reconcile.Result{}, nil
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
@@ -217,14 +240,14 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 	component := runtimesecurity.RuntimeSecurity(config)
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		r.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, rs)
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		reqLogger.Error(err, "Error creating / updating resource")
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		r.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
 

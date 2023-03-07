@@ -48,19 +48,17 @@ func (r *ReconcileLogStorage) createEsMetrics(
 ) (reconcile.Result, bool, error) {
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
 	if err != nil {
-		reqLogger.Error(err, "Failed to retrieve Elasticsearch metrics user secret.")
-		r.status.SetDegraded("Failed to retrieve Elasticsearch metrics user secret.", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve Elasticsearch metrics user secret.", err, reqLogger)
 		return reconcile.Result{}, false, err
 	} else if esMetricsSecret == nil {
 		reqLogger.Info("Waiting for elasticsearch metrics secrets to become available")
-		r.status.SetDegraded("Waiting for elasticsearch metrics secrets to become available", "")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for elasticsearch metrics secrets to become available", nil, reqLogger)
 		return reconcile.Result{}, false, nil
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
-		reqLogger.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
@@ -70,8 +68,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		common.OperatorNamespace(),
 		dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, clusterDomain))
 	if err != nil {
-		reqLogger.Error(err, "Error finding or creating TLS certificate")
-		r.status.SetDegraded("Error finding or creating TLS certificate", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
@@ -99,15 +96,13 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {
-		reqLogger.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
 	for _, comp := range components {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, false, err
 		}
 	}

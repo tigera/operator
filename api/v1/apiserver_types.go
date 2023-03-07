@@ -36,6 +36,11 @@ type APIServerSpec struct {
 type APIServerStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -126,6 +131,12 @@ type APIServerDeploymentPodSpec struct {
 	// If omitted, the API server Deployment will use its default value for nodeSelector.
 	// WARNING: Please note that this field will modify the default API server Deployment nodeSelector.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// Tolerations is the API server pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the API server Deployment.
@@ -243,6 +254,17 @@ func (c *APIServerDeployment) GetAffinity() *v1.Affinity {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
 				return c.Spec.Template.Spec.Affinity
+			}
+		}
+	}
+	return nil
+}
+
+func (c *APIServerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.TopologySpreadConstraints
 			}
 		}
 	}

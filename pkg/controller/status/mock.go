@@ -16,6 +16,10 @@ package status
 import (
 	"context"
 
+	"github.com/go-logr/logr"
+
+	operator "github.com/tigera/operator/api/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/stretchr/testify/mock"
@@ -87,8 +91,12 @@ func (m *MockStatus) SetWindowsUpgradeStatus(pending, inProgress, completed []st
 	m.Called(pending, inProgress, completed, err)
 }
 
-func (m *MockStatus) SetDegraded(reason, msg string) {
-	m.Called(reason, msg)
+func (m *MockStatus) SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger) {
+	if err != nil {
+		m.Called(reason, msg, err.Error(), log)
+	} else {
+		m.Called(reason, msg, err, log)
+	}
 }
 
 func (m *MockStatus) ClearDegraded() {

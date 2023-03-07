@@ -690,9 +690,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
-				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentFlexVolumePrivate.Image, components.ComponentFlexVolumePrivate.Version)))
-
 				expectedNodeEnv := []corev1.EnvVar{
 					// Default envvars.
 					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -1780,9 +1777,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
-
-				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentFlexVolumePrivate.Image, components.ComponentFlexVolumePrivate.Version)))
 
 				expectedNodeEnv := []corev1.EnvVar{
 					// Default envvars.
@@ -3228,7 +3222,7 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			Context("With calico-node DaemonSet overrides", func() {
-				var rr1 = corev1.ResourceRequirements{
+				rr1 := corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						"cpu":     resource.MustParse("2"),
 						"memory":  resource.MustParse("300Mi"),
@@ -3240,7 +3234,7 @@ var _ = Describe("Node rendering tests", func() {
 						"storage": resource.MustParse("10Gi"),
 					},
 				}
-				var rr2 = corev1.ResourceRequirements{
+				rr2 := corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("250m"),
 						corev1.ResourceMemory: resource.MustParse("64Mi"),
@@ -3488,7 +3482,8 @@ func configureExpectedNodeEnvIPVersions(expectedNodeEnv []corev1.EnvVar, default
 	} else {
 		expectedNodeEnv = append(expectedNodeEnv, []corev1.EnvVar{
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-			{Name: "IP6", Value: "none"}}...)
+			{Name: "IP6", Value: "none"},
+		}...)
 	}
 
 	return expectedNodeEnv

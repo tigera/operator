@@ -69,13 +69,22 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+
 		mockStatus.On("SetDegraded",
+			operatorv1.ResourceReadError,
 			"failed to retrieve configmap: tigera-image-assurance-config",
-			`expected configmap "tigera-image-assurance-config" to have a field named "organizationID"`).Return().Maybe()
+			`expected configmap "tigera-image-assurance-config" to have a field named "organizationID"`,
+			mock.Anything,
+		).Return().Maybe()
+
 		mockStatus.On("SetDegraded",
+			operatorv1.ResourceReadError,
 			"failed to retrieve configmap: tigera-image-assurance-config",
-			`failed to read secret "tigera-image-assurance-config": configmaps "tigera-image-assurance-config" not found`).Return().Maybe()
+			`failed to read secret "tigera-image-assurance-config": configmaps "tigera-image-assurance-config" not found`,
+			mock.Anything,
+		).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false)
 		Expect(c.Create(ctx, cloudConfig.ConfigMap())).ToNot(HaveOccurred())

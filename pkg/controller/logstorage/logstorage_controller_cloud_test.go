@@ -159,6 +159,7 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
+				mockStatus.On("SetMetaData", mock.Anything).Return()
 			})
 			It("sets cloud enabled controllers and env variables on kube controllers", func() {
 				mockElasticsearchServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +197,7 @@ var _ = Describe("LogStorage controller", func() {
 					dns.DefaultClusterDomain, readyFlag, false, mockElasticsearchServer)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, mock.Anything).Return()
 				result, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -244,14 +245,14 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-				mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, mock.Anything).Return()
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
 				// Expect to be waiting for curator secret.
 				Expect(result).Should(Equal(reconcile.Result{}))
 				Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
-				mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for elasticsearch metrics secrets to become available", nil, mock.Anything).Return()
 				_, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
@@ -367,7 +368,8 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
 
-				mockStatus.On("SetDegraded", "Failed to retrieve Elasticsearch Gateway config map", "configmaps \"tigera-secure-cloud-config\" not found").Return()
+				mockStatus.On("SetDegraded", operatorv1.Unknown, "Failed to retrieve Elasticsearch Gateway config map", "configmaps \"tigera-secure-cloud-config\" not found", mock.Anything).Return()
+				mockStatus.On("SetMetaData", mock.Anything).Return()
 				result, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result).Should(Equal(reconcile.Result{}))
@@ -377,7 +379,7 @@ var _ = Describe("LogStorage controller", func() {
 
 				mockStatus.On("ClearDegraded")
 
-				mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for elasticsearch metrics secrets to become available", nil, mock.Anything).Return()
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(reconcile.Result{}))
@@ -464,7 +466,8 @@ var _ = Describe("LogStorage controller", func() {
 
 				mockStatus.On("ClearDegraded")
 
-				mockStatus.On("SetDegraded", "Elasticsearch health check failed", "").Return()
+				mockStatus.On("SetDegraded", operatorv1.Unknown, "Elasticsearch health check failed", nil, mock.Anything).Return()
+				mockStatus.On("SetMetaData", mock.Anything).Return()
 				result, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(reconcile.Result{}))

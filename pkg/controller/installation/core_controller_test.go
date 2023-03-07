@@ -627,6 +627,25 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(test.GetResource(c, &inst)).To(BeNil())
 			Expect(inst.Status.ImageSet).To(Equal("enterprise-" + components.EnterpriseRelease))
 		})
+
+		It("should update version", func() {
+			instance := &operator.Installation{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+			instance.Status.CalicoVersion = "v3.14"
+			Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+			Expect(instance.Status.CalicoVersion).To(Equal(components.EnterpriseRelease))
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+			instance.Status.CalicoVersion = "v3.23"
+			instance.Spec.Variant = operator.Calico
+			Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+			Expect(instance.Status.CalicoVersion).To(Equal(components.CalicoRelease))
+		})
 	})
 
 	Context("Docker Enterprise defaults", func() {

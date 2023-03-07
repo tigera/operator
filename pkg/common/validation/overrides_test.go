@@ -28,15 +28,15 @@ import (
 	opv1 "github.com/tigera/operator/api/v1"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("Test overrides validation", func() {
+var _ = Describe("Test overrides validation (NodeDaemonset)", func() {
 	var overrides *opv1.CalicoNodeDaemonSet
 
 	invalidRr := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
 			"cats": resource.MustParse("2"),
-			"dogs": resource.MustParse("300Mi"),
 		},
 	}
 
@@ -232,4 +232,34 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 			"may not be 0 when `maxSurge` is 0",
 		),
 	)
+
+	It("should accept a valid topology spread constraint", func() {
+		s := metav1.LabelSelector{MatchLabels: map[string]string{"brick": "mortar"}}
+		overrides.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, TopologyKey: "realm", WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+		}
+		err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should return an error if there are duplicate topology spread constraints", func() {
+		s := metav1.LabelSelector{MatchLabels: map[string]string{"crusty": "pizza"}}
+		overrides.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, TopologyKey: "dominion", WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+			{MaxSkew: 1, TopologyKey: "dominion", WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+		}
+		err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.TopologySpreadConstraints is invalid: spec.template.spec.topologySpreadConstraints[0].{topologyKey, whenUnsatisfiable}: Duplicate value: \"{dominion, DoNotSchedule}\""))
+	})
+
+	It("should return an error if there is no topology key", func() {
+		s := metav1.LabelSelector{MatchLabels: map[string]string{"tepid": "rinse"}}
+		overrides.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+		}
+		err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.TopologySpreadConstraints is invalid: spec.template.spec.topologySpreadConstraints[0].topologyKey: Required value: can not be empty"))
+	})
 })

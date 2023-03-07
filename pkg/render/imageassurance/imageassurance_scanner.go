@@ -211,7 +211,7 @@ func (c *component) scannerCLIClusterRole() *rbacv1.ClusterRole {
 func (c *component) scannerDeployment() *appsv1.Deployment {
 	annots := map[string]string{
 		rcimageassurance.ImageAssuranceCertHashAnnotation:              rmeta.AnnotationHash(c.config.tlsHash),
-		rcimageassurance.ImageAssuranceScannerIAAPITokenHashAnnotation: rmeta.AnnotationHash(c.config.RuntimeCleanerAPIAccessToken),
+		rcimageassurance.ImageAssuranceScannerIAAPITokenHashAnnotation: rmeta.AnnotationHash(c.config.ScannerAPIAccessToken),
 	}
 
 	env := []corev1.EnvVar{

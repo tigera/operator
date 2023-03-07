@@ -4,6 +4,7 @@ package configsync_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -186,6 +187,52 @@ var _ = Describe("Image Assurance Controller", func() {
 				}, 5*time.Second, 100*time.Millisecond).Should(Equal("true"))
 			})
 		})
+
+		When("an error occurs", func() {
+			var syncer configsync.Syncer
+			var cancel func()
+			BeforeEach(func() {
+				var ctx context.Context
+				ctx, cancel = context.WithCancel(context.Background())
+
+				mockBastClient.On("GetOrganization", "tenant123", mock.Anything).Return(nil, fmt.Errorf("some error")).Once()
+
+				// This test doesn't necessarily care if these are called, which is why "Maybe" is used. These functions
+				// will be called, but it might not be until after the test has finished (we don't wait for the call).
+				mockTicker.On("Chan").Return((<-chan time.Time)(defaultTickerChan)).Maybe()
+				mockTicker.On("Stop").Return().Maybe()
+
+				syncer = configsync.NewSyncer(ctx, "localhost:9999", c,
+					configsync.WithBastClientCreator(mockIAAPIClientCreator(mockBastClient)),
+					configsync.WithTickerCreator(mockTickerCreator(mockTicker)),
+				)
+
+				syncer.StartPeriodicSync()
+			})
+
+			AfterEach(func() {
+				cancel()
+			})
+
+			It("is returned through the Error() function", func() {
+				Expect(syncer.Error()).ShouldNot(BeNil())
+			})
+
+			When("the error doesn't happen on the next tick", func() {
+				It("returns nil when Error() is called", func() {
+					Expect(syncer.Error()).ShouldNot(BeNil())
+
+					mockBastClient.On("GetOrganization", "tenant123", mock.Anything).Return(&bastapi.Organization{
+						Settings: bastapi.OrganizationSettings{
+							RuntimeViewEnabled: false,
+						},
+					}, nil).Once()
+
+					defaultTickerChan <- time.Now()
+					Expect(syncer.Error()).Should(BeNil())
+				})
+			})
+		})
 	})
 
 	When("the context is cancelled", func() {
@@ -216,5 +263,4 @@ var _ = Describe("Image Assurance Controller", func() {
 			}, 2*time.Second, 100*time.Millisecond).Should(BeTrue())
 		})
 	})
-
 })

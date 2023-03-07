@@ -9,6 +9,20 @@ type Syncer struct {
 	mock.Mock
 }
 
+// Error provides a mock function with given fields:
+func (_m *Syncer) Error() error {
+	ret := _m.Called()
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // StartPeriodicSync provides a mock function with given fields:
 func (_m *Syncer) StartPeriodicSync() {
 	_m.Called()

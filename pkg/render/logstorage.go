@@ -1099,6 +1099,11 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
+			APIGroups: []string{"autoscaling.k8s.elastic.co"},
+			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
 			APIGroups: []string{"kibana.k8s.elastic.co"},
 			Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
@@ -1129,6 +1134,11 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
+			APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
+			Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
 			APIGroups: []string{"associations.k8s.elastic.co"},
 			Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
@@ -1151,6 +1161,7 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 	}
 
 	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "elastic-operator",
 		},

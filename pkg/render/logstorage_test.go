@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -294,6 +294,107 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
 				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+
+				eckRole := rtest.GetResource(createResources, "elastic-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(eckRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+					{
+						APIGroups: []string{"authorization.k8s.io"},
+						Resources: []string{"subjectaccessreviews"},
+						Verbs:     []string{"create"},
+					},
+					{
+						APIGroups: []string{"coordination.k8s.io"},
+						Resources: []string{"leases"},
+						Verbs:     []string{"create"},
+					},
+					{
+						APIGroups:     []string{"coordination.k8s.io"},
+						Resources:     []string{"leases"},
+						ResourceNames: []string{"elastic-operator-leader"},
+						Verbs:         []string{"get", "watch", "update"},
+					},
+					{
+						APIGroups: []string{""},
+						Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"apps"},
+						Resources: []string{"deployments", "statefulsets", "daemonsets"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"batch"},
+						Resources: []string{"cronjobs"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"policy"},
+						Resources: []string{"poddisruptionbudgets"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+						Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"autoscaling.k8s.elastic.co"},
+						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"kibana.k8s.elastic.co"},
+						Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"apm.k8s.elastic.co"},
+						Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
+						Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"beat.k8s.elastic.co"},
+						Resources: []string{"beats", "beats/status", "beats/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"agent.k8s.elastic.co"},
+						Resources: []string{"agents", "agents/status", "agents/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"maps.k8s.elastic.co"},
+						Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
+						Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"associations.k8s.elastic.co"},
+						Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"autoscaling.k8s.elastic.co"},
+						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups:     []string{"policy"},
+						Resources:     []string{"podsecuritypolicies"},
+						Verbs:         []string{"use"},
+						ResourceNames: []string{"elastic-operator"},
+					},
+				}))
 			})
 
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {

@@ -76,6 +76,7 @@ func (c *managerComponent) decorateCloudDeploymentSpec(templateSpec corev1.PodTe
 	// if image assurance is enabled add env needed for it.
 	if c.cfg.CloudResources.ImageAssuranceResources != nil {
 		templateSpec.ObjectMeta.Annotations[rcimageassurance.ImageAssuranceCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.CloudResources.ImageAssuranceResources.TLSSecret.Data)
+		templateSpec.ObjectMeta.Annotations[rcimageassurance.ImageAssuranceManagerIAAPITokenHashAnnotation] = rmeta.AnnotationHash(c.cfg.CloudResources.ImageAssuranceResources.ImageAssuranceToken)
 		templateSpec.Spec.Volumes = append(templateSpec.Spec.Volumes,
 			corev1.Volume{
 				Name: rcimageassurance.ImageAssuranceSecretName,

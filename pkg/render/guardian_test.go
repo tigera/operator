@@ -225,7 +225,7 @@ var _ = Describe("Rendering tests", func() {
 			It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
 				renderGuardianPolicy("mydomain.io:8080", false)
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
-				managementClusterEgressRule := policy.Spec.Egress[4]
+				managementClusterEgressRule := policy.Spec.Egress[5]
 				Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
 				Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
 			})

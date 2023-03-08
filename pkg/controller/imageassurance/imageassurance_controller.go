@@ -355,7 +355,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 
 	if err := r.configSyncer.Error(); err != nil {
 		reqLogger.Error(err, "An error occurred syncing while syncing the Image Assurance ConfigMap")
-		r.status.SetDegraded(string(operatorv1.ResourceUpdateError), fmt.Sprintf("an error occurred syncing while syncing the Image Assurance ConfigMap: %v", err))
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "an error occurred syncing while syncing the Image Assurance ConfigMap", err, reqLogger)
 
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}

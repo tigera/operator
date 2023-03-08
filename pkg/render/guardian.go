@@ -361,6 +361,11 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.PrometheusEntityRule,
 		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: TigeraAPIServerEntityRule,
+		},
 	}...)
 
 	// Assumes address has the form "host:port", required by net.Dial for TCP.

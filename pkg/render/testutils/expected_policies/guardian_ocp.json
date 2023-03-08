@@ -176,6 +176,16 @@
       {
         "action": "Allow",
         "protocol": "TCP",
+        "destination": {
+          "services": {
+            "name": "tigera-api",
+            "namespace": "tigera-system"
+          }
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
         "source": {
         },
         "destination": {

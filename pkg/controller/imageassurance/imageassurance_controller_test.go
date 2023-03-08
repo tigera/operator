@@ -168,6 +168,7 @@ var _ = Describe("Image Assurance Controller", func() {
 		})).NotTo(HaveOccurred())
 
 		mockConfigSyncer.On("StartPeriodicSync").Return()
+		mockConfigSyncer.On("Error").Return(nil)
 
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
@@ -214,5 +215,24 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(runtimeCleaner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
 			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceRuntimeCleaner.Image, "@sha256:123")))
+	})
+
+	It("degrades if the configsync.Syncer reports an error", func() {
+		By("applying the ImageAssurance CR to the fake cluster")
+		//apply image assurance cr
+		Expect(c.Create(ctx, &operatorv1.ImageAssurance{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.ImageAssuranceSpec{
+				APIProxyURL: "https://ia-api.dev.calicocloud.io",
+			},
+		})).NotTo(HaveOccurred())
+
+		mockConfigSyncer.On("StartPeriodicSync").Return()
+		mockConfigSyncer.On("Error").Return(fmt.Errorf("some error"))
+
+		mockStatus.On("SetDegraded", string(operatorv1.ResourceUpdateError), "an error occurred syncing while syncing the Image Assurance ConfigMap: some error").Return().Maybe()
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 })

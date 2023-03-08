@@ -353,6 +353,13 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	// times, once started the subsequent calls are no ops.
 	r.configSyncer.StartPeriodicSync()
 
+	if err := r.configSyncer.Error(); err != nil {
+		reqLogger.Error(err, "An error occurred syncing while syncing the Image Assurance ConfigMap")
+		r.status.SetDegraded(string(operatorv1.ResourceUpdateError), fmt.Sprintf("an error occurred syncing while syncing the Image Assurance ConfigMap: %v", err))
+
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
 	// Clear the degraded bit since we've reached this far.
 	r.status.ClearDegraded()
 

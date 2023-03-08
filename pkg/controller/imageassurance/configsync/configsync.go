@@ -14,7 +14,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,17 +55,27 @@ type syncer struct {
 	bastClientCreator BastClientCreator
 	tickerCreator     TickerCreator
 
-	start chan struct{}
+	apiChan chan interface{}
 
 	// If this channel is closed, then this syncer has stopped running (via the passed in context timing out or being
 	// cancelled).
 	done chan struct{}
 }
 
+// startSyncRequest is used to start syncing the config map.
+type startSyncRequest struct {
+}
+
+// getErrRequest is used to get the error occurred (if any) from the syncer routine.
+type getErrRequest struct {
+	errChan chan error
+}
+
 // Syncer implementations should poll periodically for configuration stored in the IA database and cache them in the
 // config map that image assurance stores its configuration in.
 type Syncer interface {
 	StartPeriodicSync()
+	Error() error
 }
 
 func NewSyncer(ctx context.Context, endpoint string, client client.Client, options ...Option) Syncer {
@@ -80,8 +89,8 @@ func NewSyncer(ctx context.Context, endpoint string, client client.Client, optio
 		bastClientCreator: bastapi.NewClient,
 		tickerCreator:     operatortime.NewTicker,
 
-		start: make(chan struct{}, 1),
-		done:  make(chan struct{}),
+		apiChan: make(chan interface{}, 1),
+		done:    make(chan struct{}),
 	}
 
 	for _, option := range options {
@@ -98,9 +107,16 @@ func NewSyncer(ctx context.Context, endpoint string, client client.Client, optio
 // channels will have been closed.
 func (s *syncer) StartPeriodicSync() {
 	select {
-	case s.start <- struct{}{}:
+	case s.apiChan <- startSyncRequest{}:
 	default:
 	}
+}
+
+func (s *syncer) Error() error {
+	errChan := make(chan error)
+	s.apiChan <- getErrRequest{errChan}
+
+	return <-errChan
 }
 
 func (s *syncer) run() {
@@ -114,22 +130,33 @@ func (s *syncer) run() {
 			ticker.Stop()
 		}
 	}()
-	defer close(s.start)
+	defer close(s.apiChan)
 	defer close(s.done)
 
+	var err error
 	for {
 		select {
-		case <-s.start:
-			if ticker != nil {
-				// We've already started the periodic sync so ignore any requests.
-				continue
-			}
+		case req := <-s.apiChan:
+			switch typedReq := req.(type) {
+			case startSyncRequest:
+				if ticker != nil {
+					// We've already started the periodic sync so ignore any requests.
+					continue
+				}
 
-			s.syncConfigMap()
+				err = s.syncConfigMap()
+				// Log the error in case it takes awhile for the reconcile loop to pick it up.
+				if err != nil {
+					log.Error(err, "Failed to sync Image Assurance config map with API.")
+				}
 
-			if ticker == nil {
-				ticker = s.tickerCreator(s.reSyncDuration)
-				tickerCh = ticker.Chan()
+				if ticker == nil {
+					ticker = s.tickerCreator(s.reSyncDuration)
+					tickerCh = ticker.Chan()
+				}
+			case getErrRequest:
+				typedReq.errChan <- err
+				close(typedReq.errChan)
 			}
 		case _, ok := <-tickerCh:
 			// It's unlikely that we'll hit this case with ok set to false (i.e. the ticker chan has been closed), but
@@ -145,38 +172,34 @@ func (s *syncer) run() {
 
 				continue
 			}
-			s.syncConfigMap()
+
+			err = s.syncConfigMap()
+			// Log the error in case it takes awhile for the reconcile loop to pick it up.
+			if err != nil {
+				log.Error(err, "Failed to sync Image Assurance config map with API.")
+			}
 		case <-s.ctx.Done():
 			return
 		}
 	}
 }
 
-func (s *syncer) syncConfigMap() {
+func (s *syncer) syncConfigMap() error {
 	configurationConfigMap, err := utils.GetImageAssuranceConfigurationConfigMap(s.client)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Info(fmt.Sprintf("Waiting for ConfigMap %s to be available.", rcimageassurance.ConfigurationConfigMapName))
-			return
-		}
-
-		log.Error(err, "Failed to retrieve image assurance configuration.")
-		return
+		return fmt.Errorf("failed to retrieve image assurance configuration: %w", err)
 	}
 
 	apiToken, err := utils.GetImageAssuranceAPIAccessToken(s.client, imageassurance.OperatorAPIAccessServiceAccountName)
 	if err != nil {
-		log.Error(err, err.Error())
-		return
+		return fmt.Errorf("failed to retrieve API token: %w", err)
 	} else if len(apiToken) == 0 {
-		log.Info("API token not available yet.")
-		return
+		return fmt.Errorf("API token not available")
 	}
 
 	certBytes, err := getAPICertificate(s.client)
 	if err != nil {
-		log.Error(err, "Failed to get Image Assurance API certificate.")
-		return
+		return fmt.Errorf("failed to get Image Assurance API certificate: %w", err)
 	}
 
 	certPool := x509.NewCertPool()
@@ -193,15 +216,15 @@ func (s *syncer) syncConfigMap() {
 
 	org, err := bastAPIClient.GetOrganization(configurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey])
 	if err != nil {
-		log.Error(err, "Failed to get organization settings.")
-		return
+		return fmt.Errorf("failed to get organization settings: %w", err)
 	}
 
 	configurationConfigMap.Data["runtimeViewEnabled"] = strconv.FormatBool(org.Settings.RuntimeViewEnabled)
 	if err := s.client.Update(s.ctx, configurationConfigMap); err != nil {
-		log.Error(err, "Failed to update Image Assurance configuration.")
-		return
+		return fmt.Errorf("failed to update Image Assurance configuration: %w", err)
 	}
+
+	return nil
 }
 
 // getAPICertificate retrieves and returns the image assurance api tls certificate (as bytes) stored in the k8s secret.

@@ -158,6 +158,17 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"clusterroles", "clusterrolebindings"},
 				Verbs:     []string{"watch", "list", "get", "create", "update"},
 			},
+			// Cloud Modifications for image assurance
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "serviceaccounts"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts/token"},
+				Verbs:     []string{"create"},
+			},
 			// Kube-controllers needs permissions for the image assurance resources since it creates service accounts
 			// and role bindings to a role that grants permissions to image assurance resources (you can't give
 			// permissions to something you don't have permissions for).

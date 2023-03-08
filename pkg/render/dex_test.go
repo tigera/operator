@@ -34,12 +34,14 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("dex rendering tests", func() {
@@ -63,6 +65,57 @@ var _ = Describe("dex rendering tests", func() {
 			replicas       int32
 			cfg            *render.DexComponentConfiguration
 		)
+
+		var expectedVolumeMounts = []corev1.VolumeMount{
+			{Name: "config", MountPath: "/etc/dex/baseCfg", ReadOnly: true},
+			{Name: "secrets", MountPath: "/etc/dex/secrets", ReadOnly: true},
+			{Name: "tigera-dex-tls", MountPath: "/tigera-dex-tls", ReadOnly: true},
+			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs/", ReadOnly: true},
+		}
+
+		var expectedVolumes = []corev1.Volume{
+			{Name: "config",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-dex",
+						},
+						Items: []corev1.KeyToPath{
+							{Key: "config.yaml", Path: "config.yaml"},
+						},
+					},
+				}},
+			{Name: "secrets",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "tigera-oidc-credentials",
+						Items: []corev1.KeyToPath{
+							{Key: "serviceAccountSecret", Path: "google-groups.json"},
+						},
+						DefaultMode: ptr.Int32ToPtr(420),
+					},
+				}},
+			{Name: "tigera-dex-tls",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  "tigera-dex-tls",
+						DefaultMode: ptr.Int32ToPtr(420),
+					},
+				}},
+			{Name: "tigera-ca-bundle",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ca-bundle",
+						},
+						Items: []corev1.KeyToPath{
+							{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.TrustedCertConfigMapKeyName},
+							{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: "ca.pem"},
+							{Key: certificatemanagement.RHELRootCertificateBundleName, Path: certificatemanagement.RHELRootCertificateBundleName},
+						},
+					},
+				}},
+		}
 
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
@@ -115,6 +168,8 @@ var _ = Describe("dex rendering tests", func() {
 			replicas = 2
 
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
+			trustedCaBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+			Expect(err).NotTo(HaveOccurred())
 
 			cfg = &render.DexComponentConfiguration{
 				PullSecrets:   pullSecrets,
@@ -122,6 +177,7 @@ var _ = Describe("dex rendering tests", func() {
 				DexConfig:     dexCfg,
 				ClusterDomain: clusterName,
 				TLSKeyPair:    tlsKeyPair,
+				TrustedBundle: trustedCaBundle,
 			}
 		})
 
@@ -174,6 +230,12 @@ var _ = Describe("dex rendering tests", func() {
 				corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
+
+			for k, v := range cfg.TrustedBundle.HashAnnotations() {
+				Expect(d.Spec.Template.Annotations).To(HaveKeyWithValue(k, v))
+			}
+			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(BeEquivalentTo(expectedVolumeMounts))
+			Expect(d.Spec.Template.Spec.Volumes).To(BeEquivalentTo(expectedVolumes))
 		})
 
 		DescribeTable("should render the cluster name properly in the validator", func(clusterDomain string) {

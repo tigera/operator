@@ -180,7 +180,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying for ImageAssurance")
-		r.status.SetDegraded("Error querying for ImageAssurance", err.Error())
+		r.SetDegraded("Error querying for ImageAssurance", err.Error())
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
@@ -188,18 +188,18 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
-			r.status.SetDegraded("Installation not found", err.Error())
+			r.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying installation")
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving image pull secrets")
-		r.status.SetDegraded("Error retrieving image pull secrets", err.Error())
+		r.SetDegraded("Error retrieving image pull secrets", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -207,33 +207,33 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, fmt.Sprintf("%s ConfigMap not found", rcimageassurance.ConfigurationConfigMapName))
-			r.status.SetDegraded(fmt.Sprintf("%s ConfigMap not found", rcimageassurance.ConfigurationConfigMapName), err.Error())
+			r.SetDegraded(fmt.Sprintf("%s ConfigMap not found", rcimageassurance.ConfigurationConfigMapName), err.Error())
 			return reconcile.Result{}, nil
 		}
 
 		reqLogger.Error(err, "Error retrieving image assurance configuration")
-		r.status.SetDegraded("Error retrieving image assurance configuration", err.Error())
+		r.SetDegraded("Error retrieving image assurance configuration", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if ia.Spec.APIProxyURL == "" {
 		err := fmt.Errorf("APIProxyURL cannot be nil or empty")
 		reqLogger.Error(err, "APIProxyURL cannot be nil or empty")
-		r.status.SetDegraded("APIProxyURL cannot be nil or empty", err.Error())
+		r.SetDegraded("APIProxyURL cannot be nil or empty", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		r.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
 	internalMgrSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error retrieving internal manager tls secret", err.Error())
+		r.SetDegraded("Error retrieving internal manager tls secret", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -241,53 +241,53 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 
 	if internalMgrSecret == nil {
 		reqLogger.Info("Waiting for internal manager tls certificate to be available")
-		r.status.SetDegraded("Waiting for internal manager tls certificate to be available", "")
+		r.SetDegraded("Waiting for internal manager tls certificate to be available", "")
 		return reconcile.Result{}, nil
 	}
 
 	tlsSecret, err := getAPICertSecret(r.client, r.clusterDomain)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error in ensuring TLS certificate for image-assurance api", err.Error())
+		r.SetDegraded("Error in ensuring TLS certificate for image-assurance api", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	scannerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.ScannerAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
+		r.SetDegraded("Error in retrieving scanner API access token", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if scannerAPIToken == nil {
 		reqLogger.Info("Waiting for scanner API access service account secret to be available")
-		r.status.SetDegraded("Waiting for scanner API access service account secret to be available", "")
+		r.SetDegraded("Waiting for scanner API access service account secret to be available", "")
 		return reconcile.Result{}, nil
 	}
 
 	runtimeCleanerAPIToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, imageassurance.RuntimeCleanerAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error in retrieving runtime cleaner API access token", err.Error())
+		r.SetDegraded("Error in retrieving runtime cleaner API access token", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if runtimeCleanerAPIToken == nil {
 		reqLogger.Info("Waiting for runtime cleaner API access service account secret to be available")
-		r.status.SetDegraded("Waiting for runtime cleaner API access service account secret to be available", "")
+		r.SetDegraded("Waiting for runtime cleaner API access service account secret to be available", "")
 		return reconcile.Result{}, nil
 	}
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, variant)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error retrieving image set", err.Error())
+		r.SetDegraded("Error retrieving image set", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if err = imageset.ValidateImageSet(imageSet); err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error validating image set", err.Error())
+		r.SetDegraded("Error validating image set", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -296,19 +296,19 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error querying Authentication", err.Error())
+		r.SetDegraded("Error querying Authentication", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
+		r.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
 		return reconcile.Result{}, nil
 	}
 
 	kvc, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Failed to process the authentication CR.")
-		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
+		r.SetDegraded("Failed to process the authentication CR.", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -337,14 +337,14 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		r.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	for _, component := range components {
 		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			reqLogger.Error(err, "Error creating / updating resource")
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			r.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -355,7 +355,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 
 	if err := r.configSyncer.Error(); err != nil {
 		reqLogger.Error(err, "An error occurred syncing while syncing the Image Assurance ConfigMap")
-		r.status.SetDegraded(string(operatorv1.ResourceUpdateError), fmt.Sprintf("an error occurred syncing while syncing the Image Assurance ConfigMap: %v", err))
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "an error occurred syncing while syncing the Image Assurance ConfigMap", err, reqLogger)
 
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
@@ -375,6 +375,17 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// Deprecated.
+// This adapter was created to resolve merge conflicts.
+// All calls in rs controller should be updated to use r.status.SetDegraded directly.
+func (r *ReconcileImageAssurance) SetDegraded(message, errStr string) {
+	var err error
+	if errStr != "" {
+		err = fmt.Errorf(errStr)
+	}
+	r.status.SetDegraded(operatorv1.Unknown, message, err, log.WithName(""))
 }
 
 // getAPICertSecret returns the image assurance api tls secret.

@@ -127,7 +127,7 @@ var _ = Describe("Status reporting tests", func() {
 			})
 			When("it is not progressing or failing but there is an explicit degraded reasons", func() {
 				It("should not be available or progressing but should be degraded", func() {
-					sm.SetDegraded("some message", "some message")
+					sm.SetDegraded("some message", "some message", nil, log)
 
 					Expect(sm.IsAvailable()).To(BeFalse())
 					Expect(sm.IsProgressing()).To(BeFalse())
@@ -444,19 +444,19 @@ var _ = Describe("Status reporting tests", func() {
 		})
 
 		It("should prioritize explicit degraded reason over pod failure", func() {
-			Expect(sm.degradedReason()).To(Equal("Unknown"))
+			Expect(sm.degradedReason()).To(Equal(operator.Unknown))
 			sm.failing = []string{"This pod has died"}
-			Expect(sm.degradedReason()).To(Equal("PodFailure"))
-			sm.SetDegraded("ControllerSetUsDegraded", "error message")
-			Expect(sm.degradedReason()).To(Equal("ControllerSetUsDegraded"))
+			Expect(sm.degradedReason()).To(Equal(operator.PodFailure))
+			sm.SetDegraded(operator.ResourceNotFound, "error message", nil, log)
+			Expect(sm.degradedReason()).To(Equal(operator.ResourceNotFound))
 		})
 
 		It("should generate correct degraded messages", func() {
-			Expect(sm.degradedReason()).To(Equal("Unknown"))
+			Expect(sm.degradedReason()).To(Equal(operator.Unknown))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
-			sm.SetDegraded("ControllerSetUsDegraded", "Controller set us degraded")
-			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
+			sm.SetDegraded(operator.ResourceNotFound, "Controller set us degraded", nil, log)
+			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded: \nThis pod has died"))
 		})
 
 		It("should contain all the NamespacesNames for all the resources added by multiple calls to Set<Resources>", func() {
@@ -693,25 +693,4 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 	})
-	DescribeTable("test sanitizeReason",
-		func(source, expected string) {
-			Expect(sanitizeReason(source)).To(Equal(expected))
-		},
-		Entry("Compliance example", "Error querying compliance", "Error_querying_compliance"),
-		Entry("tigera tier example with dash", "Waiting for allow-tigera tier to be created", "Waiting_for_allow_tigera_tier_to_be_created"),
-		Entry("ES example reason with comma",
-			"Elasticsearch cluster configuration is not available, waiting for it to become available",
-			"Elasticsearch_cluster_configuration_is_not_available,_waiting_for_it_to_become_available"),
-		Entry("Example reason with slash",
-			"failed to retrieve / validate  ",
-			"failed_to_retrieve___validate"),
-		Entry("Example reason with period",
-			"Failed to process the authentication CR.", "Failed_to_process_the_authentication_CR"),
-		Entry("Example with period",
-			"Failed to process the authentication CR.", "Failed_to_process_the_authentication_CR"),
-		Entry("Strip beginning invalid characters", ".+5_reason", "reason"),
-		Entry("Strip ending invalid characters", "reason1,:.,:", "reason1"),
-		Entry("sanitize on string that shouldn't be modifed",
-			string(operator.ResourceValidationError), string(operator.ResourceValidationError)),
-	)
 })

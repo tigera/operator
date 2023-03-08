@@ -5,6 +5,8 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 
 	"github.com/go-logr/logr"
@@ -49,7 +51,7 @@ func (r *ReconcileIntrusionDetection) handleCloudResources(ctx context.Context, 
 			return idcr, nil, nil
 		}
 		reqLogger.Error(err, "failed to check for Image Assurance existence")
-		r.status.SetDegraded("failed to check for Image Assurance existence: %s", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "failed to check for Image Assurance existence", err, reqLogger)
 		return idcr, nil, err
 	}
 
@@ -57,11 +59,11 @@ func (r *ReconcileIntrusionDetection) handleCloudResources(ctx context.Context, 
 	secret, err := utils.GetImageAssuranceTLSSecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve secret %s", iarender.APICertSecretName))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve secret %s", iarender.APICertSecretName), err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve secret %s", iarender.APICertSecretName), err, reqLogger)
 		return idcr, nil, err
 	} else if secret == nil {
 		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName))
-		r.status.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName), "")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName), nil, reqLogger)
 		return idcr, &reconcile.Result{}, nil
 	}
 
@@ -69,20 +71,20 @@ func (r *ReconcileIntrusionDetection) handleCloudResources(ctx context.Context, 
 	cm, err := utils.GetImageAssuranceConfigurationConfigMap(r.client)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName))
-		r.status.SetDegraded(fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err, reqLogger)
 		return idcr, nil, err
 	}
 
 	iaToken, err := utils.GetImageAssuranceAPIAccessToken(r.client, ImageAssuranceAPIAccessResourceName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error in retrieving image assurance API access token", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error in retrieving image assurance API access token", err, reqLogger)
 		return idcr, nil, err
 	}
 
 	if iaToken == nil {
 		reqLogger.Info("Waiting for image assurance API access token to be available")
-		r.status.SetDegraded("Waiting for image assurance API access token to be available", "")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for image assurance API access token to be available", nil, reqLogger)
 		return idcr, &reconcile.Result{}, nil
 	}
 

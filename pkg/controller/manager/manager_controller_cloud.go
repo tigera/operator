@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcloudrbac "github.com/tigera/operator/pkg/render/cloudrbac"
@@ -57,7 +58,7 @@ func (r *ReconcileManager) handleCloudRBACResources(ctx context.Context, mcr *re
 			return nil
 		}
 		reqLogger.Error(err, "failed to check for Cloud RBAC existence")
-		r.status.SetDegraded("failed to check for Cloud RBAC existence: %s", err.Error())
+		r.SetDegraded("failed to check for Cloud RBAC existence: %s", err.Error())
 		return err
 	}
 
@@ -65,11 +66,11 @@ func (r *ReconcileManager) handleCloudRBACResources(ctx context.Context, mcr *re
 	secret, err := utils.GetCloudRbacTLSSecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName))
-		r.status.SetDegraded(fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName), err.Error())
+		r.SetDegraded(fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName), err.Error())
 		return err
 	} else if secret == nil {
 		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName))
-		r.status.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName), "")
+		r.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName), "")
 		return nil
 	}
 
@@ -93,7 +94,7 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 			return nil, nil
 		}
 		reqLogger.Error(err, "failed to check for Image Assurance existence")
-		r.status.SetDegraded("failed to check for Image Assurance existence: %s", err.Error())
+		r.SetDegraded("failed to check for Image Assurance existence: %s", err.Error())
 		return nil, err
 	}
 
@@ -101,11 +102,11 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 	secret, err := utils.GetImageAssuranceTLSSecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve secret %s", iarender.APICertSecretName))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve secret %s", iarender.APICertSecretName), err.Error())
+		r.SetDegraded(fmt.Sprintf("Failed to retrieve secret %s", iarender.APICertSecretName), err.Error())
 		return nil, err
 	} else if secret == nil {
 		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName))
-		r.status.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName), "")
+		r.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName), "")
 		return &reconcile.Result{}, nil
 	}
 
@@ -114,12 +115,12 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info(fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName))
-			r.status.SetDegraded(fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName), "")
+			r.SetDegraded(fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName), "")
 			return &reconcile.Result{}, nil
 		}
 
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName))
-		r.status.SetDegraded(fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err.Error())
+		r.SetDegraded(fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err.Error())
 		return nil, err
 	}
 
@@ -134,11 +135,11 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 		if err != nil {
 			if errors.IsNotFound(err) {
 				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
-				r.status.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
+				r.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
 				return &reconcile.Result{}, nil
 			}
 			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Unable to read cloud config map", err.Error())
+			r.SetDegraded("Unable to read cloud config map", err.Error())
 			return nil, err
 		}
 
@@ -146,4 +147,15 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 	}
 
 	return nil, nil
+}
+
+// Deprecated.
+// This adapter was created to resolve merge conflicts.
+// All calls in rs controller should be updated to use r.status.SetDegraded directly.
+func (r *ReconcileManager) SetDegraded(message, errStr string) {
+	var err error
+	if errStr != "" {
+		err = fmt.Errorf(errStr)
+	}
+	r.status.SetDegraded(operatorv1.Unknown, message, err, log.WithName(""))
 }

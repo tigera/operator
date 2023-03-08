@@ -46,11 +46,11 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCertsSecret, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
+			r.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
 			return reconcile.Result{}, false, err
 		}
 		if c.Cloud.ExternalCertsSecret == nil {
-			r.status.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
+			r.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
 			return reconcile.Result{}, false, nil
 		}
 		c.Cloud.EnableMTLS = cloudConfig.EnableMTLS()
@@ -83,7 +83,7 @@ func (r *ReconcileLogStorage) esKubeControllersAddCloudModificationsToConfig(
 	imageAssurance, err := utils.GetImageAssurance(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		log.Error(err, "Error reading ImageAssurance")
-		r.status.SetDegraded("Error reading ImageAssurance", err.Error())
+		r.SetDegraded("Error reading ImageAssurance", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
@@ -117,7 +117,7 @@ func (r *ReconcileLogStorage) createExternalElasticsearch(
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, externalElasticsearch, r.status); err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		r.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
@@ -131,7 +131,7 @@ func (r *ReconcileLogStorage) performHealthChecks(reqLogger logr.Logger, ctx con
 	user, password, root, err := utils.GetClientCredentials(r.client, ctx)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error getting Operator Elasticsearch credentials", err.Error())
+		r.SetDegraded("Error getting Operator Elasticsearch credentials", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
@@ -144,40 +144,40 @@ func (r *ReconcileLogStorage) performHealthChecks(reqLogger logr.Logger, ctx con
 	req, err := r.buildHealthCheckRequest("/es-health", user, password)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error building Elasticsearch health check request", err.Error())
+		r.SetDegraded("Error building Elasticsearch health check request", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
 	res, err := r.healthCheckClient.Do(req)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error performing Elasticsearch health check request", err.Error())
+		r.SetDegraded("Error performing Elasticsearch health check request", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
 	if res.StatusCode != http.StatusOK {
 		reqLogger.Info("Elasticsearch health check returned unexpected status code", "status code:", res.StatusCode)
-		r.status.SetDegraded("Elasticsearch health check failed", "")
+		r.SetDegraded("Elasticsearch health check failed", "")
 		return reconcile.Result{}, false, nil
 	}
 
 	req, err = r.buildHealthCheckRequest("/kb-health", user, password)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error building Kibana health check request", err.Error())
+		r.SetDegraded("Error building Kibana health check request", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
 	res, err = r.healthCheckClient.Do(req)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error performing Kibana health check request", err.Error())
+		r.SetDegraded("Error performing Kibana health check request", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
 	if res.StatusCode != http.StatusOK {
 		reqLogger.Info("Kibana health check returned unexpected status code", "status code:", res.StatusCode)
-		r.status.SetDegraded("Kibana health check failed", "")
+		r.SetDegraded("Kibana health check failed", "")
 		return reconcile.Result{}, false, nil
 	}
 
@@ -200,15 +200,26 @@ func (r *ReconcileLogStorage) getCloudConfig(reqLogger logr.Logger, ctx context.
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Failed to retrieve Elasticsearch Gateway config map")
-			r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
+			r.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
 			return nil, nil
 		}
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
+		r.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
 		return nil, err
 	}
 
 	return cloudConfig, nil
+}
+
+// Deprecated.
+// This adapter was created to resolve merge conflicts.
+// All calls in rs controller should be updated to use r.status.SetDegraded directly.
+func (r *ReconcileLogStorage) SetDegraded(message, errStr string) {
+	var err error
+	if errStr != "" {
+		err = fmt.Errorf(errStr)
+	}
+	r.status.SetDegraded(operatorv1.Unknown, message, err, log.WithName(""))
 }
 
 func addMultiTenancyWatches(c controller.Controller) error {

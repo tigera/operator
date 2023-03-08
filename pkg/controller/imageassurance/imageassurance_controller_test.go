@@ -230,7 +230,7 @@ var _ = Describe("Image Assurance Controller", func() {
 		mockConfigSyncer.On("StartPeriodicSync").Return()
 		mockConfigSyncer.On("Error").Return(fmt.Errorf("some error"))
 
-		mockStatus.On("SetDegraded", string(operatorv1.ResourceUpdateError), "an error occurred syncing while syncing the Image Assurance ConfigMap: some error").Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, "an error occurred syncing while syncing the Image Assurance ConfigMap", "some error", mock.Anything).Return().Maybe()
 
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())

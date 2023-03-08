@@ -14,6 +14,7 @@
 package kubecontrollers
 
 import (
+	"fmt"
 	"strings"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -148,16 +149,6 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Verbs:     []string{"watch", "get", "list"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets", "serviceaccounts"},
-				Verbs:     []string{"watch", "list", "get", "update", "create"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts/token"},
-				Verbs:     []string{"create"},
-			},
-			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"watch", "list", "get"},
@@ -166,6 +157,17 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings"},
 				Verbs:     []string{"watch", "list", "get", "create", "update"},
+			},
+			// Cloud Modifications for image assurance
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "serviceaccounts"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts/token"},
+				Verbs:     []string{"create"},
 			},
 			// Kube-controllers needs permissions for the image assurance resources since it creates service accounts
 			// and role bindings to a role that grants permissions to image assurance resources (you can't give
@@ -587,7 +589,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 	}
 }
 
-// prometheusService creates a Service which exposes and endpoint on kube-controllers for
+// prometheusService creates a Service which exposes an endpoint on kube-controllers for
 // reporting Prometheus metrics.
 func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 	return &corev1.Service{
@@ -595,7 +597,11 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerMetricsName,
 			Namespace: common.CalicoNamespace,
-			Labels:    map[string]string{"k8s-app": c.kubeControllerName},
+			Annotations: map[string]string{
+				"prometheus.io/scrape": "true",
+				"prometheus.io/port":   fmt.Sprintf("%d", c.cfg.MetricsPort),
+			},
+			Labels: map[string]string{"k8s-app": c.kubeControllerName},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": c.kubeControllerName},

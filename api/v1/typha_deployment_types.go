@@ -89,6 +89,12 @@ type TyphaDeploymentPodSpec struct {
 	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty" protobuf:"varint,4,opt,name=terminationGracePeriodSeconds"`
 
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
 	// Tolerations is the typha pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the typha Deployment.
 	// If omitted, the typha Deployment will use its default value for tolerations.
@@ -220,6 +226,17 @@ func (c *TyphaDeployment) GetAffinity() *v1.Affinity {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
 				return c.Spec.Template.Spec.Affinity
+			}
+		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.TopologySpreadConstraints
 			}
 		}
 	}

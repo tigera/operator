@@ -59,6 +59,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	var cfg *render.IntrusionDetectionConfiguration
 	var bundle certificatemanagement.TrustedBundle
 	var adAPIKeyPair certificatemanagement.KeyPairInterface
+	var keyPair certificatemanagement.KeyPairInterface
 
 	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")
 	expectedIDPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed.json")
@@ -80,18 +81,22 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
 		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.IntrusionDetectionTLSSecretName, "", "", nil)
+		Expect(err).NotTo(HaveOccurred())
+		keyPair = certificatemanagement.NewKeyPair(secretTLS, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{
-			TrustedCertBundle:     bundle,
-			ADAPIServerCertSecret: adAPIKeyPair,
-			Installation:          &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ESClusterConfig:       relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
-			ClusterDomain:         dns.DefaultClusterDomain,
-			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
-			ManagedCluster:        notManagedCluster,
-			UsePSP:                true,
+			TrustedCertBundle:            bundle,
+			ADAPIServerCertSecret:        adAPIKeyPair,
+			IntrusionDetectionCertSecret: keyPair,
+			Installation:                 &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ESClusterConfig:              relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
+			ClusterDomain:                dns.DefaultClusterDomain,
+			ESLicenseType:                render.ElasticsearchLicenseTypeUnknown,
+			ManagedCluster:               notManagedCluster,
+			UsePSP:                       true,
 		}
 	})
 
@@ -182,6 +187,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/intrusion-detection-tls/tls.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/intrusion-detection-tls/tls.key"},
+			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
 		))
 		Expect(idji.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idji.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
@@ -203,13 +213,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(1))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("intrusion-detection-tls"))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/intrusion-detection-tls"))
 
-		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(1))
+		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.IntrusionDetectionTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.IntrusionDetectionTLSSecretName))
 
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
@@ -536,11 +550,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		// Validate that even with syslog configured we still have the CA configmap Volume
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(3))
 		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
-		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
-		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.IntrusionDetectionTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.IntrusionDetectionTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Volumes[2].Name).To(Equal("var-log-calico"))
+		Expect(idc.Spec.Template.Spec.Volumes[2].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())

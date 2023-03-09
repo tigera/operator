@@ -17,7 +17,7 @@ components:
     version: v3.15.1
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.15.1
+    version: v3.16.0-2
   typha:
     image: tigera/typha
     version: v3.15.1

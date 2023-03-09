@@ -100,12 +100,12 @@ promotions:
   - name: Push Images
     pipeline_file: push_images.yml
     auto_promote:
-      when: "branch =~ 'master|staging'"
+      when: "branch =~ 'master|staging|release-.*'"
   - name: Clean Up
     pipeline_file: clean_up.yml
     # Don't auto promote if this is master or a release branch so the cache is available for the Push Images pipeline.
     auto_promote:
-      when: "(branch !~ 'master|staging') OR (result != 'passed')"
+      when: "(branch !~ 'master|staging|release-.*') OR (result != 'passed')"
   - name: Clear Cache
     # Never auto promote this, this is only to give an easy way for people to clear the cache.
     pipeline_file: clear_cache.yml

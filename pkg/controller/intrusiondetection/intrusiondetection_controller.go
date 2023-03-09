@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
@@ -298,6 +300,19 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	if !isManagedCluster {
+		// check es-gateway to be available
+		elasticsearch, err := r.getElasticsearch(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
@@ -634,6 +649,18 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 	}
 
 	return nil
+}
+
+func (r *ReconcileIntrusionDetection) getElasticsearch(ctx context.Context) (*esv1.Elasticsearch, error) {
+	es := esv1.Elasticsearch{}
+	err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &es, nil
 }
 
 func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec, isManagedController bool) error {

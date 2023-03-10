@@ -304,7 +304,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	if !isManagedCluster {
 		// check es-gateway to be available
-		elasticsearch, err := r.getElasticsearch(ctx)
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -649,18 +649,6 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 	}
 
 	return nil
-}
-
-func (r *ReconcileIntrusionDetection) getElasticsearch(ctx context.Context) (*esv1.Elasticsearch, error) {
-	es := esv1.Elasticsearch{}
-	err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &es, nil
 }
 
 func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec, isManagedController bool) error {

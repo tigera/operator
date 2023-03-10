@@ -93,7 +93,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		}
 	}
 
-	elasticsearch, err := r.getElasticsearch(ctx)
+	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 		return reconcile.Result{}, false, finalizerCleanup, err

@@ -311,7 +311,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-			return reconcile.Result{}, nil
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 	}
 

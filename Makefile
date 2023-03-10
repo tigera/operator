@@ -94,6 +94,8 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 # We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
 ifeq ($(ARCH), $(filter $(ARCH),amd64))
 CGO_ENABLED=1
+GOEXPERIMENT=boringcrypto
+TAGS=osusergo,netgo
 else
 CGO_ENABLED=0
 endif
@@ -102,7 +104,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.78
+GO_BUILD_VER?=v0.82
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -224,9 +226,12 @@ endif
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
+	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -w" ./main.go'
+	go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags $(TAGS) -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -w" ./main.go'
+ifeq ($(ARCH), $(filter $(ARCH),amd64))
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c 'strings $(BINDIR)/operator-$(ARCH) | grep '_Cfunc__goboringcrypto_' 1> /dev/null'
+endif
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
@@ -342,13 +347,8 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 ###############################################################################
 .PHONY: static-checks
 ## Perform static checks on the code.
-static-checks: check-boring-ssl
+static-checks:
 	$(CONTAINERIZED) $(CALICO_BUILD) golangci-lint run --deadline 5m
-
-check-boring-ssl: $(BINDIR)/operator-amd64
-	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
-		go tool nm $(BINDIR)/operator-amd64 > $(BINDIR)/tags.txt && grep '_Cfunc__goboringcrypto_' $(BINDIR)/tags.txt 1> /dev/null
-	-rm -f $(BINDIR)/tags.txt
 
 .PHONY: fix
 ## Fix static checks

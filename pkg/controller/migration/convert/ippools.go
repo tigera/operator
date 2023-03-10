@@ -181,8 +181,9 @@ func isIpv6(ip net.IP) bool {
 
 // selectInitialPool searches through pools for enabled pools, returning the
 // first to match one of the following:
-//   1. one prefixed with default-ipv and matching the isver IP version
-//   2. one matching isver IP version
+//  1. one prefixed with default-ipv and matching the isver IP version
+//  2. one matching isver IP version
+//
 // if none match then nil, nil is returned
 // if there is an error parsing the cidr in a pool then that error will be returned
 func selectInitialPool(pools []crdv1.IPPool, isver func(ip net.IP) bool) (*crdv1.IPPool, error) {

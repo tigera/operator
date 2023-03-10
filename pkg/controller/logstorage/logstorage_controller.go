@@ -21,7 +21,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 
@@ -886,18 +885,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esv1.Elasticsearch, error) {
-	es := esv1.Elasticsearch{}
-	err := r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &es, nil
 }
 
 func (r *ReconcileLogStorage) getElasticsearchService(ctx context.Context) (*corev1.Service, error) {

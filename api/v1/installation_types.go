@@ -188,7 +188,7 @@ type InstallationSpec struct {
 type Logging struct {
 	// Customized logging specification for calico-cni plugin
 	// +optional
-	CNILogging *CNILogging `json:"cniLogging,omitempty"`
+	CNI *CNILogging `json:"cni,omitempty"`
 }
 
 type CNILogging struct {

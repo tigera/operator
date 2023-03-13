@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022, 2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,3 +30,14 @@ type Metadata struct {
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
+
+type LogLevel string
+
+const (
+	LogLevelTrace LogLevel = "Trace"
+	LogLevelInfo  LogLevel = "Info"
+	LogLevelDebug LogLevel = "Debug"
+	LogLevelWarn  LogLevel = "Warn"
+	LogLevelFatal LogLevel = "Fatal"
+	LogLevelError LogLevel = "Error"
+)

@@ -185,6 +185,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.FIPSMode = override.FIPSMode
 	}
 
+	switch compareFields(inst.Logging, override.Logging) {
+	case BOnlySet, Different:
+		inst.Logging = override.Logging
+	}
+
 	return inst
 }
 

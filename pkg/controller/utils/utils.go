@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -555,7 +557,7 @@ func ValidateResourceNameIsQualified(name string) error {
 	return nil
 }
 
-//AddTigeraStatusWatch creates a watch on the given object. It uses predicates to only return matching objects.
+// AddTigeraStatusWatch creates a watch on the given object. It uses predicates to only return matching objects.
 func AddTigeraStatusWatch(c controller.Controller, name string) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: name}}}, &handler.EnqueueRequestForObject{}, predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return object.GetName() == name
@@ -577,4 +579,16 @@ func GetKubeControllerMetricsPort(ctx context.Context, client client.Client) (in
 		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
 	}
 	return kubeControllersMetricsPort, nil
+}
+
+func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch, error) {
+	es := esv1.Elasticsearch{}
+	err := c.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &es, nil
 }

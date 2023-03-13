@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -75,6 +77,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(esv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -95,6 +98,10 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), nil, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
@@ -141,6 +148,12 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &esv1.Elasticsearch{
+			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
+			Status: esv1.ElasticsearchStatus{
+				Phase: esv1.ElasticsearchReadyPhase,
+			},
+		})).NotTo(HaveOccurred())
 
 		certificateManager, err := certificatemanager.Create(c, nil, "")
 		Expect(err).NotTo(HaveOccurred())
@@ -178,6 +191,14 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchIntrusionDetectionJobUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &esv1.Elasticsearch{
+				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName},
+				Status: esv1.ElasticsearchStatus{
+					Phase: esv1.ElasticsearchReadyPhase,
+				},
+			})).NotTo(HaveOccurred())
+
 		})
 
 		It("should use builtin images", func() {
@@ -607,6 +628,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				dpiAPIReady:     readyFlag,
 				tierWatchReady:  readyFlag,
 			}
+
 		})
 
 		It("should wait if allow-tigera tier is unavailable", func() {
@@ -765,6 +787,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
 		})
 	})
+
 	Context("Reconcile for Condition status", func() {
 		generation := int64(2)
 		It("should reconcile with creating new status condition with one item", func() {

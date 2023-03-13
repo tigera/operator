@@ -493,7 +493,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	return role
 }
 
-func (c *nodeComponent) createCalicoPlugin() map[string]interface{} {
+func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	// Determine MTU to use for veth interfaces.
 	// Zero means to use auto-detection.
 	var mtu int32 = 0
@@ -522,17 +522,17 @@ func (c *nodeComponent) createCalicoPlugin() map[string]interface{} {
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
 
 	// Determine logging configuration
-	logSeverity := string(*c.cfg.Installation.Logging.CNILogging.LogSeverity)
+	logSeverity := string(*c.cfg.Installation.Logging.CNI.LogSeverity)
 
 	// store logFileMaxSize as megabyte in config map
-	logFileMaxSize := c.cfg.Installation.Logging.CNILogging.LogFileMaxSize.Value() / (1024 * 1024)
+	logFileMaxSize := c.cfg.Installation.Logging.CNI.LogFileMaxSize.Value() / (1024 * 1024)
 
-	logFileMaxAge := *c.cfg.Installation.Logging.CNILogging.LogFileMaxAgeDays
+	logFileMaxAge := *c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays
 
-	logFileMaxCount := *c.cfg.Installation.Logging.CNILogging.LogFileMaxCount
+	logFileMaxCount := *c.cfg.Installation.Logging.CNI.LogFileMaxCount
 
 	// calico plugin
-	var calicoPlugin = map[string]interface{}{
+	var calicoPluginConfig = map[string]interface{}{
 		"type":                   "calico",
 		"datastore_type":         "kubernetes",
 		"mtu":                    mtu,
@@ -558,16 +558,16 @@ func (c *nodeComponent) createCalicoPlugin() map[string]interface{} {
 	if apiRoot != "" {
 		kubernetes["k8s_api_root"] = apiRoot
 	}
-	calicoPlugin["kubernetes"] = kubernetes
+	calicoPluginConfig["kubernetes"] = kubernetes
 
 	if c.vppDataplaneEnabled() {
-		calicoPlugin["dataplane_options"] = map[string]interface{}{
+		calicoPluginConfig["dataplane_options"] = map[string]interface{}{
 			"type":   "grpc",
 			"socket": "unix:///var/run/calico/cni-server.sock",
 		}
 	}
 
-	return calicoPlugin
+	return calicoPluginConfig
 }
 
 func (c *nodeComponent) createBandwidthPlugin() map[string]interface{} {
@@ -596,15 +596,13 @@ func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
-
 	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
 		// If calico cni is not being used, then no cni configmap is needed.
 		return nil
 	}
 
 	var plugins = make([]interface{}, 0)
-
-	plugins = append(plugins, c.createCalicoPlugin())
+	plugins = append(plugins, c.createCalicoPluginConfig())
 	plugins = append(plugins, c.createBandwidthPlugin())
 
 	// optional portmap plugin
@@ -662,11 +660,8 @@ func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) map[string]interface{
 	if v4 && v6 {
 		// Dual-stack
 		return map[string]interface{}{
-			"type": "host-local",
-			"ranges": [][]map[string]string{
-				[]map[string]string{{"subnet": "usePodCidr"}},
-				[]map[string]string{{"subnet": "usePodCidrIPv6"}},
-			},
+			"type":   "host-local",
+			"ranges": [][]map[string]string{{{"subnet": "usePodCidr"}}, {{"subnet": "usePodCidrIPv6"}}},
 		}
 	} else if v6 {
 		// Single-stack v6

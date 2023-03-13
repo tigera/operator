@@ -105,7 +105,7 @@ var _ = Describe("Node rendering tests", func() {
 						},
 					},
 					Logging: &operatorv1.Logging{
-						CNILogging: &operatorv1.CNILogging{
+						CNI: &operatorv1.CNILogging{
 							LogSeverity:       &logSeverity,
 							LogFileMaxSize:    &logFileMaxSize,
 							LogFileMaxAgeDays: &logFileMaxAgeDays,

@@ -536,7 +536,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	return role
 }
 
-// cniPluginRole creates the clusterrole containing policy rules that allow the Calico CNI plugin to operate normally.
+// cniPluginRole creates the role containing policy rules that allow the Calico CNI plugin to operate normally.
 func (c *nodeComponent) cniPluginRole() *rbacv1.Role {
 	finalizer := []string{}
 	if !c.cfg.Terminating {

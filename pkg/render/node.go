@@ -15,6 +15,7 @@
 package render
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"sort"
@@ -492,14 +493,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	return role
 }
 
-// nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
-// Returns nil if no configmap is needed.
-func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
-	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
-		// If calico cni is not being used, then no cni configmap is needed.
-		return nil
-	}
-
+func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	// Determine MTU to use for veth interfaces.
 	// Zero means to use auto-detection.
 	var mtu int32 = 0
@@ -520,62 +514,110 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 		ipForward = (*c.cfg.Installation.CalicoNetwork.ContainerIPForwarding == operatorv1.ContainerIPForwardingEnabled)
 	}
 
-	// Determine portmap configuration to use.
-	var portmap string = ""
-	if c.cfg.Installation.CalicoNetwork.HostPorts != nil && *c.cfg.Installation.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
-		portmap = `,
-    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
-	}
-
 	ipam := c.getCalicoIPAM()
 	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
 		ipam = buildHostLocalIPAM(c.cfg.Installation.CalicoNetwork)
 	}
 
-	var k8sAPIRoot string
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
+
+	// Determine logging configuration
+	logSeverity := string(*c.cfg.Installation.Logging.CNI.LogSeverity)
+
+	// store logFileMaxSize as megabyte in config map
+	logFileMaxSize := c.cfg.Installation.Logging.CNI.LogFileMaxSize.Value() / (1024 * 1024)
+
+	logFileMaxAge := *c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays
+
+	logFileMaxCount := *c.cfg.Installation.Logging.CNI.LogFileMaxCount
+
+	// calico plugin
+	var calicoPluginConfig = map[string]interface{}{
+		"type":                   "calico",
+		"datastore_type":         "kubernetes",
+		"mtu":                    mtu,
+		"nodename_file_optional": nodenameFileOptional,
+		"log_level":              logSeverity,
+		"log_file_path":          "/var/log/calico/cni/cni.log",
+		"log_file_max_size":      logFileMaxSize,
+		"log_file_max_age":       logFileMaxAge,
+		"log_file_max_count":     logFileMaxCount,
+		"ipam":                   ipam,
+		"container_settings": map[string]interface{}{
+			"allow_ip_forwarding": ipForward,
+		},
+		"policy": map[string]interface{}{
+			"type": "k8s",
+		},
+	}
+
+	// optional properties
+	var kubernetes = map[string]interface{}{
+		"kubeconfig": "__KUBECONFIG_FILEPATH__",
+	}
 	if apiRoot != "" {
-		k8sAPIRoot = fmt.Sprintf("\n          \"k8s_api_root\":\"%s\",", apiRoot)
+		kubernetes["k8s_api_root"] = apiRoot
 	}
+	calicoPluginConfig["kubernetes"] = kubernetes
 
-	var externalDataplane string = ""
 	if c.vppDataplaneEnabled() {
-		externalDataplane = `,
-      "dataplane_options": {
-        "type": "grpc",
-        "socket": "unix:///var/run/calico/cni-server.sock"
-      }`
+		calicoPluginConfig["dataplane_options"] = map[string]interface{}{
+			"type":   "grpc",
+			"socket": "unix:///var/run/calico/cni-server.sock",
+		}
 	}
 
-	// Build the CNI configuration json.
+	return calicoPluginConfig
+}
+
+func (c *nodeComponent) createBandwidthPlugin() map[string]interface{} {
+	// bandwidth plugin
+	var bandwidthPlugin = map[string]interface{}{
+		"type":         "bandwidth",
+		"capabilities": map[string]bool{"bandwidth": true},
+	}
+
+	return bandwidthPlugin
+}
+
+func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
+	// Determine portmap configuration to use.
+	portmapPlugin := map[string]interface{}{
+		"type": "portmap",
+		"snat": true,
+		"capabilities": map[string]bool{
+			"portMappings": true,
+		},
+	}
+
+	return portmapPlugin
+}
+
+// nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
+// Returns nil if no configmap is needed.
+func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
+	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
+		// If calico cni is not being used, then no cni configmap is needed.
+		return nil
+	}
+
+	var plugins = make([]interface{}, 0)
+	plugins = append(plugins, c.createCalicoPluginConfig())
+	plugins = append(plugins, c.createBandwidthPlugin())
+
+	// optional portmap plugin
+	if c.cfg.Installation.CalicoNetwork.HostPorts != nil &&
+		*c.cfg.Installation.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
+		plugins = append(plugins, c.createPortmapPlugin())
+	}
+
+	pluginsArray, _ := json.Marshal(plugins)
+
 	config := fmt.Sprintf(`{
-  "name": "k8s-pod-network",
-  "cniVersion": "0.3.1",
-  "plugins": [
-    {
-      "type": "calico",
-      "datastore_type": "kubernetes",
-      "mtu": %d,
-      "nodename_file_optional": %v,
-      "log_level": "Info",
-      "log_file_path": "/var/log/calico/cni/cni.log",
-      "ipam": %s,
-      "container_settings": {
-          "allow_ip_forwarding": %v
-      },
-      "policy": {
-          "type": "k8s"
-      },
-      "kubernetes": {%s
-          "kubeconfig": "__KUBECONFIG_FILEPATH__"
-      }%s
-    },
-    {
-      "type": "bandwidth",
-      "capabilities": {"bandwidth": true}
-    }%s
-  ]
-}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, externalDataplane, portmap)
+			  "name": "k8s-pod-network",
+			  "cniVersion": "0.3.1",
+			  "plugins": %s 
+			}`, string(pluginsArray))
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -590,7 +632,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *nodeComponent) getCalicoIPAM() string {
+func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
@@ -604,24 +646,35 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	} else {
 		assign_ipv6 = "false"
 	}
-	return fmt.Sprintf(`{ "type": "calico-ipam", "assign_ipv4" : "%s", "assign_ipv6" : "%s"}`,
-		assign_ipv4, assign_ipv6,
-	)
+	return map[string]interface{}{
+		"type":        "calico-ipam",
+		"assign_ipv4": assign_ipv4,
+		"assign_ipv6": assign_ipv6,
+	}
 }
 
-func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) string {
+func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) map[string]interface{} {
 	v6 := GetIPv6Pool(cns.IPPools) != nil
 	v4 := GetIPv4Pool(cns.IPPools) != nil
 
 	if v4 && v6 {
 		// Dual-stack
-		return `{ "type": "host-local", "ranges": [[{"subnet": "usePodCidr"}],[{"subnet": "usePodCidrIPv6"}]]}`
+		return map[string]interface{}{
+			"type":   "host-local",
+			"ranges": [][]map[string]string{{{"subnet": "usePodCidr"}}, {{"subnet": "usePodCidrIPv6"}}},
+		}
 	} else if v6 {
 		// Single-stack v6
-		return `{ "type": "host-local", "subnet": "usePodCidrIPv6"}`
+		return map[string]interface{}{
+			"type":   "host-local",
+			"subnet": "usePodCidrIPv6",
+		}
 	} else {
 		// Single-stack v4
-		return `{ "type": "host-local", "subnet": "usePodCidr"}`
+		return map[string]interface{}{
+			"type":   "host-local",
+			"subnet": "usePodCidr",
+		}
 	}
 }
 

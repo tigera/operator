@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@ package installation
 
 import (
 	"path/filepath"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -465,6 +467,79 @@ var _ = Describe("Installation validation tests", func() {
 				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+		Describe("should validate CNILogging", func() {
+			BeforeEach(func() {
+				instance.Spec.Logging = &operator.Logging{
+					CNI: &operator.CNILogging{},
+				}
+			})
+			It("with nil LogSeverity", func() {
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
+			})
+			It("with nil LogFileMaxAgeDays", func() {
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
+			})
+			It("with invalid LogFileMaxAgeDays", func() {
+				instance.Spec.Logging.CNI.LogFileMaxAgeDays = new(uint32)
+				*instance.Spec.Logging.CNI.LogFileMaxAgeDays = 0
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxAgeDays should be a positive non-zero integer"))
+			})
+			It("with nil LogFileMaxCount", func() {
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
+			})
+			It("with invalid LogFileMaxCount", func() {
+				instance.Spec.Logging.CNI.LogFileMaxCount = new(uint32)
+				*instance.Spec.Logging.CNI.LogFileMaxCount = 0
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError("spec.loggingConfig.cni.logFileMaxCount value should be greater than zero"))
+			})
+			It("with nil LogFileMaxSize", func() {
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
+			})
+			It("with invalid LogFileMaxSize", func() {
+				instance.Spec.Logging.CNI.LogFileMaxSize = new(resource.Quantity)
+				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("1")
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
+
+				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("0")
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err = validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
+
+				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("-1")
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err = validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
+
+				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("1M")
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err = validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
 			})
 		})
 	})

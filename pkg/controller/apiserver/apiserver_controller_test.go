@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,12 +46,10 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("apiserver controller tests", func() {
-
 	var (
 		cli                   client.Client
 		scheme                *runtime.Scheme
@@ -104,7 +102,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
-		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain)...)
+		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureCertSecret, common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
@@ -212,9 +210,9 @@ var _ = Describe("apiserver controller tests", func() {
 					MountPath: fmt.Sprintf("/%s", packetCaptureSecret.Name),
 				},
 				{
-					Name:      certificatemanagement.TrustedCertConfigMapName,
+					Name:      "tigera-ca-bundle",
 					ReadOnly:  true,
-					MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+					MountPath: "/etc/pki/tls/certs",
 				},
 			}))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
@@ -323,7 +321,7 @@ var _ = Describe("apiserver controller tests", func() {
 		It("should not add OwnerReference to user-supplied apiserver and packetcapture TLS cert secrets", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
-			secretName := render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise)
+			secretName := render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)
 
 			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
 
@@ -454,7 +452,6 @@ var _ = Describe("apiserver controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
-
 		})
 	})
 

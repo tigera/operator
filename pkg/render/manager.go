@@ -81,8 +81,10 @@ const (
 	defaultTunnelVoltronPort = "9449"
 )
 
-var ManagerEntityRule = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
-var ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
+var (
+	ManagerEntityRule       = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
+	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
+)
 
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
@@ -109,24 +111,35 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig      authentication.KeyValidatorConfig
-	ESSecrets               []*corev1.Secret
-	TrustedCertBundle       certificatemanagement.TrustedBundle
-	ESClusterConfig         *relasticsearch.ClusterConfig
-	TLSKeyPair              certificatemanagement.KeyPairInterface
-	PullSecrets             []*corev1.Secret
-	Openshift               bool
-	Installation            *operatorv1.InstallationSpec
-	ManagementCluster       *operatorv1.ManagementCluster
-	TunnelSecret            certificatemanagement.KeyPairInterface
-	InternalTrafficSecret   certificatemanagement.KeyPairInterface
+	KeyValidatorConfig authentication.KeyValidatorConfig
+	ESSecrets          []*corev1.Secret
+	ESClusterConfig    *relasticsearch.ClusterConfig
+	PullSecrets        []*corev1.Secret
+	Openshift          bool
+	Installation       *operatorv1.InstallationSpec
+	ManagementCluster  *operatorv1.ManagementCluster
+
+	// If provided, the KeyPair to used for external connections terminated by Voltron,
+	// and connections from the manager pod to Linseed.
+	TLSKeyPair certificatemanagement.KeyPairInterface
+
+	// KeyPair used for establishing mTLS tunnel with Guardian.
+	TunnelSecret certificatemanagement.KeyPairInterface
+
+	// TLS KeyPair used by Voltron within the cluster when operating as a management cluster.
+	InternalTrafficSecret certificatemanagement.KeyPairInterface
+
+	// Certificate bundle used by the manager pod to verify certificates presented
+	// by clients as part of mTLS authentication.
+	TrustedCertBundle certificatemanagement.TrustedBundle
+
 	ClusterDomain           string
 	ESLicenseType           ElasticsearchLicenseType
 	Replicas                *int32
 	Compliance              *operatorv1.Compliance
 	ComplianceLicenseActive bool
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -180,7 +193,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(),
-		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.Openshift),
+		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP),
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
@@ -195,8 +208,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
 		objs = append(objs, c.securityContextConstraints())
-	} else if c.cfg.UsePSP {
-		// If we're not running openshift, we need to add pod security policies.
+	}
+
+	if c.cfg.UsePSP {
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
@@ -264,11 +278,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
 	if c.cfg.KeyValidatorConfig != nil {
-		trustedVolumeMount := c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())
-		trustedVolumeMount.MountPath = "/etc/ssl/certs/"
-		return append(c.cfg.KeyValidatorConfig.RequiredVolumeMounts(), trustedVolumeMount)
+		return c.cfg.KeyValidatorConfig.RequiredVolumeMounts()
 	}
-	return []corev1.VolumeMount{}
+	return nil
 }
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
@@ -406,6 +418,7 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 func (c *managerComponent) managerProxyContainer() corev1.Container {
 	var keyPath, certPath, intKeyPath, intCertPath, tunnelKeyPath, tunnelCertPath string
 	if c.cfg.TLSKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
 		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
 	}
 	if c.cfg.InternalTrafficSecret != nil {
@@ -460,10 +473,8 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 }
 
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
-	mounts := []corev1.VolumeMount{
-		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
-		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
-	}
+	mounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
 
 	if c.cfg.ManagementCluster != nil {
 		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()))
@@ -475,13 +486,24 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
+	var keyPath, certPath string
+	if c.cfg.TLSKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
+		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
+	}
+
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 	}
 
-	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}
+	volumeMounts := append(
+		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	)
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
 	}
@@ -537,7 +559,7 @@ func managerServiceAccount() *corev1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbacv1.ClusterRole {
+func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -648,7 +670,7 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 		)
 	}
 
-	if !openshift {
+	if usePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
@@ -717,9 +739,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 }
 
 func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-manager")
-	return psp
+	return podsecuritypolicy.NewBasePolicy("tigera-manager")
 }
 
 // Allow users to access Calico Enterprise Manager.
@@ -735,6 +755,12 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
 			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      v3.EntityRule{},
+			Destination: networkpolicy.LinseedEntityRule,
 		},
 		{
 			Action:      v3.Allow,

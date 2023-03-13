@@ -56,11 +56,11 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.17.7",
+		Version: "7.17.9",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.17.7",
+		Version: "7.17.9",
 	}
 
 	ComponentElasticTseeInstaller = component{
@@ -79,7 +79,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = component{
-		Version: "2.5.0",
+		Version: "2.6.1",
 	}
 
 	ComponentElasticsearchOperator = component{
@@ -100,6 +100,11 @@ var (
 	ComponentESGateway = component{
 		Version: "master",
 		Image:   "tigera/es-gateway",
+	}
+
+	ComponentLinseed = component{
+		Version: "master",
+		Image:   "tigera/linseed",
 	}
 
 	ComponentFluentd = component{
@@ -178,7 +183,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version: "v2.32.0",
+		Version: "v2.42.0",
 	}
 
 	ComponentPrometheus = component{
@@ -192,7 +197,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = component{
-		Version: "v0.23.0",
+		Version: "v0.25.0",
 	}
 
 	ComponentPrometheusAlertmanager = component{
@@ -301,6 +306,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentLinseed,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,

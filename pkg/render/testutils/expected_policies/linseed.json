@@ -1,0 +1,235 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.linseed-access",
+    "namespace": "tigera-elasticsearch"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "k8s-app == 'tigera-linseed'",
+    "types": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'fluentd-node' || k8s-app == 'fluentd-node-windows'",
+          "namespaceSelector": "name == 'tigera-fluentd'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'eks-log-forwarder'",
+          "namespaceSelector": "name == 'tigera-fluentd'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "job-name == 'intrusion-detection-es-job-installer'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'elastic-curator'",
+          "namespaceSelector": "name == 'tigera-elasticsearch'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-manager'",
+          "namespaceSelector": "name == 'tigera-manager'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'compliance-benchmarker'",
+          "namespaceSelector": "name == 'tigera-compliance'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'compliance-controller'",
+          "namespaceSelector": "name == 'tigera-compliance'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'compliance-server'",
+          "namespaceSelector": "name == 'tigera-compliance'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'compliance-snapshotter'",
+          "namespaceSelector": "name == 'tigera-compliance'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'compliance-reporter'",
+          "namespaceSelector": "name == 'tigera-compliance'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'intrusion-detection-controller'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'elastic-operator'",
+          "namespaceSelector": "name == 'tigera-eck-operator'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-elasticsearch-metrics'",
+          "namespaceSelector": "name == 'tigera-elasticsearch'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-dpi'",
+          "namespaceSelector": "name == 'tigera-dpi'"
+        }
+      }
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "services": {
+            "name": "kubernetes",
+            "namespace": "default"
+          }
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
+          "selector": "elasticsearch.k8s.elastic.co/cluster-name == 'tigera-secure'",
+          "ports": [
+            9200
+          ]
+        }
+      }
+    ]
+  }
+}

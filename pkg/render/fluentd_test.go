@@ -66,9 +66,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
-			MetricsServerTLS: metricsSecret,
-			TrustedBundle:    certificateManager.CreateTrustedBundle(),
-			UsePSP:           true,
+			FluentdKeyPair: metricsSecret,
+			TrustedBundle:  certificateManager.CreateTrustedBundle(),
+			UsePSP:         true,
 		}
 	})
 
@@ -230,7 +230,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
-		cfg.MetricsServerTLS = nil
+		cfg.FluentdKeyPair = nil
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
@@ -625,7 +625,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SPLUNK_PROTOCOL", "https", "", ""},
 			{"SPLUNK_FLUSH_INTERVAL", "5s", "", ""},
 			{"SPLUNK_HEC_TOKEN", "", "logcollector-splunk-credentials", "token"},
-			{"SPLUNK_CA_FILE", "/etc/ssl/splunk/ca.pem", "", ""},
+			{"SPLUNK_CA_FILE", "/etc/pki/splunk/ca.pem", "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {

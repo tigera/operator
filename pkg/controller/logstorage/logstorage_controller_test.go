@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -1429,15 +1431,9 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(escfg.Spec.NodeSets).To(HaveLen(1))
 						// The Image is not populated for the container so no need to get and check it
 						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
-						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(2))
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
 						initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
 						Expect(initset).ToNot(BeNil())
-						Expect(initset.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s:%s",
-								components.ComponentElasticsearch.Image,
-								components.ComponentElasticsearch.Version)))
-						initlogctx := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-log-selinux-context")
-						Expect(initlogctx).ToNot(BeNil())
 						Expect(initset.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s:%s",
 								components.ComponentElasticsearch.Image,
@@ -1499,6 +1495,7 @@ var _ = Describe("LogStorage controller", func() {
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
 									{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 									{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
+									{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
 								},
 							},
 						})).ToNot(HaveOccurred())
@@ -1552,16 +1549,10 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(escfg.Spec.NodeSets).To(HaveLen(1))
 						// The Image is not populated for the container so no need to get and check it
 						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
-						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(2))
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
 						initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
 						Expect(initset).ToNot(BeNil())
 						Expect(initset.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s@%s",
-								components.ComponentElasticsearch.Image,
-								"sha256:elasticsearchhash")))
-						initlogctx := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-log-selinux-context")
-						Expect(initlogctx).ToNot(BeNil())
-						Expect(initlogctx.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentElasticsearch.Image,
 								"sha256:elasticsearchhash")))
@@ -1609,6 +1600,23 @@ var _ = Describe("LogStorage controller", func() {
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentESGateway.Image,
 								"sha256:esgatewayhash")))
+
+						linseedDp := appsv1.Deployment{
+							TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      linseed.DeploymentName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
+						Expect(linseedDp.Spec.Template.Spec.Containers).To(HaveLen(1))
+						linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
+						Expect(linseed).ToNot(BeNil())
+						Expect(linseed.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentLinseed.Image,
+								"sha256:linseedhash")))
+
 					})
 				})
 

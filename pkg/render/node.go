@@ -118,7 +118,7 @@ type NodeConfiguration struct {
 	// should this value change.
 	BindMode string
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -219,7 +219,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
@@ -524,7 +524,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -1183,13 +1183,13 @@ func (c *nodeComponent) nodeResources() corev1.ResourceRequirements {
 
 // nodeVolumeMounts creates the node's volume mounts.
 func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
-	nodeVolumeMounts := []corev1.VolumeMount{
-		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
-		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
-		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+	nodeVolumeMounts := c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType())
+	nodeVolumeMounts = append(nodeVolumeMounts,
+		corev1.VolumeMount{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+		corev1.VolumeMount{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
+		corev1.VolumeMount{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
-	}
+	)
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
 			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},
@@ -1708,8 +1708,7 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 }
 
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
+	psp := podsecuritypolicy.NewBasePolicy(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)

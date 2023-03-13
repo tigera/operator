@@ -33,6 +33,9 @@ components:
   es-proxy:
     image: tigera/es-proxy
     version: master
+  linseed:
+    image: tigera/linseed
+    version: master
   es-gateway:
     image: tigera/es-gateway
     version: master
@@ -40,12 +43,12 @@ components:
     image: tigera/dex
     version: master
   eck-kibana:
-    version: 7.17.7
+    version: 7.17.9
   kibana:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 7.17.7
+    version: 7.17.9
   elasticsearch:
     image: tigera/elasticsearch
     version: master
@@ -97,14 +100,14 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v2.32.0
+    version: v2.42.0
   prometheus:
     image: tigera/prometheus
     version: master
   # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
-    version: v0.23.0
+    version: v0.25.0
   alertmanager:
     image: tigera/alertmanager
     version: master
@@ -132,7 +135,7 @@ components:
     image: tigera/eck-operator
     version: master
   eck-elasticsearch-operator:
-    version: 2.5.0
+    version: 2.6.1
   l7-collector:
     image: tigera/l7-collector
     version: master

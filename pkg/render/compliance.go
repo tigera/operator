@@ -94,7 +94,7 @@ type ComplianceConfiguration struct {
 	ClusterDomain               string
 	HasNoLicense                bool
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -215,13 +215,16 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Openshift {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
-	} else if c.cfg.UsePSP {
+	}
+
+	if c.cfg.UsePSP {
 		complianceObjs = append(complianceObjs,
 			c.complianceBenchmarkerPodSecurityPolicy(),
 			c.complianceControllerPodSecurityPolicy(),
 			c.complianceReporterPodSecurityPolicy(),
 			c.complianceServerPodSecurityPolicy(),
-			c.complianceSnapshotterPodSecurityPolicy())
+			c.complianceSnapshotterPodSecurityPolicy(),
+		)
 	}
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
@@ -271,7 +274,7 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -401,9 +404,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 						},
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
-					VolumeMounts: []corev1.VolumeMount{
-						c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
-					},
+					VolumeMounts:    c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 			Volumes: []corev1.Volume{
@@ -432,9 +433,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 }
 
 func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceControllerName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(ComplianceControllerName)
 }
 
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
@@ -453,7 +452,7 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -533,10 +532,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							},
 							// On OpenShift reporter needs privileged access to write compliance reports to host path volume
 							SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
-							VolumeMounts: []corev1.VolumeMount{
-								{MountPath: "/var/log/calico", Name: "var-log-calico"},
-								c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
-							},
+							VolumeMounts: append(
+								c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
+								corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"},
+							),
 						}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 					),
 				},
@@ -558,8 +557,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 }
 
 func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("compliance-reporter")
+	psp := podsecuritypolicy.NewBasePolicy("compliance-reporter")
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
@@ -595,7 +593,7 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -749,18 +747,14 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 }
 
 func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceServerName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(ComplianceServerName)
 }
 
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
-	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
+	return append(
+		c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 		c.cfg.ComplianceServerCertSecret.VolumeMount(c.SupportedOSType()),
-	}
-
-	return mounts
+	)
 }
 
 func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
@@ -811,7 +805,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -879,9 +873,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 							},
 						},
 						SecurityContext: securitycontext.NewNonRootContext(),
-						VolumeMounts: []corev1.VolumeMount{
-							c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
-						},
+						VolumeMounts:    c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
@@ -908,9 +900,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 }
 
 func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceSnapshotterName)
-	return psp
+	return podsecuritypolicy.NewBasePolicy(ComplianceSnapshotterName)
 }
 
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
@@ -934,7 +924,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 		},
 	}
 
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -981,8 +971,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "etc-systemd", MountPath: "/etc/systemd", ReadOnly: true},
 		{Name: "etc-kubernetes", MountPath: "/etc/kubernetes", ReadOnly: true},
 		{Name: "usr-bin", MountPath: "/usr/local/bin", ReadOnly: true},
-		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 	}
+	volMounts = append(volMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 
 	vols := []corev1.Volume{
 		{
@@ -1089,8 +1079,7 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 }
 
 func (c *complianceComponent) complianceBenchmarkerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("compliance-benchmarker")
+	psp := podsecuritypolicy.NewBasePolicy("compliance-benchmarker")
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
 		{

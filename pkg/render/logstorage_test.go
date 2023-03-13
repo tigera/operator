@@ -248,7 +248,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Verify that an initContainer is added
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-				Expect(initContainers).To(HaveLen(2))
+				Expect(initContainers).To(HaveLen(1))
 				Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
 				Expect(*initContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*initContainers[0].SecurityContext.Privileged).To(BeTrue())
@@ -261,21 +261,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 				))
 				Expect(initContainers[0].SecurityContext.SeccompProfile).To(Equal(
-					&corev1.SeccompProfile{
-						Type: corev1.SeccompProfileTypeRuntimeDefault,
-					}))
-				Expect(initContainers[1].Name).To(Equal("elastic-internal-init-log-selinux-context"))
-				Expect(*initContainers[1].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-				Expect(*initContainers[1].SecurityContext.Privileged).To(BeFalse())
-				Expect(*initContainers[1].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
-				Expect(*initContainers[1].SecurityContext.RunAsNonRoot).To(BeFalse())
-				Expect(*initContainers[1].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
-				Expect(initContainers[1].SecurityContext.Capabilities).To(Equal(
-					&corev1.Capabilities{
-						Drop: []corev1.Capability{"ALL"},
-					},
-				))
-				Expect(initContainers[1].SecurityContext.SeccompProfile).To(Equal(
 					&corev1.SeccompProfile{
 						Type: corev1.SeccompProfileTypeRuntimeDefault,
 					}))
@@ -366,6 +351,106 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&corev1.SeccompProfile{
 						Type: corev1.SeccompProfileTypeRuntimeDefault,
 					}))
+				eckRole := rtest.GetResource(createResources, "elastic-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(eckRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+					{
+						APIGroups: []string{"authorization.k8s.io"},
+						Resources: []string{"subjectaccessreviews"},
+						Verbs:     []string{"create"},
+					},
+					{
+						APIGroups: []string{"coordination.k8s.io"},
+						Resources: []string{"leases"},
+						Verbs:     []string{"create"},
+					},
+					{
+						APIGroups:     []string{"coordination.k8s.io"},
+						Resources:     []string{"leases"},
+						ResourceNames: []string{"elastic-operator-leader"},
+						Verbs:         []string{"get", "watch", "update"},
+					},
+					{
+						APIGroups: []string{""},
+						Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"apps"},
+						Resources: []string{"deployments", "statefulsets", "daemonsets"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"batch"},
+						Resources: []string{"cronjobs"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"policy"},
+						Resources: []string{"poddisruptionbudgets"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+						Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"autoscaling.k8s.elastic.co"},
+						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"kibana.k8s.elastic.co"},
+						Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"apm.k8s.elastic.co"},
+						Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
+						Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"beat.k8s.elastic.co"},
+						Resources: []string{"beats", "beats/status", "beats/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"agent.k8s.elastic.co"},
+						Resources: []string{"agents", "agents/status", "agents/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"maps.k8s.elastic.co"},
+						Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
+						Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"associations.k8s.elastic.co"},
+						Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups: []string{"autoscaling.k8s.elastic.co"},
+						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					},
+					{
+						APIGroups:     []string{"policy"},
+						Resources:     []string{"podsecuritypolicies"},
+						Verbs:         []string{"use"},
+						ResourceNames: []string{"elastic-operator"},
+					},
+				}))
 			})
 
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
@@ -485,7 +570,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
 
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-				Expect(initContainers).To(HaveLen(5))
+				Expect(initContainers).To(HaveLen(4))
 				compareInitContainer := func(ic corev1.Container, expectedName string, expectedVolumes []corev1.VolumeMount) {
 					Expect(ic.Name).To(Equal(expectedName))
 					Expect(ic.VolumeMounts).To(HaveLen(len(expectedVolumes)))
@@ -504,7 +589,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				})
-				compareInitContainer(initContainers[4], "elastic-internal-init-log-selinux-context", []corev1.VolumeMount{})
 			})
 		})
 
@@ -848,7 +932,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 				},
 			))
-			Expect(initContainers).To(HaveLen(3))
+			Expect(initContainers).To(HaveLen(2))
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
 			Expect(initContainers[1].Image).To(ContainSubstring("-fips"))
 			Expect(initContainers[1].Command).To(Equal([]string{"/bin/sh"}))

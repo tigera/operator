@@ -32,7 +32,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -73,21 +72,21 @@ var TigeraAPIServerEntityRule = v3.EntityRule{
 
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
-func ProjectCalicoApiServerTLSSecretName(v operatorv1.ProductVariant) string {
+func ProjectCalicoAPIServerTLSSecretName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return calicoAPIServerTLSSecretName
 	}
 	return tigeraAPIServerTLSSecretName
 }
 
-func ProjectCalicoApiServerServiceName(v operatorv1.ProductVariant) string {
+func ProjectCalicoAPIServerServiceName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-api"
 	}
 	return "tigera-api"
 }
 
-func ApiServerServiceAccountName(v operatorv1.ProductVariant) string {
+func APIServerServiceAccountName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-apiserver"
 	}
@@ -119,7 +118,7 @@ type APIServerConfiguration struct {
 	TunnelCASecret              certificatemanagement.KeyPairInterface
 	TrustedBundle               certificatemanagement.TrustedBundle
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -186,7 +185,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
-	if !c.cfg.Openshift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
@@ -285,7 +284,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
-				Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
+				Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 			Version:  "v3",
@@ -321,7 +320,7 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -370,7 +369,7 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -390,7 +389,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+			Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 		},
 	}
@@ -524,7 +523,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -556,7 +555,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.C
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 		},
@@ -654,7 +653,7 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -741,7 +740,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
@@ -763,7 +762,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
+			Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			Labels:    map[string]string{"k8s-app": QueryserverServiceName},
 		},
@@ -858,7 +857,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					DNSPolicy:          dnsPolicy,
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
-					ServiceAccountName: ApiServerServiceAccountName(c.cfg.Installation.Variant),
+					ServiceAccountName: APIServerServiceAccountName(c.cfg.Installation.Variant),
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
@@ -1004,8 +1003,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
-		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
-		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 	if c.cfg.TrustedBundle != nil {
@@ -1023,7 +1022,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
 
 	container := corev1.Container{
@@ -1125,15 +1124,11 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client
 		nameToDelete = enterpriseName
 	}
 
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(name)
-	psp.Spec.Privileged = false
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
+	psp := podsecuritypolicy.NewBasePolicy(name)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 
-	pspToDelete := podsecuritypolicy.NewBasePolicy()
-	pspToDelete.GetObjectMeta().SetName(nameToDelete)
+	pspToDelete := podsecuritypolicy.NewBasePolicy(nameToDelete)
 
 	return psp, pspToDelete
 }
@@ -1211,7 +1206,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if !c.cfg.Openshift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -1243,7 +1238,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRoleBinding() *rbacv1.C
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 		},
@@ -1497,7 +1492,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "kibana_login",
+				"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login",
 			},
 			Verbs: []string{"get"},
 		})
@@ -1652,7 +1647,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "kibana_login", "elasticsearch_superuser",
+				"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login", "elasticsearch_superuser",
 			},
 			Verbs: []string{"get"},
 		})

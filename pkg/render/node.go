@@ -257,7 +257,7 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// cniPluginServiceAccount creates the node's service account.
+// cniPluginServiceAccount creates the Calico CNI plugin's service account.
 func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
@@ -306,7 +306,7 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	return crb
 }
 
-// cniPluginRoleBinding creates a rolebinding giving the node service account the required permissions to operate.
+// cniPluginRoleBinding creates a rolebinding giving the Calico CNI plugin service account the required permissions to operate.
 func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.RoleBinding {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
@@ -397,7 +397,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Used for creating service account tokens to be used by the CNI plugin.
 				APIGroups:     []string{""},
 				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{"calico-node", "calico-cni-plugin"},
+				ResourceNames: []string{"calico-cni-plugin"},
 				Verbs:         []string{"create"},
 			},
 			{
@@ -536,7 +536,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	return role
 }
 
-// cniPluginRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
+// cniPluginRole creates the clusterrole containing policy rules that allow the Calico CNI plugin to operate normally.
 func (c *nodeComponent) cniPluginRole() *rbacv1.Role {
 	finalizer := []string{}
 	if !c.cfg.Terminating {

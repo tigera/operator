@@ -611,6 +611,16 @@ type IPAMSpec struct {
 	// Default: Calico
 	// +kubebuilder:validation:Enum=Calico;HostLocal;AmazonVPC;AzureVNET
 	Type IPAMPluginType `json:"type"`
+
+	// Specifies a list of IPv4 CIDR string or IP pool names from which Calico IPAM will assign IP addresses from.
+	// By default, it will assign IP addresses from all the available IP pools.
+	// +optional
+	IPv4Pools []string `json:"ipv4Pools"`
+
+	// Specifies a list of IPv6 CIDR string or IP pool names from which Calico IPAM will assign IP addresses from.
+	// By default, it will assign IP addresses from all the available IP pools.
+	// +optional
+	IPv6Pools []string `json:"ipv6Pools"`
 }
 
 // CNISpec contains configuration for the CNI plugin.

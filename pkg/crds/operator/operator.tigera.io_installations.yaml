@@ -4018,6 +4018,22 @@ spec:
                     description: IPAM specifies the pod IP address management that
                       will be used in the Calico or Calico Enterprise installation.
                     properties:
+                      ipv4Pools:
+                        description: Specifies a list of IPv4 CIDR string or IP pool
+                          names from which Calico IPAM will assign IP addresses from.
+                          By default, it will assign IP addresses from all the available
+                          IP pools.
+                        items:
+                          type: string
+                        type: array
+                      ipv6Pools:
+                        description: Specifies a list of IPv6 CIDR string or IP pool
+                          names from which Calico IPAM will assign IP addresses from.
+                          By default, it will assign IP addresses from all the available
+                          IP pools.
+                        items:
+                          type: string
+                        type: array
                       type:
                         description: "Specifies the IPAM plugin that will be used
                           in the Calico or Calico Enterprise installation. * For CNI
@@ -11625,6 +11641,22 @@ spec:
                         description: IPAM specifies the pod IP address management
                           that will be used in the Calico or Calico Enterprise installation.
                         properties:
+                          ipv4Pools:
+                            description: Specifies a list of IPv4 CIDR string or IP
+                              pool names from which Calico IPAM will assign IP addresses
+                              from. By default, it will assign IP addresses from all
+                              the available IP pools.
+                            items:
+                              type: string
+                            type: array
+                          ipv6Pools:
+                            description: Specifies a list of IPv6 CIDR string or IP
+                              pool names from which Calico IPAM will assign IP addresses
+                              from. By default, it will assign IP addresses from all
+                              the available IP pools.
+                            items:
+                              type: string
+                            type: array
                           type:
                             description: "Specifies the IPAM plugin that will be used
                               in the Calico or Calico Enterprise installation. * For

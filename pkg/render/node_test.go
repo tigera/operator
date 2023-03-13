@@ -3446,6 +3446,60 @@ var _ = Describe("Node rendering tests", func() {
 					Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 					Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
 				})
+
+				It("should render node correctly with default ipam ip pool", func() {
+					cfg.Installation.CNI.IPAM.IPv4Pools = []string{"10.0.0.0/24", "20.0.0.0/16", "default-ipv4-ippool"}
+					cfg.Installation.CNI.IPAM.IPv6Pools = []string{"default-ipv6-ippool"}
+					component := render.Node(&cfg)
+					resources, _ := component.Objects()
+
+					cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+					Expect(cniCmResource).ToNot(BeNil())
+					cniCm := cniCmResource.(*corev1.ConfigMap)
+					Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+        "type": "calico-ipam",
+        "assign_ipv4": "%t",
+        "assign_ipv6": "%t",
+		"ipv4_pools": ["10.0.0.0/24", "20.0.0.0/16", "default-ipv4-ippool"],
+		"ipv6_pools": ["default-ipv6-ippool"]
+      },
+      "container_settings": {
+        "allow_ip_forwarding": false
+      },
+      "policy": {
+        "type": "k8s"
+      },
+      "kubernetes": {
+        "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {
+        "bandwidth": true
+      }
+    },
+    {
+      "type": "portmap",
+      "snat": true,
+      "capabilities": {
+        "portMappings": true
+      }
+    }
+  ]
+}`, enableIPv4, enableIPv6)))
+				})
 			})
 		})
 	}

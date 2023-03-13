@@ -594,6 +594,7 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
+	var default_ippools string
 	if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
@@ -604,8 +605,15 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	} else {
 		assign_ipv6 = "false"
 	}
-	return fmt.Sprintf(`{ "type": "calico-ipam", "assign_ipv4" : "%s", "assign_ipv6" : "%s"}`,
-		assign_ipv4, assign_ipv6,
+	if len(c.cfg.Installation.CNI.IPAM.IPv4Pools) > 0 {
+		default_ippools += fmt.Sprintf(`, "ipv4_pools" : [ "%s" ]`, strings.Join(c.cfg.Installation.CNI.IPAM.IPv4Pools, `", "`))
+	}
+	if len(c.cfg.Installation.CNI.IPAM.IPv6Pools) > 0 {
+		default_ippools += fmt.Sprintf(`, "ipv6_pools" : [ "%s" ]`, strings.Join(c.cfg.Installation.CNI.IPAM.IPv6Pools, `", "`))
+	}
+
+	return fmt.Sprintf(`{ "type": "calico-ipam", "assign_ipv4" : "%s", "assign_ipv6" : "%s"%s}`,
+		assign_ipv4, assign_ipv6, default_ippools,
 	)
 }
 

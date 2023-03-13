@@ -655,7 +655,7 @@ deploy: manifests kustomize
 # Can also generate RBAC and webhooks but that is not enabled currently
 manifests:
 	$(DOCKER_RUN) sh -c 'go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) && \
-		 controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases'
+		controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases'
 	for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' -e '/^---/d' -e '/^\s*$$/d' $$x; done
 
 # Run go fmt against code

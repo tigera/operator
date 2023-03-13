@@ -233,6 +233,7 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 
 		It("should have env vars", func() {
 			Expect(voltron.Env).Should(ContainElements(
+				corev1.EnvVar{Name: "VOLTRON_CHECK_MANAGED_CLUSTER_AUTHORIZATION_BEFORE_PROXY", Value: "true"},
 				corev1.EnvVar{Name: "VOLTRON_ENABLE_CALICO_CLOUD_RBAC_API", Value: "true"},
 				corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_CA_BUNDLE_PATH", Value: "/certs/cloud-rbac/tls.crt"},
 				corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_ENDPOINT", Value: "https://cc-rbac-api.calico-cloud-rbac.svc:8443"},

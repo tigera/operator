@@ -17,13 +17,14 @@ import (
 )
 
 // CreateTLSSecret Creates a new TLS secret with the information passed
-//   ca: The ca to use for creating the Cert/Key pair. This is required.
-//   secretName: The name of the secret.
-//   secretKeyName: The name of the data field that will contain the key.
-//   secretCertName: The name of the data field that will contain the cert.
-//   dur: How long the certificate will be valid.
-//   hostnames: The first will be used as the CN, and the rest as SANs. If
-//     no hostnames are provided then "localhost" will be used.
+//
+//	ca: The ca to use for creating the Cert/Key pair. This is required.
+//	secretName: The name of the secret.
+//	secretKeyName: The name of the data field that will contain the key.
+//	secretCertName: The name of the data field that will contain the cert.
+//	dur: How long the certificate will be valid.
+//	hostnames: The first will be used as the CN, and the rest as SANs. If
+//	  no hostnames are provided then "localhost" will be used.
 //
 // The first hostname provided is used as the common name for the certificate. If hostnames are not provided, localhost
 // is used. This code came from:

@@ -698,32 +698,32 @@ func fillDefaults(instance *operator.Installation) error {
 		if instance.Spec.Logging == nil {
 			instance.Spec.Logging = new(operator.Logging)
 		}
-		if instance.Spec.Logging.CNILogging == nil {
-			instance.Spec.Logging.CNILogging = new(operator.CNILogging)
+		if instance.Spec.Logging.CNI == nil {
+			instance.Spec.Logging.CNI = new(operator.CNILogging)
 		}
 
 		// set LofSeverity default to Info
-		if instance.Spec.Logging.CNILogging.LogSeverity == nil {
-			instance.Spec.Logging.CNILogging.LogSeverity = new(operator.LogLevel)
-			*instance.Spec.Logging.CNILogging.LogSeverity = operator.LogLevelInfo
+		if instance.Spec.Logging.CNI.LogSeverity == nil {
+			instance.Spec.Logging.CNI.LogSeverity = new(operator.LogLevel)
+			*instance.Spec.Logging.CNI.LogSeverity = operator.LogLevelInfo
 		}
 
 		// set LogFileMaxCount default to 10
-		if instance.Spec.Logging.CNILogging.LogFileMaxCount == nil {
-			instance.Spec.Logging.CNILogging.LogFileMaxCount = new(uint32)
-			*instance.Spec.Logging.CNILogging.LogFileMaxCount = 10
+		if instance.Spec.Logging.CNI.LogFileMaxCount == nil {
+			instance.Spec.Logging.CNI.LogFileMaxCount = new(uint32)
+			*instance.Spec.Logging.CNI.LogFileMaxCount = 10
 		}
 
 		// set LogFileMaxAge default to 30 days
-		if instance.Spec.Logging.CNILogging.LogFileMaxAgeDays == nil {
-			instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = new(uint32)
-			*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays = 30
+		if instance.Spec.Logging.CNI.LogFileMaxAgeDays == nil {
+			instance.Spec.Logging.CNI.LogFileMaxAgeDays = new(uint32)
+			*instance.Spec.Logging.CNI.LogFileMaxAgeDays = 30
 		}
 
 		// set LogFileMaxSize default to 100 Mi
-		if instance.Spec.Logging.CNILogging.LogFileMaxSize == nil {
-			instance.Spec.Logging.CNILogging.LogFileMaxSize = new(resource.Quantity)
-			*instance.Spec.Logging.CNILogging.LogFileMaxSize = resource.MustParse("100Mi")
+		if instance.Spec.Logging.CNI.LogFileMaxSize == nil {
+			instance.Spec.Logging.CNI.LogFileMaxSize = new(resource.Quantity)
+			*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("100Mi")
 		}
 	}
 

@@ -56,10 +56,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal(filepath.Clean("/var/lib/kubelet")))
-		Expect(*instance.Spec.Logging.CNILogging.LogSeverity).To(Equal(operator.LogLevelInfo))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(uint32(10)))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(uint32(30)))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
+		Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
 
 	})
 
@@ -163,7 +163,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				KubeletVolumePluginPath: "/my/kubelet/root/dir",
 				Logging: &operator.Logging{
-					CNILogging: &operator.CNILogging{
+					CNI: &operator.CNILogging{
 						LogSeverity:       &logSeverity,
 						LogFileMaxSize:    &logFileMaxSize,
 						LogFileMaxAgeDays: &logFileMaxAgeDays,
@@ -243,7 +243,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				KubeletVolumePluginPath: "/my/kubelet/root/dir",
 				Logging: &operator.Logging{
-					CNILogging: &operator.CNILogging{
+					CNI: &operator.CNILogging{
 						LogSeverity:       &logSeverity,
 						LogFileMaxSize:    &logFileMaxSize,
 						LogFileMaxAgeDays: &logFileMaxAgeDays,
@@ -508,10 +508,10 @@ var _ = Describe("Defaulting logic tests", func() {
 			},
 		}
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
-		Expect(*instance.Spec.Logging.CNILogging.LogSeverity).To(Equal(operator.LogLevelInfo))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxCount).To(Equal(uint32(10)))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays).To(Equal(uint32(30)))
-		Expect(*instance.Spec.Logging.CNILogging.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
+		Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 	table.DescribeTable("should default CNI type based on KubernetesProvider for hosted providers",

@@ -58,21 +58,21 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 
 		// validate logging config for calico-cni
-		if instance.Spec.Logging != nil && instance.Spec.Logging.CNILogging != nil {
-			if instance.Spec.Logging.CNILogging.LogFileMaxCount != nil &&
-				*instance.Spec.Logging.CNILogging.LogFileMaxCount <= 0 {
-				return fmt.Errorf("spec.loggingConfig.cniLoggingConfig.logFileMaxCount value should be greater than zero")
+		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
+			if instance.Spec.Logging.CNI.LogFileMaxCount != nil &&
+				*instance.Spec.Logging.CNI.LogFileMaxCount <= 0 {
+				return fmt.Errorf("spec.loggingConfig.cni.logFileMaxCount value should be greater than zero")
 			}
 
-			if instance.Spec.Logging.CNILogging.LogFileMaxSize != nil &&
-				(instance.Spec.Logging.CNILogging.LogFileMaxSize.Format != resource.BinarySI ||
-					instance.Spec.Logging.CNILogging.LogFileMaxSize.Value() <= 0) {
-				return fmt.Errorf("spec.Logging.cniLogging.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei")
+			if instance.Spec.Logging.CNI.LogFileMaxSize != nil &&
+				(instance.Spec.Logging.CNI.LogFileMaxSize.Format != resource.BinarySI ||
+					instance.Spec.Logging.CNI.LogFileMaxSize.Value() <= 0) {
+				return fmt.Errorf("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei")
 			}
 
-			if instance.Spec.Logging.CNILogging.LogFileMaxAgeDays != nil &&
-				*instance.Spec.Logging.CNILogging.LogFileMaxAgeDays <= 0 {
-				return fmt.Errorf("spec.Logging.cniLogging.logFileMaxAgeDays should be a positive non-zero integer")
+			if instance.Spec.Logging.CNI.LogFileMaxAgeDays != nil &&
+				*instance.Spec.Logging.CNI.LogFileMaxAgeDays <= 0 {
+				return fmt.Errorf("spec.Logging.cni.logFileMaxAgeDays should be a positive non-zero integer")
 			}
 		}
 
@@ -438,8 +438,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify CNILogging to not exist for non-calico cni
 	if cni := instance.Spec.CNI.Type; cni != operatorv1.PluginCalico {
-		if instance.Spec.Logging != nil && instance.Spec.Logging.CNILogging != nil {
-			return fmt.Errorf("Installation spec.Logging.cniLogging is not valid and should not be provided when spec.cni.type is Not Calico")
+		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
+			return fmt.Errorf("Installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")
 		}
 	}
 	return nil

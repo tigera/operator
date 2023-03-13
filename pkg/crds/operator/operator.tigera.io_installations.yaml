@@ -5508,7 +5508,7 @@ spec:
               logging:
                 description: Logging Configuration for Components
                 properties:
-                  cniLogging:
+                  cni:
                     description: Customized logging specification for calico-cni plugin
                     properties:
                       logFileMaxAgeDays:
@@ -13309,7 +13309,7 @@ spec:
                   logging:
                     description: Logging Configuration for Components
                     properties:
-                      cniLogging:
+                      cni:
                         description: Customized logging specification for calico-cni
                           plugin
                         properties:

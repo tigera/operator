@@ -1,8 +1,10 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
+    controller-gen.kubebuilder.io/version: v0.11.3
+  creationTimestamp: null
   name: installations.operator.tigera.io
 spec:
   group: operator.tigera.io
@@ -239,6 +241,7 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             weight:
                                               description: Weight associated with
                                                 matching the corresponding nodeSelectorTerm,
@@ -358,10 +361,12 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             type: array
                                         required:
                                         - nodeSelectorTerms
                                         type: object
+                                        x-kubernetes-map-type: atomic
                                     type: object
                                   podAffinity:
                                     description: Describes pod affinity scheduling
@@ -459,6 +464,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -531,6 +537,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -655,6 +662,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -722,6 +730,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -847,6 +856,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -919,6 +929,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -1043,6 +1054,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -1110,6 +1122,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -1646,6 +1659,7 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             weight:
                                               description: Weight associated with
                                                 matching the corresponding nodeSelectorTerm,
@@ -1765,10 +1779,12 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             type: array
                                         required:
                                         - nodeSelectorTerms
                                         type: object
+                                        x-kubernetes-map-type: atomic
                                     type: object
                                   podAffinity:
                                     description: Describes pod affinity scheduling
@@ -1866,6 +1882,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -1938,6 +1955,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -2062,6 +2080,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -2129,6 +2148,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -2254,6 +2274,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -2326,6 +2347,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -2450,6 +2472,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -2517,6 +2540,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -2936,6 +2960,7 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             weight:
                                               description: Weight associated with
                                                 matching the corresponding nodeSelectorTerm,
@@ -3055,10 +3080,12 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             type: array
                                         required:
                                         - nodeSelectorTerms
                                         type: object
+                                        x-kubernetes-map-type: atomic
                                     type: object
                                   podAffinity:
                                     description: Describes pod affinity scheduling
@@ -3156,6 +3183,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -3228,6 +3256,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -3352,6 +3381,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -3419,6 +3449,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -3544,6 +3575,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -3616,6 +3648,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -3740,6 +3773,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -3807,6 +3841,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -4363,6 +4398,7 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             weight:
                                               description: Weight associated with
                                                 matching the corresponding nodeSelectorTerm,
@@ -4482,10 +4518,12 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             type: array
                                         required:
                                         - nodeSelectorTerms
                                         type: object
+                                        x-kubernetes-map-type: atomic
                                     type: object
                                   podAffinity:
                                     description: Describes pod affinity scheduling
@@ -4583,6 +4621,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -4655,6 +4694,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -4779,6 +4819,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -4846,6 +4887,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -4971,6 +5013,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -5043,6 +5086,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -5167,6 +5211,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -5234,6 +5279,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -5410,7 +5456,7 @@ spec:
                   the image path for each image. If not specified or empty, the default
                   for each image will be used. A special case value, UseDefault, is
                   supported to explicitly specify the default image path will be used
-                  for each image. \n Image format:    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+                  for each image. \n Image format: `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                   \n This option allows configuring the `<imagePath>` portion of the
                   above format."
                 type: string
@@ -5420,7 +5466,7 @@ spec:
                   a prefix on each image. If not specified or empty, no prefix will
                   be used. A special case value, UseDefault, is supported to explicitly
                   specify the default image prefix will be used for each image. \n
-                  Image format:    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+                  Image format: `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                   \n This option allows configuring the `<imagePrefix>` portion of
                   the above format."
                 type: string
@@ -5437,6 +5483,7 @@ spec:
                         TODO: Add other useful fields. apiVersion, kind, uid?'
                       type: string
                   type: object
+                  x-kubernetes-map-type: atomic
                 type: array
               kubeletVolumePluginPath:
                 description: 'KubeletVolumePluginPath optionally specifies enablement
@@ -5540,7 +5587,7 @@ spec:
                   slash character (`/`) and all images will be pulled from this registry.
                   If not specified then the default registries will be used. A special
                   case value, UseDefault, is supported to explicitly specify the default
-                  registries will be used. \n Image format:    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+                  registries will be used. \n Image format: `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                   \n This option allows configuring the `<registry>` portion of the
                   above format."
                 type: string
@@ -5641,6 +5688,7 @@ spec:
                                     type: object
                                   type: array
                               type: object
+                              x-kubernetes-map-type: atomic
                             weight:
                               description: Weight associated with matching the corresponding
                                 nodeSelectorTerm, in the range 1-100.
@@ -5751,10 +5799,12 @@ spec:
                                     type: object
                                   type: array
                               type: object
+                              x-kubernetes-map-type: atomic
                             type: array
                         required:
                         - nodeSelectorTerms
                         type: object
+                        x-kubernetes-map-type: atomic
                     type: object
                 type: object
               typhaDeployment:
@@ -6004,6 +6054,7 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             weight:
                                               description: Weight associated with
                                                 matching the corresponding nodeSelectorTerm,
@@ -6123,10 +6174,12 @@ spec:
                                                     type: object
                                                   type: array
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             type: array
                                         required:
                                         - nodeSelectorTerms
                                         type: object
+                                        x-kubernetes-map-type: atomic
                                     type: object
                                   podAffinity:
                                     description: Describes pod affinity scheduling
@@ -6224,6 +6277,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -6296,6 +6350,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -6420,6 +6475,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -6487,6 +6543,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -6612,6 +6669,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -6684,6 +6742,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -6808,6 +6867,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaceSelector:
                                               description: A label query over the
                                                 set of namespaces that the term applies
@@ -6875,6 +6935,7 @@ spec:
                                                     are ANDed.
                                                   type: object
                                               type: object
+                                              x-kubernetes-map-type: atomic
                                             namespaces:
                                               description: namespaces specifies a
                                                 static list of namespace names that
@@ -7162,6 +7223,7 @@ spec:
                                             only "value". The requirements are ANDed.
                                           type: object
                                       type: object
+                                      x-kubernetes-map-type: atomic
                                     matchLabelKeys:
                                       description: MatchLabelKeys is a set of pod
                                         label keys to select the pods over which spreading
@@ -7284,9 +7346,9 @@ spec:
                                         the spread constraint. - DoNotSchedule (default)
                                         tells the scheduler not to schedule it. -
                                         ScheduleAnyway tells the scheduler to schedule
-                                        the pod in any location,   but giving higher
+                                        the pod in any location, but giving higher
                                         precedence to topologies that would help reduce
-                                        the   skew. A constraint is considered "Unsatisfiable"
+                                        the skew. A constraint is considered "Unsatisfiable"
                                         for an incoming pod if and only if every possible
                                         node assignment for that pod would violate
                                         "MaxSkew" on some topology. For example, in
@@ -7554,6 +7616,7 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 weight:
                                                   description: Weight associated with
                                                     matching the corresponding nodeSelectorTerm,
@@ -7685,10 +7748,12 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 type: array
                                             required:
                                             - nodeSelectorTerms
                                             type: object
+                                            x-kubernetes-map-type: atomic
                                         type: object
                                       podAffinity:
                                         description: Describes pod affinity scheduling
@@ -7794,6 +7859,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -7874,6 +7940,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -8008,6 +8075,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -8080,6 +8148,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -8215,6 +8284,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -8295,6 +8365,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -8429,6 +8500,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -8501,6 +8573,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -9066,6 +9139,7 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 weight:
                                                   description: Weight associated with
                                                     matching the corresponding nodeSelectorTerm,
@@ -9197,10 +9271,12 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 type: array
                                             required:
                                             - nodeSelectorTerms
                                             type: object
+                                            x-kubernetes-map-type: atomic
                                         type: object
                                       podAffinity:
                                         description: Describes pod affinity scheduling
@@ -9306,6 +9382,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -9386,6 +9463,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -9520,6 +9598,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -9592,6 +9671,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -9727,6 +9807,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -9807,6 +9888,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -9941,6 +10023,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -10013,6 +10096,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -10458,6 +10542,7 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 weight:
                                                   description: Weight associated with
                                                     matching the corresponding nodeSelectorTerm,
@@ -10589,10 +10674,12 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 type: array
                                             required:
                                             - nodeSelectorTerms
                                             type: object
+                                            x-kubernetes-map-type: atomic
                                         type: object
                                       podAffinity:
                                         description: Describes pod affinity scheduling
@@ -10698,6 +10785,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -10778,6 +10866,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -10912,6 +11001,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -10984,6 +11074,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -11119,6 +11210,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -11199,6 +11291,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -11333,6 +11426,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -11405,6 +11499,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -11990,6 +12085,7 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 weight:
                                                   description: Weight associated with
                                                     matching the corresponding nodeSelectorTerm,
@@ -12121,10 +12217,12 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 type: array
                                             required:
                                             - nodeSelectorTerms
                                             type: object
+                                            x-kubernetes-map-type: atomic
                                         type: object
                                       podAffinity:
                                         description: Describes pod affinity scheduling
@@ -12230,6 +12328,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -12310,6 +12409,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -12444,6 +12544,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -12516,6 +12617,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -12651,6 +12753,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -12731,6 +12834,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -12865,6 +12969,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -12937,6 +13042,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -13119,7 +13225,7 @@ spec:
                       used as the image path for each image. If not specified or empty,
                       the default for each image will be used. A special case value,
                       UseDefault, is supported to explicitly specify the default image
-                      path will be used for each image. \n Image format:    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+                      path will be used for each image. \n Image format: `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                       \n This option allows configuring the `<imagePath>` portion
                       of the above format."
                     type: string
@@ -13129,7 +13235,7 @@ spec:
                       as a prefix on each image. If not specified or empty, no prefix
                       will be used. A special case value, UseDefault, is supported
                       to explicitly specify the default image prefix will be used
-                      for each image. \n Image format:    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+                      for each image. \n Image format: `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                       \n This option allows configuring the `<imagePrefix>` portion
                       of the above format."
                     type: string
@@ -13146,6 +13252,7 @@ spec:
                             TODO: Add other useful fields. apiVersion, kind, uid?'
                           type: string
                       type: object
+                      x-kubernetes-map-type: atomic
                     type: array
                   kubeletVolumePluginPath:
                     description: 'KubeletVolumePluginPath optionally specifies enablement
@@ -13254,7 +13361,7 @@ spec:
                       from this registry. If not specified then the default registries
                       will be used. A special case value, UseDefault, is supported
                       to explicitly specify the default registries will be used. \n
-                      Image format:    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+                      Image format: `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                       \n This option allows configuring the `<registry>` portion of
                       the above format."
                     type: string
@@ -13359,6 +13466,7 @@ spec:
                                         type: object
                                       type: array
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 weight:
                                   description: Weight associated with matching the
                                     corresponding nodeSelectorTerm, in the range 1-100.
@@ -13474,10 +13582,12 @@ spec:
                                         type: object
                                       type: array
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 type: array
                             required:
                             - nodeSelectorTerms
                             type: object
+                            x-kubernetes-map-type: atomic
                         type: object
                     type: object
                   typhaDeployment:
@@ -13745,6 +13855,7 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 weight:
                                                   description: Weight associated with
                                                     matching the corresponding nodeSelectorTerm,
@@ -13876,10 +13987,12 @@ spec:
                                                         type: object
                                                       type: array
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 type: array
                                             required:
                                             - nodeSelectorTerms
                                             type: object
+                                            x-kubernetes-map-type: atomic
                                         type: object
                                       podAffinity:
                                         description: Describes pod affinity scheduling
@@ -13985,6 +14098,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -14065,6 +14179,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -14199,6 +14314,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -14271,6 +14387,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -14406,6 +14523,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaceSelector:
                                                       description: A label query over
                                                         the set of namespaces that
@@ -14486,6 +14604,7 @@ spec:
                                                             are ANDed.
                                                           type: object
                                                       type: object
+                                                      x-kubernetes-map-type: atomic
                                                     namespaces:
                                                       description: namespaces specifies
                                                         a static list of namespace
@@ -14620,6 +14739,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaceSelector:
                                                   description: A label query over
                                                     the set of namespaces that the
@@ -14692,6 +14812,7 @@ spec:
                                                         are ANDed.
                                                       type: object
                                                   type: object
+                                                  x-kubernetes-map-type: atomic
                                                 namespaces:
                                                   description: namespaces specifies
                                                     a static list of namespace names
@@ -14996,6 +15117,7 @@ spec:
                                                 ANDed.
                                               type: object
                                           type: object
+                                          x-kubernetes-map-type: atomic
                                         matchLabelKeys:
                                           description: MatchLabelKeys is a set of
                                             pod label keys to select the pods over
@@ -15127,9 +15249,9 @@ spec:
                                             satisfy the spread constraint. - DoNotSchedule
                                             (default) tells the scheduler not to schedule
                                             it. - ScheduleAnyway tells the scheduler
-                                            to schedule the pod in any location,   but
+                                            to schedule the pod in any location, but
                                             giving higher precedence to topologies
-                                            that would help reduce the   skew. A constraint
+                                            that would help reduce the skew. A constraint
                                             is considered "Unsatisfiable" for an incoming
                                             pod if and only if every possible node
                                             assignment for that pod would violate
@@ -15178,14 +15300,12 @@ spec:
                   description: "Condition contains details for one aspect of the current
                     state of this API Resource. --- This struct is intended for direct
                     use as an array at the field path .status.conditions.  For example,
-                    \n \ttype FooStatus struct{ \t    // Represents the observations
-                    of a foo's current state. \t    // Known .status.conditions.type
-                    are: \"Available\", \"Progressing\", and \"Degraded\" \t    //
-                    +patchMergeKey=type \t    // +patchStrategy=merge \t    // +listType=map
-                    \t    // +listMapKey=type \t    Conditions []metav1.Condition
+                    \n type FooStatus struct{ // Represents the observations of a
+                    foo's current state. // Known .status.conditions.type are: \"Available\",
+                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
+                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
                     `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
-                    protobuf:\"bytes,1,rep,name=conditions\"` \n \t    // other fields
-                    \t}"
+                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
                   properties:
                     lastTransitionTime:
                       description: lastTransitionTime is the last time the condition
@@ -15267,9 +15387,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

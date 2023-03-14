@@ -26,6 +26,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -135,6 +136,10 @@ var _ = Describe("Rendering tests", func() {
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var internalManagerKeyPair certificatemanagement.KeyPairInterface
+	var logSeverity = operatorv1.LogLevelInfo
+	var logFileMaxSize = resource.MustParse("100Mi")
+	var logFileMaxAgeDays uint32 = 30
+	var logFileMaxCount uint32 = 10
 	one := intstr.FromInt(1)
 	miMode := operatorv1.MultiInterfaceModeNone
 	k8sServiceEp := k8sapi.ServiceEndpoint{}
@@ -157,6 +162,14 @@ var _ = Describe("Rendering tests", func() {
 			NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 					MaxUnavailable: &one,
+				},
+			},
+			Logging: &operatorv1.Logging{
+				CNI: &operatorv1.CNILogging{
+					LogSeverity:       &logSeverity,
+					LogFileMaxSize:    &logFileMaxSize,
+					LogFileMaxAgeDays: &logFileMaxAgeDays,
+					LogFileMaxCount:   &logFileMaxCount,
 				},
 			},
 		}

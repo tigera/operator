@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"os"
@@ -1478,7 +1477,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 func readMTUFile() (int, error) {
 	filename := "/var/lib/calico/mtu"
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// File doesn't exist, return zero.

@@ -15,7 +15,6 @@
 package common
 
 import (
-	"io/ioutil"
 	"os"
 
 	"github.com/cloudflare/cfssl/log"
@@ -43,7 +42,7 @@ func getServiceAccount() string {
 	if ok {
 		return v
 	}
-	body, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	body, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		log.Info("Failed to read serviceaccount/namespace file")
 	} else {

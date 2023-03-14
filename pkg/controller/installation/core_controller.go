@@ -37,6 +37,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -691,6 +692,38 @@ func fillDefaults(instance *operator.Installation) error {
 		if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
 			mm := operator.MultiInterfaceModeNone
 			instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
+		}
+
+		// setting default values for calico-cni logging configuration when not provided by the user
+		if instance.Spec.Logging == nil {
+			instance.Spec.Logging = new(operator.Logging)
+		}
+		if instance.Spec.Logging.CNI == nil {
+			instance.Spec.Logging.CNI = new(operator.CNILogging)
+		}
+
+		// set LofSeverity default to Info
+		if instance.Spec.Logging.CNI.LogSeverity == nil {
+			instance.Spec.Logging.CNI.LogSeverity = new(operator.LogLevel)
+			*instance.Spec.Logging.CNI.LogSeverity = operator.LogLevelInfo
+		}
+
+		// set LogFileMaxCount default to 10
+		if instance.Spec.Logging.CNI.LogFileMaxCount == nil {
+			instance.Spec.Logging.CNI.LogFileMaxCount = new(uint32)
+			*instance.Spec.Logging.CNI.LogFileMaxCount = 10
+		}
+
+		// set LogFileMaxAge default to 30 days
+		if instance.Spec.Logging.CNI.LogFileMaxAgeDays == nil {
+			instance.Spec.Logging.CNI.LogFileMaxAgeDays = new(uint32)
+			*instance.Spec.Logging.CNI.LogFileMaxAgeDays = 30
+		}
+
+		// set LogFileMaxSize default to 100 Mi
+		if instance.Spec.Logging.CNI.LogFileMaxSize == nil {
+			instance.Spec.Logging.CNI.LogFileMaxSize = new(resource.Quantity)
+			*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("100Mi")
 		}
 	}
 

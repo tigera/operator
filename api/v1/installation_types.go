@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -178,6 +179,35 @@ type InstallationSpec struct {
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional
 	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
+
+	// Logging Configuration for Components
+	// +optional
+	Logging *Logging `json:"logging,omitempty"`
+}
+
+type Logging struct {
+	// Customized logging specification for calico-cni plugin
+	// +optional
+	CNI *CNILogging `json:"cni,omitempty"`
+}
+
+type CNILogging struct {
+	// Default: Info
+	// +kubebuilder:validation:Enum=Error;Warning;Debug;Info
+	// +optional
+	LogSeverity *LogLevel `json:"logSeverity,omitempty"`
+
+	// Default: 100Mi
+	// +optional
+	LogFileMaxSize *resource.Quantity `json:"logFileMaxSize,omitempty"`
+
+	// Default: 30 (days)
+	// +optional
+	LogFileMaxAgeDays *uint32 `json:"logFileMaxAgeDays,omitempty"`
+
+	// Default: 10
+	// +optional
+	LogFileMaxCount *uint32 `json:"logFileMaxCount,omitempty"`
 }
 
 type FIPSMode string

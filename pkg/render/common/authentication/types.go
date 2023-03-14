@@ -19,7 +19,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -65,7 +65,7 @@ func NewWellKnownConfig(issuerURL string, rootCA []byte) (*WellKnownConfig, erro
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read response body: %v", err)
 	}
@@ -101,7 +101,7 @@ func (wk *WellKnownConfig) GetJWKS() ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	keys, err := ioutil.ReadAll(resp.Body)
+	keys, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

@@ -74,7 +74,6 @@ type AmazonCloudIntegrationStatus struct {
 // AmazonCloudIntegration is the Schema for the amazoncloudintegrations API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:storageversion
 type AmazonCloudIntegration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

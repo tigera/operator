@@ -756,7 +756,7 @@ spec:
                 type: string
               iptablesBackend:
                 description: IptablesBackend specifies which backend of iptables will
-                  be used. The default is Auto.
+                  be used. The default is legacy.
                 type: string
               iptablesFilterAllowAction:
                 type: string

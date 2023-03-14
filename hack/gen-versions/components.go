@@ -16,7 +16,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"text/template"
 
@@ -108,7 +107,7 @@ func GetComponents(versionsPath string) (Release, error) {
 // readComponents opens a versions.yml file and returns a Release
 func readComponents(versionsPath string) (Release, error) {
 	var cr Release
-	f, err := ioutil.ReadFile(versionsPath)
+	f, err := os.ReadFile(versionsPath)
 	if err != nil {
 		return cr, err
 	}

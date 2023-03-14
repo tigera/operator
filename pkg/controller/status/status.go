@@ -46,12 +46,12 @@ var log = logf.Log.WithName("status_manager")
 // a TigeraStatus API object. The status manager uses the following conditions/states to represent the
 // component's current status:
 //
-// - Available: The component is successfully running. All pods launched by the component are healthy.
-//              An upgrade may or may not be occurring.
-// - Progressing: A state change is occurring. It may be that the component is being installed for the
-//                first time, or being upgraded to a new configuration or version.
-// - Degraded: The component is not running the desired state and is not progressing towards it. Either the
-//             component has not been installed, has been updated with invalid configuration, or has crashed.
+//   - Available: The component is successfully running. All pods launched by the component are healthy.
+//     An upgrade may or may not be occurring.
+//   - Progressing: A state change is occurring. It may be that the component is being installed for the
+//     first time, or being upgraded to a new configuration or version.
+//   - Degraded: The component is not running the desired state and is not progressing towards it. Either the
+//     component has not been installed, has been updated with invalid configuration, or has crashed.
 //
 // Each of these states can be set independently of each other. For example, a component can be both available and
 // degraded if it is running successfully but a configuration change has resulted in a configuration that cannot

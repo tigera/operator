@@ -1017,7 +1017,7 @@ var _ = Describe("Node rendering tests", func() {
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
       "log_file_max_size": 1,
-	  "log_file_max_age": 5,
+      "log_file_max_age": 5,
       "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",

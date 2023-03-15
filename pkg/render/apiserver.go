@@ -1635,7 +1635,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
-			Verbs:     []string{"get", "list", "watch"},
+			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		{
+			APIGroups: []string{},
+			Resources: []string{"services/status"},
+			Verbs:     []string{"get", "list", "watch", "patch"},
 		},
 	}
 

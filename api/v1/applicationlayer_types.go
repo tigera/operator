@@ -30,11 +30,18 @@ type ApplicationLayerSpec struct {
 	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
 	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
 	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
+	// WAF services holds a list of the services the user wants to apply the l7-logging annotation to
+	WebApplicationFirewallServices *WAFServices `json:"webApplicationFirewallServices,omitempty"`
 }
 
 type LogCollectionStatusType string
 type WAFStatusType string
 type ApplicationLayerPolicyStatusType string
+
+type WAFServices struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
 
 const (
 	WAFDisabled                    WAFStatusType                    = "Disabled"
@@ -67,6 +74,9 @@ type LogCollectionSpec struct {
 
 // ApplicationLayerStatus defines the observed state of ApplicationLayer
 type ApplicationLayerStatus struct {
+	// WebApplicationFirewallServicesActive holds the currently services with the l7-logging annotation for WAF
+	WebApplicationFirewallServicesActive *WAFServicesActive `json:"webApplicationFirewallServicesActive,omitempty"`
+
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
 
@@ -74,6 +84,11 @@ type ApplicationLayerStatus struct {
 	// Ready, Progressing, Degraded or other customer types.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+type WAFServicesActive struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 // +kubebuilder:object:root=true

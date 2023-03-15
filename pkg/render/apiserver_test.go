@@ -1383,7 +1383,7 @@ var (
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
-			Verbs:     []string{"get", "list", "watch", "patch"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
 	networkAdminPolicyRules = []rbacv1.PolicyRule{
@@ -1501,6 +1501,11 @@ var (
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services/status"},
+			Verbs:     []string{"get", "list", "watch", "patch"},
 		},
 	}
 )

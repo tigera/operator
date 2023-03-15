@@ -1637,6 +1637,11 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
 		},
+		{
+			APIGroups: []string{},
+			Resources: []string{"services/status"},
+			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.

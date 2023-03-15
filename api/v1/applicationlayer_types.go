@@ -39,7 +39,7 @@ type WAFStatusType string
 type ApplicationLayerPolicyStatusType string
 
 type WAFServices struct {
-	Name string `json:"name"`
+	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 }
 
@@ -87,7 +87,7 @@ type ApplicationLayerStatus struct {
 }
 
 type WAFServicesActive struct {
-	Name string `json:"name"`
+	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 }
 

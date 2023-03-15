@@ -232,6 +232,9 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersDeployment(),
 	)
 
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		objectsToCreate = append(objectsToCreate, c.controllersOCPFederationRoleBinding())
+	}
 	objectsToDelete := []client.Object{}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
@@ -402,6 +405,30 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 	}
 
 	return role
+}
+
+// controllersOCPFederationRoleBinding on Openshift, an admission controller will block requests unless this permission
+// is active.
+func (c *kubeControllersComponent) controllersOCPFederationRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "calico-kube-controllers-endpoint-controller",
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "system:controller:endpoint-controller",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      KubeController,
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
 }
 
 func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {

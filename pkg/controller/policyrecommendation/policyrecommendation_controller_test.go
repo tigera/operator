@@ -16,6 +16,7 @@ package policyrecommendation
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -129,7 +130,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
+			Status:     v3.LicenseKeyStatus{Features: []string{common.PolicyRecommendationFeature}}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
@@ -167,22 +168,20 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// TODO(dimitrin): Add test back
-			// d := appsv1.Deployment{
-			// 	TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-			// 	ObjectMeta: metav1.ObjectMeta{
-			// 		Name:      render.PolicyRecommendationDeploymentName,
-			// 		Namespace: render.PolicyRecommendationNamespace,
-			// 	},
-			// }
-			// Expect(test.GetResource(c, &d)).To(BeNil())
-			// Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			// controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
-			// Expect(controller).ToNot(BeNil())
-			// Expect(controller.Image).To(Equal(
-			// 	fmt.Sprintf("some.registry.org/%s:%s",
-			// 		components.ComponentPolicyRecommendation.Image,
-			// 		components.ComponentPolicyRecommendation.Version)))
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PolicyRecommendationDeploymentName,
+					Namespace: render.PolicyRecommendationNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
+			Expect(controller).ToNot(BeNil())
+			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+				components.ComponentPolicyRecommendation.Image,
+				components.ComponentPolicyRecommendation.Version)))
 		})
 
 		It("should use images from imageset", func() {
@@ -198,22 +197,21 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// TODO(dimitrin): Add test back
-			// d := appsv1.Deployment{
-			// 	TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-			// 	ObjectMeta: metav1.ObjectMeta{
-			// 		Name:      render.PolicyRecommendationDeploymentName,
-			// 		Namespace: render.PolicyRecommendationNamespace,
-			// 	},
-			// }
-			// Expect(test.GetResource(c, &d)).To(BeNil())
-			// Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			// controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
-			// Expect(controller).ToNot(BeNil())
-			// Expect(controller.Image).To(Equal(
-			// 	fmt.Sprintf("some.registry.org/%s@%s",
-			// 		components.ComponentPolicyRecommendation.Image,
-			// 		"sha256:policyrecommendationcontrollerhash")))
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PolicyRecommendationDeploymentName,
+					Namespace: render.PolicyRecommendationNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
+			Expect(controller).ToNot(BeNil())
+			Expect(controller.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentPolicyRecommendation.Image,
+					"sha256:policyrecommendationcontrollerhash")))
 		})
 	})
 
@@ -262,6 +260,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 0)).To(BeTrue())
 		})
 
 		It("should wait on tigera-ee-installer-elasticsearch-access secret when in a management cluster", func() {
@@ -274,8 +273,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			// The missing secret should force utils.ElasticSearch to return a NotFound error which triggers r.status.SetDegraded.
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
+			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 0)).To(BeTrue())
 		})
 	})
 

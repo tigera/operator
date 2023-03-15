@@ -39,15 +39,18 @@ const (
 
 	PolicyRecommendationName = "tigera-policy-recommendation"
 
-	PolicyRecommendationClusterRoleName        = PolicyRecommendationName
-	PolicyRecommendationClusterRoleBindingName = PolicyRecommendationName
-	PolicyRecommendationDeploymentName         = PolicyRecommendationName
-	PolicyRecommendationNamespace              = PolicyRecommendationName
-	PolicyRecommendationServiceAccountName     = PolicyRecommendationName
-	PolicyRecommendationPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+	PolicyRecommendationClusterRoleName    = PolicyRecommendationName
+	PolicyRecommendationRoleBindingName    = PolicyRecommendationName
+	PolicyRecommendationDeploymentName     = PolicyRecommendationName
+	PolicyRecommendationNamespace          = PolicyRecommendationName
+	PolicyRecommendationServiceName        = "policy-recommendation"
+	PolicyRecommendationServiceAccountName = PolicyRecommendationName
+	PolicyRecommendationPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationControllerName = "policy-recommendation-controller"
 	PolicyRecommendationInstallerName  = "policy-recommendation-es-installer"
+
+	PolicyRecommendationServerCertSecret = "tigera-policy-recommendation-server-tls"
 )
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
@@ -104,7 +107,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	objs = append(objs,
 		pr.serviceAccount(),
 		pr.clusterRole(),
-		pr.clusterRoleBinding(),
+		pr.roleBinding(),
 		pr.deployment(),
 	)
 
@@ -160,11 +163,15 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 	}
 }
 
-func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (pr *policyRecommendationComponent) roleBinding() client.Object {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "rbac.authorization.k8s.io/v1",
+			Kind:       "RoleBinding",
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: PolicyRecommendationClusterRoleBindingName,
+			Name:      PolicyRecommendationClusterRoleName,
+			Namespace: PolicyRecommendationNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -264,8 +271,6 @@ func (pr *policyRecommendationComponent) deploymentPodTemplate() *corev1.PodTemp
 
 func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[string]string {
 	annotations := pr.cfg.TrustedBundle.HashAnnotations()
-
-	pr.cfg.TrustedBundle.HashAnnotations()
 	if pr.cfg.PolicyRecommendationServerCertSecret != nil {
 		annotations[pr.cfg.PolicyRecommendationServerCertSecret.HashAnnotationKey()] = pr.cfg.PolicyRecommendationServerCertSecret.HashAnnotationValue()
 	}
@@ -281,18 +286,11 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 
 // allowTigeraPolicyForPolicyRecommendation defines an allow-tigera policy for policy recommendation.
 func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfiguration) *v3.NetworkPolicy {
-	apiserverEntityRule := v3.EntityRule{
-		NamespaceSelector: "projectcalico.org/name == 'default'",
-		Selector: "provider == 'kubernetes' && component == 'apiserver' && " +
-			"endpoints.projectcalico.org/serviceName == 'kubernetes'",
-		Ports: networkpolicy.Ports(443, 6443, 12388),
-	}
-
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: apiserverEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 		{
 			Action:      v3.Allow,

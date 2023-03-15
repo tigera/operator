@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -85,7 +86,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.PolicyRecommendationNamespace},
 	})
 
-	return add(mgr, controller)
+	return add(controller)
 }
 
 // newReconciler returns a new *reconcile.Reconciler.
@@ -113,7 +114,7 @@ func newReconciler(
 }
 
 // add adds watches for resources that are available at startup.
-func add(_ manager.Manager, c controller.Controller) error {
+func add(c controller.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource PolicyRecommendation
@@ -357,23 +358,32 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 
+	policyRecommendationServerCertSecret, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		render.PolicyRecommendationServerCertSecret,
+		common.OperatorNamespace(),
+		dns.GetServiceDNSNames(render.PolicyRecommendationServiceName, render.PolicyRecommendationNamespace, r.clusterDomain))
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.PolicyRecommendationServerCertSecret), err, reqLogger)
+		return reconcile.Result{}, err
+	}
 	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	reqLogger.V(3).Info("rendering components")
-	hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:   r.clusterDomain,
-		ESClusterConfig: esClusterConfig,
-		ESSecrets:       esSecrets,
-		Installation:    network,
-		PullSecrets:     pullSecrets,
-		TrustedBundle:   trustedBundle,
-		Openshift:       openshift,
-		UsePSP:          r.usePSP,
+		ClusterDomain:                        r.clusterDomain,
+		ESClusterConfig:                      esClusterConfig,
+		ESSecrets:                            esSecrets,
+		Installation:                         network,
+		PolicyRecommendationServerCertSecret: policyRecommendationServerCertSecret,
+		PullSecrets:                          pullSecrets,
+		TrustedBundle:                        trustedBundle,
+		Openshift:                            openshift,
+		UsePSP:                               r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -396,7 +406,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		}),
 	}
 
-	if hasNoLicense {
+	if hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature); hasNoLicense {
 		log.V(4).Info("PolicyRecommendation is not activated as part of this license")
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, reqLogger)
 		return reconcile.Result{}, nil

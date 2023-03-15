@@ -16,7 +16,6 @@ package render_test
 
 import (
 	. "github.com/onsi/ginkgo"
-	// . "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -26,7 +25,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 
-	//"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,11 +37,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 	var cfg *render.PolicyRecommendationConfiguration
 	var bundle certificatemanagement.TrustedBundle
 	var prAPIKeyPair certificatemanagement.KeyPairInterface
-
-	// expectedPRPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/policyrecommendation.json")
-	// expectedPRPolicyForManaged := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/policyrecommendation_managed.json")
-	// expectedPRPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/policyrecommendation_ocp.json")
-	// expectedPRPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/policyrecommendation_managed_ocp.json")
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -141,7 +134,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			},
 		))
 
-		clusterRoleBinding := rtest.GetResource(resources, render.PolicyRecommendationClusterRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		clusterRoleBinding := rtest.GetResource(resources, render.PolicyRecommendationRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef).To(Equal(
 			rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",

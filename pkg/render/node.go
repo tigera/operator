@@ -521,27 +521,13 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
 
-	// Determine logging configuration
-	logSeverity := string(*c.cfg.Installation.Logging.CNI.LogSeverity)
-
-	// store logFileMaxSize as megabyte in config map
-	logFileMaxSize := c.cfg.Installation.Logging.CNI.LogFileMaxSize.Value() / (1024 * 1024)
-
-	logFileMaxAge := *c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays
-
-	logFileMaxCount := *c.cfg.Installation.Logging.CNI.LogFileMaxCount
-
 	// calico plugin
 	var calicoPluginConfig = map[string]interface{}{
 		"type":                   "calico",
 		"datastore_type":         "kubernetes",
 		"mtu":                    mtu,
 		"nodename_file_optional": nodenameFileOptional,
-		"log_level":              logSeverity,
 		"log_file_path":          "/var/log/calico/cni/cni.log",
-		"log_file_max_size":      logFileMaxSize,
-		"log_file_max_age":       logFileMaxAge,
-		"log_file_max_count":     logFileMaxCount,
 		"ipam":                   ipam,
 		"container_settings": map[string]interface{}{
 			"allow_ip_forwarding": ipForward,
@@ -549,6 +535,30 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		"policy": map[string]interface{}{
 			"type": "k8s",
 		},
+	}
+
+	// Determine logging configuration
+	if c.cfg.Installation.Logging != nil && c.cfg.Installation.Logging.CNI != nil {
+
+		if c.cfg.Installation.Logging.CNI.LogSeverity != nil {
+			logSeverity := string(*c.cfg.Installation.Logging.CNI.LogSeverity)
+			calicoPluginConfig["log_level"] = logSeverity
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxSize != nil {
+			logFileMaxSize := c.cfg.Installation.Logging.CNI.LogFileMaxSize.Value() / (1024 * 1024)
+			calicoPluginConfig["log_file_max_size"] = logFileMaxSize
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxCount != nil {
+			logFileMaxCount := *c.cfg.Installation.Logging.CNI.LogFileMaxCount
+			calicoPluginConfig["log_file_max_count"] = logFileMaxCount
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays != nil {
+			logFileMaxAgeDays := *c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays
+			calicoPluginConfig["log_file_max_age"] = logFileMaxAgeDays
+		}
 	}
 
 	// optional properties

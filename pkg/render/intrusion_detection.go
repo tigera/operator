@@ -1554,27 +1554,37 @@ func (c *intrusionDetectionComponent) adDetectorSecret() *corev1.Secret {
 }
 
 func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{ADResourceGroup},
+			Resources: []string{
+				ADDetectorsModelResourceName,
+				ADLogTypeMetaDataResourceName,
+			},
+			Verbs: []string{
+				"get",
+				"create",
+				"update",
+			},
+		},
+	}
+
+	if c.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{ADAPIPodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      adDetectorName,
 			Namespace: IntrusionDetectionNamespace,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{
-					ADResourceGroup,
-				},
-				Resources: []string{
-					ADDetectorsModelResourceName, ADLogTypeMetaDataResourceName,
-				},
-				Verbs: []string{
-					"get",
-					"create",
-					"update",
-				},
-			},
-		},
+		Rules: rules,
 	}
 }
 

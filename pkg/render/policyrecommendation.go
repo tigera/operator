@@ -206,10 +206,9 @@ func (pr *policyRecommendationComponent) controllerContainer() corev1.Container 
 
 	sc := securitycontext.NewNonRootContext()
 
-	volumeMounts := []corev1.VolumeMount{
-		pr.cfg.TrustedBundle.VolumeMount(pr.SupportedOSType()),
-		pr.cfg.PolicyRecommendationServerCertSecret.VolumeMount(pr.SupportedOSType()),
-	}
+	volumeMounts := []corev1.VolumeMount{}
+	volumeMounts = append(volumeMounts, pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())...)
+	volumeMounts = append(volumeMounts, pr.cfg.PolicyRecommendationServerCertSecret.VolumeMount(pr.SupportedOSType()))
 
 	return corev1.Container{
 		Name:            "policy-recommendation-controller",

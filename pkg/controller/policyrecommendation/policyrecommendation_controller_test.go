@@ -50,8 +50,6 @@ import (
 )
 
 var _ = Describe("PolicyRecommendation controller tests", func() {
-	const expectedPRStorageClassName = "tigera-policy-recommendation"
-
 	var c client.Client
 	var ctx context.Context
 	var r ReconcilePolicyRecommendation

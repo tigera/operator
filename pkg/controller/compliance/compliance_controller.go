@@ -376,9 +376,29 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
 
-	var complianceServerCertSecret certificatemanagement.KeyPairInterface
+	// Get the key pairs for each component, generating them as needed.
+	type complianceKeyPair struct {
+		SecretName string
+		Interface  certificatemanagement.KeyPairInterface
+	}
+	snapshotterKeyPair := complianceKeyPair{SecretName: render.ComplianceSnapshotterSecret}
+	benchmarkerKeyPair := complianceKeyPair{SecretName: render.ComplianceBenchmarkerSecret}
+	reporterKeyPair := complianceKeyPair{SecretName: render.ComplianceReporterSecret}
+	controllerKeyPair := complianceKeyPair{SecretName: render.ComplianceControllerSecret}
+	for _, kp := range []*complianceKeyPair{&snapshotterKeyPair, &benchmarkerKeyPair, &reporterKeyPair, &controllerKeyPair} {
+		// These key pairs are only used as client credentials for mTLS with Linseed, and so do not need DNS names listed
+		// as they do not act as server certs.
+		dnsNames := []string{"localhost"}
+		kp.Interface, err = certificateManager.GetOrCreateKeyPair(r.client, kp.SecretName, common.OperatorNamespace(), dnsNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", kp.SecretName), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	var complianceServerKeyPair certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {
-		complianceServerCertSecret, err = certificateManager.GetOrCreateKeyPair(
+		complianceServerKeyPair, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
 			render.ComplianceServerCertSecret,
 			common.OperatorNamespace(),
@@ -417,7 +437,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		ESSecrets:                   esSecrets,
 		TrustedBundle:               trustedBundle,
 		Installation:                network,
-		ComplianceServerCertSecret:  complianceServerCertSecret,
+		ServerKeyPair:               complianceServerKeyPair,
+		ControllerKeyPair:           controllerKeyPair.Interface,
+		BenchmarkerKeyPair:          benchmarkerKeyPair.Interface,
+		SnapshotterKeyPair:          snapshotterKeyPair.Interface,
+		ReporterKeyPair:             reporterKeyPair.Interface,
 		ESClusterConfig:             esClusterConfig,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   openshift,
@@ -428,6 +452,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		HasNoLicense:                hasNoLicense,
 		UsePSP:                      r.usePSP,
 	}
+
 	// Render the desired objects from the CRD and create or update them.
 	comp, err := render.Compliance(complianceCfg)
 	if err != nil {
@@ -443,7 +468,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		Namespace:       render.ComplianceNamespace,
 		ServiceAccounts: []string{render.ComplianceServerSAName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-			rcertificatemanagement.NewKeyPairOption(complianceServerCertSecret, true, true),
+			rcertificatemanagement.NewKeyPairOption(complianceServerKeyPair, true, true),
+			rcertificatemanagement.NewKeyPairOption(controllerKeyPair.Interface, true, true),
+			rcertificatemanagement.NewKeyPairOption(benchmarkerKeyPair.Interface, true, true),
+			rcertificatemanagement.NewKeyPairOption(snapshotterKeyPair.Interface, true, true),
+			rcertificatemanagement.NewKeyPairOption(reporterKeyPair.Interface, true, true),
 		},
 		TrustedBundle: trustedBundle,
 	})

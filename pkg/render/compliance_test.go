@@ -71,12 +71,12 @@ var _ = Describe("compliance rendering tests", func() {
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
 			},
-			ComplianceServerCertSecret: secret,
-			ESClusterConfig:            relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
-			Openshift:                  notOpenshift,
-			ClusterDomain:              clusterDomain,
-			TrustedBundle:              bundle,
-			UsePSP:                     true,
+			ServerKeyPair:   secret,
+			ESClusterConfig: relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
+			Openshift:       notOpenshift,
+			ClusterDomain:   clusterDomain,
+			TrustedBundle:   bundle,
+			UsePSP:          true,
 		}
 	})
 
@@ -511,7 +511,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			complianceTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
-			cfg.ComplianceServerCertSecret = complianceTLS
+			cfg.ServerKeyPair = complianceTLS
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()

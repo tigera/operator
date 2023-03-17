@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -542,4 +544,16 @@ func ValidateResourceNameIsQualified(name string) error {
 	}
 
 	return nil
+}
+
+func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch, error) {
+	es := esv1.Elasticsearch{}
+	err := c.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &es, nil
 }

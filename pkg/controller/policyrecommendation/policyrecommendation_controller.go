@@ -374,11 +374,13 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
+	isManagedCluster := managementCluster == nil
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
 		ClusterDomain:                        r.clusterDomain,
 		ESClusterConfig:                      esClusterConfig,
 		ESSecrets:                            esSecrets,
 		Installation:                         network,
+		ManagedCluster:                       isManagedCluster,
 		PolicyRecommendationServerCertSecret: policyRecommendationServerCertSecret,
 		PullSecrets:                          pullSecrets,
 		TrustedBundle:                        trustedBundle,

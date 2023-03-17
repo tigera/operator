@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -112,7 +112,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		}
 	}
 
-	elasticsearch, err := r.getElasticsearch(ctx)
+	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 		return reconcile.Result{}, false, finalizerCleanup, err

@@ -39,13 +39,13 @@ const (
 
 	PolicyRecommendationName = "tigera-policy-recommendation"
 
-	PolicyRecommendationClusterRoleName    = PolicyRecommendationName
-	PolicyRecommendationRoleBindingName    = PolicyRecommendationName
-	PolicyRecommendationDeploymentName     = PolicyRecommendationName
-	PolicyRecommendationNamespace          = PolicyRecommendationName
-	PolicyRecommendationServiceName        = "policy-recommendation"
-	PolicyRecommendationServiceAccountName = PolicyRecommendationName
-	PolicyRecommendationPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+	PolicyRecommendationClusterRoleName        = PolicyRecommendationName
+	PolicyRecommendationClusterRoleBindingName = PolicyRecommendationName
+	PolicyRecommendationDeploymentName         = PolicyRecommendationName
+	PolicyRecommendationNamespace              = PolicyRecommendationName
+	PolicyRecommendationServiceName            = "policy-recommendation"
+	PolicyRecommendationServiceAccountName     = PolicyRecommendationName
+	PolicyRecommendationPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationControllerName = "policy-recommendation-controller"
 	PolicyRecommendationInstallerName  = "policy-recommendation-es-installer"
@@ -107,7 +107,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	objs = append(objs,
 		pr.serviceAccount(),
 		pr.clusterRole(),
-		pr.roleBinding(),
+		pr.clusterRoleBinding(),
 		pr.deployment(),
 	)
 
@@ -163,15 +163,14 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 	}
 }
 
-func (pr *policyRecommendationComponent) roleBinding() client.Object {
-	return &rbacv1.RoleBinding{
+func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
+	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "rbac.authorization.k8s.io/v1",
-			Kind:       "RoleBinding",
+			Kind:       "ClusterRoleBinding",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PolicyRecommendationClusterRoleName,
-			Namespace: PolicyRecommendationNamespace,
+			Name: PolicyRecommendationClusterRoleBindingName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",

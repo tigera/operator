@@ -96,7 +96,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
 
 		Expect(prc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(prc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
@@ -134,7 +134,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			},
 		))
 
-		clusterRoleBinding := rtest.GetResource(resources, render.PolicyRecommendationRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		clusterRoleBinding := rtest.GetResource(resources, render.PolicyRecommendationClusterRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef).To(Equal(
 			rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",

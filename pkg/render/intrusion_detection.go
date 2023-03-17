@@ -1,4 +1,4 @@
-// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -317,6 +317,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				},
 			},
 			Template: *podTemplate,
+			// PodFailurePolicy is not available for k8s < 1.26; setting BackoffLimit to a higher number (default is 6)
+			//to lessen the frequency of installation failures when responses from Elastic Search takes more time.
+			BackoffLimit: ptr.Int32ToPtr(30),
 			PodFailurePolicy: &batchv1.PodFailurePolicy{
 				Rules: []batchv1.PodFailurePolicyRule{
 					// We don't want the job to fail, so we keep retrying by ignoring incrementing the backoff.

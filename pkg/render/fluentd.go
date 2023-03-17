@@ -599,7 +599,7 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+		{Name: "LINSEED_ENDPOINT", Value: LinseedURL},
 		{Name: "LINSEED_CA_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},

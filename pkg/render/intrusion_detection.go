@@ -375,6 +375,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Name:  "CLUSTER_NAME",
 				Value: c.cfg.ESClusterConfig.ClusterName(),
 			},
+			{
+				Name:  "FIPS_MODE_ENABLED",
+				Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
+			},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
@@ -642,7 +646,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: "https://tigera-linseed.tigera-elasticsearch.svc",
+			Value: LinseedURL,
 		},
 		{
 			Name:  "LINSEED_CA",

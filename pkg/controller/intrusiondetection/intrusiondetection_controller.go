@@ -493,8 +493,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// keyPair is the key pair intrusion detection presents to identify itself
-	keyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+	// intrusionDetectionKeyPair is the key pair intrusion detection presents to identify itself
+	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -551,7 +551,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		HasNoLicense:                 hasNoLicense,
 		TrustedCertBundle:            trustedBundle,
 		ADAPIServerCertSecret:        adAPIServerTLSSecret,
-		IntrusionDetectionCertSecret: keyPair,
+		IntrusionDetectionCertSecret: intrusionDetectionKeyPair,
 		UsePSP:                       r.usePSP,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
@@ -602,8 +602,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			TrustedBundle: trustedBundle,
 		}),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace: render.IntrusionDetectionNamespace,
-			// TODO: ALINA - CAN WE REMOVE THIS SERVICE ACCOUNT AND LEAVE ONLY AD API ?
+			Namespace:       render.IntrusionDetectionNamespace,
 			ServiceAccounts: []string{render.IntrusionDetectionName, render.ADAPIObjectName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, true, true),

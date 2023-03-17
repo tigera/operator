@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -278,6 +280,7 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
+
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
@@ -310,6 +313,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				},
 			},
 			Template: *podTemplate,
+			// PodFailurePolicy is not available for k8s < 1.26; setting BackoffLimit to a higher number (default is 6)
+			//to lessen the frequency of installation failures when responses from Elastic Search takes more time.
+			BackoffLimit: ptr.Int32ToPtr(30),
 			PodFailurePolicy: &batchv1.PodFailurePolicy{
 				Rules: []batchv1.PodFailurePolicyRule{
 					// We don't want the job to fail, so we keep retrying by ignoring incrementing the backoff.

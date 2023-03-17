@@ -66,12 +66,14 @@ const (
 	ComplianceServerCertSecret = "tigera-compliance-server-tls"
 )
 
-var ComplianceServerEntityRule = networkpolicy.CreateEntityRule(ComplianceNamespace, ComplianceServerName, complianceServerPort)
-var ComplianceServerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName)
-var ComplianceBenchmarkerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName)
-var ComplianceControllerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName)
-var ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
-var ComplianceReporterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
+var (
+	ComplianceServerEntityRule            = networkpolicy.CreateEntityRule(ComplianceNamespace, ComplianceServerName, complianceServerPort)
+	ComplianceServerSourceEntityRule      = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName)
+	ComplianceBenchmarkerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName)
+	ComplianceControllerSourceEntityRule  = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName)
+	ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
+	ComplianceReporterSourceEntityRule    = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
+)
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 	return &complianceComponent{
@@ -663,11 +665,19 @@ func (c *complianceComponent) complianceServerService() *corev1.Service {
 }
 
 func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
+	var keyPath, certPath string
+	if c.cfg.ComplianceServerCertSecret != nil {
+		// This should never be nil, but we check it anyway just to be safe.
+		keyPath, certPath = c.cfg.ComplianceServerCertSecret.VolumeMountKeyFilePath(), c.cfg.ComplianceServerCertSecret.VolumeMountCertificateFilePath()
+	}
+
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
@@ -1404,6 +1414,11 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.ESGatewayEntityRule,
 		})
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
+		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
@@ -1440,6 +1455,11 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
 		},
 	}
 

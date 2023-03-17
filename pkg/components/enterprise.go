@@ -162,6 +162,11 @@ var (
 		Image:   "tigera/packetcapture",
 	}
 
+	ComponentPolicyRecommendation = component{
+		Version: "master",
+		Image:   "tigera/policy-recommendation",
+	}
+
 	ComponentEgressGateway = component{
 		Version: "master",
 		Image:   "tigera/egress-gateway",
@@ -291,6 +296,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,

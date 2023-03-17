@@ -60,13 +60,14 @@ const (
 	IntrusionDetectionControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
 	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
-	ADAPIObjectName            = "anomaly-detection-api"
-	ADAPIPodSecurityPolicyName = "anomaly-detection-api"
-	ADAPIObjectPortName        = "anomaly-detection-api-https"
-	ADAPITLSSecretName         = "anomaly-detection-api-tls"
-	ADAPIExpectedServiceName   = "anomaly-detection-api.tigera-intrusion-detection.svc"
-	ADAPIPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
-	adAPIPort                  = 8080
+	ADAPIObjectName                 = "anomaly-detection-api"
+	ADAPIPodSecurityPolicyName      = "anomaly-detection-api"
+	ADAPIObjectPortName             = "anomaly-detection-api-https"
+	ADAPITLSSecretName              = "anomaly-detection-api-tls"
+	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
+	ADAPIExpectedServiceName        = "anomaly-detection-api.tigera-intrusion-detection.svc"
+	ADAPIPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
+	adAPIPort                       = 8080
 
 	ADPersistentVolumeClaimName            = "tigera-anomaly-detection"
 	DefaultAnomalyDetectionPVRequestSizeGi = "10Gi"
@@ -115,10 +116,11 @@ type IntrusionDetectionConfiguration struct {
 
 	// PVC fields Spec fields are immutable, set to true when an existing AD PVC
 	// is not found as to avoid update failures.
-	ShouldRenderADPVC     bool
-	HasNoLicense          bool
-	TrustedCertBundle     certificatemanagement.TrustedBundle
-	ADAPIServerCertSecret certificatemanagement.KeyPairInterface
+	ShouldRenderADPVC            bool
+	HasNoLicense                 bool
+	TrustedCertBundle            certificatemanagement.TrustedBundle
+	ADAPIServerCertSecret        certificatemanagement.KeyPairInterface
+	IntrusionDetectionCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -373,6 +375,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Name:  "CLUSTER_NAME",
 				Value: c.cfg.ESClusterConfig.ClusterName(),
 			},
+			{
+				Name:  "FIPS_MODE_ENABLED",
+				Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
+			},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
@@ -575,6 +581,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	volumes := []corev1.Volume{
 		c.cfg.TrustedCertBundle.Volume(),
+		c.cfg.IntrusionDetectionCertSecret.Volume(),
 	}
 	// If syslog forwarding is enabled then set the necessary hostpath volume to write
 	// logs for Fluentd to access.
@@ -637,6 +644,22 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Name:  "FIPS_MODE_ENABLED",
 			Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 		},
+		{
+			Name:  "LINSEED_URL",
+			Value: LinseedURL,
+		},
+		{
+			Name:  "LINSEED_CA",
+			Value: c.cfg.TrustedCertBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_CERT",
+			Value: c.cfg.IntrusionDetectionCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_KEY",
+			Value: c.cfg.IntrusionDetectionCertSecret.VolumeMountKeyFilePath(),
+		},
 	}
 
 	sc := securitycontext.NewNonRootContext()
@@ -644,6 +667,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
 	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+	volumeMounts = append(volumeMounts, c.cfg.IntrusionDetectionCertSecret.VolumeMount(c.SupportedOSType()))
 	if c.syslogForwardingIsEnabled() {
 		envs = append(envs,
 			corev1.EnvVar{Name: "IDS_ENABLE_EVENT_FORWARDING", Value: "true"},
@@ -1724,6 +1748,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.ESGatewayEntityRule,
 		})
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
+		})
+
 	}
 	egressRules = append(egressRules, []v3.Rule{
 		{

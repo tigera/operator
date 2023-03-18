@@ -602,6 +602,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			ManagedCluster:       managedCluster,
 			UsePSP:               r.usePSP,
 			UseSyslogCertificate: useSyslogCertificate,
+			FluentdKeyPair:       fluentdKeyPair,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

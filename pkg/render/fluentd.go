@@ -599,8 +599,10 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: LinseedURL},
-		{Name: "LINSEED_CA_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+		{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc.cluster.local"},
+		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
+		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
+		{Name: "TLS_CRT_PATH", Value: c.certPath()},
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
@@ -780,6 +782,27 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		)
 	}
 	return envs
+}
+
+func (c *fluentdComponent) trustedBundlePath() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return certificatemanagement.TrustedCertBundleMountPathWindows
+	}
+	return c.cfg.TrustedBundle.MountPath()
+}
+
+func (c *fluentdComponent) keyPath() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return fmt.Sprintf("c:/%s/%s", c.cfg.FluentdKeyPair.GetName(), corev1.TLSPrivateKeyKey)
+	}
+	return c.cfg.FluentdKeyPair.VolumeMountKeyFilePath()
+}
+
+func (c *fluentdComponent) certPath() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return fmt.Sprintf("c:/%s/%s", c.cfg.FluentdKeyPair.GetName(), corev1.TLSCertKey)
+	}
+	return c.cfg.FluentdKeyPair.VolumeMountCertificateFilePath()
 }
 
 // The startup probe uses the same action as the liveness probe, but with

@@ -330,19 +330,19 @@ var _ = Describe("compliance rendering tests", func() {
 			complianceBenchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))

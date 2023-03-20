@@ -401,8 +401,9 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
 			Namespace: ComplianceNamespace,
@@ -413,7 +414,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorate(corev1.Container{
+				{
 					Name:  ComplianceControllerName,
 					Image: c.controllerImage,
 					Env:   envVars,
@@ -427,14 +428,14 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    append(c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()), c.cfg.ControllerKeyPair.VolumeMount(c.SupportedOSType())),
-				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
+				},
 			},
 			Volumes: []corev1.Volume{
 				c.cfg.ControllerKeyPair.Volume(),
 				c.cfg.TrustedBundle.Volume(),
 			},
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -523,6 +524,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
@@ -547,29 +549,27 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				Containers: []corev1.Container{
-					relasticsearch.ContainerDecorateIndexCreator(
-						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:  "reporter",
-							Image: c.reporterImage,
-							Env:   envVars,
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/liveness",
-										Port: intstr.FromInt(9099),
-									},
+					{
+						Name:  "reporter",
+						Image: c.reporterImage,
+						Env:   envVars,
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/liveness",
+									Port: intstr.FromInt(9099),
 								},
-								PeriodSeconds: 300,
 							},
-							// On OpenShift reporter needs privileged access to write compliance reports to host path volume
-							SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
-							VolumeMounts: append(
-								c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
-								c.cfg.ReporterKeyPair.VolumeMount(c.SupportedOSType()),
-								corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"},
-							),
-						}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
-					),
+							PeriodSeconds: 300,
+						},
+						// On OpenShift reporter needs privileged access to write compliance reports to host path volume
+						SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
+						VolumeMounts: append(
+							c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
+							c.cfg.ReporterKeyPair.VolumeMount(c.SupportedOSType()),
+							corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"},
+						),
+					},
 				},
 				Volumes: []corev1.Volume{
 					{
@@ -709,6 +709,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
@@ -718,7 +719,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(ComplianceNamespace))
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ComplianceServerName,
 			Namespace:   ComplianceNamespace,
@@ -731,7 +732,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorate(corev1.Container{
+				{
 					Name:  ComplianceServerName,
 					Image: c.serverImage,
 					Env:   envVars,
@@ -765,11 +766,11 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    c.complianceServerVolumeMounts(),
-				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
+				},
 			},
 			Volumes: c.complianceServerVolumes(),
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -895,9 +896,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
@@ -908,30 +910,28 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorateIndexCreator(
-					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:  ComplianceSnapshotterName,
-						Image: c.snapshotterImage,
-						Env:   envVars,
-						LivenessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: "/liveness",
-									Port: intstr.FromInt(9099),
-								},
+				{
+					Name:  ComplianceSnapshotterName,
+					Image: c.snapshotterImage,
+					Env:   envVars,
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/liveness",
+								Port: intstr.FromInt(9099),
 							},
 						},
-						SecurityContext: securitycontext.NewNonRootContext(),
-						VolumeMounts:    append(c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()), c.cfg.SnapshotterKeyPair.VolumeMount(c.SupportedOSType())),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
-				),
+					},
+					SecurityContext: securitycontext.NewNonRootContext(),
+					VolumeMounts:    append(c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()), c.cfg.SnapshotterKeyPair.VolumeMount(c.SupportedOSType())),
+				},
 			},
 			Volumes: []corev1.Volume{
 				c.cfg.TrustedBundle.Volume(),
 				c.cfg.SnapshotterKeyPair.Volume(),
 			},
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -1021,6 +1021,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 
 	volMounts := []corev1.VolumeMount{
@@ -1068,7 +1069,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		})
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
 			Namespace: ComplianceNamespace,
@@ -1079,28 +1080,26 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Tolerations:        rmeta.TolerateAll,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorateIndexCreator(
-					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:            ComplianceBenchmarkerName,
-						Image:           c.benchmarkerImage,
-						Env:             envVars,
-						SecurityContext: securitycontext.NewRootContext(false),
-						VolumeMounts:    volMounts,
-						LivenessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: "/liveness",
-									Port: intstr.FromInt(9099),
-								},
+				{
+					Name:            ComplianceBenchmarkerName,
+					Image:           c.benchmarkerImage,
+					Env:             envVars,
+					SecurityContext: securitycontext.NewRootContext(false),
+					VolumeMounts:    volMounts,
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/liveness",
+								Port: intstr.FromInt(9099),
 							},
-							PeriodSeconds: 300,
 						},
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
-				),
+						PeriodSeconds: 300,
+					},
+				},
 			},
 			Volumes: vols,
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},

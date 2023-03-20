@@ -360,8 +360,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
+		log.Info("Elasticsearch gateway certificates are not available yet, waiting until they become available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificates are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraLinseedSecret, common.OperatorNamespace())
@@ -369,8 +369,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if linseedCertificate == nil {
-		log.Info("Linseed certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+		log.Info("Linseed certificate is not available yet, waiting until it becomes available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

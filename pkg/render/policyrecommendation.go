@@ -108,8 +108,12 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
-		pr.deployment(),
 	)
+
+	// Deployment is for standalone or management cluster
+	if !pr.cfg.ManagedCluster {
+		objs = append(objs, pr.deployment())
+	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
 
@@ -145,8 +149,6 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				"policyrecommendationscopes/status",
 				"stagednetworkpolicies",
 				"tier.stagednetworkpolicies",
-				"stagednetworkpolicy",
-				"tier.stagednetworkpolicy",
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
@@ -287,6 +289,11 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ManagerEntityRule,
 		},
 	}
 	if cfg.ManagedCluster {

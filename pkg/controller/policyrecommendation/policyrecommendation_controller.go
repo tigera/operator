@@ -316,6 +316,8 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	isManagedCluster := managementClusterConnection != nil
+
 	if managementClusterConnection != nil && managementCluster != nil {
 		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
@@ -339,7 +341,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	var managerInternalTLSSecret certificatemanagement.CertificateInterface
-	if managementCluster != nil {
+	if !isManagedCluster {
 		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)
@@ -374,7 +376,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	reqLogger.V(3).Info("rendering components")
 	openshift := r.provider == operatorv1.ProviderOpenShift
-	isManagedCluster := managementCluster == nil
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
 		ClusterDomain:                        r.clusterDomain,
 		ESClusterConfig:                      esClusterConfig,

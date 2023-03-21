@@ -101,9 +101,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	objs := []client.Object{
 		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
 	}
-	if !pr.cfg.ManagedCluster {
-		objs = append(objs, allowTigeraPolicyForPolicyRecommendation(pr.cfg))
-	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
 
@@ -115,7 +112,10 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 
 	// Deployment is for standalone or management cluster
 	if !pr.cfg.ManagedCluster {
-		objs = append(objs, pr.deployment())
+		objs = append(objs,
+			allowTigeraPolicyForPolicyRecommendation(pr.cfg),
+			pr.deployment(),
+		)
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)

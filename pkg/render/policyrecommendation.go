@@ -100,8 +100,11 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
-		allowTigeraPolicyForPolicyRecommendation(pr.cfg),
 	}
+	if !pr.cfg.ManagedCluster {
+		objs = append(objs, allowTigeraPolicyForPolicyRecommendation(pr.cfg))
+	}
+
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
 
 	objs = append(objs,
@@ -295,30 +298,17 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: ManagerEntityRule,
 		},
-	}
-	if cfg.ManagedCluster {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: GuardianEntityRule,
-		})
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ManagerEntityRule,
-		})
-	} else {
-		egressRules = append(egressRules, v3.Rule{
+		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.ESGatewayEntityRule,
-		})
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
+		},
 	}
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: DexEntityRule,
-	})
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 
 	return &v3.NetworkPolicy{

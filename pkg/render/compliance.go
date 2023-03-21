@@ -1055,8 +1055,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Name:         "usr-bin",
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/usr/bin"}},
 		},
-		c.cfg.BenchmarkerKeyPair.Volume(),
 		c.cfg.TrustedBundle.Volume(),
+		c.cfg.BenchmarkerKeyPair.Volume(),
 	}
 
 	// benchmarker needs an extra host path volume mount for GKE for CIS benchmarks

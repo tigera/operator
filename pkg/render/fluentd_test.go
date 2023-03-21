@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -127,6 +128,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		Expect(envs).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "LINSEED_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tigera-fluentd-prometheus-tls/tls.key"},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tigera-fluentd-prometheus-tls/tls.crt"},
 			corev1.EnvVar{Name: "FLUENT_UID", Value: "0"},
 			corev1.EnvVar{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			corev1.EnvVar{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
@@ -230,7 +236,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
-		cfg.FluentdKeyPair = nil
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
@@ -248,6 +253,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []corev1.EnvVar{
+			{Name: "LINSEED_ENABLED", Value: "true"},
+			{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc.cluster.local"},
+			{Name: "LINSEED_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPathWindows},
+			{Name: "TLS_KEY_PATH", Value: "c:/tigera-fluentd-prometheus-tls/tls.key"},
+			{Name: "TLS_CRT_PATH", Value: "c:/tigera-fluentd-prometheus-tls/tls.crt"},
 			{Name: "FLUENT_UID", Value: "0"},
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},

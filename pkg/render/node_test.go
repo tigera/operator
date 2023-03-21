@@ -53,6 +53,10 @@ var (
 	bgpEnabled           = operatorv1.BGPEnabled
 	bgpDisabled          = operatorv1.BGPDisabled
 	nonPrivilegedEnabled = operatorv1.NonPrivilegedEnabled
+	logSeverity          = operatorv1.LogLevelDebug
+	logFileMaxAgeDays    = uint32(5)
+	logFileMaxCount      = uint32(5)
+	logFileMaxSize       = resource.MustParse("1Mi")
 )
 
 var _ = Describe("Node rendering tests", func() {
@@ -98,6 +102,14 @@ var _ = Describe("Node rendering tests", func() {
 					NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 						RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 							MaxUnavailable: &one,
+						},
+					},
+					Logging: &operatorv1.Logging{
+						CNI: &operatorv1.CNILogging{
+							LogSeverity:       &logSeverity,
+							LogFileMaxSize:    &logFileMaxSize,
+							LogFileMaxAgeDays: &logFileMaxAgeDays,
+							LogFileMaxCount:   &logFileMaxCount,
 						},
 					},
 				}
@@ -185,8 +197,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -444,8 +459,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
         "type": "calico-ipam",
         "assign_ipv4": "%t",
@@ -668,8 +686,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1450,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -996,8 +1017,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -1404,8 +1428,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -2549,8 +2576,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -2631,8 +2661,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -2699,8 +2732,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
           %s
@@ -2749,8 +2785,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
 	  "ranges": [[{"subnet": "usePodCidr"}], [{"subnet": "usePodCidrIPv6"}]]
@@ -2793,8 +2832,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
           "subnet" : "usePodCidrIPv6"
@@ -2831,8 +2873,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
         "type": "calico-ipam",
         "assign_ipv4" : "%t",
@@ -2992,8 +3037,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
 		  "subnet": "usePodCidr"

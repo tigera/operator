@@ -161,6 +161,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, kiibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))

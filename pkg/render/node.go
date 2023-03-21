@@ -307,21 +307,20 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 }
 
 // cniPluginRoleBinding creates a rolebinding giving the Calico CNI plugin service account the required permissions to operate.
-func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.RoleBinding {
+func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
 		finalizer = []string{NodeFinalizer}
 	}
-	crb := &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+	crb := &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       CalicoCNIPluginObjectName,
-			Namespace:  common.CalicoNamespace,
 			Finalizers: finalizer,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
+			Kind:     "ClusterRole",
 			Name:     CalicoCNIPluginObjectName,
 		},
 		Subjects: []rbacv1.Subject{
@@ -332,7 +331,6 @@ func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.RoleBinding {
 			},
 		},
 	}
-
 	return crb
 }
 
@@ -410,6 +408,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// For monitoring Calico-specific configuration.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
+					"bgpfilters",
 					"bgpconfigurations",
 					"bgppeers",
 					"blockaffinities",
@@ -537,16 +536,15 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 }
 
 // cniPluginRole creates the role containing policy rules that allow the Calico CNI plugin to operate normally.
-func (c *nodeComponent) cniPluginRole() *rbacv1.Role {
+func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
 		finalizer = []string{NodeFinalizer}
 	}
-	role := &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       CalicoCNIPluginObjectName,
-			Namespace:  common.CalicoNamespace,
 			Finalizers: finalizer,
 		},
 
@@ -572,6 +570,9 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.Role {
 					"ipamblocks",
 					"ipamhandles",
 					"ipamconfigs",
+					"clusterinformations",
+					"ippools",
+					"ipreservations",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},

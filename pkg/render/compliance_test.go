@@ -71,12 +71,12 @@ var _ = Describe("compliance rendering tests", func() {
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
 			},
-			ComplianceServerCertSecret: secret,
-			ESClusterConfig:            relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
-			Openshift:                  notOpenshift,
-			ClusterDomain:              clusterDomain,
-			TrustedBundle:              bundle,
-			UsePSP:                     true,
+			ServerKeyPair:   secret,
+			ESClusterConfig: relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
+			Openshift:       notOpenshift,
+			ClusterDomain:   clusterDomain,
+			TrustedBundle:   bundle,
+			UsePSP:          true,
 		}
 	})
 
@@ -330,19 +330,19 @@ var _ = Describe("compliance rendering tests", func() {
 			complianceBenchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "CLUSTER", Value: "cluster"},
 			))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
@@ -511,7 +511,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			complianceTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
-			cfg.ComplianceServerCertSecret = complianceTLS
+			cfg.ServerKeyPair = complianceTLS
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()

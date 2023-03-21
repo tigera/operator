@@ -63,15 +63,21 @@ const (
 	ElasticsearchComplianceServerUserSecret      = "tigera-ee-compliance-server-elasticsearch-access"
 	ElasticsearchCuratorUserSecret               = "tigera-ee-curator-elasticsearch-access"
 
-	ComplianceServerCertSecret = "tigera-compliance-server-tls"
+	ComplianceServerCertSecret  = "tigera-compliance-server-tls"
+	ComplianceSnapshotterSecret = "tigera-compliance-snapshotter-tls"
+	ComplianceBenchmarkerSecret = "tigera-compliance-benchmarker-tls"
+	ComplianceControllerSecret  = "tigera-compliance-controller-tls"
+	ComplianceReporterSecret    = "tigera-compliance-reporter-tls"
 )
 
-var ComplianceServerEntityRule = networkpolicy.CreateEntityRule(ComplianceNamespace, ComplianceServerName, complianceServerPort)
-var ComplianceServerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName)
-var ComplianceBenchmarkerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName)
-var ComplianceControllerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName)
-var ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
-var ComplianceReporterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
+var (
+	ComplianceServerEntityRule            = networkpolicy.CreateEntityRule(ComplianceNamespace, ComplianceServerName, complianceServerPort)
+	ComplianceServerSourceEntityRule      = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName)
+	ComplianceBenchmarkerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName)
+	ComplianceControllerSourceEntityRule  = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName)
+	ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
+	ComplianceReporterSourceEntityRule    = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
+)
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 	return &complianceComponent{
@@ -82,9 +88,7 @@ func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 // ComplianceConfiguration contains all the config information needed to render the component.
 type ComplianceConfiguration struct {
 	ESSecrets                   []*corev1.Secret
-	TrustedBundle               certificatemanagement.TrustedBundle
 	Installation                *operatorv1.InstallationSpec
-	ComplianceServerCertSecret  certificatemanagement.KeyPairInterface
 	ESClusterConfig             *relasticsearch.ClusterConfig
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
@@ -93,6 +97,16 @@ type ComplianceConfiguration struct {
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	ClusterDomain               string
 	HasNoLicense                bool
+
+	// Trusted certificate bundle for all compliance pods.
+	TrustedBundle certificatemanagement.TrustedBundle
+
+	// Key pairs used for mTLS.
+	ServerKeyPair      certificatemanagement.KeyPairInterface
+	BenchmarkerKeyPair certificatemanagement.KeyPairInterface
+	ReporterKeyPair    certificatemanagement.KeyPairInterface
+	SnapshotterKeyPair certificatemanagement.KeyPairInterface
+	ControllerKeyPair  certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -374,13 +388,22 @@ func (c *complianceComponent) complianceControllerClusterAdminClusterRoleBinding
 }
 
 func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deployment {
+	var keyPath, certPath string
+	if c.cfg.ControllerKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
+		keyPath, certPath = c.cfg.ControllerKeyPair.VolumeMountKeyFilePath(), c.cfg.ControllerKeyPair.VolumeMountCertificateFilePath()
+	}
+
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
 			Namespace: ComplianceNamespace,
@@ -391,7 +414,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorate(corev1.Container{
+				{
 					Name:  ComplianceControllerName,
 					Image: c.controllerImage,
 					Env:   envVars,
@@ -404,14 +427,15 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 						},
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
-					VolumeMounts:    c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
-				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
+					VolumeMounts:    append(c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()), c.cfg.ControllerKeyPair.VolumeMount(c.SupportedOSType())),
+				},
 			},
 			Volumes: []corev1.Volume{
+				c.cfg.ControllerKeyPair.Volume(),
 				c.cfg.TrustedBundle.Volume(),
 			},
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -488,10 +512,19 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 }
 
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
+	var keyPath, certPath string
+	if c.cfg.ReporterKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
+		keyPath, certPath = c.cfg.ReporterKeyPair.VolumeMountKeyFilePath(), c.cfg.ReporterKeyPair.VolumeMountCertificateFilePath()
+	}
+
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
@@ -516,28 +549,27 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				Containers: []corev1.Container{
-					relasticsearch.ContainerDecorateIndexCreator(
-						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:  "reporter",
-							Image: c.reporterImage,
-							Env:   envVars,
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/liveness",
-										Port: intstr.FromInt(9099),
-									},
+					{
+						Name:  "reporter",
+						Image: c.reporterImage,
+						Env:   envVars,
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/liveness",
+									Port: intstr.FromInt(9099),
 								},
-								PeriodSeconds: 300,
 							},
-							// On OpenShift reporter needs privileged access to write compliance reports to host path volume
-							SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
-							VolumeMounts: append(
-								c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
-								corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"},
-							),
-						}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
-					),
+							PeriodSeconds: 300,
+						},
+						// On OpenShift reporter needs privileged access to write compliance reports to host path volume
+						SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
+						VolumeMounts: append(
+							c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
+							c.cfg.ReporterKeyPair.VolumeMount(c.SupportedOSType()),
+							corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"},
+						),
+					},
 				},
 				Volumes: []corev1.Volume{
 					{
@@ -549,6 +581,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							},
 						},
 					},
+					c.cfg.ReporterKeyPair.Volume(),
 					c.cfg.TrustedBundle.Volume(),
 				},
 			},
@@ -663,21 +696,30 @@ func (c *complianceComponent) complianceServerService() *corev1.Service {
 }
 
 func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
+	var keyPath, certPath string
+	if c.cfg.ServerKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
+		keyPath, certPath = c.cfg.ServerKeyPair.VolumeMountKeyFilePath(), c.cfg.ServerKeyPair.VolumeMountCertificateFilePath()
+	}
+
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
 	var initContainers []corev1.Container
-	if c.cfg.ComplianceServerCertSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ComplianceServerCertSecret.InitContainer(ComplianceNamespace))
+	if c.cfg.ServerKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(ComplianceNamespace))
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ComplianceServerName,
 			Namespace:   ComplianceNamespace,
@@ -690,7 +732,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorate(corev1.Container{
+				{
 					Name:  ComplianceServerName,
 					Image: c.serverImage,
 					Env:   envVars,
@@ -719,16 +761,16 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						FailureThreshold:    5,
 					},
 					Args: []string{
-						fmt.Sprintf("-certpath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountCertificateFilePath()),
-						fmt.Sprintf("-keypath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountKeyFilePath()),
+						fmt.Sprintf("-certpath=%s", c.cfg.ServerKeyPair.VolumeMountCertificateFilePath()),
+						fmt.Sprintf("-keypath=%s", c.cfg.ServerKeyPair.VolumeMountKeyFilePath()),
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    c.complianceServerVolumeMounts(),
-				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
+				},
 			},
 			Volumes: c.complianceServerVolumes(),
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -753,13 +795,13 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
 	return append(
 		c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
-		c.cfg.ComplianceServerCertSecret.VolumeMount(c.SupportedOSType()),
+		c.cfg.ServerKeyPair.VolumeMount(c.SupportedOSType()),
 	)
 }
 
 func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{
-		c.cfg.ComplianceServerCertSecret.Volume(),
+		c.cfg.ServerKeyPair.Volume(),
 		c.cfg.TrustedBundle.Volume(),
 	}
 	return volumes
@@ -767,8 +809,8 @@ func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 
 func complianceAnnotations(c *complianceComponent) map[string]string {
 	annotations := c.cfg.TrustedBundle.HashAnnotations()
-	if c.cfg.ComplianceServerCertSecret != nil {
-		annotations[c.cfg.ComplianceServerCertSecret.HashAnnotationKey()] = c.cfg.ComplianceServerCertSecret.HashAnnotationValue()
+	if c.cfg.ServerKeyPair != nil {
+		annotations[c.cfg.ServerKeyPair.HashAnnotationKey()] = c.cfg.ServerKeyPair.HashAnnotationValue()
 	}
 	return annotations
 }
@@ -841,14 +883,23 @@ func (c *complianceComponent) complianceSnapshotterClusterRoleBinding() *rbacv1.
 }
 
 func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployment {
+	var keyPath, certPath string
+	if c.cfg.SnapshotterKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
+		keyPath, certPath = c.cfg.SnapshotterKeyPair.VolumeMountKeyFilePath(), c.cfg.SnapshotterKeyPair.VolumeMountCertificateFilePath()
+	}
+
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
@@ -859,29 +910,28 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorateIndexCreator(
-					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:  ComplianceSnapshotterName,
-						Image: c.snapshotterImage,
-						Env:   envVars,
-						LivenessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: "/liveness",
-									Port: intstr.FromInt(9099),
-								},
+				{
+					Name:  ComplianceSnapshotterName,
+					Image: c.snapshotterImage,
+					Env:   envVars,
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/liveness",
+								Port: intstr.FromInt(9099),
 							},
 						},
-						SecurityContext: securitycontext.NewNonRootContext(),
-						VolumeMounts:    c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
-				),
+					},
+					SecurityContext: securitycontext.NewNonRootContext(),
+					VolumeMounts:    append(c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()), c.cfg.SnapshotterKeyPair.VolumeMount(c.SupportedOSType())),
+				},
 			},
 			Volumes: []corev1.Volume{
 				c.cfg.TrustedBundle.Volume(),
+				c.cfg.SnapshotterKeyPair.Volume(),
 			},
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -960,9 +1010,18 @@ func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.
 }
 
 func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet {
+	var keyPath, certPath string
+	if c.cfg.BenchmarkerKeyPair != nil {
+		// This should never be nil, but we check it anyway just to be safe.
+		keyPath, certPath = c.cfg.BenchmarkerKeyPair.VolumeMountKeyFilePath(), c.cfg.BenchmarkerKeyPair.VolumeMountCertificateFilePath()
+	}
+
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "CLUSTER", Value: c.cfg.ESClusterConfig.ClusterName()},
 	}
 
 	volMounts := []corev1.VolumeMount{
@@ -973,6 +1032,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "usr-bin", MountPath: "/usr/local/bin", ReadOnly: true},
 	}
 	volMounts = append(volMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
+	volMounts = append(volMounts, c.cfg.BenchmarkerKeyPair.VolumeMount(c.SupportedOSType()))
 
 	vols := []corev1.Volume{
 		{
@@ -995,6 +1055,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Name:         "usr-bin",
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/usr/bin"}},
 		},
+		c.cfg.BenchmarkerKeyPair.Volume(),
 		c.cfg.TrustedBundle.Volume(),
 	}
 
@@ -1008,7 +1069,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		})
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
 			Namespace: ComplianceNamespace,
@@ -1019,28 +1080,26 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Tolerations:        rmeta.TolerateAll,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorateIndexCreator(
-					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:            ComplianceBenchmarkerName,
-						Image:           c.benchmarkerImage,
-						Env:             envVars,
-						SecurityContext: securitycontext.NewRootContext(false),
-						VolumeMounts:    volMounts,
-						LivenessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: "/liveness",
-									Port: intstr.FromInt(9099),
-								},
+				{
+					Name:            ComplianceBenchmarkerName,
+					Image:           c.benchmarkerImage,
+					Env:             envVars,
+					SecurityContext: securitycontext.NewRootContext(false),
+					VolumeMounts:    volMounts,
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/liveness",
+								Port: intstr.FromInt(9099),
 							},
-							PeriodSeconds: 300,
 						},
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
-				),
+						PeriodSeconds: 300,
+					},
+				},
 			},
 			Volumes: vols,
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -1386,7 +1445,7 @@ func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplat
 }
 
 // Allow internal communication from compliance-benchmarker, compliance-controller, compliance-snapshotter, compliance-reporter
-// to apiserver, coredns and elasticsearch.
+// to apiserver, coredns, linseed, and elasticsearch.
 func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
@@ -1403,6 +1462,11 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.ESGatewayEntityRule,
+		})
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
 		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{
@@ -1440,6 +1504,11 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
 		},
 	}
 

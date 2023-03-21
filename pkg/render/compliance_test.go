@@ -64,19 +64,27 @@ var _ = Describe("compliance rendering tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		bundle := certificateManager.CreateTrustedBundle()
-		secret, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
+		serverKP, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
+		controllerKP, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceControllerSecret, common.OperatorNamespace(), []string{""})
+		benchmarkerKP, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceBenchmarkerSecret, common.OperatorNamespace(), []string{""})
+		reporterKP, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceReporterSecret, common.OperatorNamespace(), []string{""})
+		snapshotterKP, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceSnapshotterSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.ComplianceConfiguration{
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
 			},
-			ServerKeyPair:   secret,
-			ESClusterConfig: relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
-			Openshift:       notOpenshift,
-			ClusterDomain:   clusterDomain,
-			TrustedBundle:   bundle,
-			UsePSP:          true,
+			ServerKeyPair:      serverKP,
+			ControllerKeyPair:  controllerKP,
+			ReporterKeyPair:    reporterKP,
+			BenchmarkerKeyPair: benchmarkerKP,
+			SnapshotterKeyPair: snapshotterKP,
+			ESClusterConfig:    relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
+			Openshift:          notOpenshift,
+			ClusterDomain:      clusterDomain,
+			TrustedBundle:      bundle,
+			UsePSP:             true,
 		}
 	})
 

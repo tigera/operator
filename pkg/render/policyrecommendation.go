@@ -37,33 +37,23 @@ import (
 const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
-	PolicyRecommendationName = "tigera-policy-recommendation"
-
-	PolicyRecommendationClusterRoleName        = PolicyRecommendationName
-	PolicyRecommendationClusterRoleBindingName = PolicyRecommendationName
-	PolicyRecommendationDeploymentName         = PolicyRecommendationName
-	PolicyRecommendationNamespace              = PolicyRecommendationName
-	PolicyRecommendationServiceName            = "policy-recommendation"
-	PolicyRecommendationServiceAccountName     = PolicyRecommendationName
-	PolicyRecommendationPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
-
-	PolicyRecommendationControllerName = "policy-recommendation-controller"
-	PolicyRecommendationInstallerName  = "policy-recommendation-es-installer"
-
-	PolicyRecommendationServerCertSecret = "tigera-policy-recommendation-server-tls"
+	PolicyRecommendationInstallerName = "policy-recommendation-es-installer"
+	PolicyRecommendationName          = "tigera-policy-recommendation"
+	PolicyRecommendationNamespace     = PolicyRecommendationName
+	PolicyRecommendationPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+	PolicyRecommendationServiceName   = "policy-recommendation"
 )
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
-	ClusterDomain                        string
-	ESClusterConfig                      *relasticsearch.ClusterConfig
-	ESSecrets                            []*corev1.Secret
-	Installation                         *operatorv1.InstallationSpec
-	ManagedCluster                       bool
-	Openshift                            bool
-	PolicyRecommendationServerCertSecret certificatemanagement.KeyPairInterface
-	PullSecrets                          []*corev1.Secret
-	TrustedBundle                        certificatemanagement.TrustedBundle
+	ClusterDomain   string
+	ESClusterConfig *relasticsearch.ClusterConfig
+	ESSecrets       []*corev1.Secret
+	Installation    *operatorv1.InstallationSpec
+	ManagedCluster  bool
+	Openshift       bool
+	PullSecrets     []*corev1.Secret
+	TrustedBundle   certificatemanagement.TrustedBundle
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -100,15 +90,12 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
-	}
-
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
-
-	objs = append(objs,
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
-	)
+	}
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
 
 	// Deployment is for standalone or management cluster
 	if !pr.cfg.ManagedCluster {
@@ -117,8 +104,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 			pr.deployment(),
 		)
 	}
-
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
 
 	return objs, nil
 }
@@ -160,7 +145,7 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: PolicyRecommendationClusterRoleName,
+			Name: PolicyRecommendationName,
 		},
 		Rules: rules,
 	}
@@ -173,29 +158,25 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 			Kind:       "ClusterRoleBinding",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: PolicyRecommendationClusterRoleBindingName,
+			Name: PolicyRecommendationName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     PolicyRecommendationClusterRoleName,
+			Name:     PolicyRecommendationName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      PolicyRecommendationServiceAccountName,
+				Name:      PolicyRecommendationName,
 				Namespace: PolicyRecommendationNamespace,
 			},
 		},
 	}
 }
 
-func (pr *policyRecommendationComponent) controllerContainer() corev1.Container {
+func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	envs := []corev1.EnvVar{
-		{
-			Name:  "CLUSTER_NAME",
-			Value: pr.cfg.ESClusterConfig.ClusterName(),
-		},
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: pr.cfg.TrustedBundle.MountPath(),
@@ -206,52 +187,30 @@ func (pr *policyRecommendationComponent) controllerContainer() corev1.Container 
 		},
 	}
 
-	sc := securitycontext.NewNonRootContext()
-
-	volumeMounts := []corev1.VolumeMount{}
-	volumeMounts = append(volumeMounts, pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())...)
-	volumeMounts = append(volumeMounts, pr.cfg.PolicyRecommendationServerCertSecret.VolumeMount(pr.SupportedOSType()))
-
-	return corev1.Container{
+	controllerContainer := corev1.Container{
 		Name:            "policy-recommendation-controller",
 		Image:           pr.image,
 		Env:             envs,
-		SecurityContext: sc,
-		VolumeMounts:    volumeMounts,
-	}
-}
-
-func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PolicyRecommendationName,
-			Namespace: PolicyRecommendationNamespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.Int32ToPtr(1),
-			Template: *pr.deploymentPodTemplate(),
-		},
-	}
-}
-
-func (pr *policyRecommendationComponent) deploymentPodTemplate() *corev1.PodTemplateSpec {
-	var ps []corev1.LocalObjectReference
-	for _, x := range pr.cfg.PullSecrets {
-		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
+		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType()),
 	}
 
 	volumes := []corev1.Volume{
 		pr.cfg.TrustedBundle.Volume(),
-		pr.cfg.PolicyRecommendationServerCertSecret.Volume(),
 	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(
-		relasticsearch.ContainerDecorate(pr.controllerContainer(), pr.cfg.ESClusterConfig.ClusterName(),
-			ElasticsearchPolicyRecommendationUserSecret, pr.cfg.ClusterDomain, rmeta.OSTypeLinux),
-		pr.cfg.ESClusterConfig.Replicas(), pr.cfg.ESClusterConfig.Shards())
+		relasticsearch.ContainerDecorate(
+			controllerContainer,
+			pr.cfg.ESClusterConfig.ClusterName(),
+			ElasticsearchPolicyRecommendationUserSecret,
+			pr.cfg.ClusterDomain,
+			rmeta.OSTypeLinux,
+		),
+		pr.cfg.ESClusterConfig.Replicas(),
+		pr.cfg.ESClusterConfig.Shards())
 
-	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplateSpec := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        PolicyRecommendationName,
 			Namespace:   PolicyRecommendationNamespace,
@@ -261,27 +220,35 @@ func (pr *policyRecommendationComponent) deploymentPodTemplate() *corev1.PodTemp
 			Tolerations:        pr.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:       pr.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: PolicyRecommendationName,
-			ImagePullSecrets:   ps,
+			ImagePullSecrets:   secret.GetReferenceList(pr.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				container,
 			},
 			Volumes: volumes,
 		},
 	}, pr.cfg.ESClusterConfig, pr.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PolicyRecommendationName,
+			Namespace: PolicyRecommendationNamespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.Int32ToPtr(1),
+			Template: *podTemplateSpec,
+		},
+	}
 }
 
 func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[string]string {
-	annotations := pr.cfg.TrustedBundle.HashAnnotations()
-	if pr.cfg.PolicyRecommendationServerCertSecret != nil {
-		annotations[pr.cfg.PolicyRecommendationServerCertSecret.HashAnnotationKey()] = pr.cfg.PolicyRecommendationServerCertSecret.HashAnnotationValue()
-	}
-	return annotations
+	return pr.cfg.TrustedBundle.HashAnnotations()
 }
 
 func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationServiceAccountName, Namespace: PolicyRecommendationNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: PolicyRecommendationNamespace},
 	}
 }
 
@@ -302,11 +269,6 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.ESGatewayEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: DexEntityRule,
 		},
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)

@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -49,7 +48,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const ResourceName = "policy-recommendation"
+const (
+	PolicyRecommendationControllerName = "policy-recommendation-controller"
+	ResourceName                       = "policy-recommendation"
+)
 
 var log = logf.Log.WithName("controller_policy_recommendation")
 
@@ -65,7 +67,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
-	controller, err := controller.New(render.PolicyRecommendationControllerName, mgr,
+	controller, err := controller.New(PolicyRecommendationControllerName, mgr,
 		controller.Options{
 			Reconciler: reconciler,
 		})
@@ -141,6 +143,7 @@ func add(c controller.Controller) error {
 			relasticsearch.PublicCertSecret,
 			render.ElasticsearchPolicyRecommendationUserSecret,
 			certificatemanagement.CASecretName,
+			render.ManagerInternalTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("policy-recommendation-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -300,10 +303,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	secretsToWatch := []string{
-		render.ElasticsearchPolicyRecommendationUserSecret,
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -324,6 +323,9 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	secretsToWatch := []string{
+		render.ElasticsearchPolicyRecommendationUserSecret,
+	}
 	esSecrets, err := utils.ElasticsearchSecrets(ctx, secretsToWatch, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -360,33 +362,22 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 
-	policyRecommendationServerCertSecret, err := certificateManager.GetOrCreateKeyPair(
-		r.client,
-		render.PolicyRecommendationServerCertSecret,
-		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.PolicyRecommendationServiceName, render.PolicyRecommendationNamespace, r.clusterDomain))
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.PolicyRecommendationServerCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	}
 	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	reqLogger.V(3).Info("rendering components")
-	openshift := r.provider == operatorv1.ProviderOpenShift
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:                        r.clusterDomain,
-		ESClusterConfig:                      esClusterConfig,
-		ESSecrets:                            esSecrets,
-		Installation:                         network,
-		ManagedCluster:                       isManagedCluster,
-		PolicyRecommendationServerCertSecret: policyRecommendationServerCertSecret,
-		PullSecrets:                          pullSecrets,
-		TrustedBundle:                        trustedBundle,
-		Openshift:                            openshift,
-		UsePSP:                               r.usePSP,
+		ClusterDomain:   r.clusterDomain,
+		ESClusterConfig: esClusterConfig,
+		ESSecrets:       esSecrets,
+		Installation:    network,
+		ManagedCluster:  isManagedCluster,
+		PullSecrets:     pullSecrets,
+		TrustedBundle:   trustedBundle,
+		Openshift:       r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:          r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -402,10 +393,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.PolicyRecommendationNamespace,
 			ServiceAccounts: []string{render.PolicyRecommendationName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(policyRecommendationCfg.PolicyRecommendationServerCertSecret, true, true),
-			},
-			TrustedBundle: trustedBundle,
+			TrustedBundle:   trustedBundle,
 		}),
 	}
 

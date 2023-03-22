@@ -169,7 +169,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PolicyRecommendationDeploymentName,
+					Name:      render.PolicyRecommendationName,
 					Namespace: render.PolicyRecommendationNamespace,
 				},
 			}
@@ -198,7 +198,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PolicyRecommendationDeploymentName,
+					Name:      render.PolicyRecommendationName,
 					Namespace: render.PolicyRecommendationNamespace,
 				},
 			}

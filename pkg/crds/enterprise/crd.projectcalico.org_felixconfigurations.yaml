@@ -453,16 +453,6 @@ spec:
                 type: string
               endpointReportingEnabled:
                 type: boolean
-              externalNetworkRoutingRulePriority:
-                description: 'ExternalNetworkRoutingRulePriority controls the priority
-                  value to use for the external network routing rule. [Default: 102]'
-                type: integer
-              externalNetworkSupport:
-                description: 'ExternalNetworkSupport defines two different support
-                  modes for external network function. [Default: Disabled] - Disabled:  External
-                  network function is disabled. - Enabled:   External network function
-                  is enabled.'
-                type: string
               externalNodesList:
                 description: ExternalNodesCIDRList is a list of CIDR's of external-non-calico-nodes
                   which may source tunnel traffic and have the tunneled traffic be
@@ -1190,8 +1180,8 @@ spec:
                 type: boolean
               vxlanEnabled:
                 description: 'VXLANEnabled overrides whether Felix should create the
-                  VXLAN tunnel device for VXLAN networking. Optional as Felix determines
-                  this based on the existing IP pools. [Default: nil (unset)]'
+                  VXLAN tunnel device for IPv4 VXLAN networking. Optional as Felix
+                  determines this based on the existing IP pools. [Default: nil (unset)]'
                 type: boolean
               vxlanMTU:
                 description: 'VXLANMTU is the MTU to set on the IPv4 VXLAN tunnel

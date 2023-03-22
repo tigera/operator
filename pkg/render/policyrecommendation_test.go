@@ -36,7 +36,7 @@ import (
 var _ = Describe("Policy recommendation rendering tests", func() {
 	var cfg *render.PolicyRecommendationConfiguration
 	var bundle certificatemanagement.TrustedBundle
-	var prAPIKeyPair certificatemanagement.KeyPairInterface
+	// var prAPIKeyPair certificatemanagement.KeyPairInterface
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -44,21 +44,21 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
-		Expect(err).NotTo(HaveOccurred())
-		prAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		// secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
+		// Expect(err).NotTo(HaveOccurred())
+		// prAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.PolicyRecommendationConfiguration{
-			ClusterDomain:                        dns.DefaultClusterDomain,
-			ESClusterConfig:                      relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
-			TrustedBundle:                        bundle,
-			PolicyRecommendationServerCertSecret: prAPIKeyPair,
-			Installation:                         &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ManagedCluster:                       notManagedCluster,
-			UsePSP:                               true,
+			ClusterDomain:   dns.DefaultClusterDomain,
+			ESClusterConfig: relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
+			TrustedBundle:   bundle,
+			// PolicyRecommendationServerCertSecret: prAPIKeyPair,
+			Installation:   &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ManagedCluster: notManagedCluster,
+			UsePSP:         true,
 		}
 	})
 
@@ -76,10 +76,10 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-policy-recommendation", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "allow-tigera.tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "allow-tigera.tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
@@ -90,7 +90,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		}
 
 		// Should mount ManagerTLSSecret for non-managed clusters
-		prc := rtest.GetResource(resources, render.PolicyRecommendationDeploymentName, render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		prc := rtest.GetResource(resources, render.PolicyRecommendationName, render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(prc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(prc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
@@ -107,7 +107,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(*prc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(*prc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 
-		clusterRole := rtest.GetResource(resources, render.PolicyRecommendationClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtest.GetResource(resources, render.PolicyRecommendationName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ContainElements(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -132,7 +132,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			},
 		))
 
-		clusterRoleBinding := rtest.GetResource(resources, render.PolicyRecommendationClusterRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		clusterRoleBinding := rtest.GetResource(resources, render.PolicyRecommendationName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef).To(Equal(
 			rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",

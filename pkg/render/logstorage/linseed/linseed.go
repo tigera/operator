@@ -300,7 +300,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 						InitialDelaySeconds: 10,
 						PeriodSeconds:       5,
 					},
-				}},
+				},
+			},
 		},
 	}
 
@@ -340,7 +341,7 @@ func (l *linseed) linseedService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName,
+			Name:      render.LinseedServiceName,
 			Namespace: l.namespace,
 		},
 		Spec: corev1.ServiceSpec{

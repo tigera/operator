@@ -20,7 +20,7 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-	CalicoRelease string = "v3.15.2"
+	CalicoRelease string = "v3.24.5"
 
 	ComponentCalicoCNI = component{
 		Version: "v3.24.5",

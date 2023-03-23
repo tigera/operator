@@ -557,7 +557,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			ServiceAccounts: []string{render.ManagerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
 			},

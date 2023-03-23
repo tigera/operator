@@ -417,8 +417,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	// For standalone and management clusters, we just use Linseed's actual certificate.
 	linseedCertLocation := render.TigeraLinseedSecret
 	if managedCluster {
+		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
+		// management cluster into the managed cluster by kube-controllers.
 		linseedCertLocation = render.VoltronLinseedPublicCert
 	}
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())

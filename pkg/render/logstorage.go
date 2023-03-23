@@ -430,7 +430,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	} else {
 		toCreate = append(toCreate,
 			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
-			es.elasticsearchExternalService(), // TODO: Delete this, and add to toDelete.
+			es.elasticsearchExternalService(),
 			es.linseedExternalService(),
 		)
 	}

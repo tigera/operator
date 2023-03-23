@@ -373,11 +373,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 
+			voltronLinseedCert, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedTLS, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+
 			cfg = &render.ManagerConfiguration{
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair()),
 				TLSKeyPair:            managerTLS,
 				ManagementCluster:     &operatorv1.ManagementCluster{},
 				TunnelSecret:          tunnelSecret,
+				VoltronLinseedKeyPair: voltronLinseedCert,
 				InternalTrafficSecret: internalTraffic,
 				Installation:          installation,
 				ESClusterConfig:       &relasticsearch.ClusterConfig{},
@@ -460,7 +464,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
 
-		Expect(len(voltron.VolumeMounts)).To(Equal(4))
+		Expect(len(voltron.VolumeMounts)).To(Equal(5))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
@@ -469,8 +473,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[2].MountPath).To(Equal("/internal-manager-tls"))
 		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.VoltronTunnelSecretName))
 		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/tigera-management-cluster-connection"))
+		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.VoltronLinseedTLS))
+		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/tigera-voltron-linseed-tls"))
 
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(5))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-ca-bundle"))
@@ -479,6 +485,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.VoltronTunnelSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.VoltronTunnelSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.VoltronLinseedTLS))
+		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(render.VoltronLinseedTLS))
 
 		clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -583,6 +591,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	var kp certificatemanagement.KeyPairInterface
+	var voltronLinseedKP certificatemanagement.KeyPairInterface
 	var bundle certificatemanagement.TrustedBundle
 
 	BeforeEach(func() {
@@ -590,6 +599,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		secret, err := certificatemanagement.CreateSelfSignedSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		kp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
+		voltronLinseedKP = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -603,13 +614,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		cfg := &render.ManagerConfiguration{
-			TrustedCertBundle: bundle,
-			ESClusterConfig:   &relasticsearch.ClusterConfig{},
-			TLSKeyPair:        kp,
-			Installation:      i,
-			ESLicenseType:     render.ElasticsearchLicenseTypeUnknown,
-			Replicas:          &replicas,
-			UsePSP:            true,
+			TrustedCertBundle:     bundle,
+			ESClusterConfig:       &relasticsearch.ClusterConfig{},
+			TLSKeyPair:            kp,
+			VoltronLinseedKeyPair: voltronLinseedKP,
+			Installation:          i,
+			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
+			Replicas:              &replicas,
+			UsePSP:                true,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -798,6 +810,7 @@ func renderObjects(roc renderConfig) []client.Object {
 
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTraffic certificatemanagement.KeyPairInterface
+	var voltronLinseedKP certificatemanagement.KeyPairInterface
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -810,6 +823,9 @@ func renderObjects(roc renderConfig) []client.Object {
 		Expect(err).NotTo(HaveOccurred())
 		internalTraffic, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
+		voltronLinseedKP, err = certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedTLS, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
+
 	}
 	managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
 	Expect(err).NotTo(HaveOccurred())
@@ -823,6 +839,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		Installation:            roc.installation,
 		ManagementCluster:       roc.managementCluster,
 		TunnelSecret:            tunnelSecret,
+		VoltronLinseedKeyPair:   voltronLinseedKP,
 		InternalTrafficSecret:   internalTraffic,
 		ClusterDomain:           dns.DefaultClusterDomain,
 		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,

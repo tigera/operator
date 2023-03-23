@@ -64,8 +64,8 @@ const (
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
-	VoltronLinseedTLS        = "tigera-secure-voltron-inner-tls"
-	VoltronLinseedPublicCert = "tigera-secure-voltron-inner-http-certs-public"
+	VoltronLinseedTLS        = "tigera-voltron-linseed-tls"
+	VoltronLinseedPublicCert = "tigera-voltron-linseed-certs-public"
 
 	ManagerClusterSettings            = "cluster-settings"
 	ManagerUserSettings               = "user-settings"
@@ -95,6 +95,10 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := cfg.TrustedCertBundle.HashAnnotations()
 	tlsAnnotations[cfg.TLSKeyPair.HashAnnotationKey()] = cfg.TLSKeyPair.HashAnnotationValue()
+
+	if cfg.VoltronLinseedKeyPair != nil {
+		tlsAnnotations[cfg.VoltronLinseedKeyPair.HashAnnotationKey()] = cfg.VoltronLinseedKeyPair.HashAnnotationValue()
+	}
 
 	if cfg.KeyValidatorConfig != nil {
 		tlsSecrets = append(tlsSecrets, cfg.KeyValidatorConfig.RequiredSecrets(ManagerNamespace)...)
@@ -228,14 +232,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
 	}
 
-	// Create a secret for managed cluster clients to verify the authenticity of Voltron's inner certificate, used for connections to Linseed.
-	// The following secret is copied by kube controllers and sent to managed clusters.
-	if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
-		objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, common.OperatorNamespace()))
-	} else {
-		objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, common.OperatorNamespace()))
-	}
-
 	return objs, nil
 }
 
@@ -310,6 +306,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 		v = append(v,
 			c.cfg.InternalTrafficSecret.Volume(),
 			c.cfg.TunnelSecret.Volume(),
+			c.cfg.VoltronLinseedKeyPair.Volume(),
 		)
 	}
 	if c.cfg.KeyValidatorConfig != nil {

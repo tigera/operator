@@ -78,6 +78,9 @@ const (
 	// TigeraKibanaCertSecret is the TLS key pair that is mounted by the Kibana pods.
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 
+	// Linseed vars.
+	LinseedServiceName = "tigera-linseed"
+
 	ElasticsearchName               = "tigera-secure"
 	ElasticsearchServiceName        = "tigera-secure-es-http"
 	ESGatewayServiceName            = "tigera-secure-es-gateway-http"
@@ -427,7 +430,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	} else {
 		toCreate = append(toCreate,
 			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
-			es.elasticsearchExternalService(),
+			es.elasticsearchExternalService(), // TODO: Delete this, and add to toDelete.
+			es.linseedExternalService(),
 		)
 	}
 
@@ -456,6 +460,20 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 func (es *elasticsearchComponent) Ready() bool {
 	return true
+}
+
+func (es elasticsearchComponent) linseedExternalService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      LinseedServiceName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, es.cfg.ClusterDomain),
+		},
+	}
 }
 
 func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service {

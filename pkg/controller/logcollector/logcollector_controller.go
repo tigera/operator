@@ -138,7 +138,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret,
+		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
@@ -371,6 +371,19 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
+	// as well as validation with respect to Syslog.logTypes.
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
+		// have this CR available, but we should communicate any other kind of error that we encounter.
+		if !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "An error occurred while looking for a ManagementClusterConnection", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+	managedCluster := managementClusterConnection != nil
+
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
@@ -403,7 +416,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraLinseedSecret, common.OperatorNamespace())
+	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	linseedCertLocation := render.TigeraLinseedSecret
+	if managedCluster {
+		linseedCertLocation = render.VoltronLinseedPublicCert
+	}
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
@@ -472,19 +490,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			}
 		}
 	}
-
-	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
-	// as well as validation with respect to Syslog.logTypes.
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-	if err != nil {
-		// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
-		// have this CR available, but we should communicate any other kind of error that we encounter.
-		if !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "An error occurred while looking for a ManagementClusterConnection", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-	managedCluster := managementClusterConnection != nil
 
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {

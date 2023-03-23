@@ -45,7 +45,6 @@ const (
 	DeploymentName             = "tigera-linseed"
 	ServiceAccountName         = "tigera-linseed"
 	RoleName                   = "tigera-linseed"
-	ServiceName                = "tigera-linseed"
 	PodSecurityPolicyName      = "tigera-linseed"
 	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
 	PortName                   = "tigera-linseed"
@@ -321,7 +320,7 @@ func (l *linseed) linseedService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName,
+			Name:      render.LinseedServiceName,
 			Namespace: l.namespace,
 		},
 		Spec: corev1.ServiceSpec{

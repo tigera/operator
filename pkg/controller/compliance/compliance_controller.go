@@ -364,7 +364,13 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificates are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraLinseedSecret, common.OperatorNamespace())
+
+	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	linseedCertLocation := render.TigeraLinseedSecret
+	if managementClusterConnection != nil {
+		linseedCertLocation = render.VoltronLinseedPublicCert
+	}
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
@@ -375,6 +381,18 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
+
+	if managementCluster != nil {
+		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
+		// management cluster by kube-controllers.
+		voltronInnerCert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if voltronInnerCert != nil {
+			trustedBundle.AddCertificates(voltronInnerCert)
+		}
+	}
 
 	// Get the key pairs for each component, generating them as needed.
 	type complianceKeyPair struct {

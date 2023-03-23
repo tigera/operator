@@ -303,12 +303,6 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
 
-	if c.cfg.ManagedCluster {
-		objs = append(objs, c.voltronService())
-	} else {
-		toDelete = append(toDelete, c.voltronService())
-	}
-
 	return objs, toDelete
 }
 
@@ -602,30 +596,10 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 	}
 }
 
-func (c *fluentdComponent) voltronService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
-			Namespace: LogCollectorNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, c.cfg.ClusterDomain),
-		},
-	}
-}
-
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
-	linseedEndpoint := relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)
-	if c.cfg.ManagedCluster {
-		// For managed clusters, we authentiate directly with Voltron.
-		// The tigera-manager service is a dummy service that forward to Guardian.
-		linseedEndpoint = "https://tigera-manager:443"
-	}
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: linseedEndpoint},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},

@@ -376,6 +376,18 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
 
+	if managementCluster != nil {
+		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
+		// management cluster by kube-controllers.
+		voltronInnerCert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if voltronInnerCert != nil {
+			trustedBundle.AddCertificates(voltronInnerCert)
+		}
+	}
+
 	// Get the key pairs for each component, generating them as needed.
 	type complianceKeyPair struct {
 		SecretName string

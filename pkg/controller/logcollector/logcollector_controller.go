@@ -138,7 +138,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret,
+		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedTLS,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
@@ -485,6 +485,18 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 	managedCluster := managementClusterConnection != nil
+
+	if managedCluster {
+		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
+		// management cluster by kube-controllers.
+		voltronInnerCert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if voltronInnerCert != nil {
+			trustedBundle.AddCertificates(voltronInnerCert)
+		}
+	}
 
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {

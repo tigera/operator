@@ -81,8 +81,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+	err = utils.AddSecretsWatch(controller, render.VoltronLinseedTLS, render.ManagerNamespace)
+	if err != nil {
+		return err
+	}
 
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: render.ManagerNamespace},

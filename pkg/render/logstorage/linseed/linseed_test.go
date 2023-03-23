@@ -68,7 +68,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-			{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
+			{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 			{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 			{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
@@ -334,7 +334,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	}))
 
 	// Check service
-	service := rtest.GetResource(resources, ServiceName, render.ElasticsearchNamespace, "", "v1", "Service").(*corev1.Service)
+	service := rtest.GetResource(resources, render.LinseedServiceName, render.ElasticsearchNamespace, "", "v1", "Service").(*corev1.Service)
 	Expect(service.Spec.Ports).To(ConsistOf([]corev1.ServicePort{
 		{
 			Name:       PortName,

@@ -134,6 +134,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -366,8 +367,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	// For standalone and management clusters, we just use Linseed's actual certificate.
 	linseedCertLocation := render.TigeraLinseedSecret
 	if managementClusterConnection != nil {
+		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
+		// management cluster into the managed cluster by kube-controllers.
 		linseedCertLocation = render.VoltronLinseedPublicCert
 	}
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
@@ -379,20 +383,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-
 	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
-
-	if managementCluster != nil {
-		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
-		// management cluster by kube-controllers.
-		voltronInnerCert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		} else if voltronInnerCert != nil {
-			trustedBundle.AddCertificates(voltronInnerCert)
-		}
-	}
 
 	// Get the key pairs for each component, generating them as needed.
 	type complianceKeyPair struct {

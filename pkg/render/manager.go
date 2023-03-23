@@ -62,6 +62,11 @@ const (
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "manager-access"
 
+	// The name of the TLS certificate used by Voltron to authenticate connections from managed
+	// cluster clients talking to Linseed.
+	VoltronLinseedTLS        = "tigera-secure-voltron-inner-tls"
+	VoltronLinseedPublicCert = "tigera-secure-voltron-inner-http-certs-public"
+
 	ManagerClusterSettings            = "cluster-settings"
 	ManagerUserSettings               = "user-settings"
 	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
@@ -122,6 +127,10 @@ type ManagerConfiguration struct {
 	// If provided, the KeyPair to used for external connections terminated by Voltron,
 	// and connections from the manager pod to Linseed.
 	TLSKeyPair certificatemanagement.KeyPairInterface
+
+	// The key pair to use for TLS between Linseed clients in managed clusters and Voltron
+	// in the management cluster.
+	VoltronLinseedKeyPair certificatemanagement.KeyPairInterface
 
 	// KeyPair used for establishing mTLS tunnel with Guardian.
 	TunnelSecret certificatemanagement.KeyPairInterface
@@ -219,6 +228,14 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
 	}
 
+	// Create a secret for managed cluster clients to verify the authenticity of Voltron's inner certificate, used for connections to Linseed.
+	// The following secret is copied by kube controllers and sent to managed clusters.
+	if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
+		objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, common.OperatorNamespace()))
+	} else {
+		objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, common.OperatorNamespace()))
+	}
+
 	return objs, nil
 }
 
@@ -248,7 +265,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.managerContainer(), c.cfg.ESClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.cfg.ESClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
-				c.managerProxyContainer(),
+				c.voltronContainer(),
 			},
 			Volumes: c.managerVolumes(),
 		},
@@ -414,9 +431,10 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 	return envs
 }
 
-// managerProxyContainer returns the container for the manager proxy container.
-func (c *managerComponent) managerProxyContainer() corev1.Container {
+// voltronContainer returns the container for the manager proxy container - voltron.
+func (c *managerComponent) voltronContainer() corev1.Container {
 	var keyPath, certPath, intKeyPath, intCertPath, tunnelKeyPath, tunnelCertPath string
+	var linseedKeyPath, linseedCertPath string
 	if c.cfg.TLSKeyPair != nil {
 		// This should never be nil, but we check it anyway just to be safe.
 		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
@@ -426,6 +444,9 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 	if c.cfg.TunnelSecret != nil {
 		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
+	}
+	if c.cfg.VoltronLinseedKeyPair != nil {
+		linseedKeyPath, linseedCertPath = c.cfg.VoltronLinseedKeyPair.VolumeMountKeyFilePath(), c.cfg.VoltronLinseedKeyPair.VolumeMountCertificateFilePath()
 	}
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
@@ -456,32 +477,31 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_KEY", Value: linseedKeyPath})
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_CERT", Value: linseedCertPath})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("VOLTRON_")...)
 	}
 
+	// Determine the volume mounts to use. This varies based on the type of cluster.
+	mounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
+	if c.cfg.ManagementCluster != nil {
+		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()))
+		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount(c.SupportedOSType()))
+		mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.proxyImage,
 		Env:             env,
-		VolumeMounts:    c.volumeMountsForProxyManager(),
+		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
-}
-
-func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
-	mounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
-	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
-
-	if c.cfg.ManagementCluster != nil {
-		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()))
-		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount(c.SupportedOSType()))
-	}
-
-	return mounts
 }
 
 // managerEsProxyContainer returns the ES proxy container

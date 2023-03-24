@@ -362,6 +362,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"bgpconfigurations",
 					"bgppeers",
+					"bgpfilters",
 					"blockaffinities",
 					"clusterinformations",
 					"felixconfigurations",
@@ -452,6 +453,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
+					"externalnetworks",
 					"licensekeys",
 					"remoteclusterconfigurations",
 					"stagedglobalnetworkpolicies",

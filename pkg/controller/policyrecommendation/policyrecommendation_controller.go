@@ -67,7 +67,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
-	controller, err := controller.New(PolicyRecommendationControllerName, mgr,
+	policyRecController, err := controller.New(PolicyRecommendationControllerName, mgr,
 		controller.Options{
 			Reconciler: reconciler,
 		})
@@ -81,14 +81,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+	go utils.WaitToAddLicenseKeyWatch(policyRecController, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, policyRecController, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(policyRecController, k8sClient, log, []types.NamespacedName{
 		{Name: render.PolicyRecommendationPolicyName, Namespace: render.PolicyRecommendationNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.PolicyRecommendationNamespace},
 	})
 
-	return add(controller)
+	return add(policyRecController)
 }
 
 // newReconciler returns a new *reconcile.Reconciler.
@@ -165,12 +165,6 @@ func add(c controller.Controller) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch primary resource: %w", err)
-	}
-
-	// Watch for changes to primary resource Authentication
-	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("policy-recommendation-controller failed to watch resource: %w", err)
 	}
 
 	// Watch for changes to TigeraStatus
@@ -343,7 +337,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	var managerInternalTLSSecret certificatemanagement.CertificateInterface
-	if !isManagedCluster {
+	if managementCluster != nil {
 		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)

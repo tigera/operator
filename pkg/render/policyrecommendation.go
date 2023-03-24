@@ -37,11 +37,9 @@ import (
 const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
-	PolicyRecommendationInstallerName = "policy-recommendation-es-installer"
-	PolicyRecommendationName          = "tigera-policy-recommendation"
-	PolicyRecommendationNamespace     = PolicyRecommendationName
-	PolicyRecommendationPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
-	PolicyRecommendationServiceName   = "policy-recommendation"
+	PolicyRecommendationName       = "tigera-policy-recommendation"
+	PolicyRecommendationNamespace  = PolicyRecommendationName
+	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 )
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
@@ -55,7 +53,7 @@ type PolicyRecommendationConfiguration struct {
 	PullSecrets     []*corev1.Secret
 	TrustedBundle   certificatemanagement.TrustedBundle
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -180,10 +178,6 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: pr.cfg.TrustedBundle.MountPath(),
-		},
-		{
-			Name:  "FIPS_MODE_ENABLED",
-			Value: operatorv1.IsFIPSModeEnabledString(pr.cfg.Installation.FIPSMode),
 		},
 	}
 

@@ -158,6 +158,15 @@ func (c *GuardianComponent) service() *corev1.Service {
 			},
 			Ports: []corev1.ServicePort{
 				{
+					Name: "linseed",
+					Port: 443,
+					TargetPort: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: 8080,
+					},
+					Protocol: corev1.ProtocolTCP,
+				},
+				{
 					Name: "elasticsearch",
 					Port: 9200,
 					TargetPort: intstr.IntOrString{

@@ -176,6 +176,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
 		render.TigeraLinseedSecret,
+		render.VoltronLinseedPublicCert,
 		certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -476,7 +477,12 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, nil
 	}
 
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraLinseedSecret, common.OperatorNamespace())
+	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	linseedCertLocation := render.TigeraLinseedSecret
+	if isManagedCluster {
+		linseedCertLocation = render.VoltronLinseedPublicCert
+	}
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err

@@ -145,9 +145,11 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
+			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}},
+		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &esv1.Elasticsearch{
 			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
 			Status: esv1.ElasticsearchStatus{
@@ -164,6 +166,11 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		// Managed clusters need the publi cert for Linseed as well.
+		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(c, render.VoltronLinseedPublicCert, common.OperatorNamespace(), []string{render.VoltronLinseedPublicCert})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
@@ -193,7 +200,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchIntrusionDetectionJobUserSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+					Namespace: "tigera-operator",
+				},
+			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &esv1.Elasticsearch{
 				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName},
@@ -201,7 +210,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					Phase: esv1.ElasticsearchReadyPhase,
 				},
 			})).NotTo(HaveOccurred())
-
 		})
 
 		It("should use builtin images", func() {
@@ -293,7 +301,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentAnomalyDetectionAPI.Image,
 					components.ComponentAnomalyDetectionAPI.Version)))
-
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -349,7 +356,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      dpi.DeepPacketInspectionName,
 					Namespace: dpi.DeepPacketInspectionNamespace,
-				}}
+				},
+			}
 			Expect(test.GetResource(c, &ds)).To(BeNil())
 			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, dpi.DeepPacketInspectionName)
@@ -631,7 +639,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				dpiAPIReady:     readyFlag,
 				tierWatchReady:  readyFlag,
 			}
-
 		})
 
 		It("should wait if allow-tigera tier is unavailable", func() {

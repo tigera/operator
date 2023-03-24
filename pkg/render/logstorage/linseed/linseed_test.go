@@ -69,8 +69,8 @@ var _ = Describe("Linseed rendering tests", func() {
 		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 			{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
-			{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-			{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+			{ClusterRoleName, render.ElasticsearchNamespace, &rbacv1.ClusterRole{}, nil},
+			{ClusterRoleName, render.ElasticsearchNamespace, &rbacv1.ClusterRoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 			{"tigera-linseed", "", &policyv1beta1.PodSecurityPolicy{}, nil},
@@ -308,7 +308,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
 
 	// Check permissions
-	clusterRole := rtest.GetResource(resources, RoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+	clusterRole := rtest.GetResource(resources, ClusterRoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 	Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 		{
 			APIGroups:     []string{"authorization.k8s.io"},
@@ -323,8 +323,8 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Verbs:         []string{"use"},
 		},
 	}))
-	clusterRoleBinding := rtest.GetResource(resources, RoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(RoleName))
+	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(ClusterRoleName))
 	Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",

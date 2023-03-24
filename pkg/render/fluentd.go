@@ -601,6 +601,16 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
+		{
+			Name: "LINSEED_TOKEN", ValueFrom: &corev1.EnvVarSource{
+				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "fluentd-linseed-token",
+					},
+					Key: "token",
+				},
+			},
+		},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},
 		{Name: "FLUENT_UID", Value: "0"},

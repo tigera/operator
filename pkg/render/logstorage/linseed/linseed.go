@@ -54,6 +54,7 @@ const (
 	PortName              = "tigera-linseed"
 	TargetPort            = 8444
 	Port                  = 443
+	ClusterRoleName       = "tigera-linseed"
 )
 
 func Linseed(c *Config) render.Component {
@@ -127,7 +128,7 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedAllowTigeraPolicy())
 	toCreate = append(toCreate, l.linseedService())
-	toCreate = append(toCreate, l.linseedRole())
+	toCreate = append(toCreate, l.linseedClusterRole())
 	toCreate = append(toCreate, l.linseedRoleBinding())
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
@@ -145,7 +146,8 @@ func (l *linseed) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (l *linseed) linseedRole() *rbacv1.Role {
+// All linseeds in the cluster must be able to do this.
+func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
 			// Linseed uses subject access review to perform authorization of clients.
@@ -153,6 +155,12 @@ func (l *linseed) linseedRole() *rbacv1.Role {
 			Resources:     []string{"subjectaccessreview"},
 			ResourceNames: []string{},
 			Verbs:         []string{"create"},
+		},
+		{
+			// Used to validate tokens from standalone and mangement cluster clients.
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
+			Verbs:     []string{"create"},
 		},
 	}
 
@@ -165,26 +173,24 @@ func (l *linseed) linseedRole() *rbacv1.Role {
 		})
 	}
 
-	return &rbacv1.Role{
+	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      RoleName,
-			Namespace: l.namespace,
+			Name: ClusterRoleName,
 		},
 		Rules: rules,
 	}
 }
 
-func (l *linseed) linseedRoleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
+func (l *linseed) linseedRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      RoleName,
-			Namespace: l.namespace,
+			Name: ClusterRoleName,
 		},
 		RoleRef: rbacv1.RoleRef{
-			Kind:     "Role",
-			Name:     RoleName,
+			Kind:     "ClusterRole",
+			Name:     ClusterRoleName,
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 		Subjects: []rbacv1.Subject{

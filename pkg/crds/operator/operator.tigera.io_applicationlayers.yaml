@@ -66,18 +66,6 @@ spec:
                   enforcement is enabled for the cluster. When enabled, Services may
                   opt-in to having ingress traffic examed by ModSecurity.
                 type: string
-              webApplicationFirewallServices:
-                description: WAF services holds a list of the services the user wants
-                  to apply the l7-logging annotation to
-                properties:
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                required:
-                - name
-                - namespace
-                type: object
             type: object
           status:
             description: ApplicationLayerStatus defines the observed state of ApplicationLayer
@@ -158,18 +146,6 @@ spec:
               state:
                 description: State provides user-readable status.
                 type: string
-              webApplicationFirewallServicesActive:
-                description: WebApplicationFirewallServicesActive holds the currently
-                  services with the l7-logging annotation for WAF
-                properties:
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                required:
-                - name
-                - namespace
-                type: object
             type: object
         type: object
     served: true

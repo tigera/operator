@@ -197,6 +197,7 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:
 		// - 6 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, PodSecurityPolicy)
+		// - 3 calico-cni-plugin resources (ServiceAccount, ClusterRole, CLusterRoleBinding)
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 1 ConfigMap for Typha comms (1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
@@ -204,7 +205,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 namespace
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 4 + 1 + 7 + 6 + 1))
+		Expect(componentCount(c)).To(Equal(6 + 3 + 4 + 1 + 7 + 6 + 1))
 		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})
 
@@ -218,7 +219,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 4 + 1 + 7 + 6 + 1) + 1 + 1))
+		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1) + 1 + 1))
 		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})
 
@@ -257,6 +258,9 @@ var _ = Describe("Rendering tests", func() {
 			{common.NodeDaemonSetName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{common.NodeDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{common.NodeDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{"calico-cni-plugin", common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{"calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{"calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-node-metrics", common.CalicoNamespace, "", "v1", "Service"},
 			{"cni-config", common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{common.NodeDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy"},

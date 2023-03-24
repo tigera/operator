@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -62,6 +64,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		clusterDomain := "cluster.local"
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp.json")
+		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
 
 		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
@@ -91,6 +94,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ClusterDomain:   clusterDomain,
 				ESAdminUserName: "elastic",
 				UsePSP:          true,
+				ESClusterConfig: esClusterConfig,
 			}
 		})
 
@@ -128,6 +132,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ClusterDomain:   clusterDomain,
 				ESAdminUserName: "elastic",
 				UsePSP:          true,
+				ESClusterConfig: esClusterConfig,
 			}
 
 			component := Linseed(cfg)
@@ -228,9 +233,10 @@ var _ = Describe("Linseed rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				KeyPair:       kp,
-				TrustedBundle: bundle,
-				ClusterDomain: clusterDomain,
+				KeyPair:         kp,
+				TrustedBundle:   bundle,
+				ClusterDomain:   clusterDomain,
+				ESClusterConfig: esClusterConfig,
 			})
 
 			resources, _ := component.Objects()
@@ -292,7 +298,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 		Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TigeraLinseedSecret)))
 	}
 
-	// Check volumes
+	// Check volumeMounts
 	Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR)))
 
 	// Check annotations
@@ -426,15 +432,87 @@ func expectedContainers() []corev1.Container {
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 				{
-					Name:  "LINSEED_ELASTIC_ENDPOINT",
-					Value: "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200",
+					Name:  "ELASTIC_REPLICAS",
+					Value: "1",
 				},
 				{
-					Name:  "LINSEED_ELASTIC_USERNAME",
+					Name:  "ELASTIC_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_FLOWS_INDEX_REPLICAS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_DNS_INDEX_REPLICAS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_AUDIT_INDEX_REPLICAS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_BGP_INDEX_REPLICAS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_WAF_INDEX_REPLICAS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_L7_INDEX_REPLICAS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_RUNTIME_INDEX_REPLICAS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_FLOWS_INDEX_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_DNS_INDEX_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_AUDIT_INDEX_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_BGP_INDEX_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_WAF_INDEX_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_L7_INDEX_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_RUNTIME_INDEX_SHARDS",
+					Value: "1",
+				},
+				{
+					Name:  "ELASTIC_SCHEME",
+					Value: "https",
+				},
+				{
+					Name:  "ELASTIC_HOST",
+					Value: "tigera-secure-es-http.tigera-elasticsearch.svc",
+				},
+				{
+					Name:  "ELASTIC_PORT",
+					Value: "9200",
+				},
+				{
+					Name:  "ELASTIC_USERNAME",
 					Value: "elastic",
 				},
 				{
-					Name:  "LINSEED_ELASTIC_PASSWORD",
+					Name:  "ELASTIC_PASSWORD",
 					Value: "",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -446,11 +524,7 @@ func expectedContainers() []corev1.Container {
 					},
 				},
 				{
-					Name:  "LINSEED_ELASTIC_CLIENT_CERT_PATH",
-					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
-				},
-				{
-					Name:  "LINSEED_ELASTIC_CA_BUNDLE_PATH",
+					Name:  "ELASTIC_CA",
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 			},

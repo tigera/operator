@@ -52,7 +52,6 @@ const (
 var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
 
 func Dex(cfg *DexComponentConfiguration) Component {
-
 	return &dexComponent{
 		cfg:       cfg,
 		connector: cfg.DexConfig.Connector(),

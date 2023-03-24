@@ -149,8 +149,14 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
 		Expect(err).NotTo(HaveOccurred())
+
+		// For managed clusters, we also need the public cert for Linseed.
+		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedPublicCert, common.OperatorNamespace(), esDNSNames)
+		Expect(err).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, gwKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Apply the compliance CR to the fake cluster.
 		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}

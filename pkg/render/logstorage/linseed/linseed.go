@@ -16,7 +16,10 @@ package linseed
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -42,16 +45,15 @@ import (
 )
 
 const (
-	DeploymentName             = "tigera-linseed"
-	ServiceAccountName         = "tigera-linseed"
-	RoleName                   = "tigera-linseed"
-	ServiceName                = "tigera-linseed"
-	PodSecurityPolicyName      = "tigera-linseed"
-	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
-	PortName                   = "tigera-linseed"
-	TargetPort                 = 8444
-	Port                       = 443
-	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	DeploymentName        = "tigera-linseed"
+	ServiceAccountName    = "tigera-linseed"
+	RoleName              = "tigera-linseed"
+	ServiceName           = "tigera-linseed"
+	PodSecurityPolicyName = "tigera-linseed"
+	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
+	PortName              = "tigera-linseed"
+	TargetPort            = 8444
+	Port                  = 443
 )
 
 func Linseed(c *Config) render.Component {
@@ -92,6 +94,9 @@ type Config struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	// Elastic cluster configuration
+	ESClusterConfig *relasticsearch.ClusterConfig
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -208,21 +213,36 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		// Configure the CA certificate used for verifying client certs.
 		{Name: "LINSEED_CA_CERT", Value: l.cfg.TrustedBundle.MountPath()},
 
-		// Configuration for connection to Elasticsearch.
-		{Name: "LINSEED_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
-		{Name: "LINSEED_ELASTIC_USERNAME", Value: l.cfg.ESAdminUserName},
-		{Name: "LINSEED_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: render.ElasticsearchAdminUserSecret,
-				},
-				Key: l.cfg.ESAdminUserName,
-			},
-		}},
+		// Configure default shards and replicas for indices
+		{Name: "ELASTIC_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+		{Name: "ELASTIC_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
 
-		// Certificates to use when authenticating with Elasticsearch.
-		{Name: "LINSEED_ELASTIC_CLIENT_CERT_PATH", Value: l.cfg.TrustedBundle.MountPath()},
-		{Name: "LINSEED_ELASTIC_CA_BUNDLE_PATH", Value: l.cfg.TrustedBundle.MountPath()},
+		// Configure shards and replicas for special indices
+		{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+		{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+		{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+		{Name: "ELASTIC_BGP_INDEX_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+		{Name: "ELASTIC_WAF_INDEX_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+		{Name: "ELASTIC_L7_INDEX_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+		{Name: "ELASTIC_RUNTIME_INDEX_REPLICAS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Replicas())},
+
+		{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.FlowShards())},
+		{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
+		{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
+		{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
+		{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
+		{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
+		{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
+
+		{Name: "ELASTIC_SCHEME", Value: "https"},
+		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
+		{Name: "ELASTIC_PORT", Value: "9200"},
+		{Name: "ELASTIC_USERNAME", Value: l.cfg.ESAdminUserName},
+		{
+			Name:      "ELASTIC_PASSWORD",
+			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchAdminUserSecret, l.cfg.ESAdminUserName, false),
+		},
+		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
 	}
 
 	var initContainers []corev1.Container
@@ -280,8 +300,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 						InitialDelaySeconds: 10,
 						PeriodSeconds:       5,
 					},
-				},
-			},
+				}},
 		},
 	}
 

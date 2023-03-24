@@ -442,6 +442,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTrafficSecret certificatemanagement.KeyPairInterface
+	var linseedVoltronSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
 		fillDefaults(managementCluster)
@@ -450,6 +451,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 		if err := r.client.Patch(ctx, managementCluster, preDefaultPatchFrom); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Create a certificate for Voltron to use for TLS connections from the managed cluster destined
+		// to Linseed. This certificate is used only for connections received over Voltron's mTLS tunnel targeting tigera-linseed.
+		linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+		linseedVoltronSecret, err = certificateManager.GetOrCreateKeyPair(
+			r.client,
+			render.VoltronLinseedTLS,
+			common.OperatorNamespace(),
+			linseedDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating Voltron Linseed TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -509,6 +523,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TrustedCertBundle:       trustedBundle,
 		ESClusterConfig:         esClusterConfig,
 		TLSKeyPair:              tlsSecret,
+		VoltronLinseedKeyPair:   linseedVoltronSecret,
 		PullSecrets:             pullSecrets,
 		Openshift:               r.provider == operatorv1.ProviderOpenShift,
 		Installation:            installation,
@@ -542,6 +557,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			ServiceAccounts: []string{render.ManagerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
 			},

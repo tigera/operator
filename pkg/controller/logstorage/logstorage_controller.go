@@ -833,6 +833,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			keyPairs.linseed,
 			trustedBundle,
 			r.usePSP,
+			clusterConfig,
 		)
 		if err != nil || !proceed {
 			return result, err

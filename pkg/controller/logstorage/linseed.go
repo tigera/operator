@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -41,6 +43,7 @@ func (r *ReconcileLogStorage) createLinseed(
 	linseedKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 	usePSP bool,
+	esClusterConfig *relasticsearch.ClusterConfig,
 ) (reconcile.Result, bool, error) {
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
@@ -62,6 +65,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		KeyPair:         linseedKeyPair,
 		ESAdminUserName: esAdminUserName,
 		UsePSP:          usePSP,
+		ESClusterConfig: esClusterConfig,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

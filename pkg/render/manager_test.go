@@ -339,6 +339,29 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 				Verbs: []string{"get", "create"},
 			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flows",
+					"flowlogs",
+					"bgplogs",
+					"auditlogs",
+					"dnsflows",
+					"dnslogs",
+					"l7flows",
+					"l7logs",
+					"events",
+					"processes",
+				},
+				Verbs: []string{"get"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"events",
+				},
+				Verbs: []string{"dismiss", "delete"},
+			},
 		}))
 	})
 
@@ -437,6 +460,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "apps", version: "v1", kind: "Deployment"},
+			{name: render.VoltronLinseedPublicCert, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -586,6 +610,29 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"https:tigera-api:8080", "calico-node-prometheus:9090",
 				},
 				Verbs: []string{"get", "create"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flows",
+					"flowlogs",
+					"bgplogs",
+					"auditlogs",
+					"dnsflows",
+					"dnslogs",
+					"l7flows",
+					"l7logs",
+					"events",
+					"processes",
+				},
+				Verbs: []string{"get"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"events",
+				},
+				Verbs: []string{"dismiss", "delete"},
 			},
 		}))
 	})

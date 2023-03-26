@@ -26,7 +26,7 @@ const (
 	NameSpaceRuntimeSecurity             = "tigera-runtime-security"
 	ElasticsearchSashaJobUserSecretName  = "tigera-ee-sasha-elasticsearch-access"
 	SashaName                            = "sasha"
-	ResourceSashaDefaultCPULimit         = "1"
+	ResourceSashaDefaultCPULimit         = "2"
 	ResourceSashaDefaultMemoryLimit      = "1Gi"
 	ResourceSashaDefaultCPURequest       = "100m"
 	ResourceSashaDefaultMemoryRequest    = "100Mi"

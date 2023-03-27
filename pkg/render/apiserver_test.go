@@ -1375,10 +1375,9 @@ var (
 			Verbs: []string{"get"},
 		},
 		{
-			APIGroups:     []string{"operator.tigera.io"},
-			Resources:     []string{"applicationlayers"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{"tigera-secure"},
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"applicationlayers"},
+			Verbs:     []string{"get"},
 		},
 		{
 			APIGroups: []string{""},
@@ -1492,10 +1491,9 @@ var (
 			Verbs: []string{"get"},
 		},
 		{
-			APIGroups:     []string{"operator.tigera.io"},
-			Resources:     []string{"applicationlayers"},
-			ResourceNames: []string{"tigera-secure"},
-			Verbs:         []string{"get", "update", "patch", "create"},
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"applicationlayers"},
+			Verbs:     []string{"get", "update", "patch", "create"},
 		},
 		{
 			APIGroups: []string{""},

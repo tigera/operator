@@ -1471,10 +1471,9 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		},
 		// Allow the user to read applicationlayers to detect if WAF is enabled/disabled.
 		{
-			APIGroups:     []string{"operator.tigera.io"},
-			Resources:     []string{"applicationlayers"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{"tigera-secure"},
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"applicationlayers"},
+			Verbs:     []string{"get"},
 		},
 		// Allow the user to read services to view WAF configuration.
 		{
@@ -1626,10 +1625,9 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 		// Allow the user to read and write applicationlayers to enable/disable WAF.
 		{
-			APIGroups:     []string{"operator.tigera.io"},
-			Resources:     []string{"applicationlayers"},
-			ResourceNames: []string{"tigera-secure"},
-			Verbs:         []string{"get", "update", "patch", "create"},
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"applicationlayers"},
+			Verbs:     []string{"get", "update", "patch", "create"},
 		},
 		// Allow the user to read services to view WAF configuration.
 		{

@@ -838,6 +838,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			ctx,
 			keyPairs.linseed,
 			trustedBundle,
+			managementCluster != nil,
 			r.usePSP,
 			clusterConfig,
 		)

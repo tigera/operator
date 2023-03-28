@@ -42,6 +42,7 @@ func (r *ReconcileLogStorage) createLinseed(
 	ctx context.Context,
 	linseedKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
+	managementCluster bool,
 	usePSP bool,
 	esClusterConfig *relasticsearch.ClusterConfig,
 ) (reconcile.Result, bool, error) {
@@ -58,14 +59,15 @@ func (r *ReconcileLogStorage) createLinseed(
 	}
 
 	cfg := &linseed.Config{
-		Installation:    install,
-		PullSecrets:     pullSecrets,
-		TrustedBundle:   trustedBundle,
-		ClusterDomain:   r.clusterDomain,
-		KeyPair:         linseedKeyPair,
-		ESAdminUserName: esAdminUserName,
-		UsePSP:          usePSP,
-		ESClusterConfig: esClusterConfig,
+		Installation:      install,
+		PullSecrets:       pullSecrets,
+		TrustedBundle:     trustedBundle,
+		ClusterDomain:     r.clusterDomain,
+		KeyPair:           linseedKeyPair,
+		ESAdminUserName:   esAdminUserName,
+		UsePSP:            usePSP,
+		ESClusterConfig:   esClusterConfig,
+		ManagementCluster: managementCluster,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

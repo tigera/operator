@@ -601,7 +601,18 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
-		{
+		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
+		{Name: "TLS_CRT_PATH", Value: c.certPath()},
+		{Name: "FLUENT_UID", Value: "0"},
+		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
+		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
+		{Name: "FLUENTD_ES_SECURE", Value: "true"},
+		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+	}
+
+	if c.cfg.ManagedCluster {
+		// Management and standalone clusters can just use their serviceaccount token with Linseed.
+		envs = append(envs, corev1.EnvVar{
 			Name: "LINSEED_TOKEN", ValueFrom: &corev1.EnvVarSource{
 				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -610,14 +621,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					Key: "token",
 				},
 			},
-		},
-		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
-		{Name: "TLS_CRT_PATH", Value: c.certPath()},
-		{Name: "FLUENT_UID", Value: "0"},
-		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
-		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
-		{Name: "FLUENTD_ES_SECURE", Value: "true"},
-		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+		})
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {

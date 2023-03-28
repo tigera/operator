@@ -415,9 +415,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				{
-					Name:  ComplianceControllerName,
-					Image: c.controllerImage,
-					Env:   envVars,
+					Name:            ComplianceControllerName,
+					Image:           "gcr.io/unique-caldron-775/casey/compliance-controller:latest",
+					ImagePullPolicy: corev1.PullAlways,
+					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -550,9 +551,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				Containers: []corev1.Container{
 					{
-						Name:  "reporter",
-						Image: c.reporterImage,
-						Env:   envVars,
+						Name:            "reporter",
+						Image:           "gcr.io/unique-caldron-775/casey/compliance-reporter:latest",
+						ImagePullPolicy: corev1.PullAlways,
+						Env:             envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{
@@ -733,9 +735,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:  ComplianceServerName,
-					Image: c.serverImage,
-					Env:   envVars,
+					Name:            ComplianceServerName,
+					Image:           "gcr.io/unique-caldron-775/casey/compliance-server:latest",
+					ImagePullPolicy: corev1.PullAlways,
+					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -911,9 +914,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				{
-					Name:  ComplianceSnapshotterName,
-					Image: c.snapshotterImage,
-					Env:   envVars,
+					Name:            ComplianceSnapshotterName,
+					Image:           "gcr.io/unique-caldron-775/casey/compliance-snapshotter:latest",
+					ImagePullPolicy: corev1.PullAlways,
+					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -1082,7 +1086,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceBenchmarkerName,
-					Image:           c.benchmarkerImage,
+					Image:           "gcr.io/unique-caldron-775/casey/compliance-benchmarker:latest",
+					ImagePullPolicy: corev1.PullAlways,
 					Env:             envVars,
 					SecurityContext: securitycontext.NewRootContext(false),
 					VolumeMounts:    volMounts,

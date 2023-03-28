@@ -93,6 +93,9 @@ type Config struct {
 	// ESAdminUserName is the admin user used to connect to Elastic
 	ESAdminUserName string
 
+	// Whether this is a management cluster
+	ManagementCluster bool
+
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 
@@ -161,6 +164,19 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"authentication.k8s.io"},
 			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
+		},
+		{
+			// Need to be able to list managed clusters
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"managedclusters"},
+			Verbs:     []string{"list", "watch"},
+		},
+		{
+			// Need to be able to get and create secrets.
+			// TODO: Limit this by resource name.
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "create"},
 		},
 	}
 
@@ -284,7 +300,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            DeploymentName,
-					Image:           l.linseedImage,
+					Image:           "gcr.io/unique-caldron-775/casey/linseed:latest",
+					ImagePullPolicy: corev1.PullAlways,
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: securitycontext.NewNonRootContext(),
@@ -385,6 +402,15 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Destination: render.ElasticsearchEntityRule,
 		},
 	}...)
+
+	if l.cfg.ManagementCluster {
+		// For management clusters, linseed talks to Voltron to create tokens.
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.ManagerEntityRule,
+		})
+	}
 
 	// Ingress needs to be allowed from all clients.
 	linseedIngressDestinationEntityRule := v3.EntityRule{

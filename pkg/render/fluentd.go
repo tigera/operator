@@ -79,6 +79,12 @@ const (
 	SysLogPublicCAPath                       = SysLogPublicCADir + SysLogPublicCertKey
 	SyslogCAConfigMapName                    = "syslog-ca"
 
+	// Constants for Linseed token volume mounting in managed clusters.
+	LinseedTokenVolumeName = "linseed-token"
+	LinseedTokenKey        = "token"
+	LinseedTokenSubPath    = "token"
+	LinseedTokenConfigMap  = "fluentd-node-linseed-token"
+
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
 	probeWindowsTimeoutSeconds int32 = 10
@@ -554,10 +560,20 @@ func (c *fluentdComponent) container() corev1.Container {
 		volumeMounts = append(volumeMounts, c.cfg.FluentdKeyPair.VolumeMount(c.SupportedOSType()))
 	}
 
+	if c.cfg.ManagedCluster {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      LinseedTokenVolumeName,
+				MountPath: c.path("/var/run/secrets/tigera.io/linseed"),
+				SubPath:   LinseedTokenSubPath,
+			})
+	}
+
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
-		Name:  "fluentd",
-		Image: c.image,
-		Env:   envs,
+		Name:            "fluentd",
+		Image:           "gcr.io/unique-caldron-775/casey/fluentd:latest", // c.image,
+		ImagePullPolicy: corev1.PullAlways,
+		Env:             envs,
 		// On OpenShift Fluentd needs privileged access to access logs on host path volume
 		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
 		VolumeMounts:    volumeMounts,
@@ -599,6 +615,13 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
+	// Default to using our serviceaccount token. However, if we're running on a managed cluster
+	// we'll use the token from Linseed.
+	tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	if c.cfg.ManagedCluster {
+		tokenPath = "/var/run/secrets/tigera.io/linseed/token"
+	}
+
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
@@ -610,20 +633,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
-	}
-
-	if c.cfg.ManagedCluster {
-		// Management and standalone clusters can just use their serviceaccount token with Linseed.
-		envs = append(envs, corev1.EnvVar{
-			Name: "LINSEED_TOKEN", ValueFrom: &corev1.EnvVarSource{
-				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "fluentd-node-linseed-token",
-					},
-					Key: "token",
-				},
-			},
-		})
+		{Name: "LINSEED_TOKEN", Value: tokenPath},
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
@@ -904,6 +914,21 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	}
 	if c.cfg.FluentdKeyPair != nil {
 		volumes = append(volumes, c.cfg.FluentdKeyPair.Volume())
+	}
+	if c.cfg.ManagedCluster {
+		// Add a projected volume for our token.
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: LinseedTokenVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: LinseedTokenConfigMap,
+						},
+						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					},
+				},
+			})
 	}
 	volumes = append(volumes, trustedBundleVolume(c.cfg.TrustedBundle))
 

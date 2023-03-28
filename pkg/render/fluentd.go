@@ -288,14 +288,16 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 			c.eksLogForwarderDeployment())
 	}
 
+	// Add in the cluster role and binding.
+	objs = append(objs,
+		c.fluentdClusterRole(),
+		c.fluentdClusterRoleBinding(),
+	)
+
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
 	if c.cfg.UsePSP && c.cfg.OSType == rmeta.OSTypeLinux {
-		objs = append(objs,
-			c.fluentdClusterRole(),
-			c.fluentdClusterRoleBinding(),
-			c.fluentdPodSecurityPolicy(),
-		)
+		objs = append(objs, c.fluentdPodSecurityPolicy())
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
@@ -616,7 +618,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 			Name: "LINSEED_TOKEN", ValueFrom: &corev1.EnvVarSource{
 				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "fluentd-linseed-token",
+						Name: "fluentd-node-linseed-token",
 					},
 					Key: "token",
 				},
@@ -943,22 +945,38 @@ func (c *fluentdComponent) fluentdClusterRoleBinding() *rbacv1.ClusterRoleBindin
 }
 
 func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: c.fluentdName(),
 		},
-
 		Rules: []rbacv1.PolicyRule{
 			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{c.fluentdName()},
+				// Add write access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flowlogs",
+					"kube_auditlogs",
+					"ee_auditlogs",
+					"dnslogs",
+					"l7logs",
+					"events",
+				},
+				Verbs: []string{"create"},
 			},
 		},
 	}
+
+	if c.cfg.UsePSP {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{c.fluentdName()},
+		})
+	}
+	return role
 }
 
 func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {

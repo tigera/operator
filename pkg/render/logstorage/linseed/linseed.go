@@ -155,7 +155,7 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		{
 			// Linseed uses subject access review to perform authorization of clients.
 			APIGroups:     []string{"authorization.k8s.io"},
-			Resources:     []string{"subjectaccessreview"},
+			Resources:     []string{"subjectaccessreviews"},
 			ResourceNames: []string{},
 			Verbs:         []string{"create"},
 		},

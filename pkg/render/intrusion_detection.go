@@ -65,6 +65,7 @@ const (
 	ADAPIObjectPortName             = "anomaly-detection-api-https"
 	ADAPITLSSecretName              = "anomaly-detection-api-tls"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
+	DPITLSSecretName                = "deep-packet-inspection-tls"
 	ADAPIExpectedServiceName        = "anomaly-detection-api.tigera-intrusion-detection.svc"
 	ADAPIPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
 	adAPIPort                       = 8080

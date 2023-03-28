@@ -157,6 +157,11 @@ var (
 		Image:   "tigera/packetcapture",
 	}
 
+	ComponentEgressGateway = component{
+		Version: "master",
+		Image:   "tigera/egress-gateway",
+	}
+
 	ComponentL7Collector = component{
 		Version: "v3.15.1",
 		Image:   "tigera/l7-collector",
@@ -168,7 +173,7 @@ var (
 	}
 
 	ComponentDikastes = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/dikastes",
 	}
 
@@ -236,22 +241,22 @@ var (
 	}
 
 	ComponentTigeraWindowsUpgrade = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/calico-windows-upgrade",
 	}
 
 	ComponentFlexVolumePrivate = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/pod2daemon-flexvol",
 	}
 
 	ComponentCSIPrivate = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/csi",
 	}
 
 	ComponentCSINodeDriverRegistrarPrivate = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/node-driver-registrar",
 	}
 
@@ -312,6 +317,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,

@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"os"
@@ -151,7 +150,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
 
 		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
-			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace}},
+			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
+		},
 		)
 	}
 
@@ -1159,18 +1159,34 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers.
-	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
-	if err != nil && !apierrors.IsNotFound(err) {
+	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
+	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	// Determine the port to use for kube-controllers metrics.
-	kubeControllersMetricsPort := 0
-	if kubeControllersConfig.Spec.PrometheusMetricsPort != nil {
-		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
+	// Secure calico kube controller metrics.
+	var kubeControllerTLS certificatemanagement.KeyPairInterface
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Create or Get TLS certificates for kube controller.
+		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(
+			r.client,
+			kubecontrollers.KubeControllerPrometheusTLSSecret,
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.clusterDomain))
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Error finding or creating TLS certificate kube controllers metric", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Add prometheus client certificate to Trusted bundle.
+		kubecontrollerprometheusTLS, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if kubecontrollerprometheusTLS != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
+		}
 	}
 
 	nodeAppArmorProfile := ""
@@ -1226,7 +1242,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.CalicoNamespace,
-			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
+			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName, kubecontrollers.KubeControllerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				// this controller is responsible for rendering the tigera-ca-private secret.
 				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
@@ -1234,6 +1250,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
 				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
@@ -1320,6 +1337,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagerInternalSecret:       managerInternalTLSSecret,
 		Terminating:                 terminating,
 		UsePSP:                      r.usePSP,
+		MetricsServerTLS:            kubeControllerTLS,
+		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
@@ -1478,7 +1497,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 func readMTUFile() (int, error) {
 	filename := "/var/lib/calico/mtu"
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// File doesn't exist, return zero.

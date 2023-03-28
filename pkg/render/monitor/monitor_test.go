@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -125,6 +125,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"tigera-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
+			{"calico-kube-controllers-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -163,6 +164,10 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(*alertmanagerObj.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*alertmanagerObj.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(*alertmanagerObj.Spec.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+		Expect(alertmanagerObj.Spec.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 		// Alertmanager Service
 		serviceObj, ok := rtest.GetResource(toCreate, "calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
@@ -201,6 +206,10 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+		Expect(prometheusObj.Spec.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 		// Prometheus ServiceAccount
 		_, ok = rtest.GetResource(toCreate, "prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount").(*corev1.ServiceAccount)
@@ -437,6 +446,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"tigera-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
+			{"calico-kube-controllers-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
@@ -581,6 +591,7 @@ var _ = Describe("monitor rendering tests", func() {
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
+				cfg.KubeControllerPort = 9094
 
 				component := monitor.MonitorPolicy(cfg)
 				resourcesToCreate, _ := component.Objects()

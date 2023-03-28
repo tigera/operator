@@ -124,6 +124,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
 		Expect(*manager.SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(999))
+		Expect(manager.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(manager.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 		Expect(manager.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: "true"},
 		))
@@ -139,9 +148,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())
-		Expect(*esProxy.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*esProxy.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*esProxy.SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+		Expect(esProxy.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(esProxy.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 		// voltron container
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
@@ -159,13 +177,22 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(*voltron.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*voltron.SecurityContext.Privileged).To(BeFalse())
-		Expect(*voltron.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*voltron.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*voltron.SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*voltron.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+		Expect(*voltron.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+		Expect(voltron.SecurityContext.Capabilities).To(Equal(
+			&corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		))
+		Expect(voltron.SecurityContext.SeccompProfile).To(Equal(
+			&corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
 
 		// Check the namespace.
 		ns := rtest.GetResource(resources, "tigera-manager", "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
 		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 

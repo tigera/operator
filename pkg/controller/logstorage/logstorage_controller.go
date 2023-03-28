@@ -665,7 +665,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil || !proceed {
 			return result, err
 		}
-
 		var trustedBundle certificatemanagement.TrustedBundle
 		result, trustedBundle, proceed, err = r.createEsGateway(
 			install,

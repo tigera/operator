@@ -97,7 +97,6 @@ func (r *ReconcileLogStorage) createEsGateway(
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil, false, nil
 	}
-
 	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, kibanaCertificate, prometheusCertificate, gatewayKeyPair)
 
 	// This secret should only ever contain one key.
@@ -151,7 +150,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		TrustedBundle: trustedBundle,
 	})
 
-	for _, comp := range []render.Component{esGatewayComponent, certificateComponent} {
+	for _, comp := range []render.Component{certificateComponent, esGatewayComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, nil, false, err

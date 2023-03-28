@@ -78,7 +78,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 	default:
-		if c.cr != nil {
+		if c.cr != nil && !skipAddingOwnerReference(c.cr, om.GetObjectMeta()) {
 			if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
 				return err
 			}
@@ -287,6 +287,17 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	return nil
 }
 
+// skipAddingOwnerReference returns true if owner is a namespaced resource and
+// controlled object is a cluster scoped resource.
+func skipAddingOwnerReference(owner, controlled metav1.Object) bool {
+	ownerNs := owner.GetNamespace()
+	controlledNs := controlled.GetNamespace()
+	if ownerNs != "" && controlledNs == "" {
+		return true
+	}
+	return false
+}
+
 // mergeState returns the object to pass to Update given the current and desired object states.
 func mergeState(desired client.Object, current runtime.Object) client.Object {
 	// Take a copy of the desired object, so we can merge values into it without
@@ -438,6 +449,20 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		// APIServer.
 		dui.SetOwnerReferences(cui.GetOwnerReferences())
 		return dui
+	case *v3.NetworkPolicy:
+		cnp := current.(*v3.NetworkPolicy)
+		dnp := desired.(*v3.NetworkPolicy)
+		if reflect.DeepEqual(cnp.Spec, dnp.Spec) {
+			return nil
+		}
+		return dnp
+	case *v3.Tier:
+		ct := current.(*v3.Tier)
+		dt := desired.(*v3.Tier)
+		if reflect.DeepEqual(ct.Spec, dt.Spec) {
+			return nil
+		}
+		return dt
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,40 +18,38 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/testutils"
-
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 type resourceTestObj struct {
@@ -229,7 +227,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Check the namespaces.
 				namespace := rtest.GetResource(createResources, "tigera-eck-operator", "", "", "v1", "Namespace").(*corev1.Namespace)
-				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
 				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 				namespace = rtest.GetResource(createResources, "tigera-elasticsearch", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -244,17 +242,63 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
 
 				// There are no node selectors in the LogStorage CR, so we expect no node selectors in the Elasticsearch CR.
+				Expect(resultES.Spec.NodeSets).To(HaveLen(1))
 				nodeSet := resultES.Spec.NodeSets[0]
 				Expect(nodeSet.PodTemplate.Spec.NodeSelector).To(BeEmpty())
 
 				// Verify that an initContainer is added
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-				Expect(len(initContainers)).To(Equal(2))
+				Expect(initContainers).To(HaveLen(2))
 				Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
+				Expect(*initContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+				Expect(*initContainers[0].SecurityContext.Privileged).To(BeTrue())
+				Expect(*initContainers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*initContainers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*initContainers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(initContainers[0].SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(initContainers[0].SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 				Expect(initContainers[1].Name).To(Equal("elastic-internal-init-log-selinux-context"))
+				Expect(*initContainers[1].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+				Expect(*initContainers[1].SecurityContext.Privileged).To(BeFalse())
+				Expect(*initContainers[1].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*initContainers[1].SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*initContainers[1].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(initContainers[1].SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(initContainers[1].SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 
 				// Verify that the default container limits/requests are set.
+				Expect(resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
+				Expect(*esContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+				Expect(*esContainer.SecurityContext.Privileged).To(BeFalse())
+				Expect(*esContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*esContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*esContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(esContainer.SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+						Add:  []corev1.Capability{"SETGID", "SETUID", "SYS_CHROOT"},
+					},
+				))
+				Expect(esContainer.SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
+
 				limits := esContainer.Resources.Limits
 				resources := esContainer.Resources.Requests
 
@@ -273,6 +317,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}))
 				resultECK := rtest.GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace,
 					"apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
+				Expect(resultECK.Spec.Template.Spec.Containers).To(HaveLen(1))
 				Expect(resultECK.Spec.Template.Spec.Containers[0].Args).To(ConsistOf([]string{
 					"manager",
 					"--namespaces=tigera-elasticsearch,tigera-kibana",
@@ -287,13 +332,40 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"--enable-webhook=false",
 					"--manage-webhook-certs=false",
 				}))
+				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+				Expect(resultECK.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(resultECK.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 
 				kb := rtest.GetResource(createResources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana")
 				Expect(kb).NotTo(BeNil())
 				kibana := kb.(*kbv1.Kibana)
-				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
-				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
-				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+				Expect(kibana.Spec.PodTemplate.Spec.Containers).To(HaveLen(1))
+
+				Expect(*kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+				Expect(*kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+				Expect(*kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+				Expect(*kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+				Expect(*kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+				Expect(kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 			})
 
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
@@ -493,6 +565,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				cronjob, ok := rtest.GetResource(createResources, "elastic-curator", "tigera-elasticsearch", "batch", "v1", "CronJob").(*batchv1.CronJob)
 				Expect(ok).To(BeTrue())
+				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
 
 				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Env).To(ContainElements([]corev1.EnvVar{
 					{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
@@ -504,6 +577,21 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(80)},
 					{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(70)},
 				}))
+
+				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
 
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
@@ -721,6 +809,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 
 			es := getElasticsearch(createResources)
+			Expect(es.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
 			esContainer := es.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
 			Expect(esContainer.Env).Should(ContainElement(corev1.EnvVar{
 				Name: "ES_JAVA_OPTS",
@@ -764,6 +853,21 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(initContainers[1].Image).To(ContainSubstring("-fips"))
 			Expect(initContainers[1].Command).To(Equal([]string{"/bin/sh"}))
 			Expect(initContainers[1].Args).To(Equal([]string{"-c", "/usr/bin/initialize_keystore.sh"}))
+			Expect(*initContainers[1].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+			Expect(*initContainers[1].SecurityContext.Privileged).To(BeFalse())
+			Expect(*initContainers[1].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+			Expect(*initContainers[1].SecurityContext.RunAsNonRoot).To(BeFalse())
+			Expect(*initContainers[1].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+			Expect(initContainers[1].SecurityContext.Capabilities).To(Equal(
+				&corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+					Add:  []corev1.Capability{"CHOWN"},
+				},
+			))
+			Expect(initContainers[1].SecurityContext.SeccompProfile).To(Equal(
+				&corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				}))
 		})
 	})
 

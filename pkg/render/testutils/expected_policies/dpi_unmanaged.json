@@ -39,7 +39,7 @@
         "destination": {
           "services": {
             "namespace": "tigera-elasticsearch",
-            "name": "tigera-secure-es-gateway-http"
+            "name": "tigera-linseed"
           }
         }
       }

@@ -61,6 +61,8 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 			fallthrough
 		case "ManagementCluster":
 			fallthrough
+		case "EgressGateway":
+			fallthrough
 		case "ManagementClusterConnection":
 			return true, nil
 		}

@@ -212,7 +212,7 @@ func (c *rbacApiComponent) deployment() client.Object {
 }
 
 func (c *rbacApiComponent) container() []corev1.Container {
-	securityContext := securitycontext.NewBaseContext(1000, 0)
+	securityContext := securitycontext.NewNonRootContext()
 	// Build a security context for the pod that will allow the pod to be deployed
 	securityContext.Capabilities = &corev1.Capabilities{
 		Drop: []corev1.Capability{"ALL"},

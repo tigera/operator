@@ -349,7 +349,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 		prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
-			log.Error(err, "Failed to get certificate")
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if prometheusCertificate != nil {
@@ -514,5 +513,4 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		}
 	}
 	return nil
-
 }

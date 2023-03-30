@@ -83,9 +83,9 @@ var _ = Describe("Role rendering tests (Calico Cloud)", func() {
 		securityContext := container.SecurityContext
 		Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*securityContext.Privileged).To(BeFalse())
-		Expect(*securityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*securityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*securityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*securityContext.RunAsUser).To(BeEquivalentTo(1000))
+		Expect(*securityContext.RunAsUser).To(BeEquivalentTo(10001))
 		Expect(*securityContext.SeccompProfile).To(BeEquivalentTo(corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,
 		}))

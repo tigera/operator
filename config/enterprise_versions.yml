@@ -116,16 +116,16 @@ components:
     version: v3.15.1
   windows-upgrade:
     image: tigera/calico-windows-upgrade
-    version: v3.15.1
+    version: master
   flexvol:
     image: tigera/pod2daemon-flexvol
-    version: v3.15.1
+    version: master
   csi:
     image: tigera/csi
-    version: v3.15.1
+    version: master
   csi-node-driver-registrar:
     image: tigera/node-driver-registrar
-    version: v3.15.1
+    version: master
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
@@ -141,7 +141,7 @@ components:
     version: v3.15.1
   dikastes:
     image: tigera/dikastes
-    version: v3.15.1
+    version: master
   image-assurance-api-proxy:
     image: tigera/image-assurance-api-proxy
     version: v1.5.5
@@ -160,3 +160,6 @@ components:
   cloud-rbac-api:
     image: tigera/cc-rbac-api
     version: v0.1.1-0-g74b6dbe
+  egress-gateway:
+    image: tigera/egress-gateway
+    version: master

@@ -925,6 +925,250 @@ var _ = Describe("Installation merge tests", func() {
 				},
 			))
 	})
+	Context("test CSINodeDriverDaemonSet merge", func() {
+		var m opv1.InstallationSpec
+		var s opv1.InstallationSpec
+
+		BeforeEach(func() {
+			m = opv1.InstallationSpec{
+				CSINodeDriverDaemonSet: &opv1.CSINodeDriverDaemonSet{
+					Spec: &opv1.CSINodeDriverDaemonSetSpec{
+						Template: &opv1.CSINodeDriverDaemonSetPodTemplateSpec{
+							Spec: &opv1.CSINodeDriverDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+			s = opv1.InstallationSpec{
+				CSINodeDriverDaemonSet: &opv1.CSINodeDriverDaemonSet{
+					Spec: &opv1.CSINodeDriverDaemonSetSpec{
+						Template: &opv1.CSINodeDriverDaemonSetPodTemplateSpec{
+							Spec: &opv1.CSINodeDriverDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+
+		})
+
+		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
+			// start with empty installation spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CSINodeDriverDaemonSet = &opv1.CSINodeDriverDaemonSet{Metadata: main}
+			}
+			if second != nil {
+				s.CSINodeDriverDaemonSet = &opv1.CSINodeDriverDaemonSet{Metadata: second}
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CSINodeDriverDaemonSet).To(BeNil())
+			} else {
+				Expect(*inst.CSINodeDriverDaemonSet.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
+			m.CSINodeDriverDaemonSet.Spec.Template.Metadata = main
+			s.CSINodeDriverDaemonSet.Spec.Template.Metadata = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Metadata).To(BeNil())
+			} else {
+				Expect(*inst.CSINodeDriverDaemonSet.Spec.Template.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+		_csiNodeDriver1a := opv1.CSINodeDriverDaemonSetContainer{Name: "csi1"}
+		_csiNodeDriver1b := opv1.CSINodeDriverDaemonSetContainer{Name: "csi1"}
+		_csiNodeDriver2 := opv1.CSINodeDriverDaemonSetContainer{Name: "csi2"}
+
+		DescribeTable("merge containers", func(main, second, expect []opv1.CSINodeDriverDaemonSetContainer) {
+			m.CSINodeDriverDaemonSet.Spec.Template.Spec.Containers = main
+			s.CSINodeDriverDaemonSet.Spec.Template.Spec.Containers = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Containers).To(BeNil())
+			} else {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Containers).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver1b}, nil, []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver1b}),
+			Entry("Second only set", nil, []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver1b}, []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver1b}),
+			Entry("Both set equal", []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver1b}, []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver1b},
+				[]opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver1b}),
+			Entry("Both set not equal", []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a, _csiNodeDriver2}, []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1b, _csiNodeDriver2},
+				[]opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1b, _csiNodeDriver2}),
+		)
+
+		_aff1 := &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "custom-affinity-key",
+							Operator: v1.NodeSelectorOpExists,
+						}},
+					}},
+				},
+			},
+		}
+		_aff2 := &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "custom-affinity-key2",
+							Operator: v1.NodeSelectorOpExists,
+						}},
+					}},
+				},
+			},
+		}
+		_affEmpty := &v1.Affinity{}
+
+		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
+			m.CSINodeDriverDaemonSet.Spec.Template.Spec.Affinity = main
+			s.CSINodeDriverDaemonSet.Spec.Template.Spec.Affinity = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Affinity).To(BeNil())
+			} else {
+				Expect(*inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", _aff1, nil, _aff1),
+			Entry("Second only set", nil, _aff1, _aff1),
+			Entry("Both set equal", _aff1, _aff1, _aff1),
+			Entry("Both set not equal", _aff1, _aff2, _aff2),
+			Entry("Both set not equal, override empty", _aff1, _affEmpty, _affEmpty),
+		)
+
+		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
+			m.CSINodeDriverDaemonSet.Spec.Template.Spec.NodeSelector = main
+			s.CSINodeDriverDaemonSet.Spec.Template.Spec.NodeSelector = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
+			} else {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.NodeSelector).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", map[string]string{"a1": "1"}, nil, map[string]string{"a1": "1"}),
+			Entry("Second only set", nil, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
+			Entry("Both set equal", map[string]string{"a1": "1"}, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
+			Entry("Both set not equal", map[string]string{"a1": "1"}, map[string]string{"a1": "2", "b1": "3"}, map[string]string{"a1": "2", "b1": "3"}),
+			Entry("Both set not equal, override empty", map[string]string{"a1": "1"}, map[string]string{}, map[string]string{}),
+		)
+
+		_toleration1 := v1.Toleration{
+			Key:      "foo",
+			Operator: v1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		_toleration2 := v1.Toleration{
+			Key:      "bar",
+			Operator: v1.TolerationOpEqual,
+			Value:    "baz",
+		}
+
+		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
+			m.CSINodeDriverDaemonSet.Spec.Template.Spec.Tolerations = main
+			s.CSINodeDriverDaemonSet.Spec.Template.Spec.Tolerations = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Tolerations).To(BeNil())
+			} else {
+				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", []v1.Toleration{_toleration1}, nil, []v1.Toleration{_toleration1}),
+			Entry("Second only set", nil, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
+			Entry("Both set equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
+			Entry("Both set not equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration2}, []v1.Toleration{_toleration2}),
+			Entry("Both set not equal, override empty", []v1.Toleration{_toleration1}, []v1.Toleration{}, []v1.Toleration{}),
+		)
+
+		DescribeTable("merge multiple CSINodeDriverDaemonSet fields", func(main, second, expect *opv1.CSINodeDriverDaemonSet) {
+			// start with empty spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CSINodeDriverDaemonSet = main
+			}
+			if second != nil {
+				s.CSINodeDriverDaemonSet = second
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CSINodeDriverDaemonSet).To(BeNil())
+			} else {
+				Expect(*inst.CSINodeDriverDaemonSet).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Different fields in the two are merged, some overridden",
+				&opv1.CSINodeDriverDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels: map[string]string{"l": "1"},
+					},
+					Spec: &opv1.CSINodeDriverDaemonSetSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CSINodeDriverDaemonSetPodTemplateSpec{
+							Spec: &opv1.CSINodeDriverDaemonSetPodSpec{
+								Containers:   []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a},
+								NodeSelector: map[string]string{"selector": "test"},
+								Tolerations:  []v1.Toleration{_toleration1},
+							},
+						},
+					},
+				},
+				&opv1.CSINodeDriverDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CSINodeDriverDaemonSetSpec{
+						Template: &opv1.CSINodeDriverDaemonSetPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CSINodeDriverDaemonSetPodSpec{
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+				&opv1.CSINodeDriverDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CSINodeDriverDaemonSetSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CSINodeDriverDaemonSetPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CSINodeDriverDaemonSetPodSpec{
+								Containers:   []opv1.CSINodeDriverDaemonSetContainer{_csiNodeDriver1a},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+			))
+	})
 
 	Context("test CalicoKubeControllersDeployment merge", func() {
 		// TODO

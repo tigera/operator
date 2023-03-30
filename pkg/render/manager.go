@@ -33,6 +33,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -173,10 +174,7 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		// In order to switch to a restricted namespace, we need to set:
-		// - securityContext.capabilities.drop=["ALL"]
-		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSBaseline),
+		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		c.managerAllowTigeraNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(ManagerNamespace),
 	}
@@ -369,16 +367,19 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
+	// UID 999 is used in the manager Dockerfile.
+	sc := securitycontext.NewNonRootContext()
+	sc.RunAsUser = ptr.Int64ToPtr(999)
+	sc.RunAsGroup = ptr.Int64ToPtr(0)
+
 	tm := corev1.Container{
-		Name:          "tigera-manager",
-		Image:         c.managerImage,
-		Env:           c.managerEnvVars(),
-		LivenessProbe: c.managerProbe(),
-		// UID 999 is used in the manager Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(999, 0),
+		Name:            "tigera-manager",
+		Image:           c.managerImage,
+		Env:             c.managerEnvVars(),
+		LivenessProbe:   c.managerProbe(),
+		SecurityContext: sc,
 		VolumeMounts:    c.managerVolumeMounts(),
 	}
-
 	return tm
 }
 
@@ -457,13 +458,12 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:          VoltronName,
-		Image:         c.proxyImage,
-		Env:           env,
-		VolumeMounts:  c.volumeMountsForProxyManager(),
-		LivenessProbe: c.managerProxyProbe(),
-		// UID 1001 is used in the voltron Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		Name:            VoltronName,
+		Image:           c.proxyImage,
+		Env:             env,
+		VolumeMounts:    c.volumeMountsForProxyManager(),
+		LivenessProbe:   c.managerProxyProbe(),
+		SecurityContext: securitycontext.NewNonRootContext(),
 	}
 }
 
@@ -500,11 +500,10 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:          "tigera-es-proxy",
-		Image:         c.esProxyImage,
-		LivenessProbe: c.managerEsProxyProbe(),
-		// UID 1001 is used in the es-proxy Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		Name:            "tigera-es-proxy",
+		Image:           c.esProxyImage,
+		LivenessProbe:   c.managerEsProxyProbe(),
+		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

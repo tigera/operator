@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,14 +19,15 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 
-	elastic "github.com/olivere/elastic/v7"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	elastic "github.com/olivere/elastic/v7"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -108,7 +109,7 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 			return &http.Response{
 				StatusCode: 200,
 				Request:    req,
-				Body:       ioutil.NopCloser(strings.NewReader("")),
+				Body:       io.NopCloser(strings.NewReader("")),
 			}, nil
 		}
 	case "GET":
@@ -131,34 +132,34 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 		switch req.URL.String() {
 		case baseURI + "/_ilm/policy/" + indexName + "_policy":
 			if newPolicies {
-				actualBody, err := ioutil.ReadAll(req.Body)
+				actualBody, err := io.ReadAll(req.Body)
 				Expect(err).To(BeNil())
 
 				jsonFile, err := os.Open("test_files/01_put_policy.json")
 				Expect(err).To(BeNil())
 				defer jsonFile.Close()
-				expectedBody, _ := ioutil.ReadAll(jsonFile)
+				expectedBody, _ := io.ReadAll(jsonFile)
 				Expect(actualBody).To(MatchJSON(expectedBody))
 
 				return &http.Response{
 					StatusCode: 200,
 					Request:    req,
-					Body:       ioutil.NopCloser(bytes.NewBufferString("{}")),
+					Body:       io.NopCloser(bytes.NewBufferString("{}")),
 				}, nil
 			}
-			actualBody, err := ioutil.ReadAll(req.Body)
+			actualBody, err := io.ReadAll(req.Body)
 			Expect(err).To(BeNil())
 
 			jsonFile, err := os.Open("test_files/02_put_policy.json")
 			Expect(err).To(BeNil())
 			defer jsonFile.Close()
-			expectedBody, _ := ioutil.ReadAll(jsonFile)
+			expectedBody, _ := io.ReadAll(jsonFile)
 			Expect(actualBody).To(MatchJSON(expectedBody))
 
 			return &http.Response{
 				StatusCode: 200,
 				Request:    req,
-				Body:       ioutil.NopCloser(bytes.NewBufferString("{}")),
+				Body:       io.NopCloser(bytes.NewBufferString("{}")),
 			}, nil
 		}
 	}
@@ -166,10 +167,10 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	if os.Getenv("ELASTIC_TEST_DEBUG") == "yes" {
 		_, _ = fmt.Fprintf(os.Stderr, "%s %s\n", req.Method, req.URL)
 		if req.Body != nil {
-			b, _ := ioutil.ReadAll(req.Body)
+			b, _ := io.ReadAll(req.Body)
 			_ = req.Body.Close()
 			body := string(b)
-			req.Body = ioutil.NopCloser(bytes.NewReader(b))
+			req.Body = io.NopCloser(bytes.NewReader(b))
 			_, _ = fmt.Fprintln(os.Stderr, body)
 		}
 	}
@@ -177,7 +178,7 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	return &http.Response{
 		Request:    req,
 		StatusCode: 500,
-		Body:       ioutil.NopCloser(strings.NewReader("")),
+		Body:       io.NopCloser(strings.NewReader("")),
 	}, nil
 }
 

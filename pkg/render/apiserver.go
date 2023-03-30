@@ -479,7 +479,6 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
-
 			// Kubernetes network policy resources.
 			APIGroups: []string{
 				"networking.k8s.io",
@@ -921,12 +920,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		)
 	}
 
-	// On OpenShift apiserver needs privileged access to write audit logs to host path volume
-	isPrivileged := false
-	if c.cfg.Openshift {
-		isPrivileged = true
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
@@ -942,12 +935,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,
-		// Needed for permissions to write to the audit log
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &isPrivileged,
-			RunAsUser:  ptr.Int64ToPtr(0),
-		},
-		VolumeMounts: volumeMounts,
+		// OpenShift apiserver needs privileged access to write audit logs to host path volume.
+		// Audit logs are owned by root on hosts so we need to be root user and group.
+		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
+		VolumeMounts:    volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -1050,8 +1041,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		// UID 1001 is used in the queryserver Dockerfile.
-		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
 	}
 	return container
@@ -1477,7 +1467,14 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"user-settings"},
 		},
-		// Allow the user to read services to configure WAF.
+		// Allow the user to read applicationlayers to detect if WAF is enabled/disabled.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"applicationlayers"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"tigera-secure"},
+		},
+		// Allow the user to read services to view WAF configuration.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
@@ -1624,14 +1621,14 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"user-settings"},
 		},
-		// Allow the user to read and write the applicationlayers resource to enable/disable WAF.
+		// Allow the user to read and write applicationlayers to enable/disable WAF.
 		{
 			APIGroups:     []string{"operator.tigera.io"},
 			Resources:     []string{"applicationlayers"},
 			ResourceNames: []string{"tigera-secure"},
 			Verbs:         []string{"get", "update", "patch", "create"},
 		},
-		// Allow the user to read services to configure WAF.
+		// Allow the user to read services to view WAF configuration.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},

@@ -567,7 +567,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
+	typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
+
+	// dpiKeyPair is the key pair dpi presents to identify itself
+	dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	dpiList := &v3.DeepPacketInspectionList{}
 	if err := r.client.List(ctx, dpiList); err != nil {
@@ -586,8 +593,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		HasNoLicense:       hasNoLicense,
 		HasNoDPIResource:   hasNoDPIResource,
 		ESClusterConfig:    esClusterConfig,
-		ESSecrets:          esSecrets,
 		ClusterDomain:      r.clusterDomain,
+		DPICertSecret:      dpiKeyPair,
 	})
 
 	components := []render.Component{
@@ -614,6 +621,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, false, true),
+			},
+			TrustedBundle: typhaNodeTLS.TrustedBundle,
+		}),
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       dpi.DeepPacketInspectionNamespace,
+			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(dpiKeyPair, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}),

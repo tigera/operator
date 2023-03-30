@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+
 	"github.com/go-logr/logr"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -395,6 +397,7 @@ func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle
 			esgateway.ServiceAccountName,
 			esmetrics.ElasticsearchMetricsName,
 			render.IntrusionDetectionName,
+			dpi.DeepPacketInspectionName,
 		},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			// We do not want to delete the elastic keypair secret from the tigera-elasticsearch namespace when CertificateManagement is
@@ -433,6 +436,9 @@ func (r *ReconcileLogStorage) generateSecrets(
 
 		// Get certificate for intrusion detection controller, which Linseed needs to trust in a standalone or management cluster.
 		render.IntrusionDetectionTLSSecretName,
+
+		// Get certificate for DPI, which Linseed needs to trust in a standalone or management cluster.
+		render.DPITLSSecretName,
 
 		// Get compliance certificates, which Linseed needs to trust.
 		render.ComplianceServerCertSecret,

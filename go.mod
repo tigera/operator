@@ -21,7 +21,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/stretchr/testify v1.8.1
-	github.com/tigera/api v0.0.0-20230321225258-f05c197d13df
+	github.com/tigera/api v0.0.0-20230213233424-acea8579d623
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.6.0
 	gopkg.in/inf.v0 v0.9.1

@@ -91,6 +91,7 @@ const (
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	defaultNodeReporterPort = 9081
 	CalicoFinalizer         = "tigera.io/operator-cleanup"
+	reconcilePeriod         = 5 * time.Minute
 )
 
 const InstallationName string = "calico"
@@ -348,6 +349,13 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
 			}
 		}
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, reconcilePeriod)
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	return nil
@@ -793,7 +801,7 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.V(1).Info("Reconciling Installation.operator.tigera.io")
+	reqLogger.Info("Reconciling Installation.operator.tigera.io")
 
 	newActiveCM, err := r.checkActive(reqLogger)
 	if err != nil {
@@ -1517,14 +1525,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Created successfully. Requeue anyway so that we perform periodic reconciliation.
-	// This acts as a backstop to catch reconcile issues, and also makes sure we spot when
-	// things change that might not trigger a reconciliation.
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	if terminating {
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
+	return reconcile.Result{}, nil
 }
 
 func readMTUFile() (int, error) {

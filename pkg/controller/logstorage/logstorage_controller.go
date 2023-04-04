@@ -222,7 +222,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 
-	if err := utils.AddServiceWatch(c, linseed.ServiceName, render.ElasticsearchNamespace); err != nil {
+	if err := utils.AddServiceWatch(c, render.LinseedServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -487,7 +487,7 @@ func (r *ReconcileLogStorage) generateSecrets(
 	// Create a server key pair for Linseed to present to clients.
 	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
 	// It will be provisioned into the cluster in the render stage later on.
-	linseedDNSNames := dns.GetServiceDNSNames(linseed.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), linseedDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)

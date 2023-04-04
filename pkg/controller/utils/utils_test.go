@@ -16,8 +16,11 @@ package utils
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/go-logr/logr"
 
@@ -191,6 +194,31 @@ var _ = Describe("ValidateResourceNameIsQualified", func() {
 		err := ValidateResourceNameIsQualified(invalidName)
 
 		Expect(err).ToNot(BeNil())
+	})
+})
+
+var _ = Describe("AddPeriodicReconcile", func() {
+	It("Periodic reconcile channel is constructed correctly", func() {
+		var reconcileEvent event.GenericEvent
+		var periodicReconciles int
+		period := 10 * time.Millisecond
+		numPeriods := 10
+		timer := time.NewTimer(time.Duration(numPeriods) * period)
+		periodicReconcileChannel := createPeriodicReconcileChannel(period)
+
+	OuterLoop:
+		for {
+			select {
+			case <-timer.C:
+				break OuterLoop
+			case reconcileEvent = <-periodicReconcileChannel:
+				Expect(reconcileEvent.Object.GetName()).To(Equal(fmt.Sprintf("periodic-%s-reconcile-event", period.String())))
+				periodicReconciles++
+			}
+		}
+
+		// In practice, perfect alignment of the timers is unlikely.
+		Expect(periodicReconciles == numPeriods || periodicReconciles == numPeriods-1).To(BeTrue())
 	})
 })
 

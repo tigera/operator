@@ -987,16 +987,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{render.ESGatewayServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
 						svc := resource.(*corev1.Service)
-
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
 					}},
 				}
-
 				component := render.LogStorage(cfg)
-
 				createResources, deleteResources := component.Objects()
-
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
 			})
@@ -1730,7 +1726,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 }
 
 func compareResources(resources []client.Object, expectedResources []resourceTestObj) {
-	Expect(len(resources)).To(Equal(len(expectedResources)))
+	ExpectWithOffset(1, len(resources)).To(Equal(len(expectedResources)))
 	for i, expectedResource := range expectedResources {
 		resource := resources[i]
 		actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()

@@ -373,11 +373,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 
+			voltronLinseedCert, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedTLS, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+
 			cfg = &render.ManagerConfiguration{
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair()),
 				TLSKeyPair:            managerTLS,
 				ManagementCluster:     &operatorv1.ManagementCluster{},
 				TunnelSecret:          tunnelSecret,
+				VoltronLinseedKeyPair: voltronLinseedCert,
 				InternalTrafficSecret: internalTraffic,
 				Installation:          installation,
 				ESClusterConfig:       &relasticsearch.ClusterConfig{},
@@ -583,6 +587,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	var kp certificatemanagement.KeyPairInterface
+	var voltronLinseedKP certificatemanagement.KeyPairInterface
 	var bundle certificatemanagement.TrustedBundle
 
 	BeforeEach(func() {
@@ -590,6 +595,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		secret, err := certificatemanagement.CreateSelfSignedSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		kp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
+		voltronLinseedKP = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -603,13 +610,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		cfg := &render.ManagerConfiguration{
-			TrustedCertBundle: bundle,
-			ESClusterConfig:   &relasticsearch.ClusterConfig{},
-			TLSKeyPair:        kp,
-			Installation:      i,
-			ESLicenseType:     render.ElasticsearchLicenseTypeUnknown,
-			Replicas:          &replicas,
-			UsePSP:            true,
+			TrustedCertBundle:     bundle,
+			ESClusterConfig:       &relasticsearch.ClusterConfig{},
+			TLSKeyPair:            kp,
+			VoltronLinseedKeyPair: voltronLinseedKP,
+			Installation:          i,
+			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
+			Replicas:              &replicas,
+			UsePSP:                true,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -798,6 +806,7 @@ func renderObjects(roc renderConfig) []client.Object {
 
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTraffic certificatemanagement.KeyPairInterface
+	var voltronLinseedKP certificatemanagement.KeyPairInterface
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -810,6 +819,9 @@ func renderObjects(roc renderConfig) []client.Object {
 		Expect(err).NotTo(HaveOccurred())
 		internalTraffic, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
+		voltronLinseedKP, err = certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedTLS, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
+
 	}
 	managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
 	Expect(err).NotTo(HaveOccurred())
@@ -823,6 +835,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		Installation:            roc.installation,
 		ManagementCluster:       roc.managementCluster,
 		TunnelSecret:            tunnelSecret,
+		VoltronLinseedKeyPair:   voltronLinseedKP,
 		InternalTrafficSecret:   internalTraffic,
 		ClusterDomain:           dns.DefaultClusterDomain,
 		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,

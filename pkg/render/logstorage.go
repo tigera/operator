@@ -466,19 +466,23 @@ func (es *elasticsearchComponent) Ready() bool {
 
 // In managed clusters, we need to provision a role and binding for linseed to provide permissions
 // to create configmaps.
-func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.Role, *rbacv1.RoleBinding) {
+func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.ClusterRole, *rbacv1.RoleBinding) {
 	// Use roles so that we only have permissions to select ConfigMaps in select namespaces.
-	role := &rbacv1.Role{
+	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-linseed",
-			Namespace: "tigera-fluentd",
+			Name: "tigera-linseed",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"create", "update"},
+			},
+			{
 				APIGroups:     []string{""},
 				Resources:     []string{"configmaps"},
-				Verbs:         []string{"create", "get", "list", "delete"},
-				ResourceNames: []string{"tigera-fluentd-token"},
+				Verbs:         []string{"get", "list"},
+				ResourceNames: []string{"fluentd-node-tigera-linseed-token"},
 			},
 		},
 	}
@@ -489,7 +493,7 @@ func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.Role, 
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
+			Kind:     "ClusterRole",
 			Name:     "tigera-linseed",
 		},
 		Subjects: []rbacv1.Subject{

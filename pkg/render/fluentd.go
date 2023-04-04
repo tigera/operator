@@ -83,7 +83,7 @@ const (
 	LinseedTokenVolumeName = "linseed-token"
 	LinseedTokenKey        = "token"
 	LinseedTokenSubPath    = "token"
-	LinseedTokenConfigMap  = "fluentd-node-linseed-token"
+	LinseedTokenConfigMap  = "fluentd-node-tigera-linseed-token"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -564,8 +564,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      LinseedTokenVolumeName,
-				MountPath: c.path("/var/run/secrets/tigera.io/linseed"),
-				SubPath:   LinseedTokenSubPath,
+				MountPath: c.path("/var/run/secrets/tigera.io/linseed/"),
 			})
 	}
 

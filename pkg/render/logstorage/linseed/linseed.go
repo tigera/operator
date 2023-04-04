@@ -267,6 +267,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
 	}
 
+	if l.cfg.ManagementCluster {
+		envVars = append(envVars, corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"})
+	}
+
 	var initContainers []corev1.Container
 	if l.cfg.KeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))

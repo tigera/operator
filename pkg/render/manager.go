@@ -232,6 +232,13 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
 	}
 
+	// The following secret is read by kube controllers and sent to managed clusters.
+	if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
+		objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, common.OperatorNamespace()))
+	} else {
+		objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, common.OperatorNamespace()))
+	}
+
 	return objs, nil
 }
 

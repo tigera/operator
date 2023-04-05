@@ -84,6 +84,9 @@ type Config struct {
 	// Keypair to use for asserting Linseed's identity.
 	KeyPair certificatemanagement.KeyPairInterface
 
+	// Keypair to use for signing tokens.
+	TokenKeyPair certificatemanagement.KeyPairInterface
+
 	// Trusted bundle to use when validating client certificates.
 	TrustedBundle certificatemanagement.TrustedBundle
 
@@ -228,7 +231,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
 
-		// Configure for Linseed server certificate.
+		// Configure Linseed server certificate.
 		{Name: "LINSEED_HTTPS_CERT", Value: l.cfg.KeyPair.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_HTTPS_KEY", Value: l.cfg.KeyPair.VolumeMountKeyFilePath()},
 
@@ -267,15 +270,6 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
 	}
 
-	if l.cfg.ManagementCluster {
-		envVars = append(envVars, corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"})
-	}
-
-	var initContainers []corev1.Container
-	if l.cfg.KeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
-	}
-
 	volumes := []corev1.Volume{
 		l.cfg.KeyPair.Volume(),
 		l.cfg.TrustedBundle.Volume(),
@@ -286,8 +280,23 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
 	)
 
+	if l.cfg.ManagementCluster {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+		)
+		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
+		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+	}
+
+	var initContainers []corev1.Container
+	if l.cfg.KeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
+	}
+
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+	annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,

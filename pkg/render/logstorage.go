@@ -69,6 +69,9 @@ const (
 	// The secret contains server key and certificate.
 	TigeraLinseedSecret = "tigera-secure-linseed-cert"
 
+	// TigeraLinseedTokenSecret is the name of the secret that holds the access token signing key for Linseed.
+	TigeraLinseedTokenSecret = "tigera-secure-linseed-token-tls"
+
 	// TigeraElasticsearchGatewaySecret is the TLS key pair that is mounted by Elasticsearch gateway.
 	TigeraElasticsearchGatewaySecret = "tigera-secure-elasticsearch-cert"
 

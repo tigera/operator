@@ -479,13 +479,7 @@ func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.Cluste
 			{
 				APIGroups: []string{""},
 				Resources: []string{"configmaps"},
-				Verbs:     []string{"create", "update"},
-			},
-			{
-				APIGroups:     []string{""},
-				Resources:     []string{"configmaps"},
-				Verbs:         []string{"get", "list"},
-				ResourceNames: []string{"fluentd-node-tigera-linseed-token"},
+				Verbs:     []string{"create", "update", "get", "list"},
 			},
 		},
 	}

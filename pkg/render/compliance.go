@@ -210,7 +210,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	var objsToDelete []client.Object
-	// Compliance server is only for Standalone or Management clusters
 	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs,
 			c.complianceServerAllowTigeraNetworkPolicy(),
@@ -219,12 +218,12 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerDeployment(),
 		)
 	} else {
+		// Compliance server is only for Standalone or Management clusters
 		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: ComplianceNamespace}})
-		if c.cfg.ManagementClusterConnection != nil { // This is a managed cluster
-			complianceObjs = append(complianceObjs,
-				c.complianceServerManagedClusterRole(),
-			)
-		}
+		complianceObjs = append(complianceObjs,
+			c.complianceServerManagedClusterRole(),
+			c.externalLinseedRoleBinding(),
+		)
 	}
 
 	if c.cfg.Openshift {
@@ -612,6 +611,28 @@ func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAc
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: ComplianceNamespace},
+	}
+}
+
+func (c *complianceComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// Bind the linseed cluster role to this namespace, so that it can create token configmaps here.
+	return &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed", // TODO: Use constant
+			Namespace: ComplianceNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-linseed", // TODO: Use a constant
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: "tigera-elasticsearch", // TODO: Use constant
+			},
+		},
 	}
 }
 

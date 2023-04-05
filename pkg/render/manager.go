@@ -675,6 +675,33 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 				},
 				Verbs: []string{"get", "create"},
 			},
+			{
+				// Add access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flows",
+					"flowlogs",
+					"bgplogs",
+					"auditlogs",
+					"kube_auditlogs",
+					"ee_auditlogs",
+					"dnsflows",
+					"dnslogs",
+					"l7flows",
+					"l7logs",
+					"events",
+					"processes",
+				},
+				Verbs: []string{"get"},
+			},
+			{
+				// Dismiss events.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"events",
+				},
+				Verbs: []string{"dismiss", "delete"},
+			},
 		},
 	}
 

@@ -325,6 +325,11 @@ func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterR
 				Resources: []string{"globalreports/finalizers"},
 				Verbs:     []string{"update"},
 			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"compliancereports"},
+				Verbs:     []string{"create"},
+			},
 		},
 	}
 }
@@ -475,6 +480,11 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 			Resources: []string{"globalreporttypes", "globalreports"},
 			Verbs:     []string{"get"},
 		},
+		{
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"compliancereports"},
+			Verbs:     []string{"create"},
+		},
 	}
 
 	if c.cfg.UsePSP {
@@ -624,6 +634,11 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"compliancereports"},
+				Verbs:     []string{"get"},
 			},
 		},
 	}
@@ -848,6 +863,11 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 			},
 			Verbs: []string{"get", "list"},
 		},
+		{
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"snapshots"},
+			Verbs:     []string{"get", "create"},
+		},
 	}
 
 	if c.cfg.UsePSP {
@@ -975,6 +995,11 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 			APIGroups: []string{""},
 			Resources: []string{"nodes"},
 			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"benchmarks"},
+			Verbs:     []string{"get", "create"},
 		},
 	}
 

@@ -83,7 +83,9 @@ const (
 	LinseedTokenVolumeName = "linseed-token"
 	LinseedTokenKey        = "token"
 	LinseedTokenSubPath    = "token"
-	LinseedTokenConfigMap  = "fluentd-node-tigera-linseed-token"
+	LinseedTokenConfigMap  = "%s-tigera-linseed-token"
+	LinseedVolumeMountPath = "/var/run/secrets/tigera.io/linseed/"
+	LinseedTokenPath       = "/var/run/secrets/tigera.io/linseed/token"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -564,7 +566,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      LinseedTokenVolumeName,
-				MountPath: c.path("/var/run/secrets/tigera.io/linseed/"),
+				MountPath: c.path(LinseedVolumeMountPath),
 			})
 	}
 
@@ -618,7 +620,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	// we'll use the token from Linseed.
 	tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	if c.cfg.ManagedCluster {
-		tokenPath = "/var/run/secrets/tigera.io/linseed/token"
+		tokenPath = LinseedTokenPath
 	}
 
 	envs := []corev1.EnvVar{
@@ -922,7 +924,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: LinseedTokenConfigMap,
+							Name: fmt.Sprintf(LinseedTokenConfigMap, FluentdNodeName),
 						},
 						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},

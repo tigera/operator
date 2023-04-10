@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/go-logr/logr"
@@ -121,6 +123,27 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	})
+}
+
+func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
+	return c.Watch(
+		&source.Channel{Source: createPeriodicReconcileChannel(period)},
+		&handler.EnqueueRequestForObject{},
+	)
+}
+
+func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEvent {
+	periodicReconcileEvents := make(chan event.GenericEvent)
+	eventObject := &unstructured.Unstructured{}
+	eventObject.SetName(fmt.Sprintf("periodic-%s-reconcile-event", period.String()))
+
+	go func() {
+		for range time.Tick(period) {
+			periodicReconcileEvents <- event.GenericEvent{Object: eventObject}
+		}
+	}()
+
+	return periodicReconcileEvents
 }
 
 func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {

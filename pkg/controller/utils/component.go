@@ -490,6 +490,9 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 			return nil
 		}
 		return dt
+	case *v3.PolicyRecommendationScope:
+		// Keep the current state. Modifications should persist.
+		return nil
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

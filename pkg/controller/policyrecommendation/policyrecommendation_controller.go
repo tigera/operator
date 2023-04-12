@@ -125,6 +125,12 @@ func add(c controller.Controller) error {
 		return err
 	}
 
+	// Watch for changes to primary resource PolicyRecommendationScope
+	err = c.Watch(&source.Kind{Type: &v3.PolicyRecommendationScope{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("policy-recommendation-controller failed to watch primary resource: %w", err)
+	}
+
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch Network resource: %w", err)
 	}

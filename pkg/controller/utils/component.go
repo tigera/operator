@@ -77,6 +77,8 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	switch obj.(type) {
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
+	case *v3.PolicyRecommendationScope:
+		// Do not add controller reference for PolicyRecommendationScope, the resource is controlled by the user
 	default:
 		if c.cr != nil && !skipAddingOwnerReference(c.cr, om.GetObjectMeta()) {
 			if multipleOwners {
@@ -193,6 +195,9 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				}
 				return nil
 			}
+		case *v3.PolicyRecommendationScope:
+			// PolicyRecommendationScope updates should persist, not updated to the desired state.
+			return nil
 		}
 		if err := c.client.Update(ctx, mobj); err != nil {
 			logCtx.WithValues("key", key).Info("Failed to update object.")
@@ -490,9 +495,6 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 			return nil
 		}
 		return dt
-	case *v3.PolicyRecommendationScope:
-		// Keep the current state. Modifications should persist.
-		return nil
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

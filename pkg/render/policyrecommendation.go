@@ -95,8 +95,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
 
-	objs = append(objs, pr.policyRecommendationScope())
-
 	// Deployment is for standalone or management cluster
 	if !pr.cfg.ManagedCluster {
 		objs = append(objs,
@@ -246,19 +244,6 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: PolicyRecommendationNamespace},
-	}
-}
-
-func (pr *policyRecommendationComponent) policyRecommendationScope() client.Object {
-	return &v3.PolicyRecommendationScope{
-		TypeMeta:   metav1.TypeMeta{Kind: "PolicyRecommendationScope", APIVersion: "v3"},
-		ObjectMeta: metav1.ObjectMeta{Name: "default"},
-		Spec: v3.PolicyRecommendationScopeSpec{
-			NamespaceSpec: v3.PolicyRecommendationScopeNamespaceSpec{
-				RecStatus: "Disabled",
-				Selector:  "!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')",
-			},
-		},
 	}
 }
 

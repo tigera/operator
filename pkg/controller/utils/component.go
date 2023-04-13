@@ -77,6 +77,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	switch obj.(type) {
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
+
 	default:
 		if c.cr != nil && !skipAddingOwnerReference(c.cr, om.GetObjectMeta()) {
 			if multipleOwners {

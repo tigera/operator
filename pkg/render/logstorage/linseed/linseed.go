@@ -54,6 +54,7 @@ const (
 	PortName              = "tigera-linseed"
 	TargetPort            = 8444
 	Port                  = 443
+	ClusterRoleName       = "tigera-linseed"
 )
 
 func Linseed(c *Config) render.Component {
@@ -83,6 +84,9 @@ type Config struct {
 	// Keypair to use for asserting Linseed's identity.
 	KeyPair certificatemanagement.KeyPairInterface
 
+	// Keypair to use for signing tokens.
+	TokenKeyPair certificatemanagement.KeyPairInterface
+
 	// Trusted bundle to use when validating client certificates.
 	TrustedBundle certificatemanagement.TrustedBundle
 
@@ -91,6 +95,9 @@ type Config struct {
 
 	// ESAdminUserName is the admin user used to connect to Elastic
 	ESAdminUserName string
+
+	// Whether this is a management cluster
+	ManagementCluster bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -127,7 +134,7 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedAllowTigeraPolicy())
 	toCreate = append(toCreate, l.linseedService())
-	toCreate = append(toCreate, l.linseedRole())
+	toCreate = append(toCreate, l.linseedClusterRole())
 	toCreate = append(toCreate, l.linseedRoleBinding())
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
@@ -145,14 +152,34 @@ func (l *linseed) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (l *linseed) linseedRole() *rbacv1.Role {
+// All linseeds in the cluster must be able to do this.
+func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
 			// Linseed uses subject access review to perform authorization of clients.
 			APIGroups:     []string{"authorization.k8s.io"},
-			Resources:     []string{"subjectaccessreview"},
+			Resources:     []string{"subjectaccessreviews"},
 			ResourceNames: []string{},
 			Verbs:         []string{"create"},
+		},
+		{
+			// Used to validate tokens from standalone and mangement cluster clients.
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			// Need to be able to list managed clusters
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"managedclusters"},
+			Verbs:     []string{"list", "watch"},
+		},
+		{
+			// Need to be able to get and create secrets.
+			// TODO: Limit this by resource name.
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "create"},
 		},
 	}
 
@@ -165,26 +192,24 @@ func (l *linseed) linseedRole() *rbacv1.Role {
 		})
 	}
 
-	return &rbacv1.Role{
+	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      RoleName,
-			Namespace: l.namespace,
+			Name: ClusterRoleName,
 		},
 		Rules: rules,
 	}
 }
 
-func (l *linseed) linseedRoleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
+func (l *linseed) linseedRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      RoleName,
-			Namespace: l.namespace,
+			Name: ClusterRoleName,
 		},
 		RoleRef: rbacv1.RoleRef{
-			Kind:     "Role",
-			Name:     RoleName,
+			Kind:     "ClusterRole",
+			Name:     ClusterRoleName,
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 		Subjects: []rbacv1.Subject{
@@ -206,7 +231,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
 
-		// Configure for Linseed server certificate.
+		// Configure Linseed server certificate.
 		{Name: "LINSEED_HTTPS_CERT", Value: l.cfg.KeyPair.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_HTTPS_KEY", Value: l.cfg.KeyPair.VolumeMountKeyFilePath()},
 
@@ -245,11 +270,6 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
 	}
 
-	var initContainers []corev1.Container
-	if l.cfg.KeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
-	}
-
 	volumes := []corev1.Volume{
 		l.cfg.KeyPair.Volume(),
 		l.cfg.TrustedBundle.Volume(),
@@ -260,8 +280,23 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
 	)
 
+	if l.cfg.ManagementCluster {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+		)
+		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
+		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+	}
+
+	var initContainers []corev1.Container
+	if l.cfg.KeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
+	}
+
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+	annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,
@@ -278,7 +313,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            DeploymentName,
-					Image:           l.linseedImage,
+					Image:           "gcr.io/unique-caldron-775/casey/linseed:latest",
+					ImagePullPolicy: corev1.PullAlways,
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: securitycontext.NewNonRootContext(),
@@ -379,6 +415,15 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Destination: render.ElasticsearchEntityRule,
 		},
 	}...)
+
+	if l.cfg.ManagementCluster {
+		// For management clusters, linseed talks to Voltron to create tokens.
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.ManagerEntityRule,
+		})
+	}
 
 	// Ingress needs to be allowed from all clients.
 	linseedIngressDestinationEntityRule := v3.EntityRule{

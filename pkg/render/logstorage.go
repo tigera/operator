@@ -69,6 +69,9 @@ const (
 	// The secret contains server key and certificate.
 	TigeraLinseedSecret = "tigera-secure-linseed-cert"
 
+	// TigeraLinseedTokenSecret is the name of the secret that holds the access token signing key for Linseed.
+	TigeraLinseedTokenSecret = "tigera-secure-linseed-token-tls"
+
 	// TigeraElasticsearchGatewaySecret is the TLS key pair that is mounted by Elasticsearch gateway.
 	TigeraElasticsearchGatewaySecret = "tigera-secure-elasticsearch-cert"
 
@@ -428,10 +431,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toDelete = append(toDelete, es.cfg.KbService)
 		}
 	} else {
+		role, binding := es.linseedExternalRoleAndBinding()
 		toCreate = append(toCreate,
 			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
 			es.elasticsearchExternalService(),
 			es.linseedExternalService(),
+			role, binding,
 		)
 	}
 
@@ -460,6 +465,44 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 func (es *elasticsearchComponent) Ready() bool {
 	return true
+}
+
+// In managed clusters, we need to provision a role and binding for linseed to provide permissions
+// to create configmaps.
+func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.ClusterRole, *rbacv1.RoleBinding) {
+	// Use roles so that we only have permissions to select ConfigMaps in select namespaces.
+	role := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-linseed",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"create", "update", "get", "list"},
+			},
+		},
+	}
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: "tigera-fluentd",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-linseed",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: "tigera-elasticsearch",
+			},
+		},
+	}
+
+	return role, binding
 }
 
 func (es elasticsearchComponent) linseedExternalService() *corev1.Service {

@@ -470,7 +470,8 @@ func (es *elasticsearchComponent) Ready() bool {
 // In managed clusters, we need to provision a role and binding for linseed to provide permissions
 // to create configmaps.
 func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.ClusterRole, *rbacv1.RoleBinding) {
-	// Use roles so that we only have permissions to select ConfigMaps in select namespaces.
+	// Create a ClusterRole to provide configmap permissions. However, we'll only bind this to
+	// specific namespaces using RoleBindings so that we only have permissions in our namespaces.
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-linseed",
@@ -483,6 +484,9 @@ func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.Cluste
 			},
 		},
 	}
+
+	// Bind the permission to the tigera-fluentd namespace. Other controllers may also bind
+	// this cluster role to their own namespace if they require linseed access tokens.
 	binding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-linseed",

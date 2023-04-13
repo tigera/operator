@@ -60,8 +60,6 @@ const (
 	EsKubeControllerMetrics           = "es-calico-kube-controllers-metrics"
 	EsKubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
 
-	LinseedTokenSigningCert = "es-calico-kube-controllers-token-signing-cert"
-
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
 	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
@@ -92,10 +90,6 @@ type KubeControllersConfiguration struct {
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundle
-
-	// Secret used by es-kube-controllers to generate tokens for Linseed.
-	// The public cert will be provided to Linseed for verification.
-	TokenSigningCert certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP           bool
@@ -484,12 +478,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 		)
 	}
-	if c.cfg.TokenSigningCert != nil {
-		env = append(env,
-			corev1.EnvVar{Name: "TOKEN_SIGNING_CERT", Value: c.cfg.TokenSigningCert.VolumeMountCertificateFilePath()},
-			corev1.EnvVar{Name: "TOKEN_SIGNING_KEY", Value: c.cfg.TokenSigningCert.VolumeMountKeyFilePath()},
-		)
-	}
 
 	// UID 999 is used in kube-controller Dockerfile.
 	sc := securitycontext.NewNonRootContext()
@@ -497,11 +485,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	sc.RunAsGroup = ptr.Int64ToPtr(0)
 
 	container := corev1.Container{
-		Name:            c.kubeControllerName,
-		Image:           c.image,
-		ImagePullPolicy: corev1.PullAlways,
-		Env:             env,
-		Resources:       c.kubeControllersResources(),
+		Name:      c.kubeControllerName,
+		Image:     c.image,
+		Env:       env,
+		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
 			PeriodSeconds: int32(10),
 			ProbeHandler: corev1.ProbeHandler{
@@ -670,9 +657,6 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 	if c.cfg.MetricsServerTLS != nil {
 		mounts = append(mounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
 	}
-	if c.cfg.TokenSigningCert != nil {
-		mounts = append(mounts, c.cfg.TokenSigningCert.VolumeMount(c.SupportedOSType()))
-	}
 	return mounts
 }
 
@@ -686,9 +670,6 @@ func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	}
 	if c.cfg.MetricsServerTLS != nil {
 		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
-	}
-	if c.cfg.TokenSigningCert != nil {
-		volumes = append(volumes, c.cfg.TokenSigningCert.Volume())
 	}
 	return volumes
 }

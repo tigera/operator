@@ -174,13 +174,6 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
 		},
-		{
-			// Need to be able to get and create secrets.
-			// TODO: Limit this by resource name.
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get", "create"},
-		},
 	}
 
 	if l.cfg.UsePSP {

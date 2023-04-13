@@ -21,6 +21,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/go-logr/logr"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
@@ -123,6 +124,12 @@ func add(c controller.Controller) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.PolicyRecommendation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
+	}
+
+	// Watch for changes to primary resource PolicyRecommendationScope
+	err = c.Watch(&source.Kind{Type: &v3.PolicyRecommendationScope{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("policy-recommendation-controller failed to watch policy recommendation scope resource: %w", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
@@ -419,5 +426,39 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	// Fetch any existing PolicyRecommendationScope object
+	policyRecommendationScope := &v3.PolicyRecommendationScope{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, policyRecommendationScope)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read policyRecommendationScope", err, reqLogger)
+			return reconcile.Result{}, err
+		} else {
+			// Create the default policy recommendation resource if not found
+			if err = r.createDefaultPolicyRecommendationScope(context.Background(), policyRecommendationScope, reqLogger); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	return reconcile.Result{}, nil
+}
+
+// createDefaultPolicyRecommendationScope will create a new default version of the
+// PolicyRecommendationScope resource.
+func (r *ReconcilePolicyRecommendation) createDefaultPolicyRecommendationScope(ctx context.Context, prs *v3.PolicyRecommendationScope, log logr.Logger) error {
+	if prs == nil {
+		prs = &v3.PolicyRecommendationScope{}
+	}
+
+	prs.ObjectMeta.Name = "default"
+	prs.Spec.NamespaceSpec.RecStatus = "Disabled"
+	prs.Spec.NamespaceSpec.Selector = "!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')"
+
+	if err := r.client.Create(ctx, prs); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to Create default PolicyRecommendationScope", err, log)
+		return err
+	}
+
+	return nil
 }

@@ -500,8 +500,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           "gcr.io/unique-caldron-775/casey/voltron:latest",
-		ImagePullPolicy: corev1.PullAlways,
+		Image:           c.proxyImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),

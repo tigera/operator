@@ -498,7 +498,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	container := corev1.Container{
 		Name:            c.kubeControllerName,
-		Image:           "gcr.io/unique-caldron-775/casey/kube-controllers:latest",
+		Image:           c.image,
 		ImagePullPolicy: corev1.PullAlways,
 		Env:             env,
 		Resources:       c.kubeControllersResources(),

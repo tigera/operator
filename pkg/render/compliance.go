@@ -453,8 +453,8 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceControllerName,
-					Image:           "gcr.io/unique-caldron-775/casey/compliance-controller:latest",
-					ImagePullPolicy: corev1.PullAlways,
+					Image:           c.controllerImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -643,8 +643,8 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Containers: []corev1.Container{
 					{
 						Name:            "reporter",
-						Image:           "gcr.io/unique-caldron-775/casey/compliance-reporter:latest",
-						ImagePullPolicy: corev1.PullAlways,
+						Image:           c.reporterImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
 						Env:             envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
@@ -840,8 +840,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceServerName,
-					Image:           "gcr.io/unique-caldron-775/casey/compliance-server:latest",
-					ImagePullPolicy: corev1.PullAlways,
+					Image:           c.serverImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -1042,8 +1042,8 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceSnapshotterName,
-					Image:           "gcr.io/unique-caldron-775/casey/compliance-snapshotter:latest",
-					ImagePullPolicy: corev1.PullAlways,
+					Image:           c.snapshotterImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -1237,8 +1237,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceBenchmarkerName,
-					Image:           "gcr.io/unique-caldron-775/casey/compliance-benchmarker:latest",
-					ImagePullPolicy: corev1.PullAlways,
+					Image:           c.benchmarkerImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
 					Env:             envVars,
 					SecurityContext: securitycontext.NewRootContext(false),
 					VolumeMounts:    volMounts,

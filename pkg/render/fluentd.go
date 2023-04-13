@@ -572,8 +572,8 @@ func (c *fluentdComponent) container() corev1.Container {
 
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
-		Image:           "gcr.io/unique-caldron-775/casey/fluentd:latest", // c.image,
-		ImagePullPolicy: corev1.PullAlways,
+		Image:           c.image,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env:             envs,
 		// On OpenShift Fluentd needs privileged access to access logs on host path volume
 		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),

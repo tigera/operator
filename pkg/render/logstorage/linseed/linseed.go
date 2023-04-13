@@ -313,8 +313,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            DeploymentName,
-					Image:           "gcr.io/unique-caldron-775/casey/linseed:latest",
-					ImagePullPolicy: corev1.PullAlways,
+					Image:           l.linseedImage,
+					ImagePullPolicy: corev1.PullIfNotPresent,
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: securitycontext.NewNonRootContext(),

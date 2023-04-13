@@ -54,7 +54,6 @@ func (r *ReconcileLogStorage) createESKubeControllers(
 	}
 
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
-	// var linseedTokenSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, svcDNSNames)
@@ -62,12 +61,6 @@ func (r *ReconcileLogStorage) createESKubeControllers(
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return reconcile.Result{}, false, err
 		}
-
-		// linseedTokenSecret, err = certificateManager.GetOrCreateKeyPair(r.client, kubecontrollers.LinseedTokenSigningCert, common.OperatorNamespace(), []string{"localhost"})
-		// if err != nil {
-		// 	r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error getting kube-controllers token signing certificate %q", render.ManagerInternalTLSSecretName), err, reqLogger)
-		// 	return reconcile.Result{}, false, err
-		// }
 	}
 
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
@@ -80,7 +73,6 @@ func (r *ReconcileLogStorage) createESKubeControllers(
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,
 		TrustedBundle:                certificateManager.CreateTrustedBundle(),
-		// TokenSigningCert:             linseedTokenSecret,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 

@@ -616,13 +616,6 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
-	// Default to using our serviceaccount token. However, if we're running on a managed cluster
-	// we'll use the token from Linseed.
-	tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
-	if c.cfg.ManagedCluster {
-		tokenPath = LinseedTokenPath
-	}
-
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
@@ -634,7 +627,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
-		{Name: "LINSEED_TOKEN", Value: tokenPath},
+		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagedCluster)},
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
@@ -917,7 +910,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 		volumes = append(volumes, c.cfg.FluentdKeyPair.Volume())
 	}
 	if c.cfg.ManagedCluster {
-		// Add a projected volume for our token.
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: LinseedTokenVolumeName,

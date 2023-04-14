@@ -438,7 +438,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
-		{Name: "LINSEED_TOKEN", Value: c.linseedTokenPath()},
+		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -551,15 +551,6 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 	}
 }
 
-func (c *complianceComponent) linseedTokenPath() string {
-	// Default to using our serviceaccount token. However, if we're running on a managed cluster
-	// we'll use the token from Linseed.
-	if c.cfg.ManagementClusterConnection != nil {
-		return LinseedTokenPath
-	}
-	return "/var/run/secrets/kubernetes.io/serviceaccount/token"
-}
-
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
 	var keyPath, certPath string
 	if c.cfg.ReporterKeyPair != nil {
@@ -575,7 +566,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
-		{Name: "LINSEED_TOKEN", Value: c.linseedTokenPath()},
+		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 
 	volumes := []corev1.Volume{
@@ -816,7 +807,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
-		{Name: "LINSEED_TOKEN", Value: c.linseedTokenPath()},
+		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
@@ -1001,7 +992,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
-		{Name: "LINSEED_TOKEN", Value: c.linseedTokenPath()},
+		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 
 	volumes := []corev1.Volume{
@@ -1156,7 +1147,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
-		{Name: "LINSEED_TOKEN", Value: c.linseedTokenPath()},
+		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 
 	volMounts := []corev1.VolumeMount{

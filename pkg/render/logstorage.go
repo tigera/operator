@@ -2078,3 +2078,14 @@ func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrid
 	}
 	return updatedReq
 }
+
+func GetLinseedTokenPath(managedCluster bool) string {
+	if managedCluster {
+		// Managed clusters use a different access token that is valid
+		// in their management cluster.
+		return LinseedTokenPath
+	}
+
+	// Default to using our serviceaccount token.
+	return "/var/run/secrets/kubernetes.io/serviceaccount/token"
+}

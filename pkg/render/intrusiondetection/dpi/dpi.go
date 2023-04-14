@@ -15,6 +15,8 @@
 package dpi
 
 import (
+	"fmt"
+
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -185,7 +187,7 @@ func (d *dpiComponent) dpiContainer() corev1.Container {
 func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		d.cfg.DPICertSecret.Volume(),
 		d.cfg.TyphaNodeTLS.TrustedBundle.Volume(),
 		d.cfg.TyphaNodeTLS.NodeSecret.Volume(),
@@ -199,6 +201,23 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 			},
 		},
 	}
+
+	if d.cfg.ManagedCluster {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: render.LinseedTokenVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: fmt.Sprintf(render.LinseedTokenConfigMap, render.FluentdNodeName),
+						},
+						Items: []corev1.KeyToPath{{Key: render.LinseedTokenKey, Path: render.LinseedTokenSubPath}},
+					},
+				},
+			})
+	}
+
+	return volumes
 }
 
 func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
@@ -214,13 +233,13 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
 		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
-
 		{Name: "CLUSTER_NAME", Value: d.cfg.ESClusterConfig.ClusterName()},
-
 		{Name: "LINSEED_CLIENT_CERT", Value: d.cfg.DPICertSecret.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_CLIENT_KEY", Value: d.cfg.DPICertSecret.VolumeMountKeyFilePath()},
+		{Name: "LINSEED_TOKEN", Value: render.GetLinseedTokenPath(d.cfg.ManagedCluster)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode)},
 	}
+
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
 	if d.cfg.TyphaNodeTLS.TyphaCommonName != "" {
@@ -233,12 +252,20 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 }
 
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
-	return append(
+	volumeMounts := append(
 		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMounts(d.SupportedOSType()),
 		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(d.SupportedOSType()),
 		corev1.VolumeMount{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
 		d.cfg.DPICertSecret.VolumeMount(d.SupportedOSType()),
 	)
+	if d.cfg.ManagedCluster {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      render.LinseedTokenVolumeName,
+				MountPath: render.LinseedVolumeMountPath,
+			})
+	}
+	return volumeMounts
 }
 
 func (d *dpiComponent) dpiReadinessProbes() *corev1.Probe {
@@ -318,6 +345,12 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"endpoints", "services"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
+			{
+				// Add write access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"events"},
+				Verbs:     []string{"create"},
+			},
 		},
 	}
 	if d.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
@@ -381,5 +414,4 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
-
 }

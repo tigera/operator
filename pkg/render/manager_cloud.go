@@ -20,7 +20,9 @@ import (
 
 var (
 	CloudManagerConfigOverrideName = "cloud-manager-config"
+	CloudVoltronConfigOverrideName = "cloud-voltron-config"
 	ManagerExtraEnv                = map[string]string{}
+	VoltronExtraEnv                = map[string]string{}
 )
 
 const (
@@ -70,6 +72,12 @@ func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Contai
 		)
 	}
 
+	// move extra env vars into Voltron, but sort them alphabetically first,
+	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
+	// which will cause another reconciliation event when Voltron is updated.
+	sortedKeysIterate(VoltronExtraEnv, func(key, val string) {
+		container.Env = append(container.Env, corev1.EnvVar{Name: key, Value: val})
+	})
 	return container
 }
 
@@ -171,32 +179,25 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 	// move extra env vars into Manager, but sort them alphabetically first,
 	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
 	// which will cause another reconciliation event when Manager is updated.
-	sortedKeys := []string{}
-	for k := range ManagerExtraEnv {
-		sortedKeys = append(sortedKeys, k)
-	}
-	sort.Strings(sortedKeys)
-
-	for _, key := range sortedKeys {
-		val := ManagerExtraEnv[key]
+	sortedKeysIterate(ManagerExtraEnv, func(key, val string) {
 		if key == "portalAPIURL" {
 			// support legacy functionality where 'portalAPIURL' was a special field used to set
 			// the portal url and enable support.
 			envs = append(envs,
 				corev1.EnvVar{Name: "CNX_PORTAL_URL", Value: val},
 				corev1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"})
-			continue
+			return
 		}
 
 		if key == "auth0OrgID" {
 			// support legacy functionality where 'auth0OrgID' was a special field used to set
 			// the org ID
 			envs = append(envs, corev1.EnvVar{Name: "CNX_AUTH0_ORG_ID", Value: val})
-			continue
+			return
 		}
 
 		envs = append(envs, corev1.EnvVar{Name: key, Value: val})
-	}
+	})
 
 	return envs
 }
@@ -246,5 +247,18 @@ func (c *managerComponent) managerToCloudRBACAPINetworkPolicy(rbacResources *clo
 				},
 			},
 		},
+	}
+}
+
+// sortedKeysIterate Sort map keys and call f with the sorted key and its value
+func sortedKeysIterate(m map[string]string, f func(key, val string)) {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		f(key, m[key])
 	}
 }

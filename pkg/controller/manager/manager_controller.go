@@ -519,14 +519,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Cloud modifications
-	mgrCfg := &corev1.ConfigMap{}
-	key := types.NamespacedName{Name: render.CloudManagerConfigOverrideName, Namespace: common.OperatorNamespace()}
-	if err = r.client.Get(ctx, key, mgrCfg); err != nil {
-		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, fmt.Errorf("Failed to read cloud-manager-config ConfigMap: %s", err.Error())
-		}
-	} else {
-		render.ManagerExtraEnv = mgrCfg.Data
+	if err = r.cloudConfigOverride(ctx); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	var mcr render.ManagerCloudResources

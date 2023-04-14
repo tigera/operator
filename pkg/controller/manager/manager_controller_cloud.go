@@ -7,11 +7,14 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcloudrbac "github.com/tigera/operator/pkg/render/cloudrbac"
@@ -26,6 +29,10 @@ func addCloudWatch(c controller.Controller) error {
 	}
 
 	if err := utils.AddCloudRBACWatch(c, render.ManagerNamespace); err != nil {
+		return err
+	}
+
+	if err := utils.AddConfigMapWatch(c, render.CloudVoltronConfigOverrideName, common.OperatorNamespace()); err != nil {
 		return err
 	}
 	return nil
@@ -58,7 +65,7 @@ func (r *ReconcileManager) handleCloudRBACResources(ctx context.Context, mcr *re
 			return nil
 		}
 		reqLogger.Error(err, "failed to check for Cloud RBAC existence")
-		r.SetDegraded("failed to check for Cloud RBAC existence: %s", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "failed to check for Cloud RBAC existence: %s", err, reqLogger)
 		return err
 	}
 
@@ -66,11 +73,11 @@ func (r *ReconcileManager) handleCloudRBACResources(ctx context.Context, mcr *re
 	secret, err := utils.GetCloudRbacTLSSecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName))
-		r.SetDegraded(fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName), err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("failed to retrieve secret %s", cloudrbac.TLSSecretName), err, reqLogger)
 		return err
 	} else if secret == nil {
 		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName))
-		r.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName), "")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("waiting for secret '%s' to become available", cloudrbac.TLSSecretName), nil, reqLogger)
 		return nil
 	}
 
@@ -94,7 +101,7 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 			return nil, nil
 		}
 		reqLogger.Error(err, "failed to check for Image Assurance existence")
-		r.SetDegraded("failed to check for Image Assurance existence: %s", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "failed to check for Image Assurance existence: %s", err, reqLogger)
 		return nil, err
 	}
 
@@ -102,11 +109,11 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 	secret, err := utils.GetImageAssuranceTLSSecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve secret %s", iarender.APICertSecretName))
-		r.SetDegraded(fmt.Sprintf("Failed to retrieve secret %s", iarender.APICertSecretName), err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve secret %s", iarender.APICertSecretName), err, reqLogger)
 		return nil, err
 	} else if secret == nil {
 		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName))
-		r.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName), "")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName), nil, reqLogger)
 		return &reconcile.Result{}, nil
 	}
 
@@ -115,12 +122,12 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info(fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName))
-			r.SetDegraded(fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName), "")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName), nil, reqLogger)
 			return &reconcile.Result{}, nil
 		}
 
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName))
-		r.SetDegraded(fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err, reqLogger)
 		return nil, err
 	}
 
@@ -135,11 +142,11 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 		if err != nil {
 			if errors.IsNotFound(err) {
 				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
-				r.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Failed to retrieve External Elasticsearch config map", err, reqLogger)
 				return &reconcile.Result{}, nil
 			}
 			reqLogger.Error(err, err.Error())
-			r.SetDegraded("Unable to read cloud config map", err.Error())
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read cloud config map", err, reqLogger)
 			return nil, err
 		}
 
@@ -149,13 +156,28 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 	return nil, nil
 }
 
-// Deprecated.
-// This adapter was created to resolve merge conflicts.
-// All calls in rs controller should be updated to use r.status.SetDegraded directly.
-func (r *ReconcileManager) SetDegraded(message, errStr string) {
+// cloudConfigOverride set manager and voltron renderer env override
+func (r *ReconcileManager) cloudConfigOverride(ctx context.Context) error {
 	var err error
-	if errStr != "" {
-		err = fmt.Errorf(errStr)
+	render.ManagerExtraEnv, err = r.getConfigMapData(ctx, render.CloudManagerConfigOverrideName)
+	if err != nil {
+		return err
 	}
-	r.status.SetDegraded(operatorv1.Unknown, message, err, log.WithName(""))
+	render.VoltronExtraEnv, err = r.getConfigMapData(ctx, render.CloudVoltronConfigOverrideName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcileManager) getConfigMapData(ctx context.Context, name string) (map[string]string, error) {
+	configMap := &corev1.ConfigMap{}
+	key := types.NamespacedName{Name: name, Namespace: common.OperatorNamespace()}
+	if err := r.client.Get(ctx, key, configMap); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to read %s ConfigMap: %s", name, err.Error())
+		}
+		return nil, nil
+	}
+	return configMap.Data, nil
 }

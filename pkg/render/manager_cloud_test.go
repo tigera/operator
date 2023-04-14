@@ -147,6 +147,11 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		)
 	})
 
+	render.VoltronExtraEnv = map[string]string{
+		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE1": "value1",
+		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3": "value3",
+		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2": "value2",
+	}
 	resources := renderObjects(renderConfig{
 		oidc:              false,
 		managementCluster: nil,
@@ -238,6 +243,15 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 				corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_CA_BUNDLE_PATH", Value: "/certs/cloud-rbac/tls.crt"},
 				corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_ENDPOINT", Value: "https://cc-rbac-api.calico-cloud-rbac.svc:8443"},
 			))
+		})
+
+		It("should have env vars appended from configmap override in correct order", func() {
+			Expect(len(voltron.Env)).To(BeNumerically(">=", 3))
+			Expect(voltron.Env[len(voltron.Env)-3:]).Should(Equal([]corev1.EnvVar{
+				{Name: "VOLTRON_EXTRA_ENVIRONMENT_VARIABLE1", Value: "value1"},
+				{Name: "VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2", Value: "value2"},
+				{Name: "VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3", Value: "value3"},
+			}))
 		})
 	})
 })

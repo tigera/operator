@@ -626,11 +626,9 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			corev1.Volume{
 				Name: LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenConfigMap, IntrusionDetectionName),
-						},
-						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, IntrusionDetectionName),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
 				},
 			})

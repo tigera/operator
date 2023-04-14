@@ -83,7 +83,7 @@ const (
 	LinseedTokenVolumeName = "linseed-token"
 	LinseedTokenKey        = "token"
 	LinseedTokenSubPath    = "token"
-	LinseedTokenConfigMap  = "%s-tigera-linseed-token"
+	LinseedTokenSecret     = "%s-tigera-linseed-token"
 	LinseedVolumeMountPath = "/var/run/secrets/tigera.io/linseed/"
 	LinseedTokenPath       = "/var/run/secrets/tigera.io/linseed/token"
 
@@ -914,11 +914,9 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 			corev1.Volume{
 				Name: LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenConfigMap, FluentdNodeName),
-						},
-						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, FluentdNodeName),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
 				},
 			})

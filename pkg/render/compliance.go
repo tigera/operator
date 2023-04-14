@@ -417,7 +417,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenConfigMap, ComplianceControllerServiceAccount),
+							Name: fmt.Sprintf(LinseedTokenSecret, ComplianceControllerServiceAccount),
 						},
 						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
@@ -594,11 +594,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			corev1.Volume{
 				Name: LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenConfigMap, ComplianceReporterServiceAccount),
-						},
-						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, ComplianceReporterServiceAccount),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
 				},
 			})
@@ -1008,7 +1006,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenConfigMap, ComplianceSnapshotterServiceAccount),
+							Name: fmt.Sprintf(LinseedTokenSecret, ComplianceSnapshotterServiceAccount),
 						},
 						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
@@ -1203,7 +1201,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenConfigMap, ComplianceBenchmarkerServiceAccount),
+							Name: fmt.Sprintf(LinseedTokenSecret, ComplianceBenchmarkerServiceAccount),
 						},
 						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},

@@ -207,11 +207,9 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 			corev1.Volume{
 				Name: render.LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(render.LinseedTokenConfigMap, render.FluentdNodeName),
-						},
-						Items: []corev1.KeyToPath{{Key: render.LinseedTokenKey, Path: render.LinseedTokenSubPath}},
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(render.LinseedTokenSecret, DeepPacketInspectionName),
+						Items:      []corev1.KeyToPath{{Key: render.LinseedTokenKey, Path: render.LinseedTokenSubPath}},
 					},
 				},
 			})

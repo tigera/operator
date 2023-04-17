@@ -69,8 +69,8 @@ var _ = Describe("Linseed rendering tests", func() {
 		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 			{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
-			{ClusterRoleName, render.ElasticsearchNamespace, &rbacv1.ClusterRole{}, nil},
-			{ClusterRoleName, render.ElasticsearchNamespace, &rbacv1.ClusterRoleBinding{}, nil},
+			{ClusterRoleName, "", &rbacv1.ClusterRole{}, nil},
+			{ClusterRoleName, "", &rbacv1.ClusterRoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 			{"tigera-linseed", "", &policyv1beta1.PodSecurityPolicy{}, nil},

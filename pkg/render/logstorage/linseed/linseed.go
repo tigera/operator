@@ -289,7 +289,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
-	annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
+	if l.cfg.TokenKeyPair != nil {
+		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
+	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,

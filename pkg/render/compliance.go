@@ -674,6 +674,7 @@ func (c *complianceComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 	// Bind the linseed cluster role to this namespace, so that it can create token configmaps here.
 	linseed := "tigera-linseed"
 	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      linseed,
 			Namespace: ComplianceNamespace,

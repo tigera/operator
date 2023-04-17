@@ -206,6 +206,11 @@ var _ = Describe("compliance rendering tests", func() {
 					Verbs:         []string{"use"},
 					ResourceNames: []string{"compliance-server"},
 				},
+				{
+					APIGroups: []string{"linseed.tigera.io"},
+					Resources: []string{"compliancereports"},
+					Verbs:     []string{"get"},
+				},
 			}))
 
 			d := rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -392,6 +397,11 @@ var _ = Describe("compliance rendering tests", func() {
 					Verbs:         []string{"use"},
 					ResourceNames: []string{"compliance-server"},
 				},
+				{
+					APIGroups: []string{"linseed.tigera.io"},
+					Resources: []string{"compliancereports"},
+					Verbs:     []string{"get"},
+				},
 			}))
 		})
 	})
@@ -441,6 +451,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
+				{"tigera-linseed", ns, rbac, "v1", "RoleBinding"},
 				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
 				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
 				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},

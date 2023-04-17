@@ -274,6 +274,16 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		)
 	}
 
+	if c.cfg.ManagedCluster {
+		// For managed clusters, we must create a role binding to allow Linseed to
+		// manage access token secrets in our namespace.
+		objs = append(objs, c.externalLinseedRoleBinding())
+	} else {
+		// We can delete the role binding for management and standalone clusters, since
+		// for these cluster types normal serviceaccount tokens are used.
+		objsToDelete = append(objsToDelete, c.externalLinseedRoleBinding())
+	}
+
 	if c.cfg.HasNoLicense {
 		return nil, objs
 	}
@@ -529,6 +539,31 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rb
 				Kind:      "ServiceAccount",
 				Name:      IntrusionDetectionName,
 				Namespace: IntrusionDetectionNamespace,
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
+	// in our namespace.
+	linseed := "tigera-linseed"
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      linseed,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     linseed,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      linseed,
+				Namespace: ElasticsearchNamespace,
 			},
 		},
 	}

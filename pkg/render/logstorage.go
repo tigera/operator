@@ -479,7 +479,7 @@ func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.Cluste
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
+				Resources: []string{"secrets"},
 				Verbs:     []string{"create", "update", "get", "list"},
 			},
 		},

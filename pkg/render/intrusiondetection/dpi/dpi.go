@@ -117,6 +117,16 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiDaemonset(),
 		)
 	}
+	if d.cfg.ManagedCluster {
+		// For managed clusters, we must create a role binding to allow Linseed to
+		// manage access token secrets in our namespace.
+		toCreate = append(toCreate, d.externalLinseedRoleBinding())
+	} else {
+		// We can delete the role binding for management and standalone clusters, since
+		// for these cluster types normal serviceaccount tokens are used.
+		toDelete = append(toDelete, d.externalLinseedRoleBinding())
+	}
+
 	return toCreate, toDelete
 }
 
@@ -371,6 +381,31 @@ func (d *dpiComponent) dpiAnnotations() map[string]string {
 	annotations[d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
 	annotations[d.cfg.DPICertSecret.HashAnnotationKey()] = d.cfg.DPICertSecret.HashAnnotationValue()
 	return annotations
+}
+
+func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
+	// in our namespace.
+	linseed := "tigera-linseed"
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      linseed,
+			Namespace: DeepPacketInspectionNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     linseed,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      linseed,
+				Namespace: render.ElasticsearchNamespace,
+			},
+		},
+	}
 }
 
 // This policy uses service selectors.

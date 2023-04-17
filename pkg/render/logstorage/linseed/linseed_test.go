@@ -312,11 +312,11 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
 
 	// Check permissions
-	clusterRole := rtest.GetResource(resources, ClusterRoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+	clusterRole := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 	Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 		{
 			APIGroups:     []string{"authorization.k8s.io"},
-			Resources:     []string{"subjectaccessreview"},
+			Resources:     []string{"subjectaccessreviews"},
 			ResourceNames: []string{},
 			Verbs:         []string{"create"},
 		},
@@ -326,8 +326,18 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			ResourceNames: []string{"tigera-linseed"},
 			Verbs:         []string{"use"},
 		},
+		{
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"managedclusters"},
+			Verbs:     []string{"list", "watch"},
+		},
 	}))
-	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(ClusterRoleName))
 	Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 		{
@@ -386,7 +396,8 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{
-			Name: DeploymentName,
+			Name:            DeploymentName,
+			ImagePullPolicy: corev1.PullIfNotPresent,
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 				AllowPrivilegeEscalation: ptr.BoolToPtr(false),

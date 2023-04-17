@@ -278,34 +278,38 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 
 	// Check deployment
 	deployment := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-	Expect(deployment).NotTo(BeNil())
+	ExpectWithOffset(1, deployment).NotTo(BeNil())
 
 	// Check containers
 	expected := expectedContainers()
 	actual := deployment.Spec.Template.Spec.Containers
-	Expect(len(actual)).To(Equal(len(expected)))
-	Expect(actual[0].Env).To(ConsistOf(expected[0].Env))
-	Expect(actual[0].VolumeMounts).To(ConsistOf(expected[0].VolumeMounts))
-	Expect(actual[0].ReadinessProbe).To(Equal(expected[0].ReadinessProbe))
-	Expect(actual[0].LivenessProbe).To(Equal(expected[0].LivenessProbe))
-	Expect(actual[0].SecurityContext).To(Equal(expected[0].SecurityContext))
-	Expect(actual[0].Name).To(Equal(expected[0].Name))
-	Expect(actual).To(ConsistOf(expected))
+	ExpectWithOffset(1, len(actual)).To(Equal(len(expected)))
+	ExpectWithOffset(1, actual[0].Env).To(ConsistOf(expected[0].Env))
+	ExpectWithOffset(1, actual[0].EnvFrom).To(ConsistOf(expected[0].EnvFrom))
+	ExpectWithOffset(1, actual[0].VolumeMounts).To(ConsistOf(expected[0].VolumeMounts))
+	ExpectWithOffset(1, actual[0].ReadinessProbe).To(Equal(expected[0].ReadinessProbe))
+	ExpectWithOffset(1, actual[0].LivenessProbe).To(Equal(expected[0].LivenessProbe))
+	ExpectWithOffset(1, actual[0].SecurityContext).To(Equal(expected[0].SecurityContext))
+	ExpectWithOffset(1, actual[0].Name).To(Equal(expected[0].Name))
+	ExpectWithOffset(1, actual[0].Resources).To(Equal(expected[0].Resources))
+	ExpectWithOffset(1, actual[0].Image).To(Equal(expected[0].Image))
+	ExpectWithOffset(1, actual[0].Ports).To(Equal(expected[0].Ports))
+	ExpectWithOffset(1, actual).To(ConsistOf(expected))
 
 	// Check init containers
 	if useCSR {
-		Expect(len(deployment.Spec.Template.Spec.InitContainers)).To(Equal(1))
-		Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TigeraLinseedSecret)))
+		ExpectWithOffset(1, len(deployment.Spec.Template.Spec.InitContainers)).To(Equal(1))
+		ExpectWithOffset(1, deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TigeraLinseedSecret)))
 	}
 
 	// Check volumeMounts
-	Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR)))
+	ExpectWithOffset(1, deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR)))
 
 	// Check annotations
 	if !useCSR {
-		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-secure-linseed-cert", Not(BeEmpty())))
+		ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-secure-linseed-cert", Not(BeEmpty())))
 	}
-	Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
+	ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
 
 	// Check permissions
 	clusterRole := rtest.GetResource(resources, ClusterRoleName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)

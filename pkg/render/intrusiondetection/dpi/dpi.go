@@ -181,11 +181,12 @@ func (d *dpiComponent) dpiContainer() corev1.Container {
 		"NET_RAW",
 	}
 	dpiContainer := corev1.Container{
-		Name:         DeepPacketInspectionName,
-		Image:        d.dpiImage,
-		Resources:    *d.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
-		Env:          d.dpiEnvVars(),
-		VolumeMounts: d.dpiVolumeMounts(),
+		Name:            DeepPacketInspectionName,
+		Image:           d.dpiImage,
+		ImagePullPolicy: render.ImagePullPolicy(),
+		Resources:       *d.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
+		Env:             d.dpiEnvVars(),
+		VolumeMounts:    d.dpiVolumeMounts(),
 		// On OpenShift Snort needs privileged access to access host network
 		SecurityContext: sc,
 		ReadinessProbe:  d.dpiReadinessProbes(),

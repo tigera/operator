@@ -93,9 +93,10 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					HostNetwork:        true,
 					Tolerations:        rmeta.TolerateAll,
 					Containers: []corev1.Container{{
-						Name:  "aws-security-group-setup",
-						Image: c.image,
-						Args:  []string{"--aws-sg-setup"},
+						Name:            "aws-security-group-setup",
+						Image:           c.image,
+						ImagePullPolicy: ImagePullPolicy(),
+						Args:            []string{"--aws-sg-setup"},
 						Env: []corev1.EnvVar{
 							{
 								Name:  "OPENSHIFT",

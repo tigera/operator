@@ -1117,6 +1117,7 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{"/opt/cni/bin/install"},
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
@@ -1134,6 +1135,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "flexvol-driver",
 		Image:           c.flexvolImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,
 	}
@@ -1170,6 +1172,7 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "mount-bpffs",
 		Image:           c.nodeImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{CalicoNodeObjectName, "-init"},
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
@@ -1232,6 +1235,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
@@ -1811,9 +1815,10 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:    "hostpath-init",
-		Image:   c.nodeImage,
-		Command: []string{"sh", "-c", "calico-node -hostpath-init"},
+		Name:            "hostpath-init",
+		Image:           c.nodeImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{"sh", "-c", "calico-node -hostpath-init"},
 		Env: []corev1.EnvVar{
 			{Name: "NODE_USER_ID", Value: "999"},
 		},

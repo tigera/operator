@@ -44,3 +44,8 @@ func setNodeCriticalPod(t *corev1.PodTemplateSpec) {
 func SetClusterCriticalPod(t *corev1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = ClusterPriorityClassName
 }
+
+// ImagePullPolicy returns the image pull policy to use for all components.
+func ImagePullPolicy() corev1.PullPolicy {
+	return corev1.PullIfNotPresent
+}

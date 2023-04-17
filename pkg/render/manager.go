@@ -234,10 +234,12 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// The following secret is read by kube controllers and sent to managed clusters so that linseed clients in the managed cluster
 	// can authenticate the certificate presented by Voltron.
-	if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
-		objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, common.OperatorNamespace()))
-	} else {
-		objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, common.OperatorNamespace()))
+	if c.cfg.VoltronLinseedKeyPair != nil {
+		if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
+			objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, common.OperatorNamespace()))
+		} else {
+			objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, common.OperatorNamespace()))
+		}
 	}
 
 	return objs, nil

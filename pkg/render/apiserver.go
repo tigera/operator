@@ -1494,7 +1494,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login",
+				"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login", "recommendations",
 			},
 			Verbs: []string{"get"},
 		})
@@ -1649,7 +1649,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login", "elasticsearch_superuser",
+				"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login", "elasticsearch_superuser", "recommendations",
 			},
 			Verbs: []string{"get"},
 		})

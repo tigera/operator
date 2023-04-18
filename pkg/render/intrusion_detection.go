@@ -86,11 +86,14 @@ const (
 
 var adAPIReplicas int32 = 1
 
-var intrusionDetectionNamespaceSelector = fmt.Sprintf("projectcalico.org/name == '%s'", IntrusionDetectionNamespace)
-var IntrusionDetectionSourceEntityRule = v3.EntityRule{
-	NamespaceSelector: intrusionDetectionNamespaceSelector,
-	Selector:          fmt.Sprintf("k8s-app == '%s'", IntrusionDetectionControllerName),
-}
+var (
+	intrusionDetectionNamespaceSelector = fmt.Sprintf("projectcalico.org/name == '%s'", IntrusionDetectionNamespace)
+	IntrusionDetectionSourceEntityRule  = v3.EntityRule{
+		NamespaceSelector: intrusionDetectionNamespaceSelector,
+		Selector:          fmt.Sprintf("k8s-app == '%s'", IntrusionDetectionControllerName),
+	}
+)
+
 var IntrusionDetectionInstallerSourceEntityRule = v3.EntityRule{
 	NamespaceSelector: intrusionDetectionNamespaceSelector,
 	Selector:          fmt.Sprintf("job-name == '%s'", IntrusionDetectionInstallerJobName),
@@ -271,6 +274,16 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		)
 	}
 
+	if c.cfg.ManagedCluster {
+		// For managed clusters, we must create a role binding to allow Linseed to
+		// manage access token secrets in our namespace.
+		objs = append(objs, c.externalLinseedRoleBinding())
+	} else {
+		// We can delete the role binding for management and standalone clusters, since
+		// for these cluster types normal serviceaccount tokens are used.
+		objsToDelete = append(objsToDelete, c.externalLinseedRoleBinding())
+	}
+
 	if c.cfg.HasNoLicense {
 		return nil, objs
 	}
@@ -283,7 +296,6 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
-
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
@@ -317,7 +329,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			},
 			Template: *podTemplate,
 			// PodFailurePolicy is not available for k8s < 1.26; setting BackoffLimit to a higher number (default is 6)
-			//to lessen the frequency of installation failures when responses from Elastic Search takes more time.
+			// to lessen the frequency of installation failures when responses from Elastic Search takes more time.
 			BackoffLimit: ptr.Int32ToPtr(30),
 			PodFailurePolicy: &batchv1.PodFailurePolicy{
 				Rules: []batchv1.PodFailurePolicyRule{
@@ -444,6 +456,26 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			Resources: []string{"deployments"},
 			Verbs:     []string{"get"},
 		},
+		{
+			// Add write access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create"},
+		},
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"waflogs",
+				"dnslogs",
+				"l7logs",
+				"flows",
+				"kube_auditlogs",
+				"ee_auditlogs",
+				"events",
+			},
+			Verbs: []string{"get"},
+		},
 	}
 
 	if !c.cfg.ManagedCluster {
@@ -507,6 +539,31 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rb
 				Kind:      "ServiceAccount",
 				Name:      IntrusionDetectionName,
 				Namespace: IntrusionDetectionNamespace,
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
+	// in our namespace.
+	linseed := "tigera-linseed"
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      linseed,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     linseed,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      linseed,
+				Namespace: ElasticsearchNamespace,
 			},
 		},
 	}
@@ -599,6 +656,19 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		})
 	}
 
+	if c.cfg.ManagedCluster {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: LinseedTokenVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, IntrusionDetectionName),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					},
+				},
+			})
+	}
+
 	container := relasticsearch.ContainerDecorateIndexCreator(
 		relasticsearch.ContainerDecorate(c.intrusionDetectionControllerContainer(), c.cfg.ESClusterConfig.ClusterName(),
 			ElasticsearchIntrusionDetectionUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux),
@@ -661,6 +731,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Name:  "LINSEED_CLIENT_KEY",
 			Value: c.cfg.IntrusionDetectionCertSecret.VolumeMountKeyFilePath(),
 		},
+		{
+			Name:  "LINSEED_TOKEN",
+			Value: GetLinseedTokenPath(c.cfg.ManagedCluster),
+		},
 	}
 
 	sc := securitycontext.NewNonRootContext()
@@ -680,6 +754,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
 		// then IDS controller needs privileged access to write event logs to that volume
 		sc = securitycontext.NewRootContext(c.cfg.Openshift)
+	}
+
+	if c.cfg.ManagedCluster {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      LinseedTokenVolumeName,
+				MountPath: LinseedVolumeMountPath,
+			})
 	}
 
 	return corev1.Container{

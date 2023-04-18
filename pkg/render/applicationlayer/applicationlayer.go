@@ -237,7 +237,6 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 			},
 		},
 	}
-
 }
 
 func (c *component) containers() []corev1.Container {

@@ -79,6 +79,14 @@ const (
 	SysLogPublicCAPath                       = SysLogPublicCADir + SysLogPublicCertKey
 	SyslogCAConfigMapName                    = "syslog-ca"
 
+	// Constants for Linseed token volume mounting in managed clusters.
+	LinseedTokenVolumeName = "linseed-token"
+	LinseedTokenKey        = "token"
+	LinseedTokenSubPath    = "token"
+	LinseedTokenSecret     = "%s-tigera-linseed-token"
+	LinseedVolumeMountPath = "/var/run/secrets/tigera.io/linseed/"
+	LinseedTokenPath       = "/var/run/secrets/tigera.io/linseed/token"
+
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
 	probeWindowsTimeoutSeconds int32 = 10
@@ -288,14 +296,16 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 			c.eksLogForwarderDeployment())
 	}
 
+	// Add in the cluster role and binding.
+	objs = append(objs,
+		c.fluentdClusterRole(),
+		c.fluentdClusterRoleBinding(),
+	)
+
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
 	if c.cfg.UsePSP && c.cfg.OSType == rmeta.OSTypeLinux {
-		objs = append(objs,
-			c.fluentdClusterRole(),
-			c.fluentdClusterRoleBinding(),
-			c.fluentdPodSecurityPolicy(),
-		)
+		objs = append(objs, c.fluentdPodSecurityPolicy())
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
@@ -552,10 +562,19 @@ func (c *fluentdComponent) container() corev1.Container {
 		volumeMounts = append(volumeMounts, c.cfg.FluentdKeyPair.VolumeMount(c.SupportedOSType()))
 	}
 
+	if c.cfg.ManagedCluster {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      LinseedTokenVolumeName,
+				MountPath: c.path(LinseedVolumeMountPath),
+			})
+	}
+
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
-		Name:  "fluentd",
-		Image: c.image,
-		Env:   envs,
+		Name:            "fluentd",
+		Image:           c.image,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Env:             envs,
 		// On OpenShift Fluentd needs privileged access to access logs on host path volume
 		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
 		VolumeMounts:    volumeMounts,
@@ -608,6 +627,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagedCluster)},
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
@@ -889,6 +909,18 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	if c.cfg.FluentdKeyPair != nil {
 		volumes = append(volumes, c.cfg.FluentdKeyPair.Volume())
 	}
+	if c.cfg.ManagedCluster {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: LinseedTokenVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, FluentdNodeName),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					},
+				},
+			})
+	}
 	volumes = append(volumes, trustedBundleVolume(c.cfg.TrustedBundle))
 
 	return volumes
@@ -929,22 +961,41 @@ func (c *fluentdComponent) fluentdClusterRoleBinding() *rbacv1.ClusterRoleBindin
 }
 
 func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: c.fluentdName(),
 		},
-
 		Rules: []rbacv1.PolicyRule{
 			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{c.fluentdName()},
+				// Add write access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flowlogs",
+					"kube_auditlogs",
+					"ee_auditlogs",
+					"dnslogs",
+					"l7logs",
+					"events",
+					"bgplogs",
+					"waflogs",
+					"runtimereports",
+				},
+				Verbs: []string{"create"},
 			},
 		},
 	}
+
+	if c.cfg.UsePSP {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{c.fluentdName()},
+		})
+	}
+	return role
 }
 
 func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {

@@ -53,6 +53,10 @@ var (
 	bgpEnabled           = operatorv1.BGPEnabled
 	bgpDisabled          = operatorv1.BGPDisabled
 	nonPrivilegedEnabled = operatorv1.NonPrivilegedEnabled
+	logSeverity          = operatorv1.LogLevelDebug
+	logFileMaxAgeDays    = uint32(5)
+	logFileMaxCount      = uint32(5)
+	logFileMaxSize       = resource.MustParse("1Mi")
 )
 
 var _ = Describe("Node rendering tests", func() {
@@ -72,7 +76,7 @@ var _ = Describe("Node rendering tests", func() {
 			var typhaNodeTLS *render.TyphaNodeTLS
 			var k8sServiceEp k8sapi.ServiceEndpoint
 			one := intstr.FromInt(1)
-			defaultNumExpectedResources := 6
+			defaultNumExpectedResources := 9
 			const defaultClusterDomain = "svc.cluster.local"
 			var defaultMode int32 = 420
 			var cfg render.NodeConfiguration
@@ -98,6 +102,14 @@ var _ = Describe("Node rendering tests", func() {
 					NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 						RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 							MaxUnavailable: &one,
+						},
+					},
+					Logging: &operatorv1.Logging{
+						CNI: &operatorv1.CNILogging{
+							LogSeverity:       &logSeverity,
+							LogFileMaxSize:    &logFileMaxSize,
+							LogFileMaxAgeDays: &logFileMaxAgeDays,
+							LogFileMaxCount:   &logFileMaxCount,
 						},
 					},
 				}
@@ -154,6 +166,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -185,8 +200,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -350,11 +368,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -380,7 +398,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -409,6 +427,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -441,8 +462,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
         "type": "calico-ipam",
         "assign_ipv4": "%t",
@@ -594,11 +618,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -624,7 +648,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
@@ -665,8 +689,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 1450,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -726,6 +753,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -814,6 +844,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -905,11 +938,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -936,7 +969,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/lib", Name: "var-lib"},
 					{MountPath: "/var/log", Name: "var-log"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -960,6 +993,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -993,8 +1029,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -1112,11 +1151,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1142,7 +1181,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -1256,11 +1295,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1285,7 +1324,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1367,6 +1406,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1401,8 +1443,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -1520,11 +1565,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1550,7 +1595,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 				}
@@ -1661,11 +1706,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1690,7 +1735,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
-					{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1713,7 +1758,11 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
 
@@ -1753,11 +1802,11 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{Name: "flexvol-driver-host", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 					{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: certificatemanagement.TrustedCertConfigMapName,
+									Name: "tigera-ca-bundle",
 								},
 							},
 						},
@@ -1824,8 +1873,12 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
 
@@ -1919,6 +1972,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -2015,8 +2071,12 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: render.BirdTemplatesConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
 
@@ -2177,7 +2237,7 @@ var _ = Describe("Node rendering tests", func() {
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
-				Expect(len(resources)).To(Equal(defaultNumExpectedResources-1), fmt.Sprintf("resources are %v", resources))
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources), fmt.Sprintf("resources are %v", resources))
 
 				// Should render the correct resources.
 				Expect(rtest.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
@@ -2508,6 +2568,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2540,8 +2603,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -2622,8 +2688,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "calico-ipam",
           "assign_ipv4" : "%t",
@@ -2690,8 +2759,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
           %s
@@ -2740,8 +2812,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
 	  "ranges": [[{"subnet": "usePodCidr"}], [{"subnet": "usePodCidrIPv6"}]]
@@ -2784,8 +2859,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
           "subnet" : "usePodCidrIPv6"
@@ -2822,8 +2900,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
         "type": "calico-ipam",
         "assign_ipv4" : "%t",
@@ -2945,6 +3026,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2983,8 +3067,11 @@ var _ = Describe("Node rendering tests", func() {
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
-      "log_level": "Info",
+      "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
 		  "subnet": "usePodCidr"
@@ -3194,6 +3281,9 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},

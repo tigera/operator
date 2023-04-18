@@ -52,6 +52,19 @@
       },
       {
         "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+        },
+        "destination": {
+          "selector": "k8s-app == 'tigera-linseed'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
         "protocol": "UDP",
         "destination": {
           "namespaceSelector": "projectcalico.org/name == 'kube-system'",

@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -76,6 +78,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(esv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -96,6 +99,10 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), nil, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
@@ -143,9 +150,17 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
+			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}},
+		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &esv1.Elasticsearch{
+			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
+			Status: esv1.ElasticsearchStatus{
+				Phase: esv1.ElasticsearchReadyPhase,
+			},
+		})).NotTo(HaveOccurred())
 
 		certificateManager, err := certificatemanager.Create(c, nil, "")
 		Expect(err).NotTo(HaveOccurred())
@@ -153,6 +168,14 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, kiibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		// Managed clusters need the publi cert for Linseed as well.
+		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(c, render.VoltronLinseedPublicCert, common.OperatorNamespace(), []string{render.VoltronLinseedPublicCert})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
@@ -182,7 +205,16 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchIntrusionDetectionJobUserSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+					Namespace: "tigera-operator",
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &esv1.Elasticsearch{
+				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName},
+				Status: esv1.ElasticsearchStatus{
+					Phase: esv1.ElasticsearchReadyPhase,
+				},
+			})).NotTo(HaveOccurred())
 		})
 
 		It("should use builtin images", func() {
@@ -274,7 +306,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentAnomalyDetectionAPI.Image,
 					components.ComponentAnomalyDetectionAPI.Version)))
-
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -330,7 +361,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      dpi.DeepPacketInspectionName,
 					Namespace: dpi.DeepPacketInspectionNamespace,
-				}}
+				},
+			}
 			Expect(test.GetResource(c, &ds)).To(BeNil())
 			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, dpi.DeepPacketInspectionName)
@@ -770,6 +802,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
 		})
 	})
+
 	Context("Reconcile for Condition status", func() {
 		generation := int64(2)
 		It("should reconcile with creating new status condition with one item", func() {

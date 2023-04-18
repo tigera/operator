@@ -20,6 +20,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -34,6 +35,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
@@ -45,6 +47,7 @@ const (
 	DeploymentName        = "tigera-secure-es-gateway"
 	ServiceAccountName    = "tigera-secure-es-gateway"
 	RoleName              = "tigera-secure-es-gateway"
+	PodSecurityPolicyName = "tigera-esgateway"
 	ServiceName           = "tigera-secure-es-gateway-http"
 	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "es-gateway-access"
 	ElasticsearchPortName = "es-gateway-elasticsearch-port"
@@ -77,7 +80,11 @@ type Config struct {
 	TrustedBundle              certificatemanagement.TrustedBundle
 	ClusterDomain              string
 	EsAdminUserName            string
-	Cloud                      CloudConfig
+
+	Cloud CloudConfig
+
+	// Whether the cluster supports pod security policies.
+	UsePSP bool
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
@@ -118,6 +125,9 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	} else {
 		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, common.OperatorNamespace()))
 	}
+	if e.cfg.UsePSP {
+		toCreate = append(toCreate, e.esGatewayPodSecurityPolicy())
+	}
 	return toCreate, toDelete
 }
 
@@ -129,25 +139,36 @@ func (e *esGateway) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (e esGateway) esGatewayRole() *rbacv1.Role {
+func (e *esGateway) esGatewayRole() *rbacv1.Role {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{},
+			Verbs:         []string{"get", "list", "watch"},
+		},
+	}
+
+	if e.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
 			Namespace: render.ElasticsearchNamespace,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{""},
-				Resources:     []string{"secrets"},
-				ResourceNames: []string{},
-				Verbs:         []string{"get", "list", "watch"},
-			},
-		},
+		Rules: rules,
 	}
 }
 
-func (e esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
+func (e *esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -169,7 +190,11 @@ func (e esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 	}
 }
 
-func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
+func (e *esGateway) esGatewayPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(PodSecurityPolicyName)
+}
+
+func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
 		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
@@ -202,10 +227,10 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		e.cfg.TrustedBundle.Volume(),
 	}
 
-	volumeMounts := []corev1.VolumeMount{
+	volumeMounts := append(
+		e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType()),
 		e.cfg.ESGatewayKeyPair.VolumeMount(e.SupportedOSType()),
-		e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
-	}
+	)
 
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
 	annotations[e.cfg.ESGatewayKeyPair.HashAnnotationKey()] = e.cfg.ESGatewayKeyPair.HashAnnotationValue()
@@ -271,7 +296,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 	return &d
 }
 
-func (e esGateway) esGatewayServiceAccount() *corev1.ServiceAccount {
+func (e *esGateway) esGatewayServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceAccountName,
@@ -280,7 +305,7 @@ func (e esGateway) esGatewayServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (e esGateway) esGatewayService() *corev1.Service {
+func (e *esGateway) esGatewayService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

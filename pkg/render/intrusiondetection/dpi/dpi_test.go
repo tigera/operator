@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +41,6 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/testutils"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var (
@@ -104,11 +104,11 @@ var (
 
 	expectedVolumes = []corev1.Volume{
 		{
-			Name: certificatemanagement.TrustedCertConfigMapName,
+			Name: "tigera-ca-bundle",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: certificatemanagement.TrustedCertConfigMapName,
+						Name: "tigera-ca-bundle",
 					}}},
 		},
 		{
@@ -131,7 +131,7 @@ var (
 	}
 
 	expectedVolumeMounts = []corev1.VolumeMount{
-		{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+		{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{
 			MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters",
@@ -158,6 +158,7 @@ var _ = Describe("DPI rendering tests", func() {
 		clusterDomain = "cluster.local"
 		installation  *operatorv1.InstallationSpec
 		typhaNodeTLS  *render.TyphaNodeTLS
+		dpiCertSecret certificatemanagement.KeyPairInterface
 		cfg           *dpi.DPIConfig
 	)
 
@@ -177,7 +178,9 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
-		trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair)
+		dpiCertSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.DPITLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair, dpiCertSecret)
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			TyphaSecret:   typhaKeyPair,
 			NodeSecret:    nodeKeyPair,
@@ -193,8 +196,8 @@ var _ = Describe("DPI rendering tests", func() {
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
 			ESClusterConfig:    esConfigMap,
-			ESSecrets:          nil,
 			ClusterDomain:      dns.DefaultClusterDomain,
+			DPICertSecret:      dpiCertSecret,
 		}
 	})
 
@@ -221,7 +224,10 @@ var _ = Describe("DPI rendering tests", func() {
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
+			corev1.EnvVar{Name: "CLUSTER_NAME", Value: "tenant_id.clusterTestName"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/deep-packet-inspection-tls/tls.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/deep-packet-inspection-tls/tls.key"},
+			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
 		))
 		Expect(len(ds.Spec.Template.Spec.Containers)).Should(Equal(1))
 		Expect(*ds.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPURequest)))

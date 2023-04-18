@@ -78,9 +78,14 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		Expect(esProxy.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
-		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
+		// In cloud we have 2 volume mounts since manager tls is included
+		Expect(esProxy.VolumeMounts).To(HaveLen(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
+
+		// cloud modification: manager tls cert
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
 
 		// In addition to default volumes, deployment should have extra volume for image assurance secret
 		Expect(dpSpec.Volumes).To(ContainElement(

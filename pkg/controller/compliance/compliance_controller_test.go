@@ -124,13 +124,15 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}, Status: operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ComplianceFeature}}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()},
+		Expect(c.Create(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()},
 			Data: map[string]string{
 				"clusterName": "cluster",
 				"shards":      "2",
 				"replicas":    "1",
 				"flowShards":  "2",
-			}})).NotTo(HaveOccurred())
+			},
+		})).NotTo(HaveOccurred())
 
 		// Create a bunch of empty secrets, such that the reconcile loop will make it to the render functionality.
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceBenchmarkerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
@@ -145,7 +147,16 @@ var _ = Describe("Compliance controller tests", func() {
 		esDNSNames := dns.GetServiceDNSNames(render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 		gwKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esDNSNames)
 		Expect(err).NotTo(HaveOccurred())
+		linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
+		Expect(err).NotTo(HaveOccurred())
+
+		// For managed clusters, we also need the public cert for Linseed.
+		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedPublicCert, common.OperatorNamespace(), esDNSNames)
+		Expect(err).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, gwKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Apply the compliance CR to the fake cluster.
 		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
@@ -157,7 +168,6 @@ var _ = Describe("Compliance controller tests", func() {
 	})
 
 	It("should create resources for standalone clusters", func() {
-
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
@@ -168,25 +178,29 @@ var _ = Describe("Compliance controller tests", func() {
 		}
 
 		By("creating 3 deployments for compliance")
-		Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerName,
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      render.ComplianceServerName,
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceServerName))
 
 		dpl = appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{}}
-		Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceSnapshotterName,
+			ObjectMeta: metav1.ObjectMeta{},
+		}
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      render.ComplianceSnapshotterName,
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceSnapshotterName))
 
 		dpl = appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{}}
-		Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceControllerName,
+			ObjectMeta: metav1.ObjectMeta{},
+		}
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      render.ComplianceControllerName,
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceControllerName))
-
 	})
 
 	It("should reconcile if the compliance server cert is user-supplied", func() {
@@ -198,10 +212,14 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(result.Requeue).NotTo(BeTrue())
 
 		By("replacing the server certs with user-supplied certs")
-		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
-		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: render.ComplianceNamespace}})).NotTo(HaveOccurred())
+		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      render.ComplianceServerCertSecret,
+			Namespace: common.OperatorNamespace(),
+		}})).NotTo(HaveOccurred())
+		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      render.ComplianceServerCertSecret,
+			Namespace: render.ComplianceNamespace,
+		}})).NotTo(HaveOccurred())
 
 		oldDNSNames := []string{"compliance.example.com", "compliance.tigera-compliance.svc"}
 		testCA := test.MakeTestCA("compliance-test")
@@ -231,10 +249,14 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(result.Requeue).NotTo(BeTrue())
 
 		By("replacing the server certs with ones that include the expected DNS names")
-		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
-		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: render.ComplianceNamespace}})).NotTo(HaveOccurred())
+		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      render.ComplianceServerCertSecret,
+			Namespace: common.OperatorNamespace(),
+		}})).NotTo(HaveOccurred())
+		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      render.ComplianceServerCertSecret,
+			Namespace: render.ComplianceNamespace,
+		}})).NotTo(HaveOccurred())
 
 		// Custom cert has the compliance svc DNS names as well as other DNS names
 		dnsNames := append(expectedDNSNames, "compliance.example.com", "192.168.10.13")
@@ -258,7 +280,6 @@ var _ = Describe("Compliance controller tests", func() {
 	})
 
 	It("test that Compliance creates a TLS cert secret if not provided and add an OwnerReference to it", func() {
-
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -270,7 +291,6 @@ var _ = Describe("Compliance controller tests", func() {
 	})
 
 	It("should not add OwnerReference to an user supplied compliance TLS cert", func() {
-
 		dnsNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, dns.DefaultClusterDomain)
 		testCA := test.MakeTestCA("compliance-test")
 		complianceSecret, err := secret.CreateTLSSecret(testCA,
@@ -289,7 +309,6 @@ var _ = Describe("Compliance controller tests", func() {
 	})
 
 	It("should remove the compliance server in managed clusters", func() {
-
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
@@ -299,7 +318,8 @@ var _ = Describe("Compliance controller tests", func() {
 		dpl := appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{},
 		}
-		Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerName,
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      render.ComplianceServerName,
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceServerName))
@@ -317,19 +337,22 @@ var _ = Describe("Compliance controller tests", func() {
 		By("removing one unnecessary deployment")
 
 		// The server should be removed...
-		err = c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerName,
+		err = c.Get(ctx, client.ObjectKey{
+			Name:      render.ComplianceServerName,
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)
 		Expect(err).To(HaveOccurred())
 		Expect(errors.IsNotFound(err)).To(BeTrue())
 
 		// ... while the snapshotter and the controller are still there.
-		Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceSnapshotterName,
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      render.ComplianceSnapshotterName,
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceSnapshotterName))
 
-		Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceControllerName,
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      render.ComplianceControllerName,
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceControllerName))
@@ -340,11 +363,11 @@ var _ = Describe("Compliance controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			//components.ComponentComplianceBenchmarker
-			//components.ComponentComplianceSnapshotter
-			//components.ComponentComplianceServer
-			//components.ComponentComplianceController
-			//components.ComponentComplianceReporter
+			// components.ComponentComplianceBenchmarker
+			// components.ComponentComplianceSnapshotter
+			// components.ComponentComplianceServer
+			// components.ComponentComplianceController
+			// components.ComponentComplianceReporter
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -813,12 +836,14 @@ func assertExpectedCertDNSNames(c client.Client, expectedDNSNames ...string) {
 	ctx := context.Background()
 	secret := &corev1.Secret{}
 
-	Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret,
+	Expect(c.Get(ctx, client.ObjectKey{
+		Name:      render.ComplianceServerCertSecret,
 		Namespace: common.OperatorNamespace(),
 	}, secret)).NotTo(HaveOccurred())
 	test.VerifyCertSANs(secret.Data[corev1.TLSCertKey], expectedDNSNames...)
 
-	Expect(c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret,
+	Expect(c.Get(ctx, client.ObjectKey{
+		Name:      render.ComplianceServerCertSecret,
 		Namespace: render.ComplianceNamespace,
 	}, secret)).NotTo(HaveOccurred())
 	test.VerifyCertSANs(secret.Data[corev1.TLSCertKey], expectedDNSNames...)

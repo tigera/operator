@@ -37,6 +37,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 	var healthTimeoutDS int32 = 30
 	var interval int32 = 20
 	var timeout int32 = 40
+	var pullSecrets []*corev1.Secret
 	rbac := "rbac.authorization.k8s.io"
 	logSeverity := operatorv1.LogLevelInfo
 	labels := map[string]string{"egress-code": "red"}
@@ -48,9 +49,13 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		LabelSelector:     &metav1.LabelSelector{MatchLabels: labels},
 	}
 
-	weightedPodAffinity := corev1.WeightedPodAffinityTerm{Weight: 100,
-		PodAffinityTerm: corev1.PodAffinityTerm{LabelSelector: &metav1.LabelSelector{MatchLabels: labels},
-			TopologyKey: "topology.kuberneted.io/zone"}}
+	weightedPodAffinity := corev1.WeightedPodAffinityTerm{
+		Weight: 100,
+		PodAffinityTerm: corev1.PodAffinityTerm{
+			LabelSelector: &metav1.LabelSelector{MatchLabels: labels},
+			TopologyKey:   "topology.kuberneted.io/zone",
+		},
+	}
 
 	affinity := &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{weightedPodAffinity}}}
 
@@ -87,6 +92,16 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 		egw.Name = "egress-test"
 		egw.Namespace = "test-ns"
+
+		pullSecrets = []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test-ns",
+				},
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}}
+
 	})
 
 	It("should render EGW deployment", func() {
@@ -97,6 +112,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{"test-secret", "test-ns", "", "v1", "Secret"},
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}
@@ -113,7 +129,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:  nil,
+			PullSecrets:  pullSecrets,
 			Installation: installation,
 			OSType:       rmeta.OSTypeLinux,
 			EgressGW:     egw,
@@ -202,7 +218,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(egwContainer.SecurityContext.Capabilities).To(Equal(
 			&corev1.Capabilities{
 				Drop: []corev1.Capability{"ALL"},
-				Add:  []corev1.Capability{"NET_ADMIN"},
+				Add:  []corev1.Capability{"NET_ADMIN", "NET_RAW"},
 			},
 		))
 		Expect(egwContainer.SecurityContext.SeccompProfile).To(Equal(
@@ -314,5 +330,4 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
-
 })

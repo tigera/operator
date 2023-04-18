@@ -41,13 +41,17 @@ import (
 )
 
 const (
-	LogCollectorNamespace                    = "tigera-fluentd"
-	FluentdFilterConfigMapName               = "fluentd-filters"
-	FluentdFilterFlowName                    = "flow"
-	FluentdFilterDNSName                     = "dns"
-	S3FluentdSecretName                      = "log-collector-s3-credentials"
-	S3KeyIdName                              = "key-id"
-	S3KeySecretName                          = "key-secret"
+	LogCollectorNamespace      = "tigera-fluentd"
+	FluentdFilterConfigMapName = "fluentd-filters"
+	FluentdFilterFlowName      = "flow"
+	FluentdFilterDNSName       = "dns"
+	S3FluentdSecretName        = "log-collector-s3-credentials"
+	S3KeyIdName                = "key-id"
+	S3KeySecretName            = "key-secret"
+
+	// FluentdPrometheusTLSSecretName is the name of the secret containing the key pair fluentd presents to identify itself.
+	// Somewhat confusingly, this is named the prometheus TLS key pair because that was the first
+	// use-case for this credential. However, it is used on all TLS connections served by fluentd.
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
@@ -68,7 +72,7 @@ const (
 	SplunkFluentdCertificateSecretName       = "logcollector-splunk-public-certificate"
 	SplunkFluentdSecretCertificateKey        = "ca.pem"
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
-	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
+	SplunkFluentdDefaultCertDir              = "/etc/pki/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 	SysLogPublicCADir                        = "/etc/pki/tls/certs/"
 	SysLogPublicCertKey                      = "ca-bundle.crt"
@@ -144,22 +148,22 @@ type EksCloudwatchLogConfig struct {
 
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
-	LogCollector     *operatorv1.LogCollector
-	ESSecrets        []*corev1.Secret
-	ESClusterConfig  *relasticsearch.ClusterConfig
-	S3Credential     *S3Credential
-	SplkCredential   *SplunkCredential
-	Filters          *FluentdFilters
-	EKSConfig        *EksCloudwatchLogConfig
-	PullSecrets      []*corev1.Secret
-	Installation     *operatorv1.InstallationSpec
-	ClusterDomain    string
-	OSType           rmeta.OSType
-	MetricsServerTLS certificatemanagement.KeyPairInterface
-	TrustedBundle    certificatemanagement.TrustedBundle
-	ManagedCluster   bool
+	LogCollector    *operatorv1.LogCollector
+	ESSecrets       []*corev1.Secret
+	ESClusterConfig *relasticsearch.ClusterConfig
+	S3Credential    *S3Credential
+	SplkCredential  *SplunkCredential
+	Filters         *FluentdFilters
+	EKSConfig       *EksCloudwatchLogConfig
+	PullSecrets     []*corev1.Secret
+	Installation    *operatorv1.InstallationSpec
+	ClusterDomain   string
+	OSType          rmeta.OSType
+	FluentdKeyPair  certificatemanagement.KeyPairInterface
+	TrustedBundle   certificatemanagement.TrustedBundle
+	ManagedCluster  bool
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 	// Whether to use User provided certificate or not.
 	UseSyslogCertificate bool
@@ -272,13 +276,12 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
-		if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+		if c.cfg.UsePSP {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
-				c.eksLogForwarderClusterRoleBinding())
-			if c.cfg.UsePSP {
-				objs = append(objs, c.eksLogForwarderPodSecurityPolicy())
-			}
+				c.eksLogForwarderClusterRoleBinding(),
+				c.eksLogForwarderPodSecurityPolicy(),
+			)
 		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
@@ -287,13 +290,12 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.OSType == rmeta.OSTypeLinux {
+	if c.cfg.UsePSP && c.cfg.OSType == rmeta.OSTypeLinux {
 		objs = append(objs,
 			c.fluentdClusterRole(),
-			c.fluentdClusterRoleBinding())
-		if c.cfg.UsePSP {
-			objs = append(objs, c.fluentdPodSecurityPolicy())
-		}
+			c.fluentdClusterRoleBinding(),
+			c.fluentdPodSecurityPolicy(),
+		)
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
@@ -446,8 +448,8 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 
 	annots := c.cfg.TrustedBundle.HashAnnotations()
 
-	if c.cfg.MetricsServerTLS != nil {
-		annots[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
+	if c.cfg.FluentdKeyPair != nil {
+		annots[c.cfg.FluentdKeyPair.HashAnnotationKey()] = c.cfg.FluentdKeyPair.HashAnnotationValue()
 	}
 	if c.cfg.S3Credential != nil {
 		annots[s3CredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.S3Credential)
@@ -459,8 +461,8 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.cfg.Filters)
 	}
 	var initContainers []corev1.Container
-	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(LogCollectorNamespace))
+	if c.cfg.FluentdKeyPair != nil && c.cfg.FluentdKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.FluentdKeyPair.InitContainer(LogCollectorNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -544,10 +546,10 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 
-	if c.cfg.MetricsServerTLS != nil {
-		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
+	if c.cfg.FluentdKeyPair != nil {
+		volumeMounts = append(volumeMounts, c.cfg.FluentdKeyPair.VolumeMount(c.SupportedOSType()))
 	}
 
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
@@ -596,6 +598,11 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
+		{Name: "LINSEED_ENABLED", Value: "true"},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
+		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
+		{Name: "TLS_CRT_PATH", Value: c.certPath()},
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
@@ -756,21 +763,46 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
 		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
 
 		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.FlowShards())},
 		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
+		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 	)
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
-			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
-			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
 	}
 	return envs
+}
+
+func (c *fluentdComponent) trustedBundlePath() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return certificatemanagement.TrustedCertBundleMountPathWindows
+	}
+	return c.cfg.TrustedBundle.MountPath()
+}
+
+func (c *fluentdComponent) keyPath() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return fmt.Sprintf("c:/%s/%s", c.cfg.FluentdKeyPair.GetName(), corev1.TLSPrivateKeyKey)
+	}
+	return c.cfg.FluentdKeyPair.VolumeMountKeyFilePath()
+}
+
+func (c *fluentdComponent) certPath() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return fmt.Sprintf("c:/%s/%s", c.cfg.FluentdKeyPair.GetName(), corev1.TLSCertKey)
+	}
+	return c.cfg.FluentdKeyPair.VolumeMountCertificateFilePath()
 }
 
 // The startup probe uses the same action as the liveness probe, but with
@@ -868,8 +900,8 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-	if c.cfg.MetricsServerTLS != nil {
-		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
+	if c.cfg.FluentdKeyPair != nil {
+		volumes = append(volumes, c.cfg.FluentdKeyPair.Volume())
 	}
 	volumes = append(volumes, trustedBundleVolume(c.cfg.TrustedBundle))
 
@@ -877,12 +909,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 }
 
 func (c *fluentdComponent) fluentdPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(c.fluentdName())
-	psp.Spec.RequiredDropCapabilities = nil
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("CAP_CHOWN"),
-	}
+	psp := podsecuritypolicy.NewBasePolicy(c.fluentdName())
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
 		{
@@ -1071,8 +1098,7 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 }
 
 func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(eksLogForwarderName)
+	psp := podsecuritypolicy.NewBasePolicy(eksLogForwarderName)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }
@@ -1104,7 +1130,6 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: eksLogForwarderName,
 		},
-
 		Rules: []rbacv1.PolicyRule{
 			{
 				// Allow access to the pod security policy in case this is enforced on the cluster
@@ -1139,6 +1164,16 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
 				Selector:          networkpolicy.KubernetesAppSelector("tigera-secure-es-gateway"),
 				NotPorts:          networkpolicy.Ports(5554),
+			},
+		})
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Deny,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{},
+			Destination: v3.EntityRule{
+				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+				Selector:          networkpolicy.KubernetesAppSelector("tigera-linseed"),
+				NotPorts:          networkpolicy.Ports(8444),
 			},
 		})
 		egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020, 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2020, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@ import (
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -54,6 +56,26 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				),
 			)
 		}
+
+		// validate logging config for calico-cni
+		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
+			if instance.Spec.Logging.CNI.LogFileMaxCount != nil &&
+				*instance.Spec.Logging.CNI.LogFileMaxCount <= 0 {
+				return fmt.Errorf("spec.loggingConfig.cni.logFileMaxCount value should be greater than zero")
+			}
+
+			if instance.Spec.Logging.CNI.LogFileMaxSize != nil &&
+				(instance.Spec.Logging.CNI.LogFileMaxSize.Format != resource.BinarySI ||
+					instance.Spec.Logging.CNI.LogFileMaxSize.Value() <= 0) {
+				return fmt.Errorf("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei")
+			}
+
+			if instance.Spec.Logging.CNI.LogFileMaxAgeDays != nil &&
+				*instance.Spec.Logging.CNI.LogFileMaxAgeDays <= 0 {
+				return fmt.Errorf("spec.Logging.cni.logFileMaxAgeDays should be a positive non-zero integer")
+			}
+		}
+
 	case operatorv1.PluginGKE:
 		// The GKE CNI plugin is only supported on GKE or BYO.
 		switch instance.Spec.KubernetesProvider {
@@ -414,6 +436,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify CNILogging to not exist for non-calico cni
+	if cni := instance.Spec.CNI.Type; cni != operatorv1.PluginCalico {
+		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
+			return fmt.Errorf("Installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")
+		}
+	}
 	return nil
 }
 

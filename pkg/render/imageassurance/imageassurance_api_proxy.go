@@ -64,10 +64,10 @@ func (c *component) apiProxyDeployment() *appsv1.Deployment {
 
 	terminationGracePeriod := int64(30)
 
-	volumeMounts := []corev1.VolumeMount{
-		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
-		c.config.TrustedCertBundle.VolumeMount(meta.OSTypeLinux),
-	}
+	volumeMounts := append(
+		c.config.TrustedCertBundle.VolumeMounts(meta.OSTypeLinux),
+		corev1.VolumeMount{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
+	)
 
 	if c.config.KeyValidatorConfig != nil {
 		env = append(env, c.config.KeyValidatorConfig.RequiredEnv("IMAGE_ASSURANCE_")...)

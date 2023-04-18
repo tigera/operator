@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -80,7 +79,7 @@ func (c client) GetOrganization(organizationID string) (*Organization, error) {
 }
 
 func parseResponse(resp *http.Response, obj interface{}) error {
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}

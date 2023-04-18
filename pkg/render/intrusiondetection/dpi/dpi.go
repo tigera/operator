@@ -15,6 +15,7 @@
 package dpi
 
 import (
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -55,9 +56,9 @@ type DPIConfig struct {
 	ManagedCluster     bool
 	HasNoLicense       bool
 	HasNoDPIResource   bool
-	ESSecrets          []*corev1.Secret
 	ESClusterConfig    *relasticsearch.ClusterConfig
 	ClusterDomain      string
+	DPICertSecret      certificatemanagement.KeyPairInterface
 }
 
 func DPI(cfg *DPIConfig) render.Component {
@@ -105,7 +106,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		)
 	} else {
 		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace)...)...)
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toCreate = append(toCreate,
 			d.dpiServiceAccount(),
@@ -132,7 +133,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: d.dpiAnnotations(),
 		},
@@ -148,7 +149,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			Containers:     []corev1.Container{d.dpiContainer()},
 			Volumes:        d.dpiVolumes(),
 		},
-	}, d.cfg.ESClusterConfig, d.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -178,16 +179,14 @@ func (d *dpiComponent) dpiContainer() corev1.Container {
 		ReadinessProbe:  d.dpiReadinessProbes(),
 	}
 
-	return relasticsearch.ContainerDecorateIndexCreator(
-		relasticsearch.ContainerDecorate(dpiContainer, d.cfg.ESClusterConfig.ClusterName(),
-			render.ElasticsearchIntrusionDetectionUserSecret, d.cfg.ClusterDomain, meta.OSTypeLinux),
-		d.cfg.ESClusterConfig.Replicas(), d.cfg.ESClusterConfig.Shards())
+	return dpiContainer
 }
 
 func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 
 	return []corev1.Volume{
+		d.cfg.DPICertSecret.Volume(),
 		d.cfg.TyphaNodeTLS.TrustedBundle.Volume(),
 		d.cfg.TyphaNodeTLS.NodeSecret.Volume(),
 		{
@@ -215,7 +214,12 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
 		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
-		{Name: "DPI_FIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode)},
+
+		{Name: "CLUSTER_NAME", Value: d.cfg.ESClusterConfig.ClusterName()},
+
+		{Name: "LINSEED_CLIENT_CERT", Value: d.cfg.DPICertSecret.VolumeMountCertificateFilePath()},
+		{Name: "LINSEED_CLIENT_KEY", Value: d.cfg.DPICertSecret.VolumeMountKeyFilePath()},
+		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode)},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -229,11 +233,12 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 }
 
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(d.SupportedOSType()),
+	return append(
+		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMounts(d.SupportedOSType()),
 		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(d.SupportedOSType()),
-		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
-	}
+		corev1.VolumeMount{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
+		d.cfg.DPICertSecret.VolumeMount(d.SupportedOSType()),
+	)
 }
 
 func (d *dpiComponent) dpiReadinessProbes() *corev1.Probe {
@@ -333,6 +338,7 @@ func (d *dpiComponent) dpiAnnotations() map[string]string {
 	}
 	annotations := d.cfg.TyphaNodeTLS.TrustedBundle.HashAnnotations()
 	annotations[d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
+	annotations[d.cfg.DPICertSecret.HashAnnotationKey()] = d.cfg.DPICertSecret.HashAnnotationValue()
 	return annotations
 }
 
@@ -357,7 +363,7 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayServiceSelectorEntityRule,
+			Destination: networkpolicy.LinseedServiceSelectorEntityRule,
 		})
 	}
 

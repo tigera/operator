@@ -83,8 +83,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+	err = utils.AddSecretsWatch(controller, render.VoltronLinseedTLS, render.ManagerNamespace)
+	if err != nil {
+		return err
+	}
 
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: render.ManagerNamespace},
@@ -336,6 +340,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Get or create a certificate for clients of the manager pod es-proxy container.
 	svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), "localhost")
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
@@ -347,8 +352,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedSecretNames := []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, relasticsearch.PublicCertSecret, render.ProjectCalicoApiServerTLSSecretName(installation.Variant)}
-
+	// Determine if compliance is enabled.
 	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
 	complianceCR, err := compliance.GetCompliance(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -356,6 +360,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Build a trusted bundle containing all of the certificates of components that communicate with the manager pod.
+	// This bundle contains the root CA used to sign all operator-generated certificates, as well as the explicitly named
+	// certificates, in case the user has provided their own cert in lieu of the default certificate.
+	trustedSecretNames := []string{
+		render.PacketCaptureCertSecret,
+		monitor.PrometheusTLSSecretName,
+		relasticsearch.PublicCertSecret,
+		render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
+		render.TigeraLinseedSecret,
+	}
 	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
 		if complianceCR.Status.State != operatorv1.TigeraStatusReady {
@@ -406,7 +420,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedBundle.AddCertificates(certificate)
 	}
 	certificateManager.AddToStatusManager(r.status, render.ManagerNamespace)
-	// check that prometheus is running
+
+	// Check that Prometheus is running
 	ns := &corev1.Namespace{}
 	if err = r.client.Get(ctx, client.ObjectKey{Name: common.TigeraPrometheusNamespace}, ns); err != nil {
 		if errors.IsNotFound(err) {
@@ -434,6 +449,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Get secrets used by the manager to authenticate with Elasticsearch.
 	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchManagerUserSecret}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -464,6 +480,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTrafficSecret certificatemanagement.KeyPairInterface
+	var linseedVoltronSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
 		fillDefaults(managementCluster)
@@ -472,6 +489,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 		if err := r.client.Patch(ctx, managementCluster, preDefaultPatchFrom); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Create a certificate for Voltron to use for TLS connections from the managed cluster destined
+		// to Linseed. This certificate is used only for connections received over Voltron's mTLS tunnel targeting tigera-linseed.
+		linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+		linseedVoltronSecret, err = certificateManager.GetOrCreateKeyPair(
+			r.client,
+			render.VoltronLinseedTLS,
+			common.OperatorNamespace(),
+			linseedDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating Voltron Linseed TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -549,6 +579,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TrustedCertBundle:       trustedBundle,
 		ESClusterConfig:         esClusterConfig,
 		TLSKeyPair:              tlsSecret,
+		VoltronLinseedKeyPair:   linseedVoltronSecret,
 		PullSecrets:             pullSecrets,
 		Openshift:               r.provider == operatorv1.ProviderOpenShift,
 		Installation:            installation,
@@ -583,6 +614,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			ServiceAccounts: []string{render.ManagerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
 			},

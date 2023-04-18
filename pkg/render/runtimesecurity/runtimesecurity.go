@@ -198,13 +198,13 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
 								},
 							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
+							VolumeMounts: append(
+								c.config.TrustedBundle.VolumeMounts(c.SupportedOSType()),
+								corev1.VolumeMount{
 									Name:      SashaVerifyAuthVolumeName,
 									MountPath: SashaVerifyAuthPath,
 								},
-								c.config.TrustedBundle.VolumeMount(c.SupportedOSType()),
-							},
+							),
 						},
 							c.config.ESClusterConfig.ClusterName(),
 							ElasticsearchSashaJobUserSecretName,

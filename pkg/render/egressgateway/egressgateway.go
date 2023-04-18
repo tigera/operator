@@ -33,12 +33,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
@@ -77,7 +79,7 @@ type Config struct {
 	VXLANPort int
 
 	OpenShift bool
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP            bool
 	NamespaceAndNames []string
 }
@@ -101,19 +103,31 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	objectsToCreate := []client.Object{}
-	objectsToDelete := []client.Object{}
-	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
+	objectsToCreate := append(
+		secret.ToRuntimeObjects(c.egwPullSecrets()...),
+		c.egwServiceAccount(),
+	)
 	if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
-	} else if c.config.UsePSP {
-		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
-		objectsToCreate = append(objectsToCreate, c.egwRole())
-		objectsToCreate = append(objectsToCreate, c.egwRoleBinding())
-	} else {
-		objectsToDelete = append(objectsToDelete, c.egwRole())
-		objectsToDelete = append(objectsToDelete, c.egwRoleBinding())
 	}
+
+	var objectsToDelete []client.Object
+	if c.config.UsePSP {
+		objectsToCreate = append(objectsToCreate,
+			PodSecurityPolicy(),
+			c.egwRole(),
+			c.egwRoleBinding(),
+		)
+	} else {
+		// It is possible to have multiple egress gateway resources in different namespaces.
+		// We only delete namespaced role and role binding here. The cluster-level psp is
+		// deleted in egressgateway_controller when no egress gateway is in the cluster.
+		objectsToDelete = append(objectsToDelete,
+			c.egwRole(),
+			c.egwRoleBinding(),
+		)
+	}
+
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	return objectsToCreate, objectsToDelete
 }
@@ -188,7 +202,7 @@ func (c *component) egwInitContainer() *corev1.Container {
 
 func (c *component) egwContainer() *corev1.Container {
 	sc := securitycontext.NewRootContext(false)
-	sc.Capabilities.Add = []corev1.Capability{"NET_ADMIN"}
+	sc.Capabilities.Add = []corev1.Capability{"NET_ADMIN", "NET_RAW"}
 
 	return &corev1.Container{
 		Name:            "egress-gateway",
@@ -287,23 +301,31 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 	}
 }
 
-func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	boolTrue := true
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(podSecurityPolicyName)
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("NET_ADMIN"),
+func (c *component) egwPullSecrets() []*corev1.Secret {
+	var secrets []*corev1.Secret
+	for _, secret := range c.config.PullSecrets {
+		x := secret.DeepCopy()
+		x.ObjectMeta = metav1.ObjectMeta{Name: secret.Name, Namespace: c.config.EgressGW.Namespace}
+		x.ObjectMeta.Labels = common.MapExistsOrInitialize(x.ObjectMeta.Labels)
+		// Each pull secret is shared across all of the EGW deployments in this namespace.
+		// As such, we mark it as having multiple owners so that we maintain multiple owner references
+		// when creating the secret so that it will only be GC'd when all of its owners have been deleted.
+		x.ObjectMeta.Labels[common.MultipleOwnersLabel] = "true"
+		secrets = append(secrets, x)
 	}
-	psp.Spec.AllowPrivilegeEscalation = &boolTrue
+	return secrets
+}
+
+func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := podsecuritypolicy.NewBasePolicy(podSecurityPolicyName)
+	psp.Spec.AllowedCapabilities = []corev1.Capability{"NET_ADMIN", "NET_RAW"}
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.HostIPC = true
 	psp.Spec.HostNetwork = true
 	psp.Spec.HostPID = true
 	psp.Spec.Privileged = true
 	psp.Spec.RunAsUser = policyv1beta1.RunAsUserStrategyOptions{
 		Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-	}
-	psp.Spec.SELinux = policyv1beta1.SELinuxStrategyOptions{
-		Rule: policyv1beta1.SELinuxStrategyRunAsAny,
 	}
 	psp.Spec.SupplementalGroups = policyv1beta1.SupplementalGroupsStrategyOptions{
 		Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
@@ -468,7 +490,7 @@ func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 		AllowHostPorts:           false,
 		AllowPrivilegeEscalation: ptr.BoolToPtr(true),
 		AllowPrivilegedContainer: true,
-		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN")},
+		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN"), corev1.Capability("NET_RAW")},
 		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyMustRunAs},
 		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
 		ReadOnlyRootFilesystem:   false,

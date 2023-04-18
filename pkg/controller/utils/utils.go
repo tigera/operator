@@ -20,6 +20,10 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+
 	"github.com/go-logr/logr"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -139,6 +143,27 @@ func AddClusterRoleWatch(c controller.Controller, name string) error {
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}
 	return AddClusterResourceWatch(c, clusterRole)
+}
+
+func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
+	return c.Watch(
+		&source.Channel{Source: createPeriodicReconcileChannel(period)},
+		&handler.EnqueueRequestForObject{},
+	)
+}
+
+func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEvent {
+	periodicReconcileEvents := make(chan event.GenericEvent)
+	eventObject := &unstructured.Unstructured{}
+	eventObject.SetName(fmt.Sprintf("periodic-%s-reconcile-event", period.String()))
+
+	go func() {
+		for range time.Tick(period) {
+			periodicReconcileEvents <- event.GenericEvent{Object: eventObject}
+		}
+	}()
+
+	return periodicReconcileEvents
 }
 
 func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
@@ -630,4 +655,16 @@ func GetKubeControllerMetricsPort(ctx context.Context, client client.Client) (in
 		kubeControllersMetricsPort = *kubeControllersConfig.Spec.PrometheusMetricsPort
 	}
 	return kubeControllersMetricsPort, nil
+}
+
+func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch, error) {
+	es := esv1.Elasticsearch{}
+	err := c.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &es, nil
 }

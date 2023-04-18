@@ -135,6 +135,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -362,14 +363,53 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
+		log.Info("Elasticsearch gateway certificates are not available yet, waiting until they become available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificates are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
-	var complianceServerCertSecret certificatemanagement.KeyPairInterface
+	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	// For standalone and management clusters, we just use Linseed's actual certificate.
+	linseedCertLocation := render.TigeraLinseedSecret
+	if managementClusterConnection != nil {
+		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
+		// management cluster into the managed cluster by kube-controllers.
+		linseedCertLocation = render.VoltronLinseedPublicCert
+	}
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if linseedCertificate == nil {
+		log.Info("Linseed certificate is not available yet, waiting until it becomes available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
+
+	// Get the key pairs for each component, generating them as needed.
+	type complianceKeyPair struct {
+		SecretName string
+		Interface  certificatemanagement.KeyPairInterface
+	}
+	snapshotterKeyPair := complianceKeyPair{SecretName: render.ComplianceSnapshotterSecret}
+	benchmarkerKeyPair := complianceKeyPair{SecretName: render.ComplianceBenchmarkerSecret}
+	reporterKeyPair := complianceKeyPair{SecretName: render.ComplianceReporterSecret}
+	controllerKeyPair := complianceKeyPair{SecretName: render.ComplianceControllerSecret}
+	for _, kp := range []*complianceKeyPair{&snapshotterKeyPair, &benchmarkerKeyPair, &reporterKeyPair, &controllerKeyPair} {
+		// These key pairs are only used as client credentials for mTLS with Linseed, and so do not need DNS names listed
+		// as they do not act as server certs.
+		dnsNames := []string{"localhost"}
+		kp.Interface, err = certificateManager.GetOrCreateKeyPair(r.client, kp.SecretName, common.OperatorNamespace(), dnsNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", kp.SecretName), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	var complianceServerKeyPair certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {
-		complianceServerCertSecret, err = certificateManager.GetOrCreateKeyPair(
+		complianceServerKeyPair, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
 			render.ComplianceServerCertSecret,
 			common.OperatorNamespace(),
@@ -392,9 +432,10 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	// create the trusted bundle.
-	// compliance-server running on management may need root certificates if oidc provider is external
-	var trustedBundle certificatemanagement.TrustedBundle
+	// update the trusted bundle with root certificates if running on management cluster
+	// as they may be needed by compliance-server if oidc provider is external.
+	// TODO: we should do this closer to instantiation of the trustedBundle but can't because that code is shared with upstream
+	// but in Cloud we need access to the authenticationCR.
 	if managementCluster != nil && authenticationCR != nil && authenticationCR.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
 		var err error
 		trustedBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates(managerInternalTLSSecret, esgwCertificate)
@@ -402,8 +443,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "failed to create trusted bundle with system root certs", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	} else {
-		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -439,7 +478,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		ESSecrets:                   esSecrets,
 		TrustedBundle:               trustedBundle,
 		Installation:                network,
-		ComplianceServerCertSecret:  complianceServerCertSecret,
+		ServerKeyPair:               complianceServerKeyPair,
+		ControllerKeyPair:           controllerKeyPair.Interface,
+		BenchmarkerKeyPair:          benchmarkerKeyPair.Interface,
+		SnapshotterKeyPair:          snapshotterKeyPair.Interface,
+		ReporterKeyPair:             reporterKeyPair.Interface,
 		ESClusterConfig:             esClusterConfig,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   openshift,
@@ -451,6 +494,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TenantID:                    tenantId,
 		UsePSP:                      r.usePSP,
 	}
+
 	// Render the desired objects from the CRD and create or update them.
 	comp, err := render.Compliance(complianceCfg)
 	if err != nil {
@@ -466,7 +510,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		Namespace:       render.ComplianceNamespace,
 		ServiceAccounts: []string{render.ComplianceServerSAName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-			rcertificatemanagement.NewKeyPairOption(complianceServerCertSecret, true, true),
+			rcertificatemanagement.NewKeyPairOption(complianceServerKeyPair, true, true),
+			rcertificatemanagement.NewKeyPairOption(controllerKeyPair.Interface, true, true),
+			rcertificatemanagement.NewKeyPairOption(benchmarkerKeyPair.Interface, true, true),
+			rcertificatemanagement.NewKeyPairOption(snapshotterKeyPair.Interface, true, true),
+			rcertificatemanagement.NewKeyPairOption(reporterKeyPair.Interface, true, true),
 		},
 		TrustedBundle: trustedBundle,
 	})

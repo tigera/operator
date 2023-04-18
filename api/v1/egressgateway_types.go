@@ -181,17 +181,6 @@ const (
 	NativeIPDisabled NativeIP = "Disabled"
 )
 
-type LogLevel string
-
-const (
-	LogLevelTrace LogLevel = "Trace"
-	LogLevelInfo  LogLevel = "Info"
-	LogLevelDebug LogLevel = "Debug"
-	LogLevelWarn  LogLevel = "Warn"
-	LogLevelFatal LogLevel = "Fatal"
-	LogLevelError LogLevel = "Error"
-)
-
 // EgressGatewayFailureDetection defines the fields the needed for determining Egress Gateway
 // readiness.
 type EgressGatewayFailureDetection struct {

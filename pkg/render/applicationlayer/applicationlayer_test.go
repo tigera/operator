@@ -30,12 +30,23 @@ import (
 )
 
 var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
-	var installation *operatorv1.InstallationSpec
+	var (
+		installation *operatorv1.InstallationSpec
+		cfg          *applicationlayer.Config
+	)
 
 	BeforeEach(func() {
 		// Initialize a default installation spec.
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
+		}
+
+		cfg = &applicationlayer.Config{
+			PullSecrets:  nil,
+			Installation: installation,
+			OsType:       rmeta.OSTypeLinux,
+			LogsEnabled:  true,
+			UsePSP:       true,
 		}
 	})
 
@@ -50,21 +61,17 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "application-layer", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 		// Should render the correct resources.
-		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OsType:       rmeta.OSTypeLinux,
-			LogsEnabled:  true,
-		})
+		component := applicationlayer.ApplicationLayer(cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
 
-		i := 0
-		for _, expectedRes := range expectedResources {
+		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
 		}
 
 		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -195,6 +202,18 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 	})
 
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := applicationlayer.ApplicationLayer(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
+
 	It("should render with custom l7 collector configuration", func() {
 		// create component with render the correct resources.
 		// Should render the correct resources.
@@ -226,4 +245,135 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 	})
 
+	It("should render with default l7 ALP configuration", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+		// Should render the correct resources.
+		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
+			PullSecrets:  nil,
+			Installation: installation,
+			OsType:       rmeta.OSTypeLinux,
+			ALPEnabled:   true,
+		})
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+		// Check rendering of daemonset.
+		Expect(ds.Spec.Template.Spec.HostNetwork).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.HostIPC).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+		Expect(len(ds.Spec.Template.Spec.Containers)).To(Equal(2))
+		Expect(len(ds.Spec.Template.Spec.Tolerations)).To(Equal(3))
+
+		// Ensure each volume rendered correctly.
+		dsVols := ds.Spec.Template.Spec.Volumes
+		expectedVolumes := []corev1.Volume{
+			{
+				Name: applicationlayer.EnvoyLogsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: applicationlayer.EnvoyConfigMapName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.EnvoyConfigMapName},
+					},
+				},
+			},
+			{
+				Name: applicationlayer.FelixSync,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver: "csi.tigera.io",
+					},
+				},
+			},
+			{
+				Name: applicationlayer.DikastesSyncVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}
+		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(expectedVolumes)))
+
+		for _, expected := range expectedVolumes {
+			Expect(dsVols).To(ContainElement(expected))
+		}
+
+		// Ensure that tolerations rendered correctly.
+		dsTolerations := ds.Spec.Template.Spec.Tolerations
+		expectedToleration := rmeta.TolerateAll
+		for _, expected := range expectedToleration {
+			Expect(dsTolerations).To(ContainElement(expected))
+		}
+
+		// Check proxy container rendering.
+		proxyContainer := ds.Spec.Template.Spec.Containers[0]
+
+		proxyEnvs := proxyContainer.Env
+		expectedProxyEnvs := []corev1.EnvVar{
+			{Name: "ENVOY_UID", Value: "0"},
+			{Name: "ENVOY_GID", Value: "0"},
+		}
+		Expect(len(proxyEnvs)).To(Equal(len(expectedProxyEnvs)))
+
+		for _, expected := range expectedProxyEnvs {
+			Expect(proxyEnvs).To(ContainElement(expected))
+		}
+
+		proxyVolMounts := proxyContainer.VolumeMounts
+		expectedProxyVolMounts := []corev1.VolumeMount{
+			{Name: applicationlayer.EnvoyConfigMapName, MountPath: "/etc/envoy"},
+			{Name: applicationlayer.EnvoyLogsVolumeName, MountPath: "/tmp/"},
+			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
+		}
+		Expect(len(proxyVolMounts)).To(Equal(len(expectedProxyVolMounts)))
+
+		for _, expected := range expectedProxyVolMounts {
+			Expect(proxyVolMounts).To(ContainElement(expected))
+		}
+
+		dikastesContainer := ds.Spec.Template.Spec.Containers[1]
+
+		dikastesEnvs := dikastesContainer.Env
+		expectedDikastesEnvs := []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "Info"},
+			{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
+		}
+		Expect(len(dikastesEnvs)).To(Equal(len(expectedDikastesEnvs)))
+
+		for _, element := range expectedDikastesEnvs {
+			Expect(dikastesEnvs).To(ContainElement(element))
+		}
+
+		dikastesVolMounts := dikastesContainer.VolumeMounts
+		expectedDikastesVolMounts := []corev1.VolumeMount{
+			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
+			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
+		}
+		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))
+		for _, expected := range expectedDikastesVolMounts {
+			Expect(dikastesVolMounts).To(ContainElement(expected))
+		}
+	})
 })

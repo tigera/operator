@@ -231,10 +231,10 @@ func (c *rbacApiComponent) container() []corev1.Container {
 		{Name: "CC_RBAC_API_OPEN_TELEMETRY_ENABLED", Value: "true"},
 	}
 
-	volumeMounts := []corev1.VolumeMount{
-		c.config.TrustedBundle.VolumeMount(c.SupportedOSType()),
+	volumeMounts := append(
+		c.config.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 		c.config.TLSKeyPair.VolumeMount(c.SupportedOSType()),
-	}
+	)
 
 	if kvc := c.config.KeyValidatorConfig; kvc != nil {
 		env = append(env, kvc.RequiredEnv("CC_RBAC_API_")...)

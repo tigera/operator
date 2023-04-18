@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -111,7 +110,7 @@ var _ = Describe("Rendering tests", func() {
 				{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
 				{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
 				{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
-				{name: certificatemanagement.TrustedCertConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
+				{name: "tigera-ca-bundle", ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
 				{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 				{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 				{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -226,7 +225,7 @@ var _ = Describe("Rendering tests", func() {
 			It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
 				renderGuardianPolicy("mydomain.io:8080", false)
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
-				managementClusterEgressRule := policy.Spec.Egress[4]
+				managementClusterEgressRule := policy.Spec.Egress[5]
 				Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
 				Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
 			})

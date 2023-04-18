@@ -43,8 +43,21 @@ global_job_config:
       - 'cache restore bin-amd64-${SEMAPHORE_GIT_SHA}'
 
 blocks:
-  - name: 'Build amd64'
+  - name: 'Pre-commit verification'
     dependencies: []
+    skip:
+      when: "pull_request =~ '.*'"
+    task:
+      jobs:
+        - name: Test pre-commit checks
+          execution_time_limit:
+            minutes: 15
+          commands:
+            # reset so it looks like we haven't committed yet
+            - git reset --soft $(git merge-base $SEMAPHORE_GIT_BRANCH HEAD)
+            - make pre-commit
+  - name: 'Build amd64'
+    dependencies: ["Pre-commit verification"]
     task:
       jobs:
         - name: Build amd64
@@ -65,6 +78,15 @@ blocks:
           - cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}
           - cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}
       jobs:
+        - name: Test pre-commit checks
+          skip:
+            when: "pull_request =~ '.*'"
+          execution_time_limit:
+            minutes: 15
+          commands:
+            # reset so it looks like we haven't committed yet
+            - git reset --soft $(git merge-base $SEMAPHORE_GIT_BRANCH HEAD)
+            - make pre-commit
         - name: Build arm64
           execution_time_limit:
             minutes: 45

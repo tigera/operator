@@ -593,7 +593,6 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
-
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
@@ -610,6 +609,14 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 					"stagedkubernetesnetworkpolicies",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+				},
+				Verbs: []string{"patch"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},

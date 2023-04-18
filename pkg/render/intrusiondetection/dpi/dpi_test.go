@@ -109,7 +109,9 @@ var (
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: "tigera-ca-bundle",
-					}}},
+					},
+				},
+			},
 		},
 		{
 			Name: "node-certs",
@@ -117,7 +119,8 @@ var (
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  render.NodeTLSSecretName,
 					DefaultMode: &defaultMode,
-				}},
+				},
+			},
 		},
 		{
 			Name: "log-snort-alters",
@@ -142,7 +145,8 @@ var (
 
 	pullSecrets = []*corev1.Secret{{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: common.OperatorNamespace()}}}
+		ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: common.OperatorNamespace()},
+	}}
 )
 
 type resourceTestObj struct {
@@ -249,7 +253,8 @@ var _ = Describe("DPI rendering tests", func() {
 					ComponentName: "DeepPacketInspection",
 					ResourceRequirements: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{"memory": memoryLimit, "cpu": cpuLimit},
-					}},
+					},
+				},
 			}},
 		}
 
@@ -299,6 +304,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "tigera-linseed", ns: "tigera-dpi", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 
 		Expect(len(deleteResource)).To(Equal(len(expectedResources)))
@@ -321,6 +327,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "tigera-linseed", ns: "tigera-dpi", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 
 		expectedCreateResources := []resourceTestObj{

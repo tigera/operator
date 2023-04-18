@@ -33,7 +33,7 @@ const (
 // KeyPairInterface wraps a Secret object that contains a private key and a certificate. Whether CertificateManagement is
 // configured or not, KeyPair returns the right InitContainer, VolumeMount or Volume (when applicable).
 type KeyPairInterface interface {
-	//UseCertificateManagement returns true if this key pair was not user provided and certificate management has been configured.
+	// UseCertificateManagement returns true if this key pair was not user provided and certificate management has been configured.
 	UseCertificateManagement() bool
 	// BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
 	BYO() bool

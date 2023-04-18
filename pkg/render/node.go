@@ -614,7 +614,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
 
 	// calico plugin
-	var calicoPluginConfig = map[string]interface{}{
+	calicoPluginConfig := map[string]interface{}{
 		"type":                   "calico",
 		"datastore_type":         "kubernetes",
 		"mtu":                    mtu,
@@ -654,7 +654,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	}
 
 	// optional properties
-	var kubernetes = map[string]interface{}{
+	kubernetes := map[string]interface{}{
 		"kubeconfig": "__KUBECONFIG_FILEPATH__",
 	}
 	if apiRoot != "" {
@@ -674,7 +674,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 
 func (c *nodeComponent) createBandwidthPlugin() map[string]interface{} {
 	// bandwidth plugin
-	var bandwidthPlugin = map[string]interface{}{
+	bandwidthPlugin := map[string]interface{}{
 		"type":         "bandwidth",
 		"capabilities": map[string]bool{"bandwidth": true},
 	}
@@ -703,7 +703,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 		return nil
 	}
 
-	var plugins = make([]interface{}, 0)
+	plugins := make([]interface{}, 0)
 	plugins = append(plugins, c.createCalicoPluginConfig())
 	plugins = append(plugins, c.createBandwidthPlugin())
 

@@ -367,9 +367,14 @@ type keyPairCollection struct {
 	// provisioned into the namespace, as well as added to the trusted bundle.
 	elastic       certificatemanagement.KeyPairInterface
 	kibana        certificatemanagement.KeyPairInterface
-	linseed       certificatemanagement.KeyPairInterface
 	metricsServer certificatemanagement.KeyPairInterface
 	gateway       certificatemanagement.KeyPairInterface
+
+	// Certificate and key for Linseed to identify itself.
+	linseed certificatemanagement.KeyPairInterface
+
+	// Certificate and key for Linseed to provision and verify access tokens.
+	linseedTokenKeyPair certificatemanagement.KeyPairInterface
 }
 
 func (c *keyPairCollection) trustedBundle(cm certificatemanager.CertificateManager) certificatemanagement.TrustedBundle {
@@ -404,6 +409,7 @@ func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle
 			// enabled. Instead, it will be replaced with a dummy secret that serves merely to pass ECK's validation checks.
 			rcertificatemanagement.NewKeyPairOption(c.elastic, true, c.elastic != nil && !c.elastic.UseCertificateManagement()),
 			rcertificatemanagement.NewKeyPairOption(c.linseed, true, true),
+			rcertificatemanagement.NewKeyPairOption(c.linseedTokenKeyPair, true, true),
 			rcertificatemanagement.NewKeyPairOption(c.gateway, true, true),
 			rcertificatemanagement.NewKeyPairOption(c.metricsServer, true, true),
 		},
@@ -494,6 +500,14 @@ func (r *ReconcileLogStorage) generateSecrets(
 		return nil, err
 	}
 	collection.linseed = linseedKeyPair
+
+	// Create a key pair for Linseed to use for tokens.
+	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, common.OperatorNamespace(), []string{"localhost"})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return nil, err
+	}
+	collection.linseedTokenKeyPair = linseedTokenKP
 
 	// Create a server key pair for the ES metrics server.
 	metricsDNSNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, r.clusterDomain)
@@ -837,7 +851,9 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger,
 			ctx,
 			keyPairs.linseed,
+			keyPairs.linseedTokenKeyPair,
 			trustedBundle,
+			managementCluster != nil,
 			r.usePSP,
 			clusterConfig,
 		)

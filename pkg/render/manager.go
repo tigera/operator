@@ -15,6 +15,7 @@
 package render
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -27,7 +28,10 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -943,6 +947,7 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 //
 // Calico Enterprise only
 func managerClusterWideTigeraLayer() *v3.UISettings {
+
 	namespaces := []string{
 		"tigera-compliance",
 		"tigera-dex",
@@ -961,6 +966,12 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-system",
 		"calico-system",
 	}
+
+	additionalNamespaces := getAdditionalNamespaces(namespaces)
+	for _, ns := range additionalNamespaces {
+		namespaces = append(namespaces, ns)
+	}
+
 	nodes := make([]v3.UIGraphNode, len(namespaces))
 	for i := range namespaces {
 		ns := namespaces[i]
@@ -984,6 +995,34 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 			},
 		},
 	}
+}
+
+// getAdditionalNamespaces returns any additional tigera namespaces currently active in the cluster
+// such as tigera-amazon-cloud-integration, tigera-firewall-controller etc.
+func getAdditionalNamespaces(stdNamespaces []string) []string {
+	var namespaces []string
+	cfg, err := config.GetConfig()
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return namespaces
+	}
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Error(err, "Failed to get k8s clientSet")
+		return namespaces
+	}
+	nsList, err := cs.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		log.Error(err, "Failed to get the list of Namespace in the cluster")
+		return namespaces
+	}
+
+	for _, ns := range nsList.Items {
+		if strings.HasPrefix(ns.Name, "tigera-") && !slices.Contains(stdNamespaces, ns.Name) {
+			namespaces = append(namespaces, ns.Name)
+		}
+	}
+	return namespaces
 }
 
 // managerClusterWideDefaultView returns a UISettings view belonging to the cluster-wide settings group that shows

@@ -193,7 +193,7 @@ func (c *component) egwInitContainer() *corev1.Container {
 	return &corev1.Container{
 		Name:            "egress-gateway-init",
 		Image:           c.config.egwImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: render.ImagePullPolicy(),
 		Command:         []string{"/init-gateway.sh"},
 		SecurityContext: securitycontext.NewRootContext(true),
 		Env:             c.egwInitEnvVars(),
@@ -207,7 +207,7 @@ func (c *component) egwContainer() *corev1.Container {
 	return &corev1.Container{
 		Name:            "egress-gateway",
 		Image:           c.config.egwImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             c.egwEnvVars(),
 		Resources:       c.getResources(),
 		VolumeMounts:    c.egwVolumeMounts(),

@@ -262,8 +262,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// We need separate certificates for OSS vs Enterprise.
-	secretName := render.ProjectCalicoApiServerTLSSecretName(network.Variant)
-	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.clusterDomain))
+	secretName := render.ProjectCalicoAPIServerTLSSecretName(network.Variant)
+	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
 		return reconcile.Result{}, err
@@ -392,7 +392,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       rmeta.APIServerNamespace(variant),
-			ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},
+			ServiceAccounts: []string{render.APIServerServiceAccountName(variant)},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelCASecret, true, true),
@@ -450,6 +450,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ClusterDomain:               r.clusterDomain,
 			ManagementClusterConnection: managementClusterConnection,
 			TrustedBundle:               trustedBundle,
+			UsePSP:                      r.usePSP,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
 		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)

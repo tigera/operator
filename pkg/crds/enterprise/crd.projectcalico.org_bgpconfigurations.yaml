@@ -69,6 +69,12 @@ spec:
                 description: Extensions is a mapping of keys to values that can be
                   used in custom BGP templates
                 type: object
+              ignoredInterfaces:
+                description: IgnoredInterfaces indicates the network interfaces that
+                  needs to be excluded when reading device routes.
+                items:
+                  type: string
+                type: array
               listenPort:
                 description: ListenPort is the port where BGP protocol should listen.
                   Defaults to 179

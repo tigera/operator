@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@ package installation
 
 import (
 	"path/filepath"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
@@ -54,6 +56,11 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal(filepath.Clean("/var/lib/kubelet")))
+		Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
+
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -89,6 +96,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
+		var logFileMaxCount uint32 = 5
+		var logFileMaxAgeDays uint32 = 10
+		var logFileMaxSize = resource.MustParse("50Mi")
+		var logSeverity = operator.LogLevelError
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -151,6 +162,14 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				KubeletVolumePluginPath: "/my/kubelet/root/dir",
+				Logging: &operator.Logging{
+					CNI: &operator.CNILogging{
+						LogSeverity:       &logSeverity,
+						LogFileMaxSize:    &logFileMaxSize,
+						LogFileMaxAgeDays: &logFileMaxAgeDays,
+						LogFileMaxCount:   &logFileMaxCount,
+					},
+				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -167,6 +186,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
+		var logFileMaxCount uint32 = 5
+		var logFileMaxAgeDays uint32 = 10
+		var logFileMaxSize = resource.MustParse("50Mi")
+		var logSeverity = operator.LogLevelError
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
@@ -219,6 +242,14 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				KubeletVolumePluginPath: "/my/kubelet/root/dir",
+				Logging: &operator.Logging{
+					CNI: &operator.CNILogging{
+						LogSeverity:       &logSeverity,
+						LogFileMaxSize:    &logFileMaxSize,
+						LogFileMaxAgeDays: &logFileMaxAgeDays,
+						LogFileMaxCount:   &logFileMaxCount,
+					},
+				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -468,6 +499,19 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+	It("should set default values for CNILogging if CNI is set to Calico", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{},
+			},
+		}
+		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+		Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
+		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 	table.DescribeTable("should default CNI type based on KubernetesProvider for hosted providers",

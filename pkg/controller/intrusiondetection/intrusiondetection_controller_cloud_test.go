@@ -5,6 +5,7 @@ package intrusiondetection
 import (
 	"context"
 
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -140,6 +141,14 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, kiibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		// Managed clusters need the publi cert for Linseed as well.
+		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(c, render.VoltronLinseedPublicCert, common.OperatorNamespace(), []string{render.VoltronLinseedPublicCert})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
@@ -171,6 +180,15 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchIntrusionDetectionJobUserSecret,
 					Namespace: "tigera-operator",
+				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &esv1.Elasticsearch{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchName,
+					Namespace: render.ElasticsearchNamespace,
+				},
+				Status: esv1.ElasticsearchStatus{
+					Phase: esv1.ElasticsearchReadyPhase,
 				},
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
@@ -246,8 +264,10 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 
 			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
 				corev1.VolumeMount{
+					// TODO: seems like this container has two 'tigera-ca-bundle' volumemounts
 					Name:      "tigera-ca-bundle",
-					MountPath: "/etc/pki/tls/certs/",
+					MountPath: "/etc/pki/tls/cert.pem",
+					SubPath:   "ca-bundle.crt",
 					ReadOnly:  true,
 				},
 			))

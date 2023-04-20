@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -183,6 +183,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	switch compareFields(inst.FIPSMode, override.FIPSMode) {
 	case BOnlySet, Different:
 		inst.FIPSMode = override.FIPSMode
+	}
+
+	switch compareFields(inst.Logging, override.Logging) {
+	case BOnlySet, Different:
+		inst.Logging = override.Logging
 	}
 
 	return inst

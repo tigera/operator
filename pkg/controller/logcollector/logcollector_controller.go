@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName,
+		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
@@ -371,12 +371,27 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
+	// as well as validation with respect to Syslog.logTypes.
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
+		// have this CR available, but we should communicate any other kind of error that we encounter.
+		if !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "An error occurred while looking for a ManagementClusterConnection", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+	managedCluster := managementClusterConnection != nil
+
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	fluentdPrometheusTLS, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
+
+	// fluentdKeyPair is the key pair fluentd presents to identify itself
+	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -401,8 +416,26 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	// For standalone and management clusters, we just use Linseed's actual certificate.
+	linseedCertLocation := render.TigeraLinseedSecret
+	if managedCluster {
+		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
+		// management cluster into the managed cluster by kube-controllers.
+		linseedCertLocation = render.VoltronLinseedPublicCert
+	}
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Linseed certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate, linseedCertificate)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
@@ -460,19 +493,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			}
 		}
 	}
-
-	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
-	// as well as validation with respect to Syslog.logTypes.
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-	if err != nil {
-		// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
-		// have this CR available, but we should communicate any other kind of error that we encounter.
-		if !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "An error occurred while looking for a ManagementClusterConnection", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-	managedCluster := managementClusterConnection != nil
 
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
@@ -535,7 +555,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Installation:         installation,
 		ClusterDomain:        r.clusterDomain,
 		OSType:               rmeta.OSTypeLinux,
-		MetricsServerTLS:     fluentdPrometheusTLS,
+		FluentdKeyPair:       fluentdKeyPair,
 		TrustedBundle:        trustedBundle,
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
@@ -549,7 +569,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			Namespace:       render.LogCollectorNamespace,
 			ServiceAccounts: []string{render.FluentdNodeName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(fluentdPrometheusTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -590,6 +610,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			ManagedCluster:       managedCluster,
 			UsePSP:               r.usePSP,
 			UseSyslogCertificate: useSyslogCertificate,
+			FluentdKeyPair:       fluentdKeyPair,
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -777,6 +798,7 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 		FetchInterval: interval,
 	}, nil
 }
+
 func getSysLogCertificate(client client.Client) (certificatemanagement.CertificateInterface, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{

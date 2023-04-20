@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
@@ -175,6 +177,8 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
+		render.TigeraLinseedSecret,
+		render.VoltronLinseedPublicCert,
 		certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -188,6 +192,10 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 
 	// These watches are here to catch a modification to the resources we create in reconcile so the changes would be corrected.
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.IntrusionDetectionNamespace); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, render.IntrusionDetectionNamespace); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
@@ -320,6 +328,19 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	if !isManagedCluster {
+		// check es-gateway to be available
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
@@ -478,10 +499,32 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, nil
 	}
 
+	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	linseedCertLocation := render.TigeraLinseedSecret
+	if isManagedCluster {
+		linseedCertLocation = render.VoltronLinseedPublicCert
+	}
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if linseedCertificate == nil {
+		log.Info("Linseed certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	adAPIServerTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSSecretName, common.OperatorNamespace(),
 		dns.GetServiceDNSNames(render.ADAPIObjectName, render.IntrusionDetectionNamespace, r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error creating TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// intrusionDetectionKeyPair is the key pair intrusion detection presents to identify itself
+	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -493,7 +536,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	// Intrusion detection controller sometimes needs to make requests to outside sources. Therefore, we include
 	// the system root certificate bundle.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(esgwCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(esgwCertificate, linseedCertificate)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
@@ -552,23 +595,26 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	hasNoLicense := !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
-		IntrusionDetection:    *instance,
-		LogCollector:          lc,
-		ESSecrets:             esSecrets,
-		Installation:          network,
-		ESClusterConfig:       esClusterConfig,
-		PullSecrets:           pullSecrets,
-		Openshift:             r.provider == operatorv1.ProviderOpenShift,
-		ClusterDomain:         r.clusterDomain,
-		ESLicenseType:         esLicenseType,
-		ManagedCluster:        isManagedCluster,
-		ShouldRenderADPVC:     shouldRenderADPVC,
-		HasNoLicense:          hasNoLicense,
-		TrustedCertBundle:     trustedBundle,
-		ADAPIServerCertSecret: adAPIServerTLSSecret,
-		UsePSP:                r.usePSP,
-		TenantId:              tenantId,
-		CloudResources:        idcr,
+		// Cloud
+		TenantId:       tenantId,
+		CloudResources: idcr,
+
+		IntrusionDetection:           *instance,
+		LogCollector:                 lc,
+		ESSecrets:                    esSecrets,
+		Installation:                 network,
+		ESClusterConfig:              esClusterConfig,
+		PullSecrets:                  pullSecrets,
+		Openshift:                    r.provider == operatorv1.ProviderOpenShift,
+		ClusterDomain:                r.clusterDomain,
+		ESLicenseType:                esLicenseType,
+		ManagedCluster:               isManagedCluster,
+		ShouldRenderADPVC:            shouldRenderADPVC,
+		HasNoLicense:                 hasNoLicense,
+		TrustedCertBundle:            trustedBundle,
+		ADAPIServerCertSecret:        adAPIServerTLSSecret,
+		IntrusionDetectionCertSecret: intrusionDetectionKeyPair,
+		UsePSP:                       r.usePSP,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
 
@@ -583,7 +629,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
+	typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
+
+	// dpiKeyPair is the key pair dpi presents to identify itself
+	dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	dpiList := &v3.DeepPacketInspectionList{}
 	if err := r.client.List(ctx, dpiList); err != nil {
@@ -602,13 +655,21 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		HasNoLicense:       hasNoLicense,
 		HasNoDPIResource:   hasNoDPIResource,
 		ESClusterConfig:    esClusterConfig,
-		ESSecrets:          esSecrets,
 		ClusterDomain:      r.clusterDomain,
+		DPICertSecret:      dpiKeyPair,
 	})
 
 	components := []render.Component{
 		comp,
 		dpiComponent,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.IntrusionDetectionNamespace,
+			ServiceAccounts: []string{render.IntrusionDetectionName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.IntrusionDetectionCertSecret, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,
 			ServiceAccounts: []string{render.IntrusionDetectionName, render.ADAPIObjectName},
@@ -622,6 +683,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, false, true),
+			},
+			TrustedBundle: typhaNodeTLS.TrustedBundle,
+		}),
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       dpi.DeepPacketInspectionNamespace,
+			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(dpiKeyPair, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}),

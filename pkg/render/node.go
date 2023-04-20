@@ -15,6 +15,7 @@
 package render
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"sort"
@@ -61,6 +62,7 @@ const (
 	CalicoNodeMetricsService      = "calico-node-metrics"
 	NodePrometheusTLSServerSecret = "calico-node-prometheus-server-tls"
 	CalicoNodeObjectName          = "calico-node"
+	CalicoCNIPluginObjectName     = "calico-cni-plugin"
 )
 
 var (
@@ -117,7 +119,7 @@ type NodeConfiguration struct {
 	// should this value change.
 	BindMode string
 
-	// Whether or not the cluster supports pod security policies.
+	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
@@ -181,6 +183,9 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
+		c.cniPluginServiceAccount(),
+		c.cniPluginRole(),
+		c.cniPluginRoleBinding(),
 	}
 
 	// These are objects to keep even when we're terminating
@@ -215,7 +220,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
+	if c.cfg.UsePSP {
 		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
@@ -253,6 +258,23 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
+// cniPluginServiceAccount creates the Calico CNI plugin's service account.
+func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
+
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       CalicoCNIPluginObjectName,
+			Namespace:  common.CalicoNamespace,
+			Finalizers: finalizer,
+		},
+	}
+}
+
 // nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
 func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
@@ -281,6 +303,34 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 	if c.cfg.MigrateNamespaces {
 		migration.AddBindingForKubeSystemNode(crb)
+	}
+	return crb
+}
+
+// cniPluginRoleBinding creates a rolebinding giving the Calico CNI plugin service account the required permissions to operate.
+func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
+	crb := &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       CalicoCNIPluginObjectName,
+			Finalizers: finalizer,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     CalicoCNIPluginObjectName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      CalicoCNIPluginObjectName,
+				Namespace: common.CalicoNamespace,
+			},
+		},
 	}
 	return crb
 }
@@ -346,7 +396,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Used for creating service account tokens to be used by the CNI plugin.
 				APIGroups:     []string{""},
 				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{"calico-node"},
+				ResourceNames: []string{"calico-cni-plugin"},
 				Verbs:         []string{"create"},
 			},
 			{
@@ -359,8 +409,10 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// For monitoring Calico-specific configuration.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
+					"bgpfilters",
 					"bgpconfigurations",
 					"bgppeers",
+					"bgpfilters",
 					"blockaffinities",
 					"clusterinformations",
 					"felixconfigurations",
@@ -436,13 +488,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
-			{
-				// Allows Calico to use the K8s TokenRequest API to create the tokens used by the CNI plugin.
-				APIGroups:     []string{""},
-				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{"calico-node"},
-				Verbs:         []string{"create"},
-			},
 		},
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -451,6 +496,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
+					"externalnetworks",
 					"licensekeys",
 					"remoteclusterconfigurations",
 					"stagedglobalnetworkpolicies",
@@ -480,7 +526,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -492,14 +538,54 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	return role
 }
 
-// nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
-// Returns nil if no configmap is needed.
-func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
-	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
-		// If calico cni is not being used, then no cni configmap is needed.
-		return nil
+// cniPluginRole creates the role containing policy rules that allow the Calico CNI plugin to operate normally.
+func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       CalicoCNIPluginObjectName,
+			Finalizers: finalizer,
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				// The CNI plugin needs to get pods, nodes, namespaces.
+				APIGroups: []string{""},
+				Resources: []string{"pods", "nodes", "namespaces"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// Calico patches the allocated IP onto the pod.
+				APIGroups: []string{""},
+				Resources: []string{"pods/status"},
+				Verbs:     []string{"patch"},
+			},
+			{
+				// Most IPAM resources need full CRUD permissions so we can allocate and
+				// release IP addresses for pods.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"blockaffinities",
+					"ipamblocks",
+					"ipamhandles",
+					"ipamconfigs",
+					"clusterinformations",
+					"ippools",
+					"ipreservations",
+				},
+				Verbs: []string{"get", "list", "create", "update", "delete"},
+			},
+		},
 	}
 
+	return role
+}
+
+func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	// Determine MTU to use for veth interfaces.
 	// Zero means to use auto-detection.
 	var mtu int32 = 0
@@ -520,62 +606,120 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 		ipForward = (*c.cfg.Installation.CalicoNetwork.ContainerIPForwarding == operatorv1.ContainerIPForwardingEnabled)
 	}
 
-	// Determine portmap configuration to use.
-	var portmap string = ""
-	if c.cfg.Installation.CalicoNetwork.HostPorts != nil && *c.cfg.Installation.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
-		portmap = `,
-    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
-	}
-
 	ipam := c.getCalicoIPAM()
 	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
 		ipam = buildHostLocalIPAM(c.cfg.Installation.CalicoNetwork)
 	}
 
-	var k8sAPIRoot string
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
+
+	// calico plugin
+	var calicoPluginConfig = map[string]interface{}{
+		"type":                   "calico",
+		"datastore_type":         "kubernetes",
+		"mtu":                    mtu,
+		"nodename_file_optional": nodenameFileOptional,
+		"log_file_path":          "/var/log/calico/cni/cni.log",
+		"ipam":                   ipam,
+		"container_settings": map[string]interface{}{
+			"allow_ip_forwarding": ipForward,
+		},
+		"policy": map[string]interface{}{
+			"type": "k8s",
+		},
+	}
+
+	// Determine logging configuration
+	if c.cfg.Installation.Logging != nil && c.cfg.Installation.Logging.CNI != nil {
+
+		if c.cfg.Installation.Logging.CNI.LogSeverity != nil {
+			logSeverity := string(*c.cfg.Installation.Logging.CNI.LogSeverity)
+			calicoPluginConfig["log_level"] = logSeverity
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxSize != nil {
+			logFileMaxSize := c.cfg.Installation.Logging.CNI.LogFileMaxSize.Value() / (1024 * 1024)
+			calicoPluginConfig["log_file_max_size"] = logFileMaxSize
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxCount != nil {
+			logFileMaxCount := *c.cfg.Installation.Logging.CNI.LogFileMaxCount
+			calicoPluginConfig["log_file_max_count"] = logFileMaxCount
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays != nil {
+			logFileMaxAgeDays := *c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays
+			calicoPluginConfig["log_file_max_age"] = logFileMaxAgeDays
+		}
+	}
+
+	// optional properties
+	var kubernetes = map[string]interface{}{
+		"kubeconfig": "__KUBECONFIG_FILEPATH__",
+	}
 	if apiRoot != "" {
-		k8sAPIRoot = fmt.Sprintf("\n          \"k8s_api_root\":\"%s\",", apiRoot)
+		kubernetes["k8s_api_root"] = apiRoot
 	}
+	calicoPluginConfig["kubernetes"] = kubernetes
 
-	var externalDataplane string = ""
 	if c.vppDataplaneEnabled() {
-		externalDataplane = `,
-      "dataplane_options": {
-        "type": "grpc",
-        "socket": "unix:///var/run/calico/cni-server.sock"
-      }`
+		calicoPluginConfig["dataplane_options"] = map[string]interface{}{
+			"type":   "grpc",
+			"socket": "unix:///var/run/calico/cni-server.sock",
+		}
 	}
 
-	// Build the CNI configuration json.
+	return calicoPluginConfig
+}
+
+func (c *nodeComponent) createBandwidthPlugin() map[string]interface{} {
+	// bandwidth plugin
+	var bandwidthPlugin = map[string]interface{}{
+		"type":         "bandwidth",
+		"capabilities": map[string]bool{"bandwidth": true},
+	}
+
+	return bandwidthPlugin
+}
+
+func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
+	// Determine portmap configuration to use.
+	portmapPlugin := map[string]interface{}{
+		"type": "portmap",
+		"snat": true,
+		"capabilities": map[string]bool{
+			"portMappings": true,
+		},
+	}
+
+	return portmapPlugin
+}
+
+// nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
+// Returns nil if no configmap is needed.
+func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
+	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
+		// If calico cni is not being used, then no cni configmap is needed.
+		return nil
+	}
+
+	var plugins = make([]interface{}, 0)
+	plugins = append(plugins, c.createCalicoPluginConfig())
+	plugins = append(plugins, c.createBandwidthPlugin())
+
+	// optional portmap plugin
+	if c.cfg.Installation.CalicoNetwork.HostPorts != nil &&
+		*c.cfg.Installation.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
+		plugins = append(plugins, c.createPortmapPlugin())
+	}
+
+	pluginsArray, _ := json.Marshal(plugins)
+
 	config := fmt.Sprintf(`{
-  "name": "k8s-pod-network",
-  "cniVersion": "0.3.1",
-  "plugins": [
-    {
-      "type": "calico",
-      "datastore_type": "kubernetes",
-      "mtu": %d,
-      "nodename_file_optional": %v,
-      "log_level": "Info",
-      "log_file_path": "/var/log/calico/cni/cni.log",
-      "ipam": %s,
-      "container_settings": {
-          "allow_ip_forwarding": %v
-      },
-      "policy": {
-          "type": "k8s"
-      },
-      "kubernetes": {%s
-          "kubeconfig": "__KUBECONFIG_FILEPATH__"
-      }%s
-    },
-    {
-      "type": "bandwidth",
-      "capabilities": {"bandwidth": true}
-    }%s
-  ]
-}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, externalDataplane, portmap)
+			  "name": "k8s-pod-network",
+			  "cniVersion": "0.3.1",
+			  "plugins": %s 
+			}`, string(pluginsArray))
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -590,7 +734,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *nodeComponent) getCalicoIPAM() string {
+func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
@@ -604,24 +748,35 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	} else {
 		assign_ipv6 = "false"
 	}
-	return fmt.Sprintf(`{ "type": "calico-ipam", "assign_ipv4" : "%s", "assign_ipv6" : "%s"}`,
-		assign_ipv4, assign_ipv6,
-	)
+	return map[string]interface{}{
+		"type":        "calico-ipam",
+		"assign_ipv4": assign_ipv4,
+		"assign_ipv6": assign_ipv6,
+	}
 }
 
-func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) string {
+func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) map[string]interface{} {
 	v6 := GetIPv6Pool(cns.IPPools) != nil
 	v4 := GetIPv4Pool(cns.IPPools) != nil
 
 	if v4 && v6 {
 		// Dual-stack
-		return `{ "type": "host-local", "ranges": [[{"subnet": "usePodCidr"}],[{"subnet": "usePodCidrIPv6"}]]}`
+		return map[string]interface{}{
+			"type":   "host-local",
+			"ranges": [][]map[string]string{{{"subnet": "usePodCidr"}}, {{"subnet": "usePodCidrIPv6"}}},
+		}
 	} else if v6 {
 		// Single-stack v6
-		return `{ "type": "host-local", "subnet": "usePodCidrIPv6"}`
+		return map[string]interface{}{
+			"type":   "host-local",
+			"subnet": "usePodCidrIPv6",
+		}
 	} else {
 		// Single-stack v4
-		return `{ "type": "host-local", "subnet": "usePodCidr"}`
+		return map[string]interface{}{
+			"type":   "host-local",
+			"subnet": "usePodCidr",
+		}
 	}
 }
 
@@ -1094,13 +1249,13 @@ func (c *nodeComponent) nodeResources() corev1.ResourceRequirements {
 
 // nodeVolumeMounts creates the node's volume mounts.
 func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
-	nodeVolumeMounts := []corev1.VolumeMount{
-		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
-		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
-		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+	nodeVolumeMounts := c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType())
+	nodeVolumeMounts = append(nodeVolumeMounts,
+		corev1.VolumeMount{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+		corev1.VolumeMount{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
+		corev1.VolumeMount{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
-	}
+	)
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
 			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},
@@ -1619,8 +1774,7 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 }
 
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
+	psp := podsecuritypolicy.NewBasePolicy(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)

@@ -43,6 +43,7 @@ var defaultImages = map[string]string{
 	"key-cert-provisioner":       "tigera/key-cert-provisioner",
 	"calico/apiserver":           "calico/apiserver",
 	"calico/windows-upgrade":     "calico/windows-upgrade",
+	"tigera/linseed":             "tigera/linseed",
 }
 
 var ignoredImages = map[string]struct{}{

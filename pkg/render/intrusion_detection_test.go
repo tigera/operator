@@ -59,6 +59,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	var cfg *render.IntrusionDetectionConfiguration
 	var bundle certificatemanagement.TrustedBundle
 	var adAPIKeyPair certificatemanagement.KeyPairInterface
+	var keyPair certificatemanagement.KeyPairInterface
 
 	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")
 	expectedIDPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed.json")
@@ -80,18 +81,22 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
 		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.IntrusionDetectionTLSSecretName, "", "", nil)
+		Expect(err).NotTo(HaveOccurred())
+		keyPair = certificatemanagement.NewKeyPair(secretTLS, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{
-			TrustedCertBundle:     bundle,
-			ADAPIServerCertSecret: adAPIKeyPair,
-			Installation:          &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ESClusterConfig:       relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1),
-			ClusterDomain:         dns.DefaultClusterDomain,
-			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
-			ManagedCluster:        notManagedCluster,
-			UsePSP:                true,
+			TrustedCertBundle:            bundle,
+			ADAPIServerCertSecret:        adAPIKeyPair,
+			IntrusionDetectionCertSecret: keyPair,
+			Installation:                 &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ESClusterConfig:              relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1),
+			ClusterDomain:                dns.DefaultClusterDomain,
+			ESLicenseType:                render.ElasticsearchLicenseTypeUnknown,
+			ManagedCluster:               notManagedCluster,
+			UsePSP:                       true,
 		}
 	})
 
@@ -163,9 +168,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
@@ -181,6 +187,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
+			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/intrusion-detection-tls/tls.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/intrusion-detection-tls/tls.key"},
+			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
 		))
 		Expect(idji.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idji.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
@@ -202,11 +213,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("intrusion-detection-tls"))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/intrusion-detection-tls"))
 
-		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.IntrusionDetectionTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.IntrusionDetectionTLSSecretName))
 
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
@@ -247,8 +264,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		// secrets are mounted
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).MountPath))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMounts(rmeta.OSTypeLinux)[0].Name))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMounts(rmeta.OSTypeLinux)[0].MountPath))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).Name))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
 		// emptyDir is expected as the default volume
@@ -283,19 +300,27 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(detectorsSecret.GetObjectMeta().GetAnnotations()[corev1.ServiceAccountNameKey]).To(Equal("anomaly-detectors"))
 
 		detectorsRole := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(len(detectorsRole.Rules)).To(Equal(1))
-		Expect(detectorsRole.Rules).To(ContainElements(
-			rbacv1.PolicyRule{
-				APIGroups: []string{
-					render.ADResourceGroup,
+		Expect(detectorsRole.Rules).To(HaveLen(2))
+		Expect(detectorsRole.Rules).To(Equal(
+			[]rbacv1.PolicyRule{
+				{
+					APIGroups: []string{
+						render.ADResourceGroup,
+					},
+					Resources: []string{
+						render.ADDetectorsModelResourceName, render.ADLogTypeMetaDataResourceName,
+					},
+					Verbs: []string{
+						"get",
+						"create",
+						"update",
+					},
 				},
-				Resources: []string{
-					render.ADDetectorsModelResourceName, render.ADLogTypeMetaDataResourceName,
-				},
-				Verbs: []string{
-					"get",
-					"create",
-					"update",
+				{
+					APIGroups:     []string{"policy"},
+					Resources:     []string{"podsecuritypolicies"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"anomaly-detection-api"},
 				},
 			},
 		))
@@ -313,13 +338,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 
 		adAPIClusterRole := rtest.GetResource(resources, render.ADAPIObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(adAPIClusterRole.Rules)).To(Equal(2))
+		Expect(adAPIClusterRole.Rules).To(HaveLen(3))
 		Expect(adAPIClusterRole.Rules[0].APIGroups).To(ConsistOf("authorization.k8s.io"))
 		Expect(adAPIClusterRole.Rules[0].Resources).To(ConsistOf("subjectaccessreviews"))
 		Expect(adAPIClusterRole.Rules[0].Verbs).To(ConsistOf("create"))
 		Expect(adAPIClusterRole.Rules[1].APIGroups).To(ConsistOf("authentication.k8s.io"))
 		Expect(adAPIClusterRole.Rules[1].Resources).To(ConsistOf("tokenreviews"))
 		Expect(adAPIClusterRole.Rules[1].Verbs).To(ConsistOf("create"))
+		Expect(adAPIClusterRole.Rules[2].APIGroups).To(ConsistOf("policy"))
+		Expect(adAPIClusterRole.Rules[2].Resources).To(ConsistOf("podsecuritypolicies"))
+		Expect(adAPIClusterRole.Rules[2].Verbs).To(ConsistOf("use"))
+		Expect(adAPIClusterRole.Rules[2].ResourceNames).To(ConsistOf("anomaly-detection-api"))
 
 		adAPIClusterRoleBinding := rtest.GetResource(resources, render.ADAPIObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(adAPIClusterRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
@@ -496,9 +525,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
@@ -520,10 +550,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		// Validate that even with syslog configured we still have the CA configmap Volume
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
-		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(3))
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.IntrusionDetectionTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.IntrusionDetectionTLSSecretName))
+		Expect(idc.Spec.Template.Spec.Volumes[2].Name).To(Equal("var-log-calico"))
+		Expect(idc.Spec.Template.Spec.Volumes[2].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
@@ -542,7 +575,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		// expect AD PodTemplate EnvVars
 		expectedADEnvs := []expectedEnvVar{
-			{"ELASTIC_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[1], "", ""},
+			{"ELASTIC_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[2], "", ""},
 			{"ELASTIC_PORT", strconv.Itoa(render.ElasticsearchDefaultPort), "", ""},
 			{"ELASTIC_CA", certificatemanagement.TrustedCertBundleMountPath, "", ""},
 			{"ELASTIC_USERNAME", "", render.ElasticsearchADJobUserSecret, "username"},
@@ -620,9 +653,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
@@ -814,6 +848,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
@@ -862,9 +897,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 func assertEnvVarlistMatch(envVars []corev1.EnvVar, expectedEnvVars []expectedEnvVar) {
 	for _, expected := range expectedEnvVars {
 		if expected.val != "" {
-			Expect(envVars).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+			ExpectWithOffset(1, envVars).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
 		} else {
-			Expect(envVars).To(ContainElement(corev1.EnvVar{
+			ExpectWithOffset(1, envVars).To(ContainElement(corev1.EnvVar{
 				Name: expected.name,
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{

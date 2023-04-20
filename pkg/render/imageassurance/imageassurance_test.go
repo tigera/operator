@@ -228,7 +228,7 @@ var _ = Describe("Image Assurance Render", func() {
 
 	var apiExpectedVolMounts = []corev1.VolumeMount{
 		{Name: imageassurance.APICertSecretName, MountPath: "/certs/https/"},
-		{Name: certificatemanagement.TrustedCertConfigMapName, MountPath: certificatemanagement.TrustedCertVolumeMountPath},
+		{Name: certificatemanagement.TrustedCertConfigMapName, MountPath: "/etc/pki/tls/certs"},
 	}
 
 	It("should render all resources with default image assurance configuration", func() {
@@ -345,7 +345,7 @@ var _ = Describe("Image Assurance Render", func() {
 		runtimeCleanerExpectedVMs := []corev1.VolumeMount{
 			{
 				Name:      certificatemanagement.TrustedCertConfigMapName,
-				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+				MountPath: "/etc/pki/tls/certs",
 			},
 			{
 				Name:      rcimageassurance.ImageAssuranceSecretName,

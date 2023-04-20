@@ -274,10 +274,15 @@ func main() {
 	// Determine if PodSecurityPolicies are supported. PSPs were removed in
 	// Kubernetes v1.25. We can remove this check once the operator not longer
 	// supports Kubernetes < v1.25.0.
-	usePSP, err := utils.SupportsPodSecurityPolicies(clientset)
-	if err != nil {
-		setupLog.Error(err, "Failed to discover PodSecurityPolicy availability")
-		os.Exit(1)
+	// Skip installation of PSPs in OpenShift since we use Security Context
+	// Constraints (SCC) instead.
+	usePSP := false
+	if provider != operatorv1.ProviderOpenShift {
+		usePSP, err = utils.SupportsPodSecurityPolicies(clientset)
+		if err != nil {
+			setupLog.Error(err, "Failed to discover PodSecurityPolicy availability")
+			os.Exit(1)
+		}
 	}
 	setupLog.WithValues("supported", usePSP).Info("Checking if PodSecurityPolicies are supported by the cluster")
 

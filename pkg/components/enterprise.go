@@ -18,143 +18,153 @@
 package components
 
 var (
-	EnterpriseRelease string = "v3.15.1"
+	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/cnx-apiserver",
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/compliance-benchmarker",
 	}
 
 	ComponentComplianceController = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/compliance-controller",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/compliance-reporter",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/compliance-server",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/compliance-snapshotter",
 	}
 
 	ComponentDeepPacketInspection = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/deep-packet-inspection",
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.17.7",
+		Version: "7.17.9",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.17.7",
+		Version: "7.17.9",
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
 	ComponentElasticsearch = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentElasticsearchFIPS = component{
-		Version: "v3.15.1-fips",
+		Version: "master-fips",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentECKElasticsearchOperator = component{
-		Version: "2.5.0",
+		Version: "2.6.1",
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/eck-operator",
 	}
 
 	ComponentEsCurator = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/es-curator",
 	}
 
 	ComponentEsProxy = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/es-proxy",
 	}
 
 	ComponentESGateway = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/es-gateway",
 	}
 
+	ComponentLinseed = component{
+		Version: "master",
+		Image:   "tigera/linseed",
+	}
+
 	ComponentFluentd = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/fluentd",
 	}
 
 	ComponentFluentdWindows = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/fluentd-windows",
 	}
 
 	ComponentGuardian = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/guardian",
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
 	ComponentAnomalyDetectionJobs = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/anomaly_detection_jobs",
 	}
 
 	ComponentAnomalyDetectionAPI = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/anomaly-detection-api",
 	}
 
 	ComponentKibana = component{
-		Version: "tesla-v3.15.1",
+		Version: "tesla-master",
 		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.15.2-2",
+		Version: "tesla-master",
 		Image:   "tigera/cnx-manager",
 	}
 
 	ComponentDex = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/dex",
 	}
 
 	ComponentManagerProxy = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/voltron",
 	}
 
 	ComponentPacketCapture = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/packetcapture",
+	}
+
+	ComponentPolicyRecommendation = component{
+		Version: "master",
+		Image:   "tigera/policy-recommendation",
 	}
 
 	ComponentEgressGateway = component{
@@ -163,12 +173,12 @@ var (
 	}
 
 	ComponentL7Collector = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/l7-collector",
 	}
 
 	ComponentEnvoyProxy = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/envoy",
 	}
 
@@ -178,65 +188,65 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version: "v2.32.1",
+		Version: "v2.42.0",
 	}
 
 	ComponentPrometheus = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/prometheus",
 	}
 
 	ComponentTigeraPrometheusService = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/prometheus-service",
 	}
 
 	ComponentCoreOSAlertmanager = component{
-		Version: "v0.23.0",
+		Version: "v0.25.0",
 	}
 
 	ComponentPrometheusAlertmanager = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/alertmanager",
 	}
 
 	ComponentQueryServer = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/cnx-queryserver",
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.16.0-3",
+		Version: "master",
 		Image:   "tigera/kube-controllers",
 	}
 
 	ComponentTigeraNode = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/cnx-node",
 	}
 
 	ComponentTigeraTypha = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/typha",
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/cni",
 	}
 
 	ComponentTigeraCNIFIPS = component{
-		Version: "v3.15.1-fips",
+		Version: "master-fips",
 		Image:   "tigera/cni",
 	}
 
 	ComponentCloudControllers = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/cloud-controllers",
 	}
 
 	ComponentElasticsearchMetrics = component{
-		Version: "v3.15.1",
+		Version: "master",
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
@@ -317,6 +327,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
@@ -332,6 +343,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentLinseed,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,

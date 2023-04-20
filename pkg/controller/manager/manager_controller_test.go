@@ -110,6 +110,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-secure-linseed-cert' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -168,6 +169,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
+			// Provision certificates that the controller will query as part of the test.
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
@@ -182,14 +184,19 @@ var _ = Describe("Manager controller tests", func() {
 			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+					Namespace: "tigera-operator",
+				},
+			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,
@@ -232,7 +239,6 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		It("should create a manager TLS cert secret if not provided and add an OwnerReference to it", func() {
-
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -322,6 +328,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-secure-linseed-cert' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -383,6 +390,7 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
 
+			// Provision certificates that the controller will query as part of the test.
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
@@ -397,7 +405,10 @@ var _ = Describe("Manager controller tests", func() {
 			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -406,7 +417,9 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+					Namespace: "tigera-operator",
+				},
+			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{

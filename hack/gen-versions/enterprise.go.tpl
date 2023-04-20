@@ -118,6 +118,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "linseed" }}
+	ComponentLinseed = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.fluentd }}
 	ComponentFluentd = component{
 		Version: "{{ .Version }}",
@@ -180,6 +186,12 @@ var (
 {{- end }}
 {{ with index .Components "packetcapture" }}
 	ComponentPacketCapture = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "policy-recommendation" }}
+	ComponentPolicyRecommendation = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -372,6 +384,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
@@ -387,6 +400,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentLinseed,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,

@@ -53,7 +53,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	esEnvs := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 		{Name: "ELASTIC_SCHEME", Value: "https"},
-		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch"},
+		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 		{Name: "ELASTIC_PORT", Value: "9200", ValueFrom: nil},
 		{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
 		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
@@ -273,6 +273,35 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
 	})
 
+	It("should render all calico kube-controllers resources using TigeraSecureEnterprise on Openshift", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			// We expect an extra cluster role binding.
+			{name: kubecontrollers.KubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: "calico-kube-controllers-endpoint-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: kubecontrollers.KubeControllerPodSecurityPolicy, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
+		}
+		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+		// Should render the correct resources.
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+	})
+
 	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using TigeraSecureEnterprise when logstorage and secrets exist", func() {
 		expectedResources := []struct {
 			name    string
@@ -319,17 +348,17 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 		Expect(envs).To(ContainElements(esEnvs))
 
-		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-ca-bundle"))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/pki/tls/certs"))
 
-		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(dp.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(dp.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-ca-bundle"))
+		Expect(dp.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(clusterRole.Rules)).To(Equal(27))
@@ -419,7 +448,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{Name: "CA_CRT_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}
 		expectedVolumeMounts := []corev1.VolumeMount{
-			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs/", ReadOnly: true},
+			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
 			{Name: "calico-kube-controllers-metrics-tls", MountPath: "/calico-kube-controllers-metrics-tls", ReadOnly: true},
 		}
 		expectedVolume := []corev1.Volume{
@@ -530,17 +559,17 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Value: "authorization,elasticsearchconfiguration,managedcluster",
 		}))
 
-		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-ca-bundle"))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/pki/tls/certs"))
 
-		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(dp.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(dp.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-ca-bundle"))
+		Expect(dp.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:tesla-" + components.ComponentTigeraKubeControllers.Version))
 

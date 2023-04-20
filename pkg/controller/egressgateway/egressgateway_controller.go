@@ -162,14 +162,12 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// If there are no Egress Gateway resources, return.
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if len(egws) == 0 {
-		objects := []client.Object{}
-
+		var objects []client.Object
 		if r.provider == operatorv1.ProviderOpenShift {
-			scc := egressgateway.SecurityContextConstraints()
-			objects = append(objects, scc)
-		} else if r.usePSP {
-			psp := egressgateway.PodSecurityPolicy()
-			objects = append(objects, psp)
+			objects = append(objects, egressgateway.SecurityContextConstraints())
+		}
+		if r.usePSP {
+			objects = append(objects, egressgateway.PodSecurityPolicy())
 		}
 		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
 		if err != nil {
@@ -310,13 +308,13 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// Fetch any existing default FelixConfiguration object.
-	fc := &crdv1.FelixConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading FelixConfiguration", err, reqLogger)
+	// patch and get the felix configuration
+	fc, err := r.patchFelixConfig(ctx)
+	if err != nil {
+		reqLogger.Error(err, "Error patching felix configuration")
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
 		for _, egw := range egwsToReconcile {
-			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error reading felix configuration err = %s", err.Error()))
+			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
 		}
 		return reconcile.Result{}, err
 	}
@@ -421,6 +419,26 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
 	return nil
+}
+
+func (r *ReconcileEgressGateway) patchFelixConfig(ctx context.Context) (*crdv1.FelixConfiguration, error) {
+	// Fetch any existing default FelixConfiguration object.
+	fc := &crdv1.FelixConfiguration{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, log)
+		return nil, err
+	}
+
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+	if fc.Spec.PolicySyncPathPrefix != "" {
+		return fc, nil
+	}
+	fc.Spec.PolicySyncPathPrefix = "/var/run/nodeagent"
+	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+		return nil, err
+	}
+	return fc, nil
 }
 
 // getRequestedEgressGateway returns the namespaced EgressGateway instance.

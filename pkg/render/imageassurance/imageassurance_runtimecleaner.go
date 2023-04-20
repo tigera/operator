@@ -191,10 +191,10 @@ func (c *component) runtimeCleanerDeployment() *appsv1.Deployment {
 			},
 		},
 		Env: env,
-		VolumeMounts: []corev1.VolumeMount{
-			c.config.TrustedCertBundle.VolumeMount(rmeta.OSTypeLinux),
-			{Name: rcimageassurance.ImageAssuranceSecretName, MountPath: rcimageassurance.CAMountPath, ReadOnly: true},
-		},
+		VolumeMounts: append(
+			c.config.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
+			corev1.VolumeMount{Name: rcimageassurance.ImageAssuranceSecretName, MountPath: rcimageassurance.CAMountPath, ReadOnly: true},
+		),
 	}
 
 	podSpec := corev1.PodSpec{

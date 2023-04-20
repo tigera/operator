@@ -37,6 +37,8 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 		Expect(err).NotTo(HaveOccurred())
 		adAPIKeyPair := certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
+		idsKeyPair := certificatemanagement.NewKeyPair(secret, []string{""}, "")
+
 		bundle := certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -62,6 +64,7 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 					TLSSecret: rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain),
 				},
 			},
+			IntrusionDetectionCertSecret: idsKeyPair,
 		}
 	})
 
@@ -90,11 +93,11 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(3))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
 			corev1.VolumeMount{
 				Name:      certificatemanagement.TrustedCertConfigMapName,
-				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+				MountPath: "/etc/pki/tls/certs",
 				ReadOnly:  true,
 			},
 		))

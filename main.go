@@ -115,6 +115,16 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	enableImageAssurance := true
+	if val, ok := os.LookupEnv("ENABLE_IMAGE_ASSURANCE"); ok {
+		var err error
+		enableImageAssurance, err = strconv.ParseBool(val)
+		if err != nil {
+			setupLog.Error(err, "Error in parsing image assurance switch.")
+			os.Exit(1)
+		}
+	}
+
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
 
 	if showVersion {
@@ -315,15 +325,16 @@ func main() {
 	}
 
 	options := options.AddOptions{
-		DetectedProvider:    provider,
-		EnterpriseCRDExists: enterpriseCRDExists,
-		UsePSP:              usePSP,
-		AmazonCRDExists:     amazonCRDExists,
-		ClusterDomain:       clusterDomain,
-		KubernetesVersion:   kubernetesVersion,
-		ManageCRDs:          manageCRDs,
-		ShutdownContext:     sigHandler,
-		ElasticExternal:     elasticExternal,
+		DetectedProvider:     provider,
+		EnterpriseCRDExists:  enterpriseCRDExists,
+		UsePSP:               usePSP,
+		AmazonCRDExists:      amazonCRDExists,
+		ClusterDomain:        clusterDomain,
+		KubernetesVersion:    kubernetesVersion,
+		ManageCRDs:           manageCRDs,
+		ShutdownContext:      sigHandler,
+		ElasticExternal:      elasticExternal,
+		EnableImageAssurance: enableImageAssurance,
 	}
 
 	err = controllers.AddToManager(mgr, options)

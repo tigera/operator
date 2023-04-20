@@ -39,4 +39,6 @@ type AddOptions struct {
 
 	// Whether or not the cluster supports PodSecurityPolicies.
 	UsePSP bool
+
+	EnableImageAssurance bool
 }

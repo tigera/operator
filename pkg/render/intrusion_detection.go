@@ -469,7 +469,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				"waflogs",
 				"dnslogs",
 				"l7logs",
-				"flows",
+				"flowlogs",
 				"auditlogs",
 				"events",
 			},

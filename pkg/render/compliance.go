@@ -511,6 +511,11 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 		},
 		{
 			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"snapshots", "benchmarks"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"compliancereports"},
 			Verbs:     []string{"create"},
 		},

@@ -415,11 +415,9 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			corev1.Volume{
 				Name: LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenSecret, ComplianceControllerServiceAccount),
-						},
-						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, ComplianceControllerServiceAccount),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
 				},
 			})
@@ -511,7 +509,7 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 		},
 		{
 			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"snapshots", "benchmarks"},
+			Resources: []string{"snapshots", "benchmarks", "auditlogs"},
 			Verbs:     []string{"get"},
 		},
 		{
@@ -1011,11 +1009,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			corev1.Volume{
 				Name: LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenSecret, ComplianceSnapshotterServiceAccount),
-						},
-						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, ComplianceSnapshotterServiceAccount),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
 				},
 			})
@@ -1206,11 +1202,9 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			corev1.Volume{
 				Name: LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf(LinseedTokenSecret, ComplianceBenchmarkerServiceAccount),
-						},
-						Items: []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, ComplianceBenchmarkerServiceAccount),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
 				},
 			})

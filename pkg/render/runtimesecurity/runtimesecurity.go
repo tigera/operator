@@ -39,6 +39,10 @@ const (
 	ResourceThreatIdDefaultMemoryLimit   = "1Gi"
 	ResourceThreatIdDefaultCPURequest    = "100m"
 	ResourceThreatIdDefaultMemoryRequest = "100Mi"
+	SashaHistoryVolumeName               = "history"
+	SashaHistoryVolumeSizeLimit          = "100Mi"
+	SashaHistoryVolumeMountPath          = "/history"
+	SashaHistoryRetentionPeriod          = "6h"
 )
 
 func RuntimeSecurity(
@@ -129,6 +133,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{
 		{Name: "SASHA_SECRETLOCATION", Value: SashaVerifyAuthFile},
+		{Name: "SASHA_HISTORYDIR", Value: SashaHistoryVolumeMountPath},
+		{Name: "SASHA_HISTORYRETENTION", Value: SashaHistoryRetentionPeriod},
 	}
 
 	rsSecretOptional := false
@@ -142,6 +148,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 		PeriodSeconds:    2,
 		FailureThreshold: 6,
 	}
+
+	historyVolumeSizeLimit := resource.MustParse(SashaHistoryVolumeSizeLimit)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -181,6 +189,14 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 								},
 							},
 						},
+						{
+							Name: SashaHistoryVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{
+									SizeLimit: &historyVolumeSizeLimit,
+								},
+							},
+						},
 						c.config.TrustedBundle.Volume(),
 					},
 					Containers: []corev1.Container{
@@ -204,6 +220,10 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 									Name:      SashaVerifyAuthVolumeName,
 									MountPath: SashaVerifyAuthPath,
 								},
+								corev1.VolumeMount{
+									Name:      SashaHistoryVolumeName,
+									MountPath: SashaHistoryVolumeMountPath,
+								},
 							),
 						},
 							c.config.ESClusterConfig.ClusterName(),
@@ -226,6 +246,12 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 							},
 							LivenessProbe:  grpcProbe,
 							ReadinessProbe: grpcProbe,
+							VolumeMounts: []corev1.VolumeMount{
+								corev1.VolumeMount{
+									Name:      SashaHistoryVolumeName,
+									MountPath: SashaHistoryVolumeMountPath,
+								},
+							},
 						},
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),

@@ -265,6 +265,10 @@ func (c *component) egwEnvVars() []corev1.EnvVar {
 		{Name: "LOG_SEVERITY", Value: c.config.EgressGW.GetLogSeverity()},
 	}
 
+	if c.config.EgressGW.GetIPTablesBackend() != "" {
+		envVar = append(envVar, corev1.EnvVar{Name: "IPTABLES_BACKEND", Value: c.config.EgressGW.GetIPTablesBackend()})
+	}
+
 	icmpProbeIPs, icmpInterval, icmpTimeout := c.getICMPProbe()
 	if icmpProbeIPs != "" {
 		icmpEnvVar := []corev1.EnvVar{

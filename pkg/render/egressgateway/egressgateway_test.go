@@ -40,6 +40,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 	var pullSecrets []*corev1.Secret
 	rbac := "rbac.authorization.k8s.io"
 	logSeverity := operatorv1.LogLevelInfo
+	iptablesBackend := operatorv1.IptablesBackendNFTables
 	labels := map[string]string{"egress-code": "red"}
 
 	topoConstraint := corev1.TopologySpreadConstraint{
@@ -73,6 +74,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 				},
 				ExternalNetworks: []string{"one", "two"},
 				LogSeverity:      &logSeverity,
+				IPTablesBackend:  &iptablesBackend,
 				Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{
 					Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels},
 					Spec: &operatorv1.EgressGatewayDeploymentPodSpec{
@@ -193,6 +195,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			{Name: "ICMP_PROBE_TIMEOUT", Value: "40s"},
 			{Name: "HTTP_PROBE_INTERVAL", Value: "20s"},
 			{Name: "HTTP_PROBE_TIMEOUT", Value: "40s"},
+			{Name: "IPTABLES_BACKEND", Value: "nft"},
 		}
 		for _, elem := range expectedEnvVars {
 			Expect(egwContainer.Env).To(ContainElement(elem))

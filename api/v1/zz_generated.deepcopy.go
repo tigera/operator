@@ -1912,6 +1912,11 @@ func (in *EgressGatewaySpec) DeepCopyInto(out *EgressGatewaySpec) {
 		*out = new(LogLevel)
 		**out = **in
 	}
+	if in.IPTablesBackend != nil {
+		in, out := &in.IPTablesBackend, &out.IPTablesBackend
+		*out = new(IptablesBackend)
+		**out = **in
+	}
 	if in.Template != nil {
 		in, out := &in.Template, &out.Template
 		*out = new(EgressGatewayDeploymentPodTemplateSpec)

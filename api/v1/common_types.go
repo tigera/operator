@@ -41,3 +41,10 @@ const (
 	LogLevelFatal LogLevel = "Fatal"
 	LogLevelError LogLevel = "Error"
 )
+
+type IptablesBackend string
+
+const (
+	IptablesBackendLegacy   IptablesBackend = "Legacy"
+	IptablesBackendNFTables IptablesBackend = "NFT"
+)

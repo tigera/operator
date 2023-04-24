@@ -156,6 +156,14 @@ spec:
                       type: string
                   type: object
                 type: array
+              ipTablesBackend:
+                description: IPTablesBackend is used to configure whether Egress Gateway
+                  must use nft or legacy. If not specified, Egress Gateway will auto-detect
+                  which backend to use. If both are supported, nft is preferred.
+                enum:
+                - Legacy
+                - NFT
+                type: string
               logSeverity:
                 default: Info
                 description: 'LogSeverity defines the logging level of the Egress

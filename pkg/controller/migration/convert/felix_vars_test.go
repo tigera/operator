@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 	"github.com/tigera/operator/pkg/apis"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -218,7 +219,7 @@ var _ = Describe("felix env parser", func() {
 			f := crdv1.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.IptablesBackend).ToNot(BeNil())
-			legacy := crdv1.IptablesBackend(crdv1.IptablesBackendLegacy)
+			legacy := crdv1.IptablesBackend(string(operatorv1.IptablesBackendLegacy))
 			Expect(f.Spec.IptablesBackend).To(Equal(&legacy))
 		})
 	})

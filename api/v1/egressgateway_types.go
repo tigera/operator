@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"strings"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,6 +79,13 @@ type EgressGatewaySpec struct {
 	// +optional
 	// +kubebuilder:default:=Info
 	LogSeverity *LogLevel `json:"logSeverity,omitempty"`
+
+	// IPTablesBackend is used to configure whether Egress Gateway must use
+	// nft or legacy. If not specified, Egress Gateway will auto-detect which
+	// backend to use. If both are supported, nft is preferred.
+	// +kubebuilder:validation:Enum=Legacy;NFT
+	// +optional
+	IPTablesBackend *IptablesBackend `json:"ipTablesBackend,omitempty"`
 
 	// Template describes the EGW Deployment pod that will be created.
 	// +optional
@@ -305,6 +314,13 @@ type EgressGatewayList struct {
 
 func (c *EgressGateway) GetLogSeverity() string {
 	return string(*c.Spec.LogSeverity)
+}
+
+func (c *EgressGateway) GetIPTablesBackend() string {
+	if c.Spec.IPTablesBackend != nil {
+		return strings.ToLower(string(*c.Spec.IPTablesBackend))
+	}
+	return ""
 }
 
 func (c *EgressGateway) GetTerminationGracePeriodSeconds() *int64 {

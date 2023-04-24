@@ -24,9 +24,6 @@ type IptablesBackend string
 
 const (
 	KindFelixConfiguration = "FelixConfiguration"
-
-	IptablesBackendLegacy   = "Legacy"
-	IptablesBackendNFTables = "NFT"
 )
 
 // +kubebuilder:validation:Enum=DoNothing;Enable;Disable

@@ -150,13 +150,13 @@ components:
     version: master
   image-assurance-api-proxy:
     image: tigera/image-assurance-api-proxy
-    version: v1.6.0
+    version: v1.6.1
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: v1.6.0
+    version: v1.6.1
   image-assurance-runtime-cleaner:
     image: tigera/image-assurance-runtime-cleaner
-    version: v1.6.0
+    version: v1.6.1
   sasha:
     image: tigera/sasha
     version: v1.5.0-263-gaf6092540a80-amd64

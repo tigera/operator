@@ -235,6 +235,16 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
 	}
 
+	// The following secret is read by kube controllers and sent to managed clusters so that linseed clients in the managed cluster
+	// can authenticate the certificate presented by Voltron.
+	if c.cfg.VoltronLinseedKeyPair != nil {
+		if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
+			objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, common.OperatorNamespace()))
+		} else {
+			objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, common.OperatorNamespace()))
+		}
+	}
+
 	return objs, nil
 }
 
@@ -503,6 +513,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.proxyImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),
@@ -603,7 +614,6 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
-
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
@@ -620,6 +630,14 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 					"stagedkubernetesnetworkpolicies",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+				},
+				Verbs: []string{"patch"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -688,6 +706,31 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 					"https:tigera-api:8080", "calico-node-prometheus:9090",
 				},
 				Verbs: []string{"get", "create"},
+			},
+			{
+				// Add access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flows",
+					"flowlogs",
+					"bgplogs",
+					"auditlogs",
+					"dnsflows",
+					"dnslogs",
+					"l7flows",
+					"l7logs",
+					"events",
+					"processes",
+				},
+				Verbs: []string{"get"},
+			},
+			{
+				// Dismiss events.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"events",
+				},
+				Verbs: []string{"dismiss", "delete"},
 			},
 		},
 	}

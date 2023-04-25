@@ -3,18 +3,22 @@
 package v1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // RuntimeSecuritySpec defines the desired state of RuntimeSecurity
 type RuntimeSecuritySpec struct {
-	// Sasha specifies configuration options to run the hash-based verification job(s)
-	// +optional
-	Sasha SashaSpec `json:"sasha,omitempty"`
+	Sasha    SashaSpec    `json:"sasha,omitempty"`
+	ThreatId ThreatIdSpec `json:"threatId,omitempty"`
 }
 
-// SashaSpec defines the desired state of SASHA
 type SashaSpec struct {
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+type ThreatIdSpec struct {
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // RuntimeSecurityStatus defines the observed state of RuntimeSecurity

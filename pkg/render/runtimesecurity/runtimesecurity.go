@@ -45,25 +45,22 @@ const (
 	SashaHistoryRetentionPeriod          = "6h"
 )
 
-func RuntimeSecurity(
-	config *Config,
-) render.Component {
-	return &component{
-		config: config,
-	}
+func RuntimeSecurity(config *Config) render.Component {
+	return &component{config: config}
 }
 
 // Config contains all the config information RuntimeSecurity needs to render component.
 type Config struct {
 	// Required config.
-	PullSecrets     []*corev1.Secret
-	Installation    *operatorv1.InstallationSpec
-	OsType          rmeta.OSType
-	SashaESSecrets  []*corev1.Secret
-	ESClusterConfig *relasticsearch.ClusterConfig
-	ESSecrets       []*corev1.Secret
-	ClusterDomain   string
-	TrustedBundle   certificatemanagement.TrustedBundle
+	PullSecrets         []*corev1.Secret
+	Installation        *operatorv1.InstallationSpec
+	OsType              rmeta.OSType
+	SashaESSecrets      []*corev1.Secret
+	ESClusterConfig     *relasticsearch.ClusterConfig
+	ESSecrets           []*corev1.Secret
+	ClusterDomain       string
+	TrustedBundle       certificatemanagement.TrustedBundle
+	RuntimeSecuritySpec *operatorv1.RuntimeSecuritySpec
 	// Calculated internal fields.
 	sashaImage    string
 	threatIdImage string
@@ -201,19 +198,10 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 					},
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:  SashaName,
-							Image: c.config.sashaImage,
-							Env:   envVars,
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPULimit),
-									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryLimit),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPURequest),
-									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
-								},
-							},
+							Name:      SashaName,
+							Image:     c.config.sashaImage,
+							Env:       envVars,
+							Resources: *c.config.RuntimeSecuritySpec.Sasha.Resources,
 							VolumeMounts: append(
 								c.config.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 								corev1.VolumeMount{
@@ -230,24 +218,14 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 							ElasticsearchSashaJobUserSecretName,
 							c.config.ClusterDomain,
 							c.config.OsType),
-						corev1.Container{
-							Name:  ThreatIdName,
-							Image: c.config.threatIdImage,
-							// Env:   envVars, // Not needed for now
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(ResourceThreatIdDefaultCPULimit),
-									corev1.ResourceMemory: resource.MustParse(ResourceThreatIdDefaultMemoryLimit),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(ResourceThreatIdDefaultCPURequest),
-									corev1.ResourceMemory: resource.MustParse(ResourceThreatIdDefaultMemoryRequest),
-								},
-							},
+						{
+							Name:           ThreatIdName,
+							Image:          c.config.threatIdImage,
+							Resources:      *c.config.RuntimeSecuritySpec.ThreatId.Resources,
 							LivenessProbe:  grpcProbe,
 							ReadinessProbe: grpcProbe,
 							VolumeMounts: []corev1.VolumeMount{
-								corev1.VolumeMount{
+								{
 									Name:      SashaHistoryVolumeName,
 									MountPath: SashaHistoryVolumeMountPath,
 								},

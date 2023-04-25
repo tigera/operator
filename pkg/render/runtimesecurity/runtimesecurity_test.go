@@ -18,6 +18,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -61,6 +62,32 @@ var _ = Describe("Runtime Security rendering tests", func() {
 			ESClusterConfig: esConfig,
 			ClusterDomain:   "nil",
 			TrustedBundle:   certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair()),
+			RuntimeSecuritySpec: &operatorv1.RuntimeSecuritySpec{
+				Sasha: operatorv1.SashaSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse(runtimesecurity.ResourceSashaDefaultCPULimit),
+							corev1.ResourceMemory: resource.MustParse(runtimesecurity.ResourceSashaDefaultMemoryLimit),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse(runtimesecurity.ResourceSashaDefaultCPURequest),
+							corev1.ResourceMemory: resource.MustParse(runtimesecurity.ResourceSashaDefaultMemoryRequest),
+						},
+					},
+				},
+				ThreatId: operatorv1.ThreatIdSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse(runtimesecurity.ResourceThreatIdDefaultCPULimit),
+							corev1.ResourceMemory: resource.MustParse(runtimesecurity.ResourceThreatIdDefaultMemoryLimit),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse(runtimesecurity.ResourceThreatIdDefaultCPURequest),
+							corev1.ResourceMemory: resource.MustParse(runtimesecurity.ResourceThreatIdDefaultMemoryRequest),
+						},
+					},
+				},
+			},
 		})
 
 		expectedResources := []struct {

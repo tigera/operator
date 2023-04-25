@@ -25,6 +25,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,13 +114,26 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		By("applying the Runtime Security CR to the fake cluster")
 		Expect(c.Create(ctx, &operatorv1.RuntimeSecurity{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec:       operatorv1.RuntimeSecuritySpec{},
+			Spec: operatorv1.RuntimeSecuritySpec{
+				Sasha: operatorv1.SashaSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("345"),
+							corev1.ResourceMemory: resource.MustParse("900Gi"),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("123m"),
+							corev1.ResourceMemory: resource.MustParse("678Mi"),
+						},
+					},
+				},
+			},
 		})).NotTo(HaveOccurred())
 
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("ensuring the Sasha Deployment resource created ")
+		By("ensuring the Sasha Deployment resource created")
 		deploy := appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -136,6 +150,30 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		Expect(spec.Containers[1].Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
 			components.ComponentThreatId.Image, components.ComponentThreatId.Version)))
 
-	})
+		By("verifying resource limits set for ThreatId and Sasha in the deployment")
+		Expect(spec.Containers[0].Resources.Limits.Cpu().String()).To(Equal("345"))
+		Expect(spec.Containers[0].Resources.Limits.Memory().String()).To(Equal("900Gi"))
+		Expect(spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("123m"))
+		Expect(spec.Containers[0].Resources.Requests.Memory().String()).To(Equal("678Mi"))
+		Expect(spec.Containers[1].Resources.Limits.Cpu().String()).To(Equal(rsrender.ResourceThreatIdDefaultCPULimit))
+		Expect(spec.Containers[1].Resources.Limits.Memory().String()).To(Equal(rsrender.ResourceThreatIdDefaultMemoryLimit))
+		Expect(spec.Containers[1].Resources.Requests.Cpu().String()).To(Equal(rsrender.ResourceThreatIdDefaultCPURequest))
+		Expect(spec.Containers[1].Resources.Requests.Memory().String()).To(Equal(rsrender.ResourceThreatIdDefaultMemoryRequest))
 
+		By("verifying set resource limits for Sasha in the updated RS resource")
+		rs := &operatorv1.RuntimeSecurity{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		Expect(test.GetResource(c, rs)).To(BeNil())
+		Expect(rs.Spec.Sasha.Resources.Requests.Cpu().String()).To(Equal("123m"))
+		Expect(rs.Spec.Sasha.Resources.Limits.Cpu().String()).To(Equal("345"))
+		Expect(rs.Spec.Sasha.Resources.Requests.Memory().String()).To(Equal("678Mi"))
+		Expect(rs.Spec.Sasha.Resources.Limits.Memory().String()).To(Equal("900Gi"))
+
+		By("verifying default resource limits for ThreatId in the updated RS resource")
+		Expect(rs.Spec.ThreatId.Resources.Requests.Cpu().String()).To(Equal(rsrender.ResourceThreatIdDefaultCPURequest))
+		Expect(rs.Spec.ThreatId.Resources.Limits.Cpu().String()).To(Equal(rsrender.ResourceThreatIdDefaultCPULimit))
+		Expect(rs.Spec.ThreatId.Resources.Requests.Memory().String()).To(Equal(rsrender.ResourceThreatIdDefaultMemoryRequest))
+		Expect(rs.Spec.ThreatId.Resources.Limits.Memory().String()).To(Equal(rsrender.ResourceThreatIdDefaultMemoryLimit))
+	})
 })

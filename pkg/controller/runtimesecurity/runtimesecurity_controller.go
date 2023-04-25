@@ -21,6 +21,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/k8svalidation"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -30,8 +31,11 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/runtimesecurity"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -157,6 +161,30 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", rs)
 
+	// create a pre-default patch from RuntimeSecurity CR
+	preDefaultsRS := client.MergeFrom(rs.DeepCopy())
+
+	// update RuntimeSecurity resource with default values that are missing
+	updateRSWithDefaults(rs)
+
+	// validate RS limits for Sasha:
+	if err = validateResourceRequirements(rs.Spec.Sasha.Resources); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	// validate RS limits for Threat Identification:
+	if err = validateResourceRequirements(rs.Spec.ThreatId.Resources); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	// write the updated RS resource back to the datastore:
+	if err = r.client.Patch(ctx, rs, preDefaultsRS); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write default values to RuntimeSecurity", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 
 	if err != nil {
@@ -228,13 +256,14 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
 
 	config := &runtimesecurity.Config{
-		PullSecrets:     pullSecrets,
-		Installation:    installation,
-		OsType:          rmeta.OSTypeLinux,
-		SashaESSecrets:  ss,
-		ESClusterConfig: esClusterConfig,
-		ClusterDomain:   r.clusterDomain,
-		TrustedBundle:   trustedBundle,
+		PullSecrets:         pullSecrets,
+		Installation:        installation,
+		OsType:              rmeta.OSTypeLinux,
+		SashaESSecrets:      ss,
+		ESClusterConfig:     esClusterConfig,
+		ClusterDomain:       r.clusterDomain,
+		TrustedBundle:       trustedBundle,
+		RuntimeSecuritySpec: &rs.Spec,
 	}
 
 	component := runtimesecurity.RuntimeSecurity(config)
@@ -276,4 +305,55 @@ func getRuntimeSecurity(ctx context.Context, cli client.Client) (*operatorv1.Run
 	}
 
 	return instance, nil
+}
+
+func validateResourceRequirements(requirements *v1.ResourceRequirements) error {
+	errs := k8svalidation.ValidateResourceRequirements(requirements, field.NewPath(""))
+	return errs.ToAggregate()
+}
+
+func updateRSWithDefaults(rs *operatorv1.RuntimeSecurity) {
+	if rs.Spec.Sasha.Resources == nil {
+		rs.Spec.Sasha.Resources = &v1.ResourceRequirements{}
+	}
+	if rs.Spec.Sasha.Resources.Limits == nil {
+		rs.Spec.Sasha.Resources.Limits = make(v1.ResourceList)
+	}
+	if rs.Spec.Sasha.Resources.Requests == nil {
+		rs.Spec.Sasha.Resources.Requests = make(v1.ResourceList)
+	}
+	if _, ok := rs.Spec.Sasha.Resources.Limits[v1.ResourceCPU]; !ok {
+		rs.Spec.Sasha.Resources.Limits[v1.ResourceCPU] = resource.MustParse(runtimesecurity.ResourceSashaDefaultCPULimit)
+	}
+	if _, ok := rs.Spec.Sasha.Resources.Limits[v1.ResourceMemory]; !ok {
+		rs.Spec.Sasha.Resources.Limits[v1.ResourceMemory] = resource.MustParse(runtimesecurity.ResourceSashaDefaultMemoryLimit)
+	}
+	if _, ok := rs.Spec.Sasha.Resources.Requests[v1.ResourceCPU]; !ok {
+		rs.Spec.Sasha.Resources.Limits[v1.ResourceCPU] = resource.MustParse(runtimesecurity.ResourceSashaDefaultCPURequest)
+	}
+	if _, ok := rs.Spec.Sasha.Resources.Requests[v1.ResourceMemory]; !ok {
+		rs.Spec.Sasha.Resources.Limits[v1.ResourceMemory] = resource.MustParse(runtimesecurity.ResourceSashaDefaultMemoryRequest)
+	}
+
+	if rs.Spec.ThreatId.Resources == nil {
+		rs.Spec.ThreatId.Resources = &v1.ResourceRequirements{}
+	}
+	if rs.Spec.ThreatId.Resources.Limits == nil {
+		rs.Spec.ThreatId.Resources.Limits = make(v1.ResourceList)
+	}
+	if rs.Spec.ThreatId.Resources.Requests == nil {
+		rs.Spec.ThreatId.Resources.Requests = make(v1.ResourceList)
+	}
+	if _, ok := rs.Spec.ThreatId.Resources.Limits[v1.ResourceCPU]; !ok {
+		rs.Spec.ThreatId.Resources.Limits[v1.ResourceCPU] = resource.MustParse(runtimesecurity.ResourceThreatIdDefaultCPULimit)
+	}
+	if _, ok := rs.Spec.ThreatId.Resources.Limits[v1.ResourceMemory]; !ok {
+		rs.Spec.ThreatId.Resources.Limits[v1.ResourceMemory] = resource.MustParse(runtimesecurity.ResourceThreatIdDefaultMemoryLimit)
+	}
+	if _, ok := rs.Spec.ThreatId.Resources.Requests[v1.ResourceCPU]; !ok {
+		rs.Spec.ThreatId.Resources.Requests[v1.ResourceCPU] = resource.MustParse(runtimesecurity.ResourceThreatIdDefaultCPURequest)
+	}
+	if _, ok := rs.Spec.ThreatId.Resources.Requests[v1.ResourceMemory]; !ok {
+		rs.Spec.ThreatId.Resources.Requests[v1.ResourceMemory] = resource.MustParse(runtimesecurity.ResourceThreatIdDefaultMemoryRequest)
+	}
 }

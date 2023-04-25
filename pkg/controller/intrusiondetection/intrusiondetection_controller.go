@@ -330,7 +330,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !isManagedCluster {
+	if !isManagedCluster && !r.elasticExternal {
 		// check es-gateway to be available
 		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 		if err != nil {

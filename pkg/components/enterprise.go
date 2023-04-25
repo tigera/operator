@@ -286,12 +286,12 @@ var (
 	}
 
 	ComponentSasha = component{
-		Version: "v1.5.0-263-gaf6092540a80-amd64",
+		Version: "v1.6.0",
 		Image:   "tigera/sasha",
 	}
 
 	ComponentThreatId = component{
-		Version: "v1.5.0-263-gaf6092540a80-amd64",
+		Version: "v1.6.0",
 		Image:   "tigera/threat-identification",
 	}
 

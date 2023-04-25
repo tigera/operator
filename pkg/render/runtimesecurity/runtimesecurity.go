@@ -43,6 +43,7 @@ const (
 	SashaHistoryVolumeSizeLimit          = "100Mi"
 	SashaHistoryVolumeMountPath          = "/history"
 	SashaHistoryRetentionPeriod          = "6h"
+	SashaHistoryBuffer                   = "50Mi"
 )
 
 func RuntimeSecurity(config *Config) render.Component {
@@ -132,6 +133,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 		{Name: "SASHA_SECRETLOCATION", Value: SashaVerifyAuthFile},
 		{Name: "SASHA_HISTORYDIR", Value: SashaHistoryVolumeMountPath},
 		{Name: "SASHA_HISTORYRETENTION", Value: SashaHistoryRetentionPeriod},
+		{Name: "SASHA_HISTORYBUFFER", Value: SashaHistoryBuffer},
 	}
 
 	rsSecretOptional := false

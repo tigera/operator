@@ -169,6 +169,12 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"create"},
 		},
 		{
+			// Need to be able to get and create secrets associated with a token
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "create"},
+		},
+		{
 			// Need to be able to list managed clusters
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},

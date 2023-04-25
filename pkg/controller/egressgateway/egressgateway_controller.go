@@ -384,6 +384,14 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		egwVXLANVNI = *fc.Spec.EgressIPVXLANVNI
 	}
 
+	ipTablesBackend := ""
+	if fc.Spec.IptablesBackend != nil {
+		backend := strings.ToLower(string(*fc.Spec.IptablesBackend))
+		if backend != "auto" {
+			ipTablesBackend = backend
+		}
+	}
+
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	config := &egressgateway.Config{
 		PullSecrets:       pullSecrets,
@@ -392,6 +400,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		EgressGW:          egw,
 		VXLANPort:         egwVXLANPort,
 		VXLANVNI:          egwVXLANVNI,
+		IptablesBackend:   ipTablesBackend,
 		UsePSP:            r.usePSP,
 		OpenShift:         openshift,
 		NamespaceAndNames: namespaceAndNames,

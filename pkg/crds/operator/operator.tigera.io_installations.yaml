@@ -1457,6 +1457,21 @@ spec:
                           on interfaces that do not match the given regex.
                         type: string
                     type: object
+                  vppDataplaneOptions:
+                    description: VppDataplaneOptions is used to configure vpp dataplane.
+                      To specify this, linuxDataplane value should be vpp.
+                    properties:
+                      featureGates:
+                        type: string
+                      initialConfig:
+                        type: string
+                      interfaces:
+                        type: string
+                      servicePrefix:
+                        type: string
+                      vppConfig:
+                        type: string
+                    type: object
                 type: object
               calicoNodeDaemonSet:
                 description: CalicoNodeDaemonSet configures the calico-node DaemonSet.
@@ -7682,6 +7697,22 @@ spec:
                           skipInterface:
                             description: SkipInterface enables IP auto-detection based
                               on interfaces that do not match the given regex.
+                            type: string
+                        type: object
+                      vppDataplaneOptions:
+                        description: VppDataplaneOptions is used to configure vpp
+                          dataplane. To specify this, linuxDataplane value should
+                          be vpp.
+                        properties:
+                          featureGates:
+                            type: string
+                          initialConfig:
+                            type: string
+                          interfaces:
+                            type: string
+                          servicePrefix:
+                            type: string
+                          vppConfig:
                             type: string
                         type: object
                     type: object

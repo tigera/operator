@@ -59,6 +59,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -1315,6 +1316,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		UsePSP:       r.usePSP,
 	}
 	components = append(components, render.CSI(&csiCfg))
+
+	if instance.Spec.CalicoNetwork != nil &&
+		instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
+		*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP {
+		vppCfg := render.VPPConfiguration{
+			Installation: &instance.Spec,
+		}
+		components = append(components, render.VPP(&vppCfg))
+	}
 
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,6 +51,12 @@ func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeAny
 }
 
+func (c *namespaceComponent) vppDataplaneEnabled() bool {
+	return c.cfg.Installation.CalicoNetwork != nil &&
+		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP
+}
+
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
 		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
@@ -61,6 +67,9 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if len(c.cfg.PullSecrets) > 0 {
 		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PullSecrets...)...)...)
+	}
+	if c.vppDataplaneEnabled() {
+		ns = append(ns, CreateNamespace(common.CalicoVPPDataplaneNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
 	}
 
 	if c.cfg.Terminating {

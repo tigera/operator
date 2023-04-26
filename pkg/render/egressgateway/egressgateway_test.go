@@ -125,12 +125,13 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:  pullSecrets,
-			Installation: installation,
-			OSType:       rmeta.OSTypeLinux,
-			EgressGW:     egw,
-			VXLANVNI:     4097,
-			VXLANPort:    4790,
+			PullSecrets:     pullSecrets,
+			Installation:    installation,
+			OSType:          rmeta.OSTypeLinux,
+			EgressGW:        egw,
+			VXLANVNI:        4097,
+			VXLANPort:       4790,
+			IptablesBackend: "nft",
 		})
 		resources, resToBeDeleted := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -162,6 +163,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		expectedInitEnvVars := []corev1.EnvVar{
 			{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
 			{Name: "EGRESS_VXLAN_PORT", Value: "4790"},
+			{Name: "IPTABLES_BACKEND", Value: "nft"},
 		}
 		for _, elem := range expectedInitEnvVars {
 			Expect(initContainer.Env).To(ContainElement(elem))

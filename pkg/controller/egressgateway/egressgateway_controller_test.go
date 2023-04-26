@@ -320,6 +320,84 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				Expect(initContainer.Env).To(ContainElement(elem))
 				Expect(initContainer_blue.Env).To(ContainElement(elem))
 			}
+			var backend crdv1.IptablesBackend
+			backend = "Auto"
+			fc.Spec.IptablesBackend = &backend
+			Expect(c.Update(ctx, fc)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &dep)).To(BeNil())
+			dep_blue = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-blue",
+					Namespace: "calico-gw",
+				},
+			}
+			Expect(test.GetResource(c, &dep_blue)).To(BeNil())
+			initContainer = dep.Spec.Template.Spec.InitContainers[0]
+			initContainer_blue = dep_blue.Spec.Template.Spec.InitContainers[0]
+			expectedInitEnvVar = []corev1.EnvVar{
+				{Name: "EGRESS_VXLAN_VNI", Value: "4100"},
+				{Name: "EGRESS_VXLAN_PORT", Value: "4800"},
+			}
+			for _, elem := range expectedInitEnvVar {
+				Expect(initContainer.Env).To(ContainElement(elem))
+				Expect(initContainer_blue.Env).To(ContainElement(elem))
+			}
+
+			backend = "legacy"
+			fc.Spec.IptablesBackend = &backend
+			Expect(c.Update(ctx, fc)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &dep)).To(BeNil())
+			dep_blue = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-blue",
+					Namespace: "calico-gw",
+				},
+			}
+			Expect(test.GetResource(c, &dep_blue)).To(BeNil())
+			initContainer = dep.Spec.Template.Spec.InitContainers[0]
+			initContainer_blue = dep_blue.Spec.Template.Spec.InitContainers[0]
+			expectedInitEnvVar = []corev1.EnvVar{
+				{Name: "EGRESS_VXLAN_VNI", Value: "4100"},
+				{Name: "EGRESS_VXLAN_PORT", Value: "4800"},
+				{Name: "IPTABLES_BACKEND", Value: "legacy"},
+			}
+			for _, elem := range expectedInitEnvVar {
+				Expect(initContainer.Env).To(ContainElement(elem))
+				Expect(initContainer_blue.Env).To(ContainElement(elem))
+			}
+
+			backend = "NFT"
+			fc.Spec.IptablesBackend = &backend
+			Expect(c.Update(ctx, fc)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(test.GetResource(c, &dep)).To(BeNil())
+			dep_blue = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-blue",
+					Namespace: "calico-gw",
+				},
+			}
+			Expect(test.GetResource(c, &dep_blue)).To(BeNil())
+			initContainer = dep.Spec.Template.Spec.InitContainers[0]
+			initContainer_blue = dep_blue.Spec.Template.Spec.InitContainers[0]
+			expectedInitEnvVar = []corev1.EnvVar{
+				{Name: "EGRESS_VXLAN_VNI", Value: "4100"},
+				{Name: "EGRESS_VXLAN_PORT", Value: "4800"},
+				{Name: "IPTABLES_BACKEND", Value: "nft"},
+			}
+			for _, elem := range expectedInitEnvVar {
+				Expect(initContainer.Env).To(ContainElement(elem))
+				Expect(initContainer_blue.Env).To(ContainElement(elem))
+			}
+
 		})
 
 		It("should use a single psp when EGW is created with on a psp cluster", func() {

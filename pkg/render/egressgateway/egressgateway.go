@@ -74,9 +74,10 @@ type Config struct {
 	OSType       rmeta.OSType
 	EgressGW     *operatorv1.EgressGateway
 
-	egwImage  string
-	VXLANVNI  int
-	VXLANPort int
+	egwImage        string
+	VXLANVNI        int
+	VXLANPort       int
+	IptablesBackend string
 
 	OpenShift bool
 	// Whether the cluster supports pod security policies.
@@ -294,11 +295,15 @@ func (c *component) egwEnvVars() []corev1.EnvVar {
 
 func (c *component) egwInitEnvVars() []corev1.EnvVar {
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
-	return []corev1.EnvVar{
+	envVar := []corev1.EnvVar{
 		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.VXLANVNI)},
 		{Name: "EGRESS_VXLAN_PORT", Value: fmt.Sprintf("%d", c.config.VXLANPort)},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
 	}
+	if c.config.IptablesBackend != "" {
+		envVar = append(envVar, corev1.EnvVar{Name: "IPTABLES_BACKEND", Value: c.config.IptablesBackend})
+	}
+	return envVar
 }
 
 func (c *component) egwPullSecrets() []*corev1.Secret {

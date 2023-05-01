@@ -167,15 +167,34 @@ func isDockerEE(ctx context.Context, c kubernetes.Interface) (bool, error) {
 // EKS doesn't have any provider-specific API groups, so we need to use a different approach than
 // we use for other platforms in autodetectFromGroup.
 func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
-	cm, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "eks-certificates-controller", metav1.GetOptions{})
-	if err != nil {
-		if kerrors.IsNotFound(err) {
-			return false, nil
-		}
+	cm, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "aws-auth", metav1.GetOptions{})
+	if err != nil && !kerrors.IsNotFound(err) {
 		return false, err
 	}
+	if cm != nil {
+		return true, nil
+	}
 
-	return (cm != nil), nil
+	cm, err = c.CoreV1().ConfigMaps("kube-system").Get(ctx, "eks-certificates-controller", metav1.GetOptions{})
+	if err != nil && !kerrors.IsNotFound(err) {
+		return false, err
+	}
+	if cm != nil {
+		return true, nil
+	}
+
+	dnsService, err := c.CoreV1().Services("kube-system").Get(ctx, "kube-dns", metav1.GetOptions{})
+	if err != nil && !kerrors.IsNotFound(err) {
+		return false, err
+	} else if dnsService != nil {
+		for key := range dnsService.Labels {
+			if key == "eks.amazonaws.com/component" {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 // isRKE2 returns true if running on an RKE2 cluster, and false otherwise.

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -78,6 +78,31 @@ var _ = Describe("provider discovery", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "eks-certificates-controller",
 				Namespace: "kube-system",
+			},
+		})
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderEKS))
+	})
+	It("should detect EKS based on aws-auth ConfigMap", func() {
+		c := fake.NewSimpleClientset(&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "aws-auth",
+				Namespace: "kube-system",
+			},
+		})
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderEKS))
+	})
+	It("should detect EKS based on kube-dns service label", func() {
+		c := fake.NewSimpleClientset(&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kube-dns",
+				Namespace: "kube-system",
+				Labels: map[string]string{
+					"eks.amazonaws.com/component": "kube-dns",
+				},
 			},
 		})
 		p, e := AutoDiscoverProvider(context.Background(), c)

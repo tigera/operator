@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -367,15 +367,17 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 
 	// check typha nodeSelectors
 	if c.typha != nil {
-		// we can migrate typha affinities provided they are a NodeAffinity for Preferred.
 		if aff := c.typha.Spec.Template.Spec.Affinity; aff != nil {
-			if aff.PodAffinity != nil || aff.PodAntiAffinity != nil {
-				return ErrIncompatibleCluster{
-					err:       "pod affinity and antiAffinity not supported for typha deployment",
-					component: ComponentTypha,
-					fix:       "remove the affinity",
-				}
+			install = ensureTyphaDeploymentAffinityNonNil(install)
+
+			if aff.PodAffinity != nil {
+				install.Spec.TyphaDeployment.Spec.Template.Spec.Affinity.PodAffinity = aff.PodAffinity
 			}
+
+			if aff.PodAntiAffinity != nil {
+				install.Spec.TyphaDeployment.Spec.Template.Spec.Affinity.PodAntiAffinity = aff.PodAntiAffinity
+			}
+
 			if aff.NodeAffinity != nil {
 				if aff.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 					return ErrIncompatibleCluster{
@@ -466,4 +468,25 @@ func handleFelixNodeMetrics(c *components, install *operatorv1.Installation) err
 	}
 
 	return nil
+}
+
+// ensureTyphaDeploymentAffinityNonNil ensures all the fields under TyphaDeployment are non-nil
+// and won't overwrite the fields if they are already populated
+func ensureTyphaDeploymentAffinityNonNil(install *operatorv1.Installation) *operatorv1.Installation {
+	if install.Spec.TyphaDeployment == nil {
+		install.Spec.TyphaDeployment = &operatorv1.TyphaDeployment{}
+	}
+	if install.Spec.TyphaDeployment.Spec == nil {
+		install.Spec.TyphaDeployment.Spec = &operatorv1.TyphaDeploymentSpec{}
+	}
+	if install.Spec.TyphaDeployment.Spec.Template == nil {
+		install.Spec.TyphaDeployment.Spec.Template = &operatorv1.TyphaDeploymentPodTemplateSpec{}
+	}
+	if install.Spec.TyphaDeployment.Spec.Template.Spec == nil {
+		install.Spec.TyphaDeployment.Spec.Template.Spec = &operatorv1.TyphaDeploymentPodSpec{}
+	}
+	if install.Spec.TyphaDeployment.Spec.Template.Spec.Affinity == nil {
+		install.Spec.TyphaDeployment.Spec.Template.Spec.Affinity = &corev1.Affinity{}
+	}
+	return install
 }

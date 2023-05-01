@@ -335,11 +335,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Verbs:     []string{"create"},
 		},
 		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get", "create"},
-		},
-		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},

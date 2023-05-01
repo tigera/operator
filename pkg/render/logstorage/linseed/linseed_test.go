@@ -279,6 +279,9 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	// Check deployment
 	deployment := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 	ExpectWithOffset(1, deployment).NotTo(BeNil())
+	ExpectWithOffset(1, deployment.Spec.Strategy.Type).To(Equal(appsv1.RollingUpdateDeploymentStrategyType))
+	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxSurge).To(Equal(ptr.IntOrStrPtr("100%")))
+	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxUnavailable).To(Equal(ptr.IntOrStrPtr("0")))
 
 	// Check containers
 	expected := expectedContainers()

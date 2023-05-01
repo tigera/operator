@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,13 @@ package tiers
 import (
 	"context"
 	"fmt"
+
+	"k8s.io/client-go/rest"
+
+	"strings"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -80,12 +86,25 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &ReconcileTiers{
 		client:   mgr.GetClient(),
+		config:   mgr.GetConfig(),
 		scheme:   mgr.GetScheme(),
 		provider: opts.DetectedProvider,
 		status:   status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
+}
+
+var _ reconcile.Reconciler = &ReconcileTiers{}
+
+type ReconcileTiers struct {
+	client             client.Client
+	config             *rest.Config
+	scheme             *runtime.Scheme
+	provider           operatorv1.Provider
+	status             status.StatusManager
+	tierWatchReady     *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
 }
 
 // add adds watches for resources that are available at startup.
@@ -98,18 +117,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("tiers-controller failed to watch APIServer resource: %v", err)
 	}
 
+	if err := utils.AddNodeLocalDNSWatch(c); err != nil {
+		return fmt.Errorf("tiers-controller failes to watch node-local-dns daemonset: #{err}")
+	}
+
 	return nil
-}
-
-var _ reconcile.Reconciler = &ReconcileTiers{}
-
-type ReconcileTiers struct {
-	client             client.Client
-	scheme             *runtime.Scheme
-	provider           operatorv1.Provider
-	status             status.StatusManager
-	tierWatchReady     *utils.ReadyFlag
-	policyWatchesReady *utils.ReadyFlag
 }
 
 func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -136,7 +148,37 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	component := tiers.Tiers(&tiers.Config{Openshift: r.provider == operatorv1.ProviderOpenShift})
+	tiersConfig := tiers.Config{
+		Openshift:    r.provider == operatorv1.ProviderOpenShift,
+		NodeLocalDNS: false,
+		KubeDNSCIDR:  "0.0.0.0/32",
+	}
+
+	if r.provider != operatorv1.ProviderOpenShift {
+		nodeLocalDNSExists, _ := utils.IsNodeLocalDNSAvailable(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Node Local DNS not enabled", err, reqLogger)
+		} else if nodeLocalDNSExists {
+			// discover kube-dns ip address
+			k8sClient, _ := kubernetes.NewForConfig(r.config)
+			kubeDNSService, _ := k8sClient.CoreV1().Services("kube-system").Get(ctx, "kube-dns", metav1.GetOptions{})
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "kube-dns service not found", err, reqLogger)
+			}
+			kubeDNSIpAddress := kubeDNSService.Spec.ClusterIP
+
+			var builder strings.Builder
+			builder.WriteString(kubeDNSIpAddress)
+			builder.WriteString("/32")
+
+			kubeDNSCIDR := builder.String()
+
+			// update tiersConfig
+			tiersConfig.NodeLocalDNS = true
+			tiersConfig.KubeDNSCIDR = kubeDNSCIDR
+		}
+	}
+	component := tiers.Tiers(&tiersConfig)
 
 	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)

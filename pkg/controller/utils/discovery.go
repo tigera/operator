@@ -167,31 +167,31 @@ func isDockerEE(ctx context.Context, c kubernetes.Interface) (bool, error) {
 // EKS doesn't have any provider-specific API groups, so we need to use a different approach than
 // we use for other platforms in autodetectFromGroup.
 func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
-	cm, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "aws-auth", metav1.GetOptions{})
-	if err != nil && !kerrors.IsNotFound(err) {
-		return false, err
-	}
-	if cm != nil {
+	_, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "aws-auth", metav1.GetOptions{})
+	if err == nil {
 		return true, nil
+	} else if !kerrors.IsNotFound(err) {
+		return false, err
 	}
 
-	cm, err = c.CoreV1().ConfigMaps("kube-system").Get(ctx, "eks-certificates-controller", metav1.GetOptions{})
-	if err != nil && !kerrors.IsNotFound(err) {
-		return false, err
-	}
-	if cm != nil {
+	_, err = c.CoreV1().ConfigMaps("kube-system").Get(ctx, "eks-certificates-controller", metav1.GetOptions{})
+	if err == nil {
 		return true, nil
+	} else if !kerrors.IsNotFound(err) {
+		return false, err
 	}
 
 	dnsService, err := c.CoreV1().Services("kube-system").Get(ctx, "kube-dns", metav1.GetOptions{})
-	if err != nil && !kerrors.IsNotFound(err) {
-		return false, err
-	} else if dnsService != nil {
-		for key := range dnsService.Labels {
-			if key == "eks.amazonaws.com/component" {
-				return true, nil
+	if err == nil {
+		if dnsService != nil {
+			for key := range dnsService.Labels {
+				if key == "eks.amazonaws.com/component" {
+					return true, nil
+				}
 			}
 		}
+	} else if !kerrors.IsNotFound(err) {
+		return false, err
 	}
 
 	return false, nil

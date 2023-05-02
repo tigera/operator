@@ -31,6 +31,7 @@ const TigeraComponentDefaultDenyPolicyName = TigeraComponentPolicyPrefix + "defa
 var TCPProtocol = numorstring.ProtocolFromString(numorstring.ProtocolTCP)
 var UDPProtocol = numorstring.ProtocolFromString(numorstring.ProtocolUDP)
 var HighPrecedenceOrder = 1.0
+var AfterHighPrecendenceOrder = 10.0
 
 // AppendDNSEgressRules appends a rule to the provided slice that allows DNS egress. The appended rule utilizes label selectors and ports.
 func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {

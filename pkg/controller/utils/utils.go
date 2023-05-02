@@ -621,21 +621,23 @@ func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, erro
 
 	err := cli.Get(ctx, client.ObjectKey{Namespace: "kube-system", Name: "node-local-dns"}, ds)
 	if err != nil {
-		return false, err
+		if errors.IsNotFound(err) {
+			return false, nil
+		} else {
+			return false, err
+		}
 	}
 
 	return true, nil
 }
 
-// AddNodeLocalDNSWatch creates a watch on the node local dns.
+// AddNodeLocalDNSWatch creates a watch on the node-local-dns pods.
 func AddNodeLocalDNSWatch(c controller.Controller) error {
 	ds := &v1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
-			Labels: map[string]string{
-				"k8s-app": "node-local-dns",
-			},
+			Name:      "node-local-dns",
 		},
 	}
-	return c.Watch(&source.Kind{Type: ds}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
+	return c.Watch(&source.Kind{Type: &v1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }

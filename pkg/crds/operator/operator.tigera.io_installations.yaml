@@ -5586,6 +5586,11 @@ spec:
                         type: object
                     type: object
                 type: object
+              dataVolumePath:
+                description: DataVolumePath optionally specifies a custom path for
+                  Calico to persist data. If not specified, the path will default
+                  to /etc/calico.
+                type: string
               fipsMode:
                 description: 'FIPSMode uses images and features only that are using
                   FIPS 140-2 validated cryptographic modules and standards. Default:
@@ -13591,6 +13596,11 @@ spec:
                             type: object
                         type: object
                     type: object
+                  dataVolumePath:
+                    description: DataVolumePath optionally specifies a custom path
+                      for Calico to persist data. If not specified, the path will
+                      default to /etc/calico.
+                    type: string
                   fipsMode:
                     description: 'FIPSMode uses images and features only that are
                       using FIPS 140-2 validated cryptographic modules and standards.

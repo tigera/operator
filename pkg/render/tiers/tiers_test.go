@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,10 +30,15 @@ var _ = Describe("Tiers rendering tests", func() {
 
 	clusterDNSPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns.json")
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
+	nodeLocalDNSPolicy := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns.json")
 
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
-		cfg = &tiers.Config{Openshift: false}
+		cfg = &tiers.Config{
+			Openshift:    false,
+			NodeLocalDNS: false,
+			KubeDNSCIDR:  "10.96.0.10/32",
+		}
 	})
 
 	Context("allow-tigera rendering", func() {
@@ -51,9 +56,10 @@ var _ = Describe("Tiers rendering tests", func() {
 			return nil
 		}
 
-		DescribeTable("should render allow-tigera policy",
+		DescribeTable("should render allow-tigera network policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
+				cfg.NodeLocalDNS = scenario.NodeLocalDNS
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
 
@@ -68,10 +74,55 @@ var _ = Describe("Tiers rendering tests", func() {
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+
+			// NodeLocalDNS is not supported on Openshift so no need to test Openshift:true with NodeLocalDNS: true
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, NodeLocalDNS: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true, NodeLocalDNS: false}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false, NodeLocalDNS: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true, NodeLocalDNS: false}),
+		)
+	})
+
+	Context("allow-tigera global policy rendering", func() {
+		globalPolicyNames := []string{
+			"allow-tigera.node-local-dns",
+		}
+
+		getExpectedGlobalPolicy := func(name string, scenario testutils.AllowTigeraScenario) *v3.GlobalNetworkPolicy {
+			if name == "allow-tigera.node-local-dns" &&
+				!scenario.Openshift && scenario.NodeLocalDNS {
+				return nodeLocalDNSPolicy
+			}
+
+			return nil
+		}
+
+		DescribeTable("should render allow-tigera global network policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.Openshift = scenario.Openshift
+				cfg.NodeLocalDNS = scenario.NodeLocalDNS
+				component := tiers.Tiers(cfg)
+				resourcesToCreate, _ := component.Objects()
+
+				// Validate tier render
+				allowTigera := rtest.GetGlobalResource(resourcesToCreate, "allow-tigera", "projectcalico.org", "v3", "Tier").(*v3.Tier)
+				Expect(*allowTigera.Spec.Order).To(Equal(100.0))
+
+				// Validate created policy render
+				for _, policyName := range globalPolicyNames {
+					policy := testutils.GetAllowTigeraGlobalPolicyFromResources(policyName, resourcesToCreate)
+					expectedPolicy := getExpectedGlobalPolicy(policyName, scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				}
+			},
+
+			// NodeLocalDNS is not supported on Openshift so no need to test Openshift:true with NodeLocalDNS: true
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, NodeLocalDNS: false}),
+			Entry("for management/standalone, kube-dns, node-local-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, NodeLocalDNS: true}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true, NodeLocalDNS: false}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false, NodeLocalDNS: false}),
+			Entry("for managed, kube-dns, node-local-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false, NodeLocalDNS: true}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true, NodeLocalDNS: false}),
 		)
 	})
 })

@@ -17,13 +17,12 @@ package tiers
 import (
 	"context"
 	"fmt"
+	"net"
 
-	"k8s.io/client-go/rest"
+	corev1 "k8s.io/api/core/v1"
 
 	"strings"
 	"time"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -86,7 +85,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &ReconcileTiers{
 		client:   mgr.GetClient(),
-		config:   mgr.GetConfig(),
 		scheme:   mgr.GetScheme(),
 		provider: opts.DetectedProvider,
 		status:   status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
@@ -99,7 +97,6 @@ var _ reconcile.Reconciler = &ReconcileTiers{}
 
 type ReconcileTiers struct {
 	client             client.Client
-	config             *rest.Config
 	scheme             *runtime.Scheme
 	provider           operatorv1.Provider
 	status             status.StatusManager
@@ -118,7 +115,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	if err := utils.AddNodeLocalDNSWatch(c); err != nil {
-		return fmt.Errorf("tiers-controller failes to watch node-local-dns daemonset: #{err}")
+		return fmt.Errorf("tiers-controller failed to watch node-local-dns daemonset: %v", err)
 	}
 
 	return nil
@@ -155,21 +152,32 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	if r.provider != operatorv1.ProviderOpenShift {
-		nodeLocalDNSExists, _ := utils.IsNodeLocalDNSAvailable(ctx, r.client)
+		nodeLocalDNSExists, err := utils.IsNodeLocalDNSAvailable(ctx, r.client)
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Node Local DNS not enabled", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		} else if nodeLocalDNSExists {
-			// discover kube-dns ip address
-			k8sClient, _ := kubernetes.NewForConfig(r.config)
-			kubeDNSService, _ := k8sClient.CoreV1().Services("kube-system").Get(ctx, "kube-dns", metav1.GetOptions{})
+			// discover kube-dns ip address - node-local-dns is not supported on OpenShift which is the only platform without
+			// kube-dns. Thus, the name "kube-dns" can be static.
+			kubeDNSService := &corev1.Service{}
+			err = r.client.Get(ctx, types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}, kubeDNSService)
 			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "kube-dns service not found", err, reqLogger)
+				if errors.IsNotFound(err) {
+					r.status.SetDegraded(operatorv1.ResourceNotFound, "kube-dns service not found", err, reqLogger)
+				} else {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying kube-dns service", err, reqLogger)
+				}
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 			kubeDNSIpAddress := kubeDNSService.Spec.ClusterIP
 
 			var builder strings.Builder
 			builder.WriteString(kubeDNSIpAddress)
-			builder.WriteString("/32")
+			if net.ParseIP(kubeDNSIpAddress).To4() != nil {
+				builder.WriteString("/32")
+			} else {
+				builder.WriteString("/128")
+			}
 
 			kubeDNSCIDR := builder.String()
 

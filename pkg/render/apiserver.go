@@ -503,6 +503,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"globalnetworksets",
 				"networksets",
 				"bgpconfigurations",
+				"bgpfilters",
 				"bgppeers",
 				"felixconfigurations",
 				"kubecontrollersconfigurations",
@@ -1192,7 +1193,6 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"deeppacketinspections/status",
 				"uisettingsgroups",
 				"uisettings",
-				"bgpfilters",
 				"externalnetworks",
 			},
 			Verbs: []string{

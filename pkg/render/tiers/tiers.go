@@ -171,6 +171,8 @@ func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy 
 				{
 					Action: v3.Allow,
 					Destination: v3.EntityRule{
+						// NodeLocal DNSCache creates and listens on the kube-dns ClusterIP on each node, so we can use
+						// kube-dns ClusterIP address directly in the policy where a normal service IP wouldn't match.
 						Nets:  []string{t.cfg.KubeDNSCIDR},
 						Ports: networkpolicy.Ports(53),
 					},

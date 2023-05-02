@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -167,12 +169,6 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"authentication.k8s.io"},
 			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
-		},
-		{
-			// Need to be able to get and create secrets associated with a token
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get", "create"},
 		},
 		{
 			// Need to be able to list managed clusters
@@ -357,7 +353,11 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: ptr.IntOrStrPtr("0"),
+					MaxSurge:       ptr.IntOrStrPtr("100%"),
+				},
 			},
 			Template: *podTemplate,
 			Replicas: l.cfg.Installation.ControlPlaneReplicas,

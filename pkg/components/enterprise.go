@@ -269,37 +269,6 @@ var (
 		Version: "master",
 		Image:   "tigera/node-driver-registrar",
 	}
-
-	ComponentImageAssuranceApiProxy = component{
-		Version: "v1.6.2",
-		Image:   "tigera/image-assurance-api-proxy",
-	}
-
-	ComponentImageAssuranceScanner = component{
-		Version: "v1.6.2",
-		Image:   "tigera/image-assurance-scanner",
-	}
-
-	ComponentImageAssuranceRuntimeCleaner = component{
-		Version: "v1.6.2",
-		Image:   "tigera/image-assurance-runtime-cleaner",
-	}
-
-	ComponentSasha = component{
-		Version: "v1.6.0",
-		Image:   "tigera/sasha",
-	}
-
-	ComponentThreatId = component{
-		Version: "v1.6.0",
-		Image:   "tigera/threat-identification",
-	}
-
-	ComponentCloudRBACApi = component{
-		Version: "v0.1.1-0-g74b6dbe",
-		Image:   "tigera/cc-rbac-api",
-	}
-
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []component{
@@ -349,11 +318,5 @@ var (
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,
 		ComponentCSINodeDriverRegistrarPrivate,
-		ComponentImageAssuranceApiProxy,
-		ComponentImageAssuranceScanner,
-		ComponentImageAssuranceRuntimeCleaner,
-		ComponentSasha,
-		ComponentThreatId,
-		ComponentCloudRBACApi,
 	}
 )

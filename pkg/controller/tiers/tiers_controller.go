@@ -146,9 +146,8 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	tiersConfig := tiers.Config{
-		Openshift:    r.provider == operatorv1.ProviderOpenShift,
-		NodeLocalDNS: false,
-		KubeDNSCIDR:  "0.0.0.0/32",
+		Openshift:      r.provider == operatorv1.ProviderOpenShift,
+		DNSEgressCIDRs: []string{},
 	}
 
 	if r.provider != operatorv1.ProviderOpenShift {
@@ -157,7 +156,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		} else if nodeLocalDNSExists {
-			// discover kube-dns ip address - node-local-dns is not supported on OpenShift which is the only platform without
+			// Discover the kube-dns Service cluster IP address - node-local-dns is not supported on OpenShift which is the only platform without
 			// kube-dns. Thus, the name "kube-dns" can be static.
 			kubeDNSService := &corev1.Service{}
 			err = r.client.Get(ctx, types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}, kubeDNSService)
@@ -169,21 +168,20 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 				}
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
-			kubeDNSIpAddress := kubeDNSService.Spec.ClusterIP
+			kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
-			var builder strings.Builder
-			builder.WriteString(kubeDNSIpAddress)
-			if net.ParseIP(kubeDNSIpAddress).To4() != nil {
-				builder.WriteString("/32")
-			} else {
-				builder.WriteString("/128")
+			for _, IP := range kubeDNSIPs {
+				var builder strings.Builder
+				builder.WriteString(IP)
+				if net.ParseIP(IP).To4() != nil {
+					builder.WriteString("/32")
+				} else {
+					builder.WriteString("/128")
+				}
+
+				tiersConfig.DNSEgressCIDRs = append(tiersConfig.DNSEgressCIDRs, builder.String())
+				builder.String()
 			}
-
-			kubeDNSCIDR := builder.String()
-
-			// update tiersConfig
-			tiersConfig.NodeLocalDNS = true
-			tiersConfig.KubeDNSCIDR = kubeDNSCIDR
 		}
 	}
 	component := tiers.Tiers(&tiersConfig)

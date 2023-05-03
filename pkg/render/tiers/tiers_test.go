@@ -30,15 +30,39 @@ var _ = Describe("Tiers rendering tests", func() {
 
 	clusterDNSPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns.json")
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
-	nodeLocalDNSPolicy := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns.json")
+	nodeLocalDNSPolicy_ipv4 := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns_ipv4.json")
+	nodeLocalDNSPolicy_ipv6 := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns_ipv6.json")
+	nodeLocalDNSPolicy_dual := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns_dual.json")
 
-	DNSEgressCIDRs := []string{"10.96.0.10/32"}
+	getDNSEgressCIDRs := func(ipMode testutils.IPMode) tiers.DNSEgressCIDR {
+		switch ipMode {
+		case testutils.IPV4:
+			return tiers.DNSEgressCIDR{
+				IPV4: []string{"10.96.0.10/32"},
+			}
+
+		case testutils.IPV6:
+			return tiers.DNSEgressCIDR{
+				IPV6: []string{"2002:a60:a::"},
+			}
+		case testutils.DualStack:
+			return tiers.DNSEgressCIDR{
+				IPV4: []string{"10.96.0.10/32"},
+				IPV6: []string{"2002:a60:a::"},
+			}
+		// default to IPV4 if ipMode is not set.
+		default:
+			return tiers.DNSEgressCIDR{
+				IPV4: []string{"10.96.0.10/32"},
+			}
+		}
+	}
 
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
 		cfg = &tiers.Config{
 			Openshift:      false,
-			DNSEgressCIDRs: []string{},
+			DNSEgressCIDRs: getDNSEgressCIDRs(testutils.IPV4),
 		}
 	})
 
@@ -60,9 +84,7 @@ var _ = Describe("Tiers rendering tests", func() {
 		DescribeTable("should render allow-tigera network policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
-				if scenario.NodeLocalDNS {
-					cfg.DNSEgressCIDRs = DNSEgressCIDRs
-				}
+
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
 
@@ -79,33 +101,35 @@ var _ = Describe("Tiers rendering tests", func() {
 			},
 
 			// NodeLocalDNS is not supported on Openshift so no need to test Openshift:true with NodeLocalDNS: true
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, NodeLocalDNS: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true, NodeLocalDNS: false}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false, NodeLocalDNS: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true, NodeLocalDNS: false}),
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
 	})
 
-	Context("allow-tigera global policy rendering", func() {
+	Context("allow-tigera node-local-dns global policy rendering", func() {
 		globalPolicyNames := []string{
 			"allow-tigera.node-local-dns",
 		}
 
-		getExpectedGlobalPolicy := func(name string, scenario testutils.AllowTigeraScenario) *v3.GlobalNetworkPolicy {
-			if name == "allow-tigera.node-local-dns" &&
-				!scenario.Openshift && scenario.NodeLocalDNS {
-				return nodeLocalDNSPolicy
+		getExpectedPolicy := func(ipMode testutils.IPMode) *v3.GlobalNetworkPolicy {
+			switch ipMode {
+			case testutils.IPV4:
+				return nodeLocalDNSPolicy_ipv4
+			case testutils.IPV6:
+				return nodeLocalDNSPolicy_ipv6
+			case testutils.DualStack:
+				return nodeLocalDNSPolicy_dual
+			// default behaviour is IPV4
+			default:
+				return nodeLocalDNSPolicy_ipv4
 			}
-
-			return nil
 		}
 
-		DescribeTable("should render allow-tigera global network policy",
-			func(scenario testutils.AllowTigeraScenario) {
-				cfg.Openshift = scenario.Openshift
-				if scenario.NodeLocalDNS {
-					cfg.DNSEgressCIDRs = DNSEgressCIDRs
-				}
+		DescribeTable("should render for single and dual stack",
+			func(ipMode testutils.IPMode) {
+				cfg.DNSEgressCIDRs = getDNSEgressCIDRs(ipMode)
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
 
@@ -116,18 +140,15 @@ var _ = Describe("Tiers rendering tests", func() {
 				// Validate created policy render
 				for _, policyName := range globalPolicyNames {
 					policy := testutils.GetAllowTigeraGlobalPolicyFromResources(policyName, resourcesToCreate)
-					expectedPolicy := getExpectedGlobalPolicy(policyName, scenario)
+					expectedPolicy := getExpectedPolicy(ipMode)
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
 
-			// NodeLocalDNS is not supported on Openshift so no need to test Openshift:true with NodeLocalDNS: true
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, NodeLocalDNS: false}),
-			Entry("for management/standalone, kube-dns, node-local-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, NodeLocalDNS: true}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true, NodeLocalDNS: false}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false, NodeLocalDNS: false}),
-			Entry("for managed, kube-dns, node-local-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false, NodeLocalDNS: true}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true, NodeLocalDNS: false}),
+			Entry("for IPV4", testutils.IPV4),
+			Entry("for IPV6", testutils.IPV6),
+			Entry("for DualStack", testutils.DualStack),
+			Entry("for when ipMode is not provided", nil),
 		)
 	})
 })

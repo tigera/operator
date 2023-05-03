@@ -17,8 +17,6 @@ package tiers
 import (
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -47,7 +45,6 @@ var TigeraNamespaceSelector = createNamespaceSelector(
 	render.PacketCaptureNamespace,
 	render.PolicyRecommendationNamespace,
 	common.TigeraPrometheusNamespace,
-	dpi.DeepPacketInspectionNamespace,
 	rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
 	"tigera-skraper",
 )
@@ -59,9 +56,8 @@ func Tiers(cfg *Config) render.Component {
 }
 
 type Config struct {
-	Openshift    bool
-	NodeLocalDNS bool
-	KubeDNSCIDR  string
+	Openshift      bool
+	DNSEgressCIDRs []string
 }
 
 type tiersComponent struct {
@@ -80,7 +76,7 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToDelete := []client.Object{}
 
-	if t.cfg.NodeLocalDNS {
+	if t.cfg.DNSEgressCIDRs != nil && len(t.cfg.DNSEgressCIDRs) > 0 {
 		objsToCreate = append(objsToCreate, t.allowTigeraNodeLocalDNSPolicy())
 	} else {
 		objsToDelete = append(objsToDelete, t.allowTigeraNodeLocalDNSPolicy())
@@ -173,7 +169,7 @@ func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy 
 					Destination: v3.EntityRule{
 						// NodeLocal DNSCache creates and listens on the kube-dns ClusterIP on each node, so we can use
 						// kube-dns ClusterIP address directly in the policy where a normal service IP wouldn't match.
-						Nets:  []string{t.cfg.KubeDNSCIDR},
+						Nets:  t.cfg.DNSEgressCIDRs,
 						Ports: networkpolicy.Ports(53),
 					},
 					Protocol: &networkpolicy.UDPProtocol,

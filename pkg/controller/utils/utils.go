@@ -25,7 +25,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/go-logr/logr"
-	v1 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -617,7 +617,7 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 }
 
 func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, error) {
-	ds := &v1.DaemonSet{}
+	ds := &appsv1.DaemonSet{}
 
 	err := cli.Get(ctx, client.ObjectKey{Namespace: "kube-system", Name: "node-local-dns"}, ds)
 	if err != nil {
@@ -633,11 +633,11 @@ func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, erro
 
 // AddNodeLocalDNSWatch creates a watch on the node-local-dns pods.
 func AddNodeLocalDNSWatch(c controller.Controller) error {
-	ds := &v1.DaemonSet{
+	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
 			Name:      "node-local-dns",
 		},
 	}
-	return c.Watch(&source.Kind{Type: &v1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
+	return c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }

@@ -25,8 +25,8 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -92,7 +92,7 @@ func AddComplianceWatch(c controller.Controller) error {
 }
 
 func AddNamespaceWatch(c controller.Controller, name string) error {
-	ns := &v1.Namespace{
+	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -104,7 +104,7 @@ func AddNamespaceWatch(c controller.Controller, name string) error {
 type MetaMatch func(metav1.ObjectMeta) bool
 
 func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
-	s := &v1.Secret{
+	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
@@ -112,7 +112,7 @@ func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatche
 }
 
 func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
-	cm := &v1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
@@ -120,7 +120,7 @@ func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
 }
 
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
-	return AddNamespacedWatch(c, &v1.Service{
+	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	})
@@ -614,4 +614,30 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 		return nil, err
 	}
 	return &es, nil
+}
+
+func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, error) {
+	ds := &appsv1.DaemonSet{}
+
+	err := cli.Get(ctx, client.ObjectKey{Namespace: "kube-system", Name: "node-local-dns"}, ds)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+
+	return true, nil
+}
+
+// AddNodeLocalDNSWatch creates a watch on the node-local-dns pods.
+func AddNodeLocalDNSWatch(c controller.Controller) error {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "kube-system",
+			Name:      "node-local-dns",
+		},
+	}
+	return c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }

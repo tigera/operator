@@ -57,7 +57,12 @@ func Tiers(cfg *Config) render.Component {
 
 type Config struct {
 	Openshift      bool
-	DNSEgressCIDRs []string
+	DNSEgressCIDRs DNSEgressCIDR
+}
+
+type DNSEgressCIDR struct {
+	IPV4 []string
+	IPV6 []string
 }
 
 type tiersComponent struct {
@@ -76,7 +81,7 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToDelete := []client.Object{}
 
-	if t.cfg.DNSEgressCIDRs != nil && len(t.cfg.DNSEgressCIDRs) > 0 {
+	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 || len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
 		objsToCreate = append(objsToCreate, t.allowTigeraNodeLocalDNSPolicy())
 	} else {
 		objsToDelete = append(objsToDelete, t.allowTigeraNodeLocalDNSPolicy())
@@ -154,7 +159,7 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy {
 	nodeLocalDNSPolicySelector := TigeraNamespaceSelector
 
-	return &v3.GlobalNetworkPolicy{
+	nodeLocalDNSPolicy := &v3.GlobalNetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: NodeLocalDNSPolicyName,
@@ -163,21 +168,41 @@ func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy 
 			Order:    &networkpolicy.AfterHighPrecendenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: nodeLocalDNSPolicySelector,
-			Egress: []v3.Rule{
-				{
-					Action: v3.Allow,
-					Destination: v3.EntityRule{
-						// NodeLocal DNSCache creates and listens on the kube-dns ClusterIP on each node, so we can use
-						// kube-dns ClusterIP address directly in the policy where a normal service IP wouldn't match.
-						Nets:  t.cfg.DNSEgressCIDRs,
-						Ports: networkpolicy.Ports(53),
-					},
-					Protocol: &networkpolicy.UDPProtocol,
-				},
-			},
-			Types: []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   []v3.Rule{},
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 		},
 	}
+
+	egressRuleTemplate := v3.Rule{
+		Action: v3.Allow,
+		Destination: v3.EntityRule{
+			// NodeLocal DNSCache creates and listens on the kube-dns ClusterIP on each node, so we can use
+			// kube-dns ClusterIPs address directly in the policy where a normal service IP wouldn't match.
+			Nets:  []string{},
+			Ports: networkpolicy.Ports(53),
+		},
+		Protocol: &networkpolicy.UDPProtocol,
+	}
+
+	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 {
+		IPV4Rule := egressRuleTemplate
+		appendIPVersionCIDRs(&IPV4Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV4)
+
+		nodeLocalDNSPolicy.Spec.Egress = append(nodeLocalDNSPolicy.Spec.Egress, IPV4Rule)
+	}
+
+	if len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
+		IPV6Rule := egressRuleTemplate
+		appendIPVersionCIDRs(&IPV6Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV6)
+
+		nodeLocalDNSPolicy.Spec.Egress = append(nodeLocalDNSPolicy.Spec.Egress, IPV6Rule)
+	}
+
+	return nodeLocalDNSPolicy
+}
+
+func appendIPVersionCIDRs(net *[]string, cidrArray []string) {
+	*net = append(*net, cidrArray...)
 }
 
 func createNamespaceSelector(namespaces ...string) string {

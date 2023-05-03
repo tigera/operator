@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/go-logr/logr"
+
 	corev1 "k8s.io/api/core/v1"
 
 	"strings"
@@ -145,16 +147,34 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
+	tiersConfig, reconcileResult := r.prepareTiersConfig(ctx, reqLogger)
+	if reconcileResult != nil {
+		return *reconcileResult, nil
+	}
+
+	component := tiers.Tiers(tiersConfig)
+
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.Logger) (*tiers.Config, *reconcile.Result) {
 	tiersConfig := tiers.Config{
 		Openshift:      r.provider == operatorv1.ProviderOpenShift,
-		DNSEgressCIDRs: []string{},
+		DNSEgressCIDRs: tiers.DNSEgressCIDR{},
 	}
 
 	if r.provider != operatorv1.ProviderOpenShift {
 		nodeLocalDNSExists, err := utils.IsNodeLocalDNSAvailable(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
 		} else if nodeLocalDNSExists {
 			// Discover the kube-dns Service cluster IP address - node-local-dns is not supported on OpenShift which is the only platform without
 			// kube-dns. Thus, the name "kube-dns" can be static.
@@ -166,7 +186,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 				} else {
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying kube-dns service", err, reqLogger)
 				}
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
 			}
 			kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
@@ -175,23 +195,15 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 				builder.WriteString(IP)
 				if net.ParseIP(IP).To4() != nil {
 					builder.WriteString("/32")
+					tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
 				} else {
 					builder.WriteString("/128")
+					tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
 				}
 
-				tiersConfig.DNSEgressCIDRs = append(tiersConfig.DNSEgressCIDRs, builder.String())
-				builder.String()
 			}
 		}
 	}
-	component := tiers.Tiers(&tiersConfig)
 
-	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	return reconcile.Result{}, nil
+	return &tiersConfig, nil
 }

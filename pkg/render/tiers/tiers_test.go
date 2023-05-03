@@ -32,12 +32,13 @@ var _ = Describe("Tiers rendering tests", func() {
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
 	nodeLocalDNSPolicy := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns.json")
 
+	DNSEgressCIDRs := []string{"10.96.0.10/32"}
+
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
 		cfg = &tiers.Config{
-			Openshift:    false,
-			NodeLocalDNS: false,
-			KubeDNSCIDR:  "10.96.0.10/32",
+			Openshift:      false,
+			DNSEgressCIDRs: []string{},
 		}
 	})
 
@@ -59,7 +60,9 @@ var _ = Describe("Tiers rendering tests", func() {
 		DescribeTable("should render allow-tigera network policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
-				cfg.NodeLocalDNS = scenario.NodeLocalDNS
+				if scenario.NodeLocalDNS {
+					cfg.DNSEgressCIDRs = DNSEgressCIDRs
+				}
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
 
@@ -100,7 +103,9 @@ var _ = Describe("Tiers rendering tests", func() {
 		DescribeTable("should render allow-tigera global network policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
-				cfg.NodeLocalDNS = scenario.NodeLocalDNS
+				if scenario.NodeLocalDNS {
+					cfg.DNSEgressCIDRs = DNSEgressCIDRs
+				}
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
 

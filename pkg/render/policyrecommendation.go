@@ -40,7 +40,11 @@ const (
 	PolicyRecommendationName       = "tigera-policy-recommendation"
 	PolicyRecommendationNamespace  = PolicyRecommendationName
 	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+
+	PolicyRecommendationTLSSecretName = "policy-recommendation-tls"
 )
+
+var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
@@ -99,7 +103,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// Deployment is for standalone or management cluster
 	if !pr.cfg.ManagedCluster {
 		objs = append(objs,
-			pr.externalLinseedRoleBinding(),
 			allowTigeraPolicyForPolicyRecommendation(pr.cfg),
 			pr.deployment(),
 		)
@@ -142,21 +145,10 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
 		{
-			// Add write access to Linseed APIs.
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"events"},
-			Verbs:     []string{"create"},
-		},
-		{
 			// Add read access to Linseed APIs.
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{
-				"waflogs",
-				"dnslogs",
-				"l7logs",
 				"flowlogs",
-				"auditlogs",
-				"events",
 			},
 			Verbs: []string{"get"},
 		},
@@ -274,31 +266,6 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.Int32ToPtr(1),
 			Template: *podTemplateSpec,
-		},
-	}
-}
-
-func (c *policyRecommendationComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
-	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
-	// in our namespace.
-	linseed := "tigera-linseed"
-	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      linseed,
-			Namespace: PolicyRecommendationNamespace,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     linseed,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: ElasticsearchNamespace,
-			},
 		},
 	}
 }

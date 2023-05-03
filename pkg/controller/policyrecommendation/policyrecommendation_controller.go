@@ -362,7 +362,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	//trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 
 	linseedCertLocation := render.TigeraLinseedSecret
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
@@ -375,13 +374,14 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, nil
 	}
 
-	// Intrusion detection controller sometimes needs to make requests to outside sources. Therefore, we include
-	// the system root certificate bundle.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
+	// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
+	policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{render.PolicyRecommendationTLSSecretName})
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
 
 	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
 
@@ -390,15 +390,16 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	reqLogger.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:   r.clusterDomain,
-		ESClusterConfig: esClusterConfig,
-		ESSecrets:       esSecrets,
-		Installation:    network,
-		ManagedCluster:  isManagedCluster,
-		PullSecrets:     pullSecrets,
-		TrustedBundle:   trustedBundle,
-		Openshift:       r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:          r.usePSP,
+		ClusterDomain:                  r.clusterDomain,
+		ESClusterConfig:                esClusterConfig,
+		ESSecrets:                      esSecrets,
+		Installation:                   network,
+		ManagedCluster:                 isManagedCluster,
+		PullSecrets:                    pullSecrets,
+		TrustedBundle:                  trustedBundle,
+		Openshift:                      r.provider == operatorv1.ProviderOpenShift,
+		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
+		UsePSP:                         r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

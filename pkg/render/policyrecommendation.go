@@ -44,14 +44,15 @@ const (
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
-	ClusterDomain   string
-	ESClusterConfig *relasticsearch.ClusterConfig
-	ESSecrets       []*corev1.Secret
-	Installation    *operatorv1.InstallationSpec
-	ManagedCluster  bool
-	Openshift       bool
-	PullSecrets     []*corev1.Secret
-	TrustedBundle   certificatemanagement.TrustedBundle
+	ClusterDomain                  string
+	ESClusterConfig                *relasticsearch.ClusterConfig
+	ESSecrets                      []*corev1.Secret
+	Installation                   *operatorv1.InstallationSpec
+	ManagedCluster                 bool
+	Openshift                      bool
+	PullSecrets                    []*corev1.Secret
+	TrustedBundle                  certificatemanagement.TrustedBundle
+	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -98,6 +99,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// Deployment is for standalone or management cluster
 	if !pr.cfg.ManagedCluster {
 		objs = append(objs,
+			pr.externalLinseedRoleBinding(),
 			allowTigeraPolicyForPolicyRecommendation(pr.cfg),
 			pr.deployment(),
 		)
@@ -139,6 +141,25 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
+		{
+			// Add write access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create"},
+		},
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"waflogs",
+				"dnslogs",
+				"l7logs",
+				"flowlogs",
+				"auditlogs",
+				"events",
+			},
+			Verbs: []string{"get"},
+		},
 	}
 
 	return &rbacv1.ClusterRole{
@@ -179,6 +200,26 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: pr.cfg.TrustedBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain),
+		},
+		{
+			Name:  "LINSEED_CA",
+			Value: pr.cfg.TrustedBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_CERT",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_KEY",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "LINSEED_TOKEN",
+			Value: GetLinseedTokenPath(pr.cfg.ManagedCluster),
 		},
 	}
 
@@ -237,6 +278,31 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	}
 }
 
+func (c *policyRecommendationComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
+	// in our namespace.
+	linseed := "tigera-linseed"
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      linseed,
+			Namespace: PolicyRecommendationNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     linseed,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      linseed,
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
+}
+
 func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[string]string {
 	return pr.cfg.TrustedBundle.HashAnnotations()
 }
@@ -267,6 +333,15 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Destination: networkpolicy.ESGatewayEntityRule,
 		},
 	}
+
+	if !cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
+		})
+	}
+
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 
 	return &v3.NetworkPolicy{

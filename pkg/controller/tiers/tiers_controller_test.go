@@ -26,7 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	v1 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +47,7 @@ var _ = Describe("tier controller tests", func() {
 		scheme = runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
-		Expect(v1.AddToScheme(scheme))
+		Expect(appsv1.AddToScheme(scheme))
 
 		// Create a client that will have a crud interface of k8s objects.
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -107,9 +107,9 @@ var _ = Describe("tier controller tests", func() {
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
 
-		Expect(c.Create(ctx, &v1.DaemonSet{
+		Expect(c.Create(ctx, &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "node-local-dns", Namespace: "kube-dns"},
-			TypeMeta:   metav1.TypeMeta{Kind: (&v1.DaemonSet{}).String()},
+			TypeMeta:   metav1.TypeMeta{Kind: (&appsv1.DaemonSet{}).String()},
 		})).NotTo(HaveOccurred())
 	})
 

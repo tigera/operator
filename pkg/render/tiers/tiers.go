@@ -186,23 +186,19 @@ func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy 
 
 	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 {
 		IPV4Rule := egressRuleTemplate
-		appendIPVersionCIDRs(&IPV4Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV4)
+		IPV4Rule.Destination.Nets = append(IPV4Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV4...)
 
 		nodeLocalDNSPolicy.Spec.Egress = append(nodeLocalDNSPolicy.Spec.Egress, IPV4Rule)
 	}
 
 	if len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
 		IPV6Rule := egressRuleTemplate
-		appendIPVersionCIDRs(&IPV6Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV6)
+		IPV6Rule.Destination.Nets = append(IPV6Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV6...)
 
 		nodeLocalDNSPolicy.Spec.Egress = append(nodeLocalDNSPolicy.Spec.Egress, IPV6Rule)
 	}
 
 	return nodeLocalDNSPolicy
-}
-
-func appendIPVersionCIDRs(net *[]string, cidrArray []string) {
-	*net = append(*net, cidrArray...)
 }
 
 func createNamespaceSelector(namespaces ...string) string {

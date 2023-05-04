@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,10 +30,40 @@ var _ = Describe("Tiers rendering tests", func() {
 
 	clusterDNSPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns.json")
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
+	nodeLocalDNSPolicyIPv4 := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns_ipv4.json")
+	nodeLocalDNSPolicyIPv6 := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns_ipv6.json")
+	nodeLocalDNSPolicyDual := testutils.GetExpectedGlobalPolicyFromFile("../testutils/expected_policies/node_local_dns_dual.json")
+
+	getDNSEgressCIDRs := func(ipMode testutils.IPMode) tiers.DNSEgressCIDR {
+		switch ipMode {
+		case testutils.IPV4:
+			return tiers.DNSEgressCIDR{
+				IPV4: []string{"10.96.0.10/32"},
+			}
+
+		case testutils.IPV6:
+			return tiers.DNSEgressCIDR{
+				IPV6: []string{"2002:a60:a::"},
+			}
+		case testutils.DualStack:
+			return tiers.DNSEgressCIDR{
+				IPV4: []string{"10.96.0.10/32"},
+				IPV6: []string{"2002:a60:a::"},
+			}
+		// default to IPV4 if ipMode is not set.
+		default:
+			return tiers.DNSEgressCIDR{
+				IPV4: []string{"10.96.0.10/32"},
+			}
+		}
+	}
 
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
-		cfg = &tiers.Config{Openshift: false}
+		cfg = &tiers.Config{
+			Openshift:      false,
+			DNSEgressCIDRs: getDNSEgressCIDRs(testutils.IPV4),
+		}
 	})
 
 	Context("allow-tigera rendering", func() {
@@ -51,9 +81,10 @@ var _ = Describe("Tiers rendering tests", func() {
 			return nil
 		}
 
-		DescribeTable("should render allow-tigera policy",
+		DescribeTable("should render allow-tigera network policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
+
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
 
@@ -68,10 +99,55 @@ var _ = Describe("Tiers rendering tests", func() {
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
+
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
+
+	Context("allow-tigera node-local-dns global policy rendering", func() {
+		globalPolicyNames := []string{
+			"allow-tigera.node-local-dns",
+		}
+
+		getExpectedPolicy := func(ipMode testutils.IPMode) *v3.GlobalNetworkPolicy {
+			switch ipMode {
+			case testutils.IPV4:
+				return nodeLocalDNSPolicyIPv4
+			case testutils.IPV6:
+				return nodeLocalDNSPolicyIPv6
+			case testutils.DualStack:
+				return nodeLocalDNSPolicyDual
+			// default behaviour is IPV4
+			default:
+				return nodeLocalDNSPolicyIPv4
+			}
+		}
+
+		DescribeTable("should render for single and dual stack",
+			func(ipMode testutils.IPMode) {
+				cfg.DNSEgressCIDRs = getDNSEgressCIDRs(ipMode)
+				component := tiers.Tiers(cfg)
+				resourcesToCreate, _ := component.Objects()
+
+				// Validate tier render
+				allowTigera := rtest.GetGlobalResource(resourcesToCreate, "allow-tigera", "projectcalico.org", "v3", "Tier").(*v3.Tier)
+				Expect(*allowTigera.Spec.Order).To(Equal(100.0))
+
+				// Validate created policy render
+				for _, policyName := range globalPolicyNames {
+					policy := testutils.GetAllowTigeraGlobalPolicyFromResources(policyName, resourcesToCreate)
+					expectedPolicy := getExpectedPolicy(ipMode)
+					Expect(policy).To(Equal(expectedPolicy))
+				}
+			},
+
+			Entry("for IPV4", testutils.IPV4),
+			Entry("for IPV6", testutils.IPV6),
+			Entry("for DualStack", testutils.DualStack),
+			Entry("for when ipMode is not provided", nil),
 		)
 	})
 })

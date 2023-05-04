@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,12 +35,29 @@ type AllowTigeraScenario struct {
 	Openshift      bool
 }
 
+type IPMode string
+
+const (
+	IPV4      IPMode = "IPV4"
+	IPV6      IPMode = "IPV6"
+	DualStack IPMode = "Dual-stack"
+)
+
 func GetAllowTigeraPolicyFromResources(name types.NamespacedName, resources []client.Object) *v3.NetworkPolicy {
 	resource := rtest.GetResource(resources, name.Name, name.Namespace, "projectcalico.org", "v3", "NetworkPolicy")
 	if resource == nil {
 		return nil
 	} else {
 		return resource.(*v3.NetworkPolicy)
+	}
+}
+
+func GetAllowTigeraGlobalPolicyFromResources(name string, resources []client.Object) *v3.GlobalNetworkPolicy {
+	resource := rtest.GetGlobalResource(resources, name, "projectcalico.org", "v3", "GlobalNetworkPolicy")
+	if resource == nil {
+		return nil
+	} else {
+		return resource.(*v3.GlobalNetworkPolicy)
 	}
 }
 
@@ -53,6 +70,21 @@ func GetExpectedPolicyFromFile(name string) *v3.NetworkPolicy {
 	Expect(err).ShouldNot(HaveOccurred())
 
 	var policy v3.NetworkPolicy
+	err = json.Unmarshal(byteValue, &policy)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	return &policy
+}
+
+func GetExpectedGlobalPolicyFromFile(name string) *v3.GlobalNetworkPolicy {
+	jsonFile, err := os.Open(name)
+	Expect(err).ShouldNot(HaveOccurred())
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	var policy v3.GlobalNetworkPolicy
 	err = json.Unmarshal(byteValue, &policy)
 	Expect(err).ShouldNot(HaveOccurred())
 

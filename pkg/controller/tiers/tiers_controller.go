@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,13 @@ package tiers
 import (
 	"context"
 	"fmt"
+	"net"
+
+	"github.com/go-logr/logr"
+
+	corev1 "k8s.io/api/core/v1"
+
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -88,6 +95,17 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 	return r
 }
 
+var _ reconcile.Reconciler = &ReconcileTiers{}
+
+type ReconcileTiers struct {
+	client             client.Client
+	scheme             *runtime.Scheme
+	provider           operatorv1.Provider
+	status             status.StatusManager
+	tierWatchReady     *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
+}
+
 // add adds watches for resources that are available at startup.
 func add(mgr manager.Manager, c controller.Controller) error {
 	if err := utils.AddNetworkWatch(c); err != nil {
@@ -98,18 +116,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("tiers-controller failed to watch APIServer resource: %v", err)
 	}
 
+	if err := utils.AddNodeLocalDNSWatch(c); err != nil {
+		return fmt.Errorf("tiers-controller failed to watch node-local-dns daemonset: %v", err)
+	}
+
 	return nil
-}
-
-var _ reconcile.Reconciler = &ReconcileTiers{}
-
-type ReconcileTiers struct {
-	client             client.Client
-	scheme             *runtime.Scheme
-	provider           operatorv1.Provider
-	status             status.StatusManager
-	tierWatchReady     *utils.ReadyFlag
-	policyWatchesReady *utils.ReadyFlag
 }
 
 func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -136,7 +147,12 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	component := tiers.Tiers(&tiers.Config{Openshift: r.provider == operatorv1.ProviderOpenShift})
+	tiersConfig, reconcileResult := r.prepareTiersConfig(ctx, reqLogger)
+	if reconcileResult != nil {
+		return *reconcileResult, nil
+	}
+
+	component := tiers.Tiers(tiersConfig)
 
 	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
@@ -146,4 +162,48 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.Logger) (*tiers.Config, *reconcile.Result) {
+	tiersConfig := tiers.Config{
+		Openshift:      r.provider == operatorv1.ProviderOpenShift,
+		DNSEgressCIDRs: tiers.DNSEgressCIDR{},
+	}
+
+	if r.provider != operatorv1.ProviderOpenShift {
+		nodeLocalDNSExists, err := utils.IsNodeLocalDNSAvailable(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
+			return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
+		} else if nodeLocalDNSExists {
+			// Discover the kube-dns Service cluster IP address - node-local-dns is not supported on OpenShift which is the only platform without
+			// kube-dns. Thus, the name "kube-dns" can be static.
+			kubeDNSService := &corev1.Service{}
+			err = r.client.Get(ctx, types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}, kubeDNSService)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					r.status.SetDegraded(operatorv1.ResourceNotFound, "kube-dns service not found", err, reqLogger)
+				} else {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying kube-dns service", err, reqLogger)
+				}
+				return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
+			}
+			kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
+
+			for _, IP := range kubeDNSIPs {
+				var builder strings.Builder
+				builder.WriteString(IP)
+				if net.ParseIP(IP).To4() != nil {
+					builder.WriteString("/32")
+					tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
+				} else {
+					builder.WriteString("/128")
+					tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
+				}
+
+			}
+		}
+	}
+
+	return &tiersConfig, nil
 }

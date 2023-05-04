@@ -37,9 +37,11 @@ type AllowTigeraScenario struct {
 
 type IPMode string
 
-const IPV4 IPMode = "IPV4"
-const IPV6 IPMode = "IPV6"
-const DualStack IPMode = "Dual-stack"
+const (
+	IPV4      IPMode = "IPV4"
+	IPV6      IPMode = "IPV6"
+	DualStack IPMode = "Dual-stack"
+)
 
 func GetAllowTigeraPolicyFromResources(name types.NamespacedName, resources []client.Object) *v3.NetworkPolicy {
 	resource := rtest.GetResource(resources, name.Name, name.Namespace, "projectcalico.org", "v3", "NetworkPolicy")

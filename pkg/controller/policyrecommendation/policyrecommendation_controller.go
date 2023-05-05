@@ -415,7 +415,10 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.PolicyRecommendationNamespace,
 			ServiceAccounts: []string{render.PolicyRecommendationName},
-			TrustedBundle:   trustedBundle,
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 

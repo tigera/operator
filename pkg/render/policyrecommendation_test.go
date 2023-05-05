@@ -36,6 +36,7 @@ import (
 var _ = Describe("Policy recommendation rendering tests", func() {
 	var cfg *render.PolicyRecommendationConfiguration
 	var bundle certificatemanagement.TrustedBundle
+	var keyPair certificatemanagement.KeyPairInterface
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -44,16 +45,20 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		bundle = certificateManager.CreateTrustedBundle()
+		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.PolicyRecommendationTLSSecretName, "", "", nil)
+		Expect(err).NotTo(HaveOccurred())
+		keyPair = certificatemanagement.NewKeyPair(secretTLS, []string{""}, "")
 
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.PolicyRecommendationConfiguration{
-			ClusterDomain:   dns.DefaultClusterDomain,
-			ESClusterConfig: relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
-			TrustedBundle:   bundle,
-			Installation:    &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ManagedCluster:  notManagedCluster,
-			UsePSP:          true,
+			ClusterDomain:                  dns.DefaultClusterDomain,
+			ESClusterConfig:                relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
+			TrustedBundle:                  bundle,
+			Installation:                   &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ManagedCluster:                 notManagedCluster,
+			PolicyRecommendationCertSecret: keyPair,
+			UsePSP:                         true,
 		}
 	})
 
@@ -89,6 +94,10 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(prc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(prc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/policy-recommendation-tls/tls.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/policy-recommendation-tls/tls.key"},
 		))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))

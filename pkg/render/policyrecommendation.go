@@ -40,18 +40,23 @@ const (
 	PolicyRecommendationName       = "tigera-policy-recommendation"
 	PolicyRecommendationNamespace  = PolicyRecommendationName
 	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+
+	PolicyRecommendationTLSSecretName = "policy-recommendation-tls"
 )
+
+var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
-	ClusterDomain   string
-	ESClusterConfig *relasticsearch.ClusterConfig
-	ESSecrets       []*corev1.Secret
-	Installation    *operatorv1.InstallationSpec
-	ManagedCluster  bool
-	Openshift       bool
-	PullSecrets     []*corev1.Secret
-	TrustedBundle   certificatemanagement.TrustedBundle
+	ClusterDomain                  string
+	ESClusterConfig                *relasticsearch.ClusterConfig
+	ESSecrets                      []*corev1.Secret
+	Installation                   *operatorv1.InstallationSpec
+	ManagedCluster                 bool
+	Openshift                      bool
+	PullSecrets                    []*corev1.Secret
+	TrustedBundle                  certificatemanagement.TrustedBundle
+	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -139,6 +144,15 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"flows",
+				"flowlogs",
+			},
+			Verbs: []string{"get"},
+		},
 	}
 
 	return &rbacv1.ClusterRole{
@@ -177,9 +191,43 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	envs := []corev1.EnvVar{
 		{
+			Name:  "LOG_LEVEL",
+			Value: "Info",
+		},
+		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: pr.cfg.TrustedBundle.MountPath(),
 		},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain),
+		},
+		{
+			Name:  "LINSEED_CA",
+			Value: pr.cfg.TrustedBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_CERT",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_KEY",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "LINSEED_TOKEN",
+			Value: GetLinseedTokenPath(pr.cfg.ManagedCluster),
+		},
+	}
+
+	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
+	volumeMounts = append(volumeMounts, pr.cfg.PolicyRecommendationCertSecret.VolumeMount(pr.SupportedOSType()))
+	if pr.cfg.ManagedCluster {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      LinseedTokenVolumeName,
+				MountPath: LinseedVolumeMountPath,
+			})
 	}
 
 	controllerContainer := corev1.Container{
@@ -187,11 +235,12 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		Image:           pr.image,
 		Env:             envs,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType()),
+		VolumeMounts:    volumeMounts,
 	}
 
 	volumes := []corev1.Volume{
 		pr.cfg.TrustedBundle.Volume(),
+		pr.cfg.PolicyRecommendationCertSecret.Volume(),
 	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(
@@ -266,6 +315,15 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Destination: networkpolicy.ESGatewayEntityRule,
 		},
 	}
+
+	if !cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
+		})
+	}
+
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 
 	return &v3.NetworkPolicy{

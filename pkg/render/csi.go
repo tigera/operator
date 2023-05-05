@@ -186,6 +186,11 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 }
 
 func (c *csiComponent) csiVolumes() []corev1.Volume {
+	dataVolumePath := c.cfg.Installation.DataVolumePath
+	if dataVolumePath == "" {
+		dataVolumePath = "/etc/calico"
+	}
+
 	hostPathTypeDir := corev1.HostPathDirectory
 	hostPathTypeDirOrCreate := corev1.HostPathDirectoryOrCreate
 	return []corev1.Volume{
@@ -201,7 +206,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "etccalico",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: filepath.Clean("/etc/calico"),
+					Path: filepath.Clean(dataVolumePath),
 				},
 			},
 		},

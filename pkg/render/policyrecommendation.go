@@ -216,7 +216,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		},
 		{
 			Name:  "LINSEED_TOKEN",
-			Value: GetLinseedTokenPath(pr.cfg.ManagedCluster),
+			Value: GetLinseedTokenPath(false),
 		},
 	}
 

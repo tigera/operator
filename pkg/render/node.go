@@ -393,10 +393,10 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"patch"},
 			},
 			{
-				// Used for creating service account tokens to be used by the CNI plugin.
+				// Allows Calico to use the K8s TokenRequest API to create the tokens used by the CNI plugin.
 				APIGroups:     []string{""},
 				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{"calico-cni-plugin"},
+				ResourceNames: []string{"calico-node"},
 				Verbs:         []string{"create"},
 			},
 			{
@@ -563,6 +563,13 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				APIGroups: []string{""},
 				Resources: []string{"pods/status"},
 				Verbs:     []string{"patch"},
+			},
+			{
+				// Used for creating service account tokens to be used by the CNI plugin.
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-cni-plugin"},
+				Verbs:         []string{"create"},
 			},
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and

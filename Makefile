@@ -512,10 +512,12 @@ COMMON_VERSIONS?=config/common_versions.yml
 
 gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-common
 
-gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds
+# note: operator-cloud gen-versions does not pull updates to CRDs, instead relying on upstream operator repo to do so.
+gen-versions-calico: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
 
-gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
+# note: operator-cloud gen-versions does not pull updates to CRDs, instead relying on upstream operator repo to do so.
+gen-versions-enterprise: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
 
 gen-versions-common: $(BINDIR)/gen-versions

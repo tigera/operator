@@ -320,43 +320,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "image-assurance-api-proxy" }}
-	ComponentImageAssuranceApiProxy = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
-{{ with index .Components "image-assurance-scanner" }}
-	ComponentImageAssuranceScanner = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
-{{ with index .Components "image-assurance-runtime-cleaner" }}
-	ComponentImageAssuranceRuntimeCleaner = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
-{{ with index .Components "sasha" }}
-	ComponentSasha = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
-{{ with index .Components "threat-id" }}
-	ComponentThreatId = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
-{{ with index .Components "cloud-rbac-api" }}
-	ComponentCloudRBACApi = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
-
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []component{
@@ -406,11 +369,5 @@ var (
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,
 		ComponentCSINodeDriverRegistrarPrivate,
-		ComponentImageAssuranceApiProxy,
-		ComponentImageAssuranceScanner,
-		ComponentImageAssuranceRuntimeCleaner,
-		ComponentSasha,
-		ComponentThreatId,
-		ComponentCloudRBACApi,
 	}
 )

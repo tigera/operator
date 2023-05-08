@@ -506,11 +506,12 @@ gen-files: manifests generate
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
+CLOUD_VERSIONS?=config/cloud_versions.yml
 COMMON_VERSIONS?=config/common_versions.yml
 
-.PHONY: gen-versions gen-versions-calico gen-versions-enterprise gen-versions-common
+.PHONY: gen-versions gen-versions-calico gen-versions-enterprise gen-versions-cloud gen-versions-common
 
-gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-common
+gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-cloud gen-versions-common
 
 # note: operator-cloud gen-versions does not pull updates to CRDs, instead relying on upstream operator repo to do so.
 gen-versions-calico: $(BINDIR)/gen-versions
@@ -519,6 +520,9 @@ gen-versions-calico: $(BINDIR)/gen-versions
 # note: operator-cloud gen-versions does not pull updates to CRDs, instead relying on upstream operator repo to do so.
 gen-versions-enterprise: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
+
+gen-versions-cloud: $(BINDIR)/gen-versions
+	$(BINDIR)/gen-versions -cloud-versions=$(CLOUD_VERSIONS) > pkg/components/cloud.go
 
 gen-versions-common: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -common-versions=$(COMMON_VERSIONS) > pkg/components/common.go

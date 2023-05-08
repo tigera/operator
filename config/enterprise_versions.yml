@@ -148,24 +148,6 @@ components:
   dikastes:
     image: tigera/dikastes
     version: master
-  image-assurance-api-proxy:
-    image: tigera/image-assurance-api-proxy
-    version: v1.6.2
-  image-assurance-scanner:
-    image: tigera/image-assurance-scanner
-    version: v1.6.2
-  image-assurance-runtime-cleaner:
-    image: tigera/image-assurance-runtime-cleaner
-    version: v1.6.2
-  sasha:
-    image: tigera/sasha
-    version: v1.6.0
-  threat-id:
-    image: tigera/threat-identification
-    version: v1.6.0
-  cloud-rbac-api:
-    image: tigera/cc-rbac-api
-    version: v0.1.1-0-g74b6dbe
   egress-gateway:
     image: tigera/egress-gateway
     version: master

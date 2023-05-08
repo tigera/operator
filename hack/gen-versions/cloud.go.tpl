@@ -18,35 +18,42 @@
 package components
 
 var (
+{{- with index .Components "image-assurance-api-proxy" }}
 	ComponentImageAssuranceApiProxy = component{
-		Version: "v1.6.2",
-		Image:   "tigera/image-assurance-api-proxy",
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
-
+{{- end }}
+{{ with index .Components "image-assurance-scanner" }}
 	ComponentImageAssuranceScanner = component{
-		Version: "v1.6.2",
-		Image:   "tigera/image-assurance-scanner",
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
-
+{{- end }}
+{{ with index .Components "image-assurance-runtime-cleaner" }}
 	ComponentImageAssuranceRuntimeCleaner = component{
-		Version: "v1.6.2",
-		Image:   "tigera/image-assurance-runtime-cleaner",
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
-
+{{- end }}
+{{ with index .Components "sasha" }}
 	ComponentSasha = component{
-		Version: "v1.6.0",
-		Image:   "tigera/sasha",
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
-
+{{- end }}
+{{ with index .Components "threat-id" }}
 	ComponentThreatId = component{
-		Version: "v1.6.0",
-		Image:   "tigera/threat-identification",
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
-
+{{- end }}
+{{ with index .Components "cloud-rbac-api" }}
 	ComponentCloudRBACApi = component{
-		Version: "v0.1.1-0-g74b6dbe",
-		Image:   "tigera/cc-rbac-api",
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
+{{- end }}
 
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.

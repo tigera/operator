@@ -27,6 +27,7 @@ const (
 
 	eeVersionsTpl     = "enterprise.go.tpl"
 	osVersionsTpl     = "calico.go.tpl"
+	cloudVersionsTpl  = "cloud.go.tpl"
 	commonVersionsTpl = "common.go.tpl"
 )
 
@@ -35,6 +36,7 @@ var (
 	debug              bool
 	eeVersionsPath     string
 	osVersionsPath     string
+	cloudVersionsPath  string
 	commonVersionsPath string
 	gcrBearer          string
 )
@@ -44,6 +46,7 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "enable debug logging")
 	flag.StringVar(&eeVersionsPath, "ee-versions", "", "path to calico versions file")
 	flag.StringVar(&osVersionsPath, "os-versions", "", "path to enterprise versions file")
+	flag.StringVar(&cloudVersionsPath, "cloud-versions", "", "path to cloud versions file")
 	flag.StringVar(&commonVersionsPath, "common-versions", "", "path to common versions file")
 	flag.StringVar(&gcrBearer, "gcr-bearer", "", "output of 'gcloud auth print-access-token")
 	flag.Parse()
@@ -65,6 +68,10 @@ func main() {
 		}
 	} else if eeVersionsPath != "" {
 		if err := run(eeVersionsPath, filepath.Join(templateDir, eeVersionsTpl), defaultEnterpriseRegistry); err != nil {
+			log.Fatalln(err)
+		}
+	} else if cloudVersionsPath != "" {
+		if err := run(cloudVersionsPath, filepath.Join(templateDir, cloudVersionsTpl), defaultEnterpriseRegistry); err != nil {
 			log.Fatalln(err)
 		}
 	} else if commonVersionsPath != "" {

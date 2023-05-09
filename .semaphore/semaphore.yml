@@ -98,7 +98,7 @@ blocks:
             - 'cache store go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
         - name: Build s390x
           execution_time_limit:
-            minutes: 45
+            minutes: 90
           commands:
             - make register build ARCH=s390x
             # Store in cache for other builds in this run

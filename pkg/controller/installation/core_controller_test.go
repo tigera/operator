@@ -1549,8 +1549,9 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			policies := v3.NetworkPolicyList{}
 			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(1))
+			Expect(policies.Items).To(HaveLen(2))
 			Expect(policies.Items[0].Name).To(Equal("allow-tigera.kube-controller-access"))
+			Expect(policies.Items[1].Name).To(Equal("allow-tigera.default-deny"))
 		})
 
 		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {

@@ -16,8 +16,9 @@ package components
 
 var ({{ with index .Components "key-cert-provisioner" }}
 	ComponentCSRInitContainer = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:    "{{ .Version }}",
+		Image:      "{{ .Image }}",
+		Registry:   "{{ .Registry }}",
 	}
 {{- end }}
 	CommonImages = []component{

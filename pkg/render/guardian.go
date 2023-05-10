@@ -299,8 +299,9 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 func (c *GuardianComponent) container() []corev1.Container {
 	return []corev1.Container{
 		{
-			Name:  GuardianDeploymentName,
-			Image: c.image,
+			Name:            GuardianDeploymentName,
+			Image:           c.image,
+			ImagePullPolicy: ImagePullPolicy(),
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},

@@ -1392,7 +1392,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
-		components = append(components, kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg))
+		components = append(components,
+			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
+			render.NewPassthrough(networkpolicy.AllowTigeraDefaultDeny(common.CalicoNamespace)),
+		)
 	}
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)

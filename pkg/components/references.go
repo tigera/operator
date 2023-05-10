@@ -24,6 +24,11 @@ type component struct {
 	// Image is the full image path and name for this component (e.g., tigera/cnx-node, calico/cni)
 	Image   string
 	Version string
+
+	// Registry is only used for developer workflows. For production builds, the registry
+	// is always determined from user configuration. This field can be overridden
+	// as part of a developer workflow to deploy custom dev images on an individual basis.
+	Registry string
 }
 
 const UseDefault = "UseDefault"
@@ -52,6 +57,13 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 			registry = CSRInitRegistry
 		default:
 			registry = TigeraRegistry
+		}
+
+		// If the component asks for an explicit registry, and the user
+		// did not provide a custom registry, use the one specified by
+		// the component.
+		if c.Registry != "" {
+			registry = c.Registry
 		}
 	}
 

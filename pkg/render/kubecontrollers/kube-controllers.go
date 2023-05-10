@@ -485,10 +485,11 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	sc.RunAsGroup = ptr.Int64ToPtr(0)
 
 	container := corev1.Container{
-		Name:      c.kubeControllerName,
-		Image:     c.image,
-		Env:       env,
-		Resources: c.kubeControllersResources(),
+		Name:            c.kubeControllerName,
+		Image:           c.image,
+		ImagePullPolicy: render.ImagePullPolicy(),
+		Env:             env,
+		Resources:       c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
 			PeriodSeconds: int32(10),
 			ProbeHandler: corev1.ProbeHandler{

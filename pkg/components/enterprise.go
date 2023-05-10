@@ -21,253 +21,304 @@ var (
 	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = component{
-		Version: "master",
-		Image:   "tigera/cnx-apiserver",
+		Version:  "master",
+		Image:    "tigera/cnx-apiserver",
+		Registry: "",
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "master",
-		Image:   "tigera/compliance-benchmarker",
+		Version:  "master",
+		Image:    "tigera/compliance-benchmarker",
+		Registry: "",
 	}
 
 	ComponentComplianceController = component{
-		Version: "master",
-		Image:   "tigera/compliance-controller",
+		Version:  "master",
+		Image:    "tigera/compliance-controller",
+		Registry: "",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "master",
-		Image:   "tigera/compliance-reporter",
+		Version:  "master",
+		Image:    "tigera/compliance-reporter",
+		Registry: "",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "master",
-		Image:   "tigera/compliance-server",
+		Version:  "master",
+		Image:    "tigera/compliance-server",
+		Registry: "",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "master",
-		Image:   "tigera/compliance-snapshotter",
+		Version:  "master",
+		Image:    "tigera/compliance-snapshotter",
+		Registry: "",
 	}
 
 	ComponentDeepPacketInspection = component{
-		Version: "master",
-		Image:   "tigera/deep-packet-inspection",
+		Version:  "master",
+		Image:    "tigera/deep-packet-inspection",
+		Registry: "",
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.17.9",
+		Version:  "7.17.9",
+		Registry: "",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.17.9",
+		Version:  "7.17.9",
+		Registry: "",
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "master",
-		Image:   "tigera/intrusion-detection-job-installer",
+		Version:  "master",
+		Image:    "tigera/intrusion-detection-job-installer",
+		Registry: "",
 	}
 
 	ComponentElasticsearch = component{
-		Version: "master",
-		Image:   "tigera/elasticsearch",
+		Version:  "master",
+		Image:    "tigera/elasticsearch",
+		Registry: "",
 	}
 
 	ComponentElasticsearchFIPS = component{
-		Version: "master-fips",
-		Image:   "tigera/elasticsearch",
+		Version:  "master-fips",
+		Image:    "tigera/elasticsearch",
+		Registry: "",
 	}
 
 	ComponentECKElasticsearchOperator = component{
-		Version: "2.6.1",
+		Version:  "2.6.1",
+		Registry: "",
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "master",
-		Image:   "tigera/eck-operator",
+		Version:  "master",
+		Image:    "tigera/eck-operator",
+		Registry: "",
 	}
 
 	ComponentEsCurator = component{
-		Version: "master",
-		Image:   "tigera/es-curator",
+		Version:  "master",
+		Image:    "tigera/es-curator",
+		Registry: "",
 	}
 
 	ComponentEsProxy = component{
-		Version: "master",
-		Image:   "tigera/es-proxy",
+		Version:  "master",
+		Image:    "tigera/es-proxy",
+		Registry: "",
 	}
 
 	ComponentESGateway = component{
-		Version: "master",
-		Image:   "tigera/es-gateway",
+		Version:  "master",
+		Image:    "tigera/es-gateway",
+		Registry: "",
 	}
 
 	ComponentLinseed = component{
-		Version: "master",
-		Image:   "tigera/linseed",
+		Version:  "master",
+		Image:    "tigera/linseed",
+		Registry: "",
 	}
 
 	ComponentFluentd = component{
-		Version: "master",
-		Image:   "tigera/fluentd",
+		Version:  "master",
+		Image:    "tigera/fluentd",
+		Registry: "",
 	}
 
 	ComponentFluentdWindows = component{
-		Version: "master",
-		Image:   "tigera/fluentd-windows",
+		Version:  "master",
+		Image:    "tigera/fluentd-windows",
+		Registry: "",
 	}
 
 	ComponentGuardian = component{
-		Version: "master",
-		Image:   "tigera/guardian",
+		Version:  "master",
+		Image:    "tigera/guardian",
+		Registry: "",
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "master",
-		Image:   "tigera/intrusion-detection-controller",
+		Version:  "master",
+		Image:    "tigera/intrusion-detection-controller",
+		Registry: "",
 	}
 
 	ComponentAnomalyDetectionJobs = component{
-		Version: "master",
-		Image:   "tigera/anomaly_detection_jobs",
+		Version:  "master",
+		Image:    "tigera/anomaly_detection_jobs",
+		Registry: "",
 	}
 
 	ComponentAnomalyDetectionAPI = component{
-		Version: "master",
-		Image:   "tigera/anomaly-detection-api",
+		Version:  "master",
+		Image:    "tigera/anomaly-detection-api",
+		Registry: "",
 	}
 
 	ComponentKibana = component{
-		Version: "master",
-		Image:   "tigera/kibana",
+		Version:  "master",
+		Image:    "tigera/kibana",
+		Registry: "",
 	}
 
 	ComponentManager = component{
-		Version: "master",
-		Image:   "tigera/cnx-manager",
+		Version:  "master",
+		Image:    "tigera/cnx-manager",
+		Registry: "",
 	}
 
 	ComponentDex = component{
-		Version: "master",
-		Image:   "tigera/dex",
+		Version:  "master",
+		Image:    "tigera/dex",
+		Registry: "",
 	}
 
 	ComponentManagerProxy = component{
-		Version: "master",
-		Image:   "tigera/voltron",
+		Version:  "master",
+		Image:    "tigera/voltron",
+		Registry: "",
 	}
 
 	ComponentPacketCapture = component{
-		Version: "master",
-		Image:   "tigera/packetcapture",
+		Version:  "master",
+		Image:    "tigera/packetcapture",
+		Registry: "",
 	}
 
 	ComponentPolicyRecommendation = component{
-		Version: "master",
-		Image:   "tigera/policy-recommendation",
+		Version:  "master",
+		Image:    "tigera/policy-recommendation",
+		Registry: "",
 	}
 
 	ComponentEgressGateway = component{
-		Version: "master",
-		Image:   "tigera/egress-gateway",
+		Version:  "master",
+		Image:    "tigera/egress-gateway",
+		Registry: "",
 	}
 
 	ComponentL7Collector = component{
-		Version: "master",
-		Image:   "tigera/l7-collector",
+		Version:  "master",
+		Image:    "tigera/l7-collector",
+		Registry: "",
 	}
 
 	ComponentEnvoyProxy = component{
-		Version: "master",
-		Image:   "tigera/envoy",
+		Version:  "master",
+		Image:    "tigera/envoy",
+		Registry: "",
 	}
 
 	ComponentDikastes = component{
-		Version: "master",
-		Image:   "tigera/dikastes",
+		Version:  "master",
+		Image:    "tigera/dikastes",
+		Registry: "",
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version: "v2.43.1",
+		Version:  "v2.43.1",
+		Registry: "",
 	}
 
 	ComponentPrometheus = component{
-		Version: "master",
-		Image:   "tigera/prometheus",
+		Version:  "master",
+		Image:    "tigera/prometheus",
+		Registry: "",
 	}
 
 	ComponentTigeraPrometheusService = component{
-		Version: "master",
-		Image:   "tigera/prometheus-service",
+		Version:  "master",
+		Image:    "tigera/prometheus-service",
+		Registry: "",
 	}
 
 	ComponentCoreOSAlertmanager = component{
-		Version: "v0.25.0",
+		Version:  "v0.25.0",
+		Registry: "",
 	}
 
 	ComponentPrometheusAlertmanager = component{
-		Version: "master",
-		Image:   "tigera/alertmanager",
+		Version:  "master",
+		Image:    "tigera/alertmanager",
+		Registry: "",
 	}
 
 	ComponentQueryServer = component{
-		Version: "master",
-		Image:   "tigera/cnx-queryserver",
+		Version:  "master",
+		Image:    "tigera/cnx-queryserver",
+		Registry: "",
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "master",
-		Image:   "tigera/kube-controllers",
+		Version:  "master",
+		Image:    "tigera/kube-controllers",
+		Registry: "",
 	}
 
 	ComponentTigeraNode = component{
-		Version: "master",
-		Image:   "tigera/cnx-node",
+		Version:  "master",
+		Image:    "tigera/cnx-node",
+		Registry: "",
 	}
 
 	ComponentTigeraTypha = component{
-		Version: "master",
-		Image:   "tigera/typha",
+		Version:  "master",
+		Image:    "tigera/typha",
+		Registry: "",
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "master",
-		Image:   "tigera/cni",
+		Version:  "master",
+		Image:    "tigera/cni",
+		Registry: "",
 	}
 
 	ComponentTigeraCNIFIPS = component{
-		Version: "master-fips",
-		Image:   "tigera/cni",
+		Version:  "master-fips",
+		Image:    "tigera/cni",
+		Registry: "",
 	}
 
 	ComponentCloudControllers = component{
-		Version: "master",
-		Image:   "tigera/cloud-controllers",
+		Version:  "master",
+		Image:    "tigera/cloud-controllers",
+		Registry: "",
 	}
 
 	ComponentElasticsearchMetrics = component{
-		Version: "master",
-		Image:   "tigera/elasticsearch-metrics",
+		Version:  "master",
+		Image:    "tigera/elasticsearch-metrics",
+		Registry: "",
 	}
 
 	ComponentTigeraWindowsUpgrade = component{
-		Version: "master",
-		Image:   "tigera/calico-windows-upgrade",
+		Version:  "master",
+		Image:    "tigera/calico-windows-upgrade",
+		Registry: "",
 	}
 
 	ComponentFlexVolumePrivate = component{
-		Version: "master",
-		Image:   "tigera/pod2daemon-flexvol",
+		Version:  "master",
+		Image:    "tigera/pod2daemon-flexvol",
+		Registry: "",
 	}
 
 	ComponentCSIPrivate = component{
-		Version: "master",
-		Image:   "tigera/csi",
+		Version:  "master",
+		Image:    "tigera/csi",
+		Registry: "",
 	}
 
 	ComponentCSINodeDriverRegistrarPrivate = component{
-		Version: "master",
-		Image:   "tigera/node-driver-registrar",
+		Version:  "master",
+		Image:    "tigera/node-driver-registrar",
+		Registry: "",
 	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.

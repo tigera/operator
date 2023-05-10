@@ -168,9 +168,10 @@ func (c *windowsComponent) windowsUpgradeContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         common.CalicoWindowsUpgradeResourceName,
-		Image:        c.windowsUpgradeImage,
-		VolumeMounts: mounts,
+		Name:            common.CalicoWindowsUpgradeResourceName,
+		Image:           c.windowsUpgradeImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		VolumeMounts:    mounts,
 	}
 }
 

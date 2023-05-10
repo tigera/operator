@@ -232,12 +232,15 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 							corev1.Container{
 								Name:            ElasticsearchMetricsName,
 								Image:           e.esMetricsImage,
+								ImagePullPolicy: render.ImagePullPolicy(),
 								SecurityContext: securitycontext.NewNonRootContext(),
 								Command:         []string{"/bin/elasticsearch_exporter"},
-								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
+								Args: []string{
+									"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
+									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath),
+								},
 								VolumeMounts: append(
 									e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType()),
 									e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),

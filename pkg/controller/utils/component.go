@@ -524,9 +524,13 @@ func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 
 // setImagePullPolicy ensures that an image pull policy is set if not set already.
 func setImagePullPolicy(podSpec *v1.PodSpec) {
+	// Determine the pull policy to use. For production, we always set to
+	// IfNotPresent, but for dev purposes this can be overridden to be other values.
+	policy := render.ImagePullPolicy()
+
 	for i := range podSpec.Containers {
 		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
-			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
+			podSpec.Containers[i].ImagePullPolicy = policy
 		}
 	}
 }

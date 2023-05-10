@@ -701,6 +701,17 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 		})
 	}
 
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   networkpolicy.PrometheusSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(uint16(cfg.MetricsPort)),
+			},
+		},
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -711,8 +722,9 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(KubeController),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
 			Egress:   egressRules,
+			Ingress:  ingressRules,
 		},
 	}
 }

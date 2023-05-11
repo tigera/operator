@@ -96,6 +96,15 @@ blocks:
             - 'cache store bin-ppc64le-${SEMAPHORE_GIT_SHA} build/_output/bin'
             - 'cache store go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
             - 'cache store go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
+        - name: Build s390x
+          execution_time_limit:
+            minutes: 90
+          commands:
+            - make register build ARCH=s390x
+            # Store in cache for other builds in this run
+            - 'cache store bin-s390x-${SEMAPHORE_GIT_SHA} build/_output/bin'
+            - 'cache store go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
+            - 'cache store go-mod-cache-s390x-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
   - name: 'Static / File Generation Checks'
     dependencies: [ "Build amd64" ]
     task:

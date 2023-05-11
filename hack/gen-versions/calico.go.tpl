@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,62 +23,72 @@ var (
 	CalicoRelease string = "{{ .Title }}"
 {{ with index .Components "calico/cni" }}
 	ComponentCalicoCNI = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "calico/cni" }}
 	ComponentCalicoCNIFIPS = component{
-		Version: "{{ .Version }}-fips",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components  "calico/node" }}
 	ComponentCalicoNode = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
 	ComponentCalicoTypha = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.flexvol }}
 	ComponentFlexVolume = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "calico/apiserver"}}
 	ComponentCalicoAPIServer = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
 	ComponentWindowsUpgrade = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "calico/csi"}}
 	ComponentCalicoCSI = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
 	ComponentCalicoCSIRegistrar = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 	ComponentOperatorInit = component{

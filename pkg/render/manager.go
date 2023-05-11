@@ -408,6 +408,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
 		Image:           c.managerImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: sc,
@@ -504,7 +505,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.proxyImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),
@@ -543,6 +544,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "tigera-es-proxy",
 		Image:           c.esProxyImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,

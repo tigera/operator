@@ -16,7 +16,17 @@ package render_test
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -24,19 +34,18 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Policy recommendation rendering tests", func() {
 	var cfg *render.PolicyRecommendationConfiguration
 	var bundle certificatemanagement.TrustedBundle
 	var keyPair certificatemanagement.KeyPairInterface
+
+	// Fetch expectations from utilities that require Ginkgo context.
+	expectedUnmanagedPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation.json")
+	expectedUnmanagedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation_ocp.json")
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -189,5 +198,36 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-policy-recommendation", Namespace: "tigera-policy-recommendation"}
+
+		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			return testutils.SelectPolicyByClusterTypeAndProvider(
+				scenario,
+				expectedUnmanagedPolicy,
+				expectedUnmanagedPolicyForOpenshift,
+				nil, // expectedManagedPolicy
+				nil, // expectedManagedPolicyForOpenshift
+			)
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.ManagedCluster = scenario.ManagedCluster
+				cfg.Openshift = scenario.Openshift
+				component := render.PolicyRecommendation(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := getExpectedPolicy(scenario)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
 	})
 })

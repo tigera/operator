@@ -10,57 +10,41 @@
     "tier": "allow-tigera",
     "selector": "k8s-app == 'tigera-policy-recommendation'",
     "types": [
-      "Ingress",
       "Egress"
     ],
-    "ingress": [
-      {
-        "action": "Allow",
-        "protocol": "TCP",
-        "source": {
-          "selector": "k8s-app == 'tigera-manager'",
-          "namespaceSelector": "name == 'tigera-manager'"
-        },
-        "destination": {
-          "ports": [
-            8444
-          ]
-        }
-      }
-    ],
+    "ingress": [],
     "egress": [
       {
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
-          "namespaceSelector": "projectcalico.org/name == 'default'",
-          "selector": "provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes'",
-          "ports": [
-            443,
-            6443,
-            12388
-          ]
+          "services": {
+            "name": "kubernetes",
+            "namespace": "default"
+          }
         }
       },
       {
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'tigera-manager'",
+          "selector": "k8s-app == 'tigera-manager'",
+          "ports": [
+            9443
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+        },
+        "destination": {
+          "selector": "k8s-app == 'tigera-linseed'",
           "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
-          "selector": "k8s-app == 'tigera-secure-es-gateway'",
           "ports": [
-            5554
-          ]
-        }
-      },
-      {
-        "action": "Allow",
-        "protocol": "TCP",
-        "destination": {
-          "namespaceSelector": "projectcalico.org/name == 'tigera-dex'",
-          "selector": "k8s-app == 'tigera-dex'",
-          "ports": [
-            5556
+            8444
           ]
         }
       },

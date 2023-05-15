@@ -313,18 +313,9 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.LinseedEntityRule,
 		},
 	}
-
-	if !cfg.ManagedCluster {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
-		})
-	}
-
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 
 	return &v3.NetworkPolicy{

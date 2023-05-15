@@ -366,7 +366,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	linseedCertLocation := render.TigeraLinseedSecret
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if linseedCertificate == nil {
 		log.Info("Linseed certificate is not available yet, waiting until they become available")
@@ -381,7 +381,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
 
 	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
 

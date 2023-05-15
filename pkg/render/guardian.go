@@ -132,7 +132,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
+		managerClusterWideTigeraLayer(GuardianNamespace),
 		managerClusterWideDefaultView(),
 	)
 

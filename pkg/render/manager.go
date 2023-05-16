@@ -154,6 +154,8 @@ type ManagerConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	OptionaUILayerNamespaces []string
 }
 
 type managerComponent struct {
@@ -210,7 +212,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
+		managerClusterWideTigeraLayer(c.cfg.OptionaUILayerNamespaces),
 		managerClusterWideDefaultView(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
@@ -942,18 +944,15 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 // all of the tigera namespaces.
 //
 // Calico Enterprise only
-func managerClusterWideTigeraLayer() *v3.UISettings {
+func managerClusterWideTigeraLayer(namespace []string) *v3.UISettings {
 	namespaces := []string{
 		"tigera-compliance",
-		"tigera-dex",
 		"tigera-dpi",
 		"tigera-eck-operator",
 		"tigera-elasticsearch",
 		"tigera-fluentd",
-		"tigera-guardian",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
-		"tigera-manager",
 		"tigera-operator",
 		"tigera-packetcapture",
 		"tigera-policy-recommendation",
@@ -961,6 +960,11 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-system",
 		"calico-system",
 	}
+
+	for _, ns := range namespace {
+		namespaces = append(namespaces, ns)
+	}
+
 	nodes := make([]v3.UIGraphNode, len(namespaces))
 	for i := range namespaces {
 		ns := namespaces[i]

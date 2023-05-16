@@ -359,7 +359,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
 
-	var additionalNameSpaces []string
+	optionaUILayerNamespaces := []string{render.ManagerNamespace}
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -371,7 +371,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	} else if authenticationCR != nil {
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
-		additionalNameSpaces = append(additionalNameSpaces, render.DexNamespace)
+		optionaUILayerNamespaces = append(optionaUILayerNamespaces, render.DexNamespace)
 	}
 
 	trustedBundle := certificateManager.CreateTrustedBundle()
@@ -527,29 +527,29 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		log.Error(err, "Failed to  fetch GetAmazonCloudIntegration info")
 	} else if amz != nil {
-		additionalNameSpaces = append(additionalNameSpaces, render.DexNamespace)
+		optionaUILayerNamespaces = append(optionaUILayerNamespaces, render.AmazonCloudIntegrationNamespace)
 	}
 
 	managerCfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:      keyValidatorConfig,
-		ESSecrets:               esSecrets,
-		TrustedCertBundle:       trustedBundle,
-		ESClusterConfig:         esClusterConfig,
-		TLSKeyPair:              tlsSecret,
-		VoltronLinseedKeyPair:   linseedVoltronSecret,
-		PullSecrets:             pullSecrets,
-		Openshift:               r.provider == operatorv1.ProviderOpenShift,
-		Installation:            installation,
-		ManagementCluster:       managementCluster,
-		TunnelSecret:            tunnelSecret,
-		InternalTrafficSecret:   internalTrafficSecret,
-		ClusterDomain:           r.clusterDomain,
-		ESLicenseType:           elasticLicenseType,
-		Replicas:                replicas,
-		Compliance:              complianceCR,
-		ComplianceLicenseActive: complianceLicenseFeatureActive,
-		UsePSP:                  r.usePSP,
-		AdditionalNameSpaces:    additionalNameSpaces,
+		KeyValidatorConfig:       keyValidatorConfig,
+		ESSecrets:                esSecrets,
+		TrustedCertBundle:        trustedBundle,
+		ESClusterConfig:          esClusterConfig,
+		TLSKeyPair:               tlsSecret,
+		VoltronLinseedKeyPair:    linseedVoltronSecret,
+		PullSecrets:              pullSecrets,
+		Openshift:                r.provider == operatorv1.ProviderOpenShift,
+		Installation:             installation,
+		ManagementCluster:        managementCluster,
+		TunnelSecret:             tunnelSecret,
+		InternalTrafficSecret:    internalTrafficSecret,
+		ClusterDomain:            r.clusterDomain,
+		ESLicenseType:            elasticLicenseType,
+		Replicas:                 replicas,
+		Compliance:               complianceCR,
+		ComplianceLicenseActive:  complianceLicenseFeatureActive,
+		UsePSP:                   r.usePSP,
+		OptionaUILayerNamespaces: optionaUILayerNamespaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

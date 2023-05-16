@@ -155,7 +155,7 @@ type ManagerConfiguration struct {
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 
-	AdditionalNameSpaces []string
+	OptionaUILayerNamespaces []string
 }
 
 type managerComponent struct {
@@ -212,7 +212,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(c.cfg.AdditionalNameSpaces...),
+		managerClusterWideTigeraLayer(c.cfg.OptionaUILayerNamespaces),
 		managerClusterWideDefaultView(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
@@ -944,7 +944,7 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 // all of the tigera namespaces.
 //
 // Calico Enterprise only
-func managerClusterWideTigeraLayer(namespace ...string) *v3.UISettings {
+func managerClusterWideTigeraLayer(namespace []string) *v3.UISettings {
 	namespaces := []string{
 		"tigera-compliance",
 		"tigera-dpi",
@@ -953,7 +953,6 @@ func managerClusterWideTigeraLayer(namespace ...string) *v3.UISettings {
 		"tigera-fluentd",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
-		"tigera-manager",
 		"tigera-operator",
 		"tigera-packetcapture",
 		"tigera-policy-recommendation",

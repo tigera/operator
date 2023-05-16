@@ -100,13 +100,14 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
 
-	// Deployment is for standalone or management cluster
+	// Deployment is for a standalone or management cluster
 	if !pr.cfg.ManagedCluster {
 		objs = append(objs,
 			allowTigeraPolicyForPolicyRecommendation(pr.cfg),
 			pr.deployment(),
 		)
 	}
+	objs = append(objs, networkpolicy.AllowTigeraDefaultDeny(PolicyRecommendationNamespace))
 
 	return objs, nil
 }

@@ -18,7 +18,7 @@ ARG UBI_DIGEST=sha256:0aeb0f23d012ee735e4469fd6ff736d3d42be6326aeeb8118b1fec98d9
 ARG QEMU_IMAGE=calico/go-build:v0.76-arm64
 
 FROM ${QEMU_IMAGE} as qemu
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.7 AS ubi
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.8 AS ubi
 
 # Enable non-native builds of this image on an amd64 hosts.
 # This must be the first RUN command in this file!

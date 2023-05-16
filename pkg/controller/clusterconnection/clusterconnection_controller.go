@@ -331,16 +331,25 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	optionaUILayerNamespaces := []string{render.GuardianNamespace}
+	amz, err := utils.GetAmazonCloudIntegration(ctx, r.Client)
+	if err != nil {
+		log.Error(err, "Failed to  fetch GetAmazonCloudIntegration info")
+	} else if amz != nil {
+		optionaUILayerNamespaces = append(optionaUILayerNamespaces, render.AmazonCloudIntegrationNamespace)
+	}
+
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
-		TunnelCAType:      managementClusterConnection.Spec.TLS.CA,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
-		Installation:      instl,
-		TunnelSecret:      tunnelSecret,
-		TrustedCertBundle: trustedCertBundle,
-		UsePSP:            r.usePSP,
+		URL:                      managementClusterConnection.Spec.ManagementClusterAddr,
+		TunnelCAType:             managementClusterConnection.Spec.TLS.CA,
+		PullSecrets:              pullSecrets,
+		Openshift:                r.Provider == operatorv1.ProviderOpenShift,
+		Installation:             instl,
+		TunnelSecret:             tunnelSecret,
+		TrustedCertBundle:        trustedCertBundle,
+		UsePSP:                   r.usePSP,
+		OptionaUILayerNamespaces: optionaUILayerNamespaces,
 	}
 
 	components := []render.Component{render.Guardian(guardianCfg)}

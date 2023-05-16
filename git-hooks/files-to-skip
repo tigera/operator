@@ -59,3 +59,4 @@ pkg/time/ticker.go
 pkg/time/mocks/Ticker.go
 pkg/bastapi/client.go
 pkg/bastapi/mocks/Client.go
+pkg/render/testsupport/golden_yaml.go

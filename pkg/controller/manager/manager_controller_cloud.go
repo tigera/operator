@@ -41,7 +41,10 @@ func addCloudWatch(c controller.Controller) error {
 // handleCloudResources returns managerCloudResources.
 // It returns a non-nil reconcile.Result when it's waiting for resources to be available.
 func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger logr.Logger) (render.ManagerCloudResources, *reconcile.Result, error) {
-	mcr := render.ManagerCloudResources{}
+	mcr := render.ManagerCloudResources{
+		VoltronMetricsEnabled:    true,
+		VoltronInternalHttpsPort: 9444,
+	}
 
 	result, err := r.handleImageAssuranceResources(ctx, &mcr, reqLogger)
 	if err != nil {

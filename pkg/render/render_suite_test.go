@@ -15,7 +15,9 @@
 package render
 
 import (
+	"flag"
 	glog "log"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -23,6 +25,11 @@ import (
 
 	"github.com/onsi/ginkgo/reporters"
 )
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	os.Exit(m.Run())
+}
 
 func TestRender(t *testing.T) {
 	glog.SetOutput(GinkgoWriter)

@@ -16,6 +16,7 @@ import (
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testsupport"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -158,46 +159,17 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2": "value2",
 	}
 	resources := renderObjects(renderConfig{
-		oidc:              false,
-		managementCluster: nil,
-		installation:      installation,
-		cloudRBACEnabled:  true})
+		oidc:                  false,
+		managementCluster:     nil,
+		installation:          installation,
+		cloudRBACEnabled:      true,
+		voltronMetricsEnabled: true,
+	})
 
 	deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 	template := deployment.Spec.Template.Spec
 
 	It("should render voltron resources for Cloud RBAC", func() {
-
-		// Should render the correct resources.
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			// In addition to default resources, extra resource voltron cloud-rbac-ca secret is expected.
-			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.ManagerPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "calico-cloud-rbac-tls", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.CloudRBACAPIPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
-		}
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		Expect(len(template.Containers)).Should(Equal(3))
 		var manager = template.Containers[0]
@@ -207,6 +179,8 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
 		Expect(esProxy.Image).Should(Equal(components.CloudRegistry + "tigera/es-proxy:tesla-" + components.ComponentEsProxy.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
+
+		testsupport.ExpectMatchesGoldenYaml("manager-cloud-rbac-all", resources)
 	})
 
 	Context("voltron", func() {

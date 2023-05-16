@@ -4,6 +4,7 @@ package render
 
 import (
 	"sort"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,8 +27,9 @@ var (
 )
 
 const (
-	ImageAssurancePolicyName = networkpolicy.TigeraComponentPolicyPrefix + "image-assurance-access"
-	CloudRBACAPIPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "cloud-rbac-api"
+	ImageAssurancePolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "image-assurance-access"
+	CloudRBACAPIPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "cloud-rbac-api"
+	CloudMonitoringAllowPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "calico-cloud-monitoring"
 )
 
 var ImageAssuranceEntityRule = networkpolicy.CreateEntityRule("tigera-image-assurance", "tigera-image-assurance-api-proxy", 5557)
@@ -37,9 +39,21 @@ type ManagerCloudResources struct {
 	TenantID                string
 	CloudRBACResources      *cloudrbac.Resources
 	ImageAssuranceResources *rcimageassurance.Resources
+
+	VoltronMetricsEnabled    bool
+	VoltronInternalHttpsPort uint16
 }
 
 func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Container) corev1.Container {
+
+	container.Env = append(container.Env,
+		corev1.EnvVar{Name: "VOLTRON_K8S_CLIENT_QPS", Value: "20"},
+		corev1.EnvVar{Name: "VOLTRON_K8S_CLIENT_BURST", Value: "20"},
+		corev1.EnvVar{Name: "VOLTRON_INTERNAL_PORT", Value: strconv.FormatUint(uint64(c.cfg.CloudResources.VoltronInternalHttpsPort), 10)},
+		corev1.EnvVar{Name: "VOLTRON_METRICS_ENABLED", Value: strconv.FormatBool(c.cfg.CloudResources.VoltronMetricsEnabled)},
+		corev1.EnvVar{Name: "VOLTRON_HTTP_ACCESS_LOGGING_ENABLED", Value: "true"},
+	)
+
 	// if image assurance is enabled add env needed for it.
 	if c.cfg.CloudResources.ImageAssuranceResources != nil {
 		container.Env = append(container.Env,
@@ -59,6 +73,8 @@ func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Contai
 	if c.cfg.CloudResources.CloudRBACResources != nil {
 		container.Env = append(container.Env,
 			corev1.EnvVar{Name: "VOLTRON_CHECK_MANAGED_CLUSTER_AUTHORIZATION_BEFORE_PROXY", Value: "true"},
+			corev1.EnvVar{Name: "VOLTRON_CHECK_MANAGED_CLUSTER_AUTHORIZATION_CACHE_TTL", Value: "10s"},
+			corev1.EnvVar{Name: "VOLTRON_OIDC_TOKEN_REVIEW_CACHE_TTL", Value: "10s"},
 			corev1.EnvVar{Name: "VOLTRON_ENABLE_CALICO_CLOUD_RBAC_API", Value: "true"},
 			corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_CA_BUNDLE_PATH", Value: cloudrbac.CABundlePath},
 			corev1.EnvVar{Name: "VOLTRON_CALICO_CLOUD_RBAC_API_ENDPOINT", Value: cloudrbac.APIEndpoint},
@@ -115,27 +131,35 @@ func (c *managerComponent) decorateCloudDeploymentSpec(templateSpec corev1.PodTe
 			})
 	}
 
+	if c.cfg.CloudResources.VoltronMetricsEnabled {
+		templateSpec.Annotations["prometheus.io.scrape"] = "true"
+		templateSpec.Annotations["prometheus.io.scheme"] = "https"
+		templateSpec.Annotations["prometheus.io.port"] = strconv.FormatUint(uint64(c.cfg.CloudResources.VoltronInternalHttpsPort), 10)
+	}
+
 	return templateSpec
 }
 
 func (c *managerComponent) addCloudResources(objs []client.Object) []client.Object {
+	cloudResources := c.cfg.CloudResources
+
 	// if image assurance is enabled add corresponding resources.
-	if c.cfg.CloudResources.ImageAssuranceResources != nil {
+	if cloudResources.ImageAssuranceResources != nil {
 		objs = append(objs, secret.ToRuntimeObjects(&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: rcimageassurance.ImageAssuranceSecretName, Namespace: ManagerNamespace},
 			Data: map[string][]byte{
-				corev1.TLSCertKey: c.cfg.CloudResources.ImageAssuranceResources.TLSSecret.Data[corev1.TLSCertKey],
+				corev1.TLSCertKey: cloudResources.ImageAssuranceResources.TLSSecret.Data[corev1.TLSCertKey],
 			},
 		})...)
 
 		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(ManagerNamespace,
-			c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
+			cloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
 
 		objs = append(objs, c.managerImageAssuranceNetworkPolicy())
 	}
 
-	cloudRBACResources := c.cfg.CloudResources.CloudRBACResources
+	cloudRBACResources := cloudResources.CloudRBACResources
 	if cloudRBACResources != nil {
 		objs = append(objs, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

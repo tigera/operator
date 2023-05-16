@@ -1,0 +1,809 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  creationTimestamp: null
+  labels:
+    name: tigera-manager
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+  name: tigera-manager
+spec: {}
+status: {}
+
+---
+apiVersion: projectcalico.org/v3
+kind: NetworkPolicy
+metadata:
+  creationTimestamp: null
+  name: allow-tigera.manager-access
+  namespace: tigera-manager
+spec:
+  egress:
+  - action: Allow
+    destination:
+      services:
+        name: tigera-api
+        namespace: tigera-system
+    protocol: TCP
+    source: {}
+  - action: Allow
+    destination:
+      namespaceSelector: projectcalico.org/name == 'tigera-elasticsearch'
+      ports:
+      - 5554
+      selector: k8s-app == 'tigera-secure-es-gateway'
+    protocol: TCP
+    source: {}
+  - action: Allow
+    destination:
+      namespaceSelector: projectcalico.org/name == 'tigera-elasticsearch'
+      ports:
+      - 8444
+      selector: k8s-app == 'tigera-linseed'
+    protocol: TCP
+    source: {}
+  - action: Allow
+    destination:
+      namespaceSelector: projectcalico.org/name == 'tigera-compliance'
+      ports:
+      - 5443
+      selector: k8s-app == 'compliance-server'
+    protocol: TCP
+    source: {}
+  - action: Allow
+    destination:
+      namespaceSelector: projectcalico.org/name == 'tigera-dex'
+      ports:
+      - 5556
+      selector: k8s-app == 'tigera-dex'
+    protocol: TCP
+    source: {}
+  - action: Allow
+    destination:
+      namespaceSelector: projectcalico.org/name == 'tigera-packetcapture'
+      ports:
+      - 8444
+      selector: k8s-app == 'tigera-packetcapture'
+    protocol: TCP
+    source: {}
+  - action: Allow
+    destination:
+      services:
+        name: kubernetes
+        namespace: default
+    protocol: TCP
+    source: {}
+  - action: Allow
+    destination:
+      namespaceSelector: projectcalico.org/name == 'kube-system'
+      ports:
+      - 53
+      selector: k8s-app == 'kube-dns'
+    protocol: UDP
+    source: {}
+  - action: Allow
+    destination:
+      namespaceSelector: projectcalico.org/name == 'tigera-prometheus'
+      ports:
+      - 9095
+      selector: (app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')
+    protocol: TCP
+    source: {}
+  ingress:
+  - action: Allow
+    destination:
+      ports:
+      - 9443
+    protocol: TCP
+    source:
+      nets:
+      - 0.0.0.0/0
+  - action: Allow
+    destination:
+      ports:
+      - 9443
+    protocol: TCP
+    source:
+      nets:
+      - ::/0
+  - action: Allow
+    destination:
+      ports:
+      - 9449
+    protocol: TCP
+    source: {}
+  order: 1
+  selector: k8s-app == 'tigera-manager'
+  tier: allow-tigera
+  types:
+  - Ingress
+  - Egress
+
+---
+apiVersion: projectcalico.org/v3
+kind: NetworkPolicy
+metadata:
+  creationTimestamp: null
+  name: allow-tigera.default-deny
+  namespace: tigera-manager
+spec:
+  selector: all()
+  tier: allow-tigera
+  types:
+  - Ingress
+  - Egress
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  creationTimestamp: null
+  name: tigera-manager
+  namespace: tigera-manager
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: tigera-manager-role
+rules:
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - projectcalico.org
+  resources:
+  - networksets
+  - globalnetworksets
+  - globalnetworkpolicies
+  - tier.globalnetworkpolicies
+  - networkpolicies
+  - tier.networkpolicies
+  - stagedglobalnetworkpolicies
+  - tier.stagedglobalnetworkpolicies
+  - stagednetworkpolicies
+  - tier.stagednetworkpolicies
+  - stagedkubernetesnetworkpolicies
+  verbs:
+  - list
+- apiGroups:
+  - projectcalico.org
+  resources:
+  - stagednetworkpolicies
+  - tier.stagednetworkpolicies
+  verbs:
+  - patch
+- apiGroups:
+  - projectcalico.org
+  resources:
+  - tiers
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - projectcalico.org
+  resources:
+  - hostendpoints
+  verbs:
+  - list
+- apiGroups:
+  - projectcalico.org
+  resourceNames:
+  - default
+  resources:
+  - felixconfigurations
+  verbs:
+  - get
+- apiGroups:
+  - projectcalico.org
+  resources:
+  - alertexceptions
+  verbs:
+  - get
+  - list
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  - namespaces
+  - nodes
+  - events
+  - services
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  - statefulsets
+  - daemonsets
+  verbs:
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - users
+  - groups
+  - serviceaccounts
+  verbs:
+  - impersonate
+- apiGroups:
+  - ""
+  resourceNames:
+  - https:tigera-api:8080
+  - calico-node-prometheus:9090
+  resources:
+  - services/proxy
+  verbs:
+  - get
+  - create
+- apiGroups:
+  - linseed.tigera.io
+  resources:
+  - flows
+  - flowlogs
+  - bgplogs
+  - auditlogs
+  - dnsflows
+  - dnslogs
+  - l7flows
+  - l7logs
+  - events
+  - processes
+  verbs:
+  - get
+- apiGroups:
+  - linseed.tigera.io
+  resources:
+  - events
+  verbs:
+  - dismiss
+  - delete
+- apiGroups:
+  - projectcalico.org
+  resources:
+  - managedclusters
+  verbs:
+  - list
+  - get
+  - watch
+  - update
+- apiGroups:
+  - policy
+  resourceNames:
+  - tigera-manager
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: tigera-manager-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tigera-manager-role
+subjects:
+- kind: ServiceAccount
+  name: tigera-manager
+  namespace: tigera-manager
+
+---
+apiVersion: projectcalico.org/v3
+kind: UISettingsGroup
+metadata:
+  creationTimestamp: null
+  name: cluster-settings
+spec:
+  description: Cluster Settings
+
+---
+apiVersion: projectcalico.org/v3
+kind: UISettingsGroup
+metadata:
+  creationTimestamp: null
+  name: user-settings
+spec:
+  description: User Settings
+  filterType: User
+
+---
+apiVersion: projectcalico.org/v3
+kind: UISettings
+metadata:
+  creationTimestamp: null
+  name: cluster-settings.layer.tigera-infrastructure
+spec:
+  description: Tigera Infrastructure
+  group: cluster-settings
+  layer:
+    nodes:
+    - id: namespace/tigera-compliance
+      name: tigera-compliance
+      type: namespace
+    - id: namespace/tigera-dex
+      name: tigera-dex
+      type: namespace
+    - id: namespace/tigera-dpi
+      name: tigera-dpi
+      type: namespace
+    - id: namespace/tigera-eck-operator
+      name: tigera-eck-operator
+      type: namespace
+    - id: namespace/tigera-elasticsearch
+      name: tigera-elasticsearch
+      type: namespace
+    - id: namespace/tigera-fluentd
+      name: tigera-fluentd
+      type: namespace
+    - id: namespace/tigera-guardian
+      name: tigera-guardian
+      type: namespace
+    - id: namespace/tigera-intrusion-detection
+      name: tigera-intrusion-detection
+      type: namespace
+    - id: namespace/tigera-kibana
+      name: tigera-kibana
+      type: namespace
+    - id: namespace/tigera-manager
+      name: tigera-manager
+      type: namespace
+    - id: namespace/tigera-operator
+      name: tigera-operator
+      type: namespace
+    - id: namespace/tigera-packetcapture
+      name: tigera-packetcapture
+      type: namespace
+    - id: namespace/tigera-policy-recommendation
+      name: tigera-policy-recommendation
+      type: namespace
+    - id: namespace/tigera-prometheus
+      name: tigera-prometheus
+      type: namespace
+    - id: namespace/tigera-system
+      name: tigera-system
+      type: namespace
+    - id: namespace/calico-system
+      name: calico-system
+      type: namespace
+
+---
+apiVersion: projectcalico.org/v3
+kind: UISettings
+metadata:
+  creationTimestamp: null
+  name: cluster-settings.view.default
+spec:
+  description: Default
+  group: cluster-settings
+  view:
+    nodes:
+    - id: layer/cluster-settings.layer.tigera-infrastructure
+      name: cluster-settings.layer.tigera-infrastructure
+      type: layer
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  name: tigera-manager
+  namespace: tigera-manager
+spec:
+  ports:
+  - port: 9443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    k8s-app: tigera-manager
+status:
+  loadBalancer: {}
+
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
+  creationTimestamp: null
+  name: tigera-manager
+spec:
+  allowPrivilegeEscalation: false
+  fsGroup:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  hostPorts:
+  - max: 65535
+    min: 0
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+
+---
+apiVersion: v1
+data:
+  tls.crt: redacted-certificate-data
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: calico-cloud-rbac-tls
+  namespace: tigera-manager
+
+---
+apiVersion: projectcalico.org/v3
+kind: NetworkPolicy
+metadata:
+  creationTimestamp: null
+  name: allow-tigera.cloud-rbac-api
+  namespace: tigera-manager
+spec:
+  egress:
+  - action: Allow
+    destination:
+      services: {}
+    protocol: TCP
+    source: {}
+  order: 1
+  selector: k8s-app == 'tigera-manager'
+  tier: allow-tigera
+  types:
+  - Egress
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  name: tigera-manager
+  namespace: tigera-manager
+spec:
+  selector: null
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        hash.operator.tigera.io/cloud-rbac-cert:  redacted-hash-value
+        hash.operator.tigera.io/elasticsearch-configmap:  redacted-hash-value
+        hash.operator.tigera.io/elasticsearch-secrets:  redacted-hash-value
+        hash.operator.tigera.io/manager-tls:  redacted-hash-value
+        hash.operator.tigera.io/tigera-ca-private:  redacted-hash-value
+        prometheus.io.port: "9444"
+        prometheus.io.scheme: https
+        prometheus.io.scrape: "true"
+      creationTimestamp: null
+      name: tigera-manager
+      namespace: tigera-manager
+    spec:
+      containers:
+      - env:
+        - name: CNX_PROMETHEUS_API_URL
+          value: /api/v1/namespaces/tigera-prometheus/services/calico-node-prometheus:9090/proxy/api/v1
+        - name: CNX_COMPLIANCE_REPORTS_API_URL
+          value: /compliance/reports
+        - name: CNX_QUERY_API_URL
+          value: /api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy
+        - name: CNX_ELASTICSEARCH_API_URL
+          value: /tigera-elasticsearch
+        - name: CNX_ELASTICSEARCH_KIBANA_URL
+          value: /tigera-kibana
+        - name: CNX_ENABLE_ERROR_TRACKING
+          value: "false"
+        - name: CNX_ALP_SUPPORT
+          value: "true"
+        - name: CNX_CLUSTER_NAME
+          value: cluster
+        - name: CNX_POLICY_RECOMMENDATION_SUPPORT
+          value: "true"
+        - name: ENABLE_MULTI_CLUSTER_MANAGEMENT
+          value: "false"
+        - name: ENABLE_KIBANA
+          value: "true"
+        - name: ENABLE_ANOMALY_DETECTION
+          value: "true"
+        - name: ENABLE_COMPLIANCE_REPORTS
+          value: "false"
+        - name: CNX_WEB_AUTHENTICATION_TYPE
+          value: Token
+        - name: ENABLE_MANAGED_CLUSTERS_ONLY
+          value: "true"
+        - name: LICENSE_EDITION
+          value: cloudEdition
+        - name: ELASTIC_INDEX_SUFFIX
+          value: tenant_id.clusterTestName
+        - name: ELASTIC_SCHEME
+          value: https
+        - name: ELASTIC_HOST
+          value: tigera-secure-es-gateway-http.tigera-elasticsearch.svc
+        - name: ELASTIC_PORT
+          value: "9200"
+        - name: ELASTIC_ACCESS_MODE
+          value: serviceuser
+        - name: ELASTIC_SSL_VERIFY
+          value: "true"
+        - name: ELASTIC_USER
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: tigera-ee-manager-elasticsearch-access
+        - name: ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: tigera-ee-manager-elasticsearch-access
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: tigera-ee-manager-elasticsearch-access
+        - name: ELASTIC_CA
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: ES_CA_CERT
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: ES_CURATOR_BACKEND_CERT
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        image: quay.io/tigera/cnx-manager:tesla-master
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 90
+          periodSeconds: 10
+        name: tigera-manager
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsGroup: 0
+          runAsNonRoot: true
+          runAsUser: 999
+          seccompProfile:
+            type: RuntimeDefault
+      - env:
+        - name: ELASTIC_LICENSE_TYPE
+          value: enterprise_trial
+        - name: ELASTIC_KIBANA_ENDPOINT
+          value: https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:5601
+        - name: FIPS_MODE_ENABLED
+          value: "false"
+        - name: ELASTIC_INDEX_TENANT_ID
+        - name: LINSEED_CLIENT_CERT
+          value: /manager-tls/tls.crt
+        - name: LINSEED_CLIENT_KEY
+          value: /manager-tls/tls.key
+        - name: ELASTIC_INDEX_SUFFIX
+          value: tenant_id.clusterTestName
+        - name: ELASTIC_SCHEME
+          value: https
+        - name: ELASTIC_HOST
+          value: tigera-secure-es-gateway-http.tigera-elasticsearch.svc
+        - name: ELASTIC_PORT
+          value: "9200"
+        - name: ELASTIC_ACCESS_MODE
+          value: serviceuser
+        - name: ELASTIC_SSL_VERIFY
+          value: "true"
+        - name: ELASTIC_USER
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: tigera-ee-manager-elasticsearch-access
+        - name: ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: tigera-ee-manager-elasticsearch-access
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: tigera-ee-manager-elasticsearch-access
+        - name: ELASTIC_CA
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: ES_CA_CERT
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: ES_CURATOR_BACKEND_CERT
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        image: gcr.io/tigera-tesla/tigera/es-proxy:tesla-master
+        livenessProbe:
+          httpGet:
+            path: /tigera-elasticsearch/version
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 90
+          periodSeconds: 10
+        name: tigera-es-proxy
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsGroup: 10001
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /etc/pki/tls/certs
+          name: tigera-ca-bundle
+          readOnly: true
+        - mountPath: /manager-tls
+          name: manager-tls
+          readOnly: true
+      - env:
+        - name: VOLTRON_PORT
+          value: "9443"
+        - name: VOLTRON_COMPLIANCE_ENDPOINT
+          value: https://compliance.tigera-compliance.svc.cluster.local
+        - name: VOLTRON_LOGLEVEL
+          value: Info
+        - name: VOLTRON_KIBANA_ENDPOINT
+          value: https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:5601
+        - name: VOLTRON_KIBANA_BASE_PATH
+          value: /tigera-kibana/
+        - name: VOLTRON_KIBANA_CA_BUNDLE_PATH
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: VOLTRON_PROMETHEUS_CA_BUNDLE_PATH
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: VOLTRON_COMPLIANCE_CA_BUNDLE_PATH
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: VOLTRON_DEX_CA_BUNDLE_PATH
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: VOLTRON_QUERYSERVER_ENDPOINT
+          value: https://tigera-api.tigera-system.svc:8080
+        - name: VOLTRON_QUERYSERVER_BASE_PATH
+          value: /api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy/
+        - name: VOLTRON_QUERYSERVER_CA_BUNDLE_PATH
+          value: /etc/pki/tls/certs/tigera-ca-bundle.crt
+        - name: VOLTRON_HTTPS_KEY
+          value: /manager-tls/tls.key
+        - name: VOLTRON_HTTPS_CERT
+          value: /manager-tls/tls.crt
+        - name: VOLTRON_TUNNEL_KEY
+        - name: VOLTRON_TUNNEL_CERT
+        - name: VOLTRON_INTERNAL_HTTPS_KEY
+        - name: VOLTRON_INTERNAL_HTTPS_CERT
+        - name: VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT
+          value: "false"
+        - name: VOLTRON_TUNNEL_PORT
+          value: "9449"
+        - name: VOLTRON_DEFAULT_FORWARD_SERVER
+          value: tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200
+        - name: VOLTRON_ENABLE_COMPLIANCE
+          value: "false"
+        - name: VOLTRON_FIPS_MODE_ENABLED
+          value: "false"
+        - name: VOLTRON_K8S_CLIENT_QPS
+          value: "20"
+        - name: VOLTRON_K8S_CLIENT_BURST
+          value: "20"
+        - name: VOLTRON_INTERNAL_PORT
+          value: "9444"
+        - name: VOLTRON_METRICS_ENABLED
+          value: "true"
+        - name: VOLTRON_HTTP_ACCESS_LOGGING_ENABLED
+          value: "true"
+        - name: VOLTRON_CHECK_MANAGED_CLUSTER_AUTHORIZATION_BEFORE_PROXY
+          value: "true"
+        - name: VOLTRON_CHECK_MANAGED_CLUSTER_AUTHORIZATION_CACHE_TTL
+          value: 10s
+        - name: VOLTRON_OIDC_TOKEN_REVIEW_CACHE_TTL
+          value: 10s
+        - name: VOLTRON_ENABLE_CALICO_CLOUD_RBAC_API
+          value: "true"
+        - name: VOLTRON_CALICO_CLOUD_RBAC_API_CA_BUNDLE_PATH
+          value: /certs/cloud-rbac/tls.crt
+        - name: VOLTRON_CALICO_CLOUD_RBAC_API_ENDPOINT
+          value: https://cc-rbac-api.calico-cloud-rbac.svc:8443
+        - name: VOLTRON_EXTRA_ENVIRONMENT_VARIABLE1
+          value: value1
+        - name: VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2
+          value: value2
+        - name: VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3
+          value: value3
+        image: quay.io/tigera/voltron:master
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /voltron/api/health
+            port: 9443
+            scheme: HTTPS
+          initialDelaySeconds: 90
+          periodSeconds: 10
+        name: tigera-voltron
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsGroup: 10001
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /etc/pki/tls/certs
+          name: tigera-ca-bundle
+          readOnly: true
+        - mountPath: /manager-tls
+          name: manager-tls
+          readOnly: true
+        - mountPath: /certs/cloud-rbac
+          name: calico-cloud-rbac-tls
+          readOnly: true
+      serviceAccountName: tigera-manager
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+      - key: CriticalAddonsOnly
+        operator: Exists
+      volumes:
+      - name: manager-tls
+        secret:
+          defaultMode: 420
+          secretName: manager-tls
+      - configMap:
+          name: tigera-ca-bundle
+        name: tigera-ca-bundle
+      - name: calico-cloud-rbac-tls
+        secret:
+          secretName: calico-cloud-rbac-tls
+status: {}

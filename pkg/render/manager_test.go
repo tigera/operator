@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
 	"github.com/tigera/operator/pkg/render/common/cloudrbac"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 
@@ -872,6 +873,7 @@ type renderConfig struct {
 	imageAssuranceEnabled   bool
 	openshift               bool
 	cloudRBACEnabled        bool
+	voltronMetricsEnabled   bool
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -910,6 +912,7 @@ func renderObjects(roc renderConfig) []client.Object {
 	Expect(err).NotTo(HaveOccurred())
 
 	var cloudResources render.ManagerCloudResources
+
 	if roc.imageAssuranceEnabled {
 		voltronTls := rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain)
 		cloudResources.ImageAssuranceResources = &rcimageassurance.Resources{
@@ -934,6 +937,11 @@ func renderObjects(roc renderConfig) []client.Object {
 		cloudResources.CloudRBACResources = &cloudrbac.Resources{
 			TLSSecret: rtest.CreateCertSecret(cloudrbac.TLSSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain),
 		}
+	}
+
+	if roc.voltronMetricsEnabled {
+		cloudResources.VoltronMetricsEnabled = true
+		cloudResources.VoltronInternalHttpsPort = 9444
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1)

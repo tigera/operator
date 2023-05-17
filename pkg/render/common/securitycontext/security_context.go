@@ -76,8 +76,3 @@ func NewNonRootPodContext() *corev1.PodSecurityContext {
 		},
 	}
 }
-
-// GetNonRootUID returns the non-root UID
-func GetNonRootUID() int64 {
-	return runAsUserID
-}

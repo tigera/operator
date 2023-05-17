@@ -332,23 +332,10 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Populate a list of namespaces to be displayed in the service graph Tigera infrastructure layer.
-	sgLayerTigeraNameSpaces := map[string]bool{
-		"tigera-compliance":            true,
-		"tigera-dpi":                   true,
-		"tigera-eck-operator":          true,
-		"tigera-elasticsearch":         true,
-		"tigera-fluentd":               true,
-		"tigera-intrusion-detection":   true,
-		"tigera-kibana":                true,
-		"tigera-operator":              true,
-		"tigera-packetcapture":         true,
-		"tigera-policy-recommendation": true,
-		"tigera-prometheus":            true,
-		"tigera-system":                true,
-		"calico-system":                true,
-		"tigera-guardian":              true,
+	sgLayerTigeraNameSpaces := render.DefaultSGLayerTigeraNamespaces()
+	if !sgLayerTigeraNameSpaces[render.GuardianNamespace] {
+		sgLayerTigeraNameSpaces[render.GuardianNamespace] = true
 	}
-
 	amz, err := utils.GetAmazonCloudIntegration(ctx, r.Client)
 	if err != nil {
 		log.Error(err, "Failed to  fetch GetAmazonCloudIntegration info")

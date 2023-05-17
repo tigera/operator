@@ -91,23 +91,26 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
+	// Management and managed clusters need API access to the resources defined in the policy
+	// recommendation cluster role
 	objs := []client.Object{
 		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
+		pr.allowTigeraPolicyForPolicyRecommendation(),
+		networkpolicy.AllowTigeraDefaultDeny(PolicyRecommendationNamespace),
 	}
+
+	if pr.cfg.ManagedCluster {
+		// No further resources are needed for managed clusters
+		return objs, nil
+	}
+
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
-
-	// Deployment is for a standalone or management cluster
-	if !pr.cfg.ManagedCluster {
-		objs = append(objs,
-			allowTigeraPolicyForPolicyRecommendation(pr.cfg),
-			pr.deployment(),
-		)
-	}
-	objs = append(objs, networkpolicy.AllowTigeraDefaultDeny(PolicyRecommendationNamespace))
+	// The deployment is created on management/standalone clusters only
+	objs = append(objs, pr.deployment())
 
 	return objs, nil
 }
@@ -298,7 +301,7 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 }
 
 // allowTigeraPolicyForPolicyRecommendation defines an allow-tigera policy for policy recommendation.
-func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfiguration) *v3.NetworkPolicy {
+func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendation() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -310,13 +313,17 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: ManagerEntityRule,
 		},
-		{
+	}
+
+	if !pr.cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.LinseedEntityRule,
-		},
+		})
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pr.cfg.Openshift)
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

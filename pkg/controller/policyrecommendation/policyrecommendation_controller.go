@@ -353,25 +353,22 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
+	var trustedBundle certificatemanagement.TrustedBundle
+	if !isManagedCluster {
+		linseedCertLocation := render.TigeraLinseedSecret
+		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if linseedCertificate == nil {
+			log.Info("Linseed certificate is not available yet, waiting until they become available")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
 
-	linseedCertLocation := render.TigeraLinseedSecret
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if linseedCertificate == nil {
-		log.Info("Linseed certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
+		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+	} else {
+		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret)
 	}
 
 	// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
@@ -380,8 +377,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
 
 	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
 

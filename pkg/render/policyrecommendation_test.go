@@ -46,6 +46,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 	// Fetch expectations from utilities that require Ginkgo context.
 	expectedUnmanagedPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation.json")
 	expectedUnmanagedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation_ocp.json")
+	expectedManagedPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation_managed.json")
+	expectedManagedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation_managed_ocp.json")
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -89,6 +91,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "allow-tigera.tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "allow-tigera.default-deny", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
@@ -208,8 +211,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				scenario,
 				expectedUnmanagedPolicy,
 				expectedUnmanagedPolicyForOpenshift,
-				nil, // expectedManagedPolicy
-				nil, // expectedManagedPolicyForOpenshift
+				expectedManagedPolicy,
+				expectedManagedPolicyForOpenshift,
 			)
 		}
 

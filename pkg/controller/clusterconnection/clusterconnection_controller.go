@@ -331,25 +331,42 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	optionaUILayerNamespaces := []string{render.GuardianNamespace}
+	// Populate a list of namespaces to be displayed in the service graph Tigera infrastructure layer.
+	sgLayerTigeraNameSpaces := map[string]bool{
+		"tigera-compliance":            true,
+		"tigera-dpi":                   true,
+		"tigera-eck-operator":          true,
+		"tigera-elasticsearch":         true,
+		"tigera-fluentd":               true,
+		"tigera-intrusion-detection":   true,
+		"tigera-kibana":                true,
+		"tigera-operator":              true,
+		"tigera-packetcapture":         true,
+		"tigera-policy-recommendation": true,
+		"tigera-prometheus":            true,
+		"tigera-system":                true,
+		"calico-system":                true,
+		"tigera-guardian":              true,
+	}
+
 	amz, err := utils.GetAmazonCloudIntegration(ctx, r.Client)
 	if err != nil {
 		log.Error(err, "Failed to  fetch GetAmazonCloudIntegration info")
-	} else if amz != nil {
-		optionaUILayerNamespaces = append(optionaUILayerNamespaces, render.AmazonCloudIntegrationNamespace)
+	} else if amz != nil && !sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] {
+		sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] = true
 	}
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:                      managementClusterConnection.Spec.ManagementClusterAddr,
-		TunnelCAType:             managementClusterConnection.Spec.TLS.CA,
-		PullSecrets:              pullSecrets,
-		Openshift:                r.Provider == operatorv1.ProviderOpenShift,
-		Installation:             instl,
-		TunnelSecret:             tunnelSecret,
-		TrustedCertBundle:        trustedCertBundle,
-		UsePSP:                   r.usePSP,
-		OptionaUILayerNamespaces: optionaUILayerNamespaces,
+		URL:                     managementClusterConnection.Spec.ManagementClusterAddr,
+		TunnelCAType:            managementClusterConnection.Spec.TLS.CA,
+		PullSecrets:             pullSecrets,
+		Openshift:               r.Provider == operatorv1.ProviderOpenShift,
+		Installation:            instl,
+		TunnelSecret:            tunnelSecret,
+		TrustedCertBundle:       trustedCertBundle,
+		UsePSP:                  r.usePSP,
+		SGLayerTigeraNameSpaces: sgLayerTigeraNameSpaces,
 	}
 
 	components := []render.Component{render.Guardian(guardianCfg)}

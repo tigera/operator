@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	tls2 "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -896,7 +897,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// hostpath init container should have the correct env and security context.
 				hostPathContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "hostpath-init")
-				rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "999")
+				rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", fmt.Sprintf("%d", securitycontext.GetNonRootUID()))
 				Expect(*hostPathContainer.SecurityContext.RunAsUser).To(Equal(int64(0)))
 
 				// Verify hostpath init container volume mounts.

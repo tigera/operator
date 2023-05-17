@@ -193,6 +193,8 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 	}
 }
 
+// deployment returns the policy recommendation deployments. It assumes that this is defined for
+// management and standalone clusters only.
 func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	envs := []corev1.EnvVar{
 		{
@@ -227,13 +229,11 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 
 	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
 	volumeMounts = append(volumeMounts, pr.cfg.PolicyRecommendationCertSecret.VolumeMount(pr.SupportedOSType()))
-	if pr.cfg.ManagedCluster {
-		volumeMounts = append(volumeMounts,
-			corev1.VolumeMount{
-				Name:      LinseedTokenVolumeName,
-				MountPath: LinseedVolumeMountPath,
-			})
-	}
+	volumeMounts = append(volumeMounts,
+		corev1.VolumeMount{
+			Name:      LinseedTokenVolumeName,
+			MountPath: LinseedVolumeMountPath,
+		})
 
 	controllerContainer := corev1.Container{
 		Name:            "policy-recommendation-controller",

@@ -338,63 +338,19 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	var managerInternalTLSSecret certificatemanagement.CertificateInterface
-	if managementCluster != nil {
-		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
-	var trustedBundle certificatemanagement.TrustedBundle
-	if !isManagedCluster {
-		linseedCertLocation := render.TigeraLinseedSecret
-		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		} else if linseedCertificate == nil {
-			log.Info("Linseed certificate is not available yet, waiting until they become available")
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-
-		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
-	} else {
-		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret)
-	}
-
-	// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
-	policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{render.PolicyRecommendationTLSSecretName})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	reqLogger.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:                  r.clusterDomain,
-		ESClusterConfig:                esClusterConfig,
-		ESSecrets:                      esSecrets,
-		Installation:                   network,
-		ManagedCluster:                 isManagedCluster,
-		PullSecrets:                    pullSecrets,
-		TrustedBundle:                  trustedBundle,
-		Openshift:                      r.provider == operatorv1.ProviderOpenShift,
-		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
-		UsePSP:                         r.usePSP,
+		ClusterDomain:   r.clusterDomain,
+		ESClusterConfig: esClusterConfig,
+		ESSecrets:       esSecrets,
+		Installation:    network,
+		ManagedCluster:  isManagedCluster,
+		PullSecrets:     pullSecrets,
+		Openshift:       r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:          r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -407,14 +363,59 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	components := []render.Component{
 		component,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.PolicyRecommendationNamespace,
-			ServiceAccounts: []string{render.PolicyRecommendationName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
+	}
+
+	if !isManagedCluster {
+		certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		var managerInternalTLSSecret certificatemanagement.CertificateInterface
+		if managementCluster != nil {
+			managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
+		linseedCertLocation := render.TigeraLinseedSecret
+		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if linseedCertificate == nil {
+			log.Info("Linseed certificate is not available yet, waiting until they become available")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+
+		trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+
+		// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
+		policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{render.PolicyRecommendationTLSSecretName})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
+
+		policyRecommendationCfg.TrustedBundle = trustedBundle
+		policyRecommendationCfg.PolicyRecommendationCertSecret = policyRecommendationKeyPair
+
+		components = append(components,
+			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+				Namespace:       render.PolicyRecommendationNamespace,
+				ServiceAccounts: []string{render.PolicyRecommendationName},
+				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+					rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
+				},
+				TrustedBundle: trustedBundle,
+			}),
+		)
 	}
 
 	if hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature); hasNoLicense {

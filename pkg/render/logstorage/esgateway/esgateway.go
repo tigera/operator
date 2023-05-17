@@ -81,10 +81,11 @@ type Config struct {
 	ClusterDomain              string
 	EsAdminUserName            string
 
-	Cloud CloudConfig
-
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	// Configuration for Calico Cloud.
+	Cloud CloudConfig
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {

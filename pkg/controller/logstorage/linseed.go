@@ -72,6 +72,13 @@ func (r *ReconcileLogStorage) createLinseed(
 		ManagementCluster: managementCluster,
 	}
 
+	// Multi-tenancy modifications.
+	if r.elasticExternal {
+		if result, proceed, err := r.linseedAddCloudModificationsToConfig(ctx, cfg, esAdminUserSecret, reqLogger); err != nil || !proceed {
+			return result, proceed, err
+		}
+	}
+
 	linseedComponent := linseed.Linseed(cfg)
 
 	if err := imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {

@@ -20,8 +20,10 @@ import (
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/externalelasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 )
 
 // esGatewayAddCloudModificationsToConfig modifies the provided *esgateway.Config to include multi-tenancy specific configuration.
@@ -43,7 +45,7 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 	c.Cloud.ExternalKibanaDomain = cloudConfig.ExternalKibanaDomain()
 
 	if cloudConfig.EnableMTLS() {
-		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCertsSecret, common.OperatorNamespace())
+		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, logstorage.ExternalCertsSecret, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, err.Error())
 			r.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
@@ -51,6 +53,43 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 		}
 		if c.Cloud.ExternalCertsSecret == nil {
 			r.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
+			return reconcile.Result{}, false, nil
+		}
+		c.Cloud.EnableMTLS = cloudConfig.EnableMTLS()
+	}
+
+	if cloudConfig.TenantId() != "" {
+		c.Cloud.TenantId = cloudConfig.TenantId()
+	}
+
+	return reconcile.Result{}, true, nil
+}
+
+// linseedAddCloudModificationsToConfig modifies the provided *linseed.Config to include multi-tenancy specific configuration.
+func (r *ReconcileLogStorage) linseedAddCloudModificationsToConfig(
+	ctx context.Context,
+	c *linseed.Config,
+	esAdminUserSecret *corev1.Secret,
+	reqLogger logr.Logger,
+) (reconcile.Result, bool, error) {
+	c.Cloud.EsAdminUserSecret = esAdminUserSecret
+	c.Cloud.ExternalElastic = true
+
+	cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
+	if cloudConfig == nil || err != nil {
+		return reconcile.Result{}, false, err
+	}
+	c.Cloud.ExternalESDomain = cloudConfig.ExternalESDomain()
+
+	if cloudConfig.EnableMTLS() {
+		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, logstorage.ExternalCertsSecret, common.OperatorNamespace())
+		if err != nil {
+			reqLogger.Error(err, err.Error())
+			r.SetDegraded("Waiting for external Elasticsearch client certificate secret to be available", "")
+			return reconcile.Result{}, false, err
+		}
+		if c.Cloud.ExternalCertsSecret == nil {
+			r.SetDegraded("Waiting for external Elasticsearch client certificate secret to be available", "")
 			return reconcile.Result{}, false, nil
 		}
 		c.Cloud.EnableMTLS = cloudConfig.EnableMTLS()

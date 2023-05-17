@@ -995,3 +995,21 @@ func managerClusterWideDefaultView() *v3.UISettings {
 		},
 	}
 }
+
+func DefaultSGLayerTigeraNamespaces() map[string]bool {
+	return map[string]bool{
+		"tigera-compliance":            true,
+		"tigera-dpi":                   true,
+		"tigera-eck-operator":          true,
+		"tigera-elasticsearch":         true,
+		"tigera-fluentd":               true,
+		"tigera-intrusion-detection":   true,
+		"tigera-kibana":                true,
+		"tigera-operator":              true,
+		"tigera-packetcapture":         true,
+		"tigera-policy-recommendation": true,
+		"tigera-prometheus":            true,
+		"tigera-system":                true,
+		"calico-system":                true,
+	}
+}

@@ -476,6 +476,18 @@ func (r *ReconcileLogStorage) generateSecrets(
 		render.ComplianceBenchmarkerSecret,
 		render.ComplianceReporterSecret,
 	}
+
+	if r.elasticExternal {
+		// This branch is a modification for Calico cloud. In CC, we run an external elasticsearch. This means we don't
+		// need to generate a keypair for ES itself. Instead, the CC provisioner installs a public certificate
+		// for the external ES and Kibana that we must load and include in the trusted bundle for Linseed and es-gateway.
+		//
+		// These are provisioned by:
+		// - tesla/charts/tigera-operator/templates/cloud/lss/sealed-tigera-secure-es-http-certs-public.yaml
+		// - tesla/charts/tigera-operator/templates/cloud/lss/sealed-tigera-secure-kb-http-certs-public.yaml
+		certs = append(certs, "tigera-secure-es-http-certs-public", "tigera-secure-kb-http-certs-public")
+	}
+
 	for _, certName := range certs {
 		cert, err := cm.GetCertificate(r.client, certName, common.OperatorNamespace())
 		if err != nil {
@@ -489,42 +501,31 @@ func (r *ReconcileLogStorage) generateSecrets(
 		}
 	}
 
-	// Cloud modification.
-	// TODO: is this still needed?
-	kbSecret := render.TigeraKibanaCertSecret
-	esSecret := render.TigeraElasticsearchInternalCertSecret
-	if r.elasticExternal {
-		// These secrets are no longer used in non-external setups, we'll keep using these,
-		// we could switch them and we would need to change the Secret created by
-		// tesla/charts/tigera-operator/templates/cloud/lss/sealed-tigera-secure-kb-http-certs-public.yaml
-		// tesla/charts/tigera-operator/templates/cloud/lss/sealed-tigera-secure-es-http-certs-public.yaml
-		kbSecret = "tigera-secure-kb-http-certs-public"
-		esSecret = "tigera-secure-es-http-certs-public"
-	}
-
-	// Generate a keypair for elasticsearch.
-	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
-	// It will be provisioned into the cluster in the render stage later on.
-	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-	elasticKeyPair, err := cm.GetOrCreateKeyPair(r.client, esSecret, common.OperatorNamespace(), esDNSNames)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
-		return nil, err
-	}
-	collection.elastic = elasticKeyPair
-
-	// Generate a keypair for Kibana.
-	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
-	// It will be provisioned into the cluster in the render stage later on.
-	if !operatorv1.IsFIPSModeEnabled(fipsMode) {
-		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-		kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, kbSecret, common.OperatorNamespace(), kbDNSNames)
+	if !r.elasticExternal {
+		// Generate a keypair for elasticsearch.
+		// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+		// It will be provisioned into the cluster in the render stage later on.
+		esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+		elasticKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames)
 		if err != nil {
-			log.Error(err, err.Error())
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
 			return nil, err
 		}
-		collection.kibana = kibanaKeyPair
+		collection.elastic = elasticKeyPair
+
+		// Generate a keypair for Kibana.
+		// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+		// It will be provisioned into the cluster in the render stage later on.
+		if !operatorv1.IsFIPSModeEnabled(fipsMode) {
+			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+			kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+			if err != nil {
+				log.Error(err, err.Error())
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
+				return nil, err
+			}
+			collection.kibana = kibanaKeyPair
+		}
 	}
 
 	// Create a server key pair for Linseed to present to clients.
@@ -726,7 +727,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	// TODO: confirm this bundle has the prometheus cert, esInternalCert, and kibanacert
 	trustedBundle := keyPairs.trustedBundle(certificateManager)
 
 	var esAdminUserSecret *corev1.Secret
@@ -788,7 +788,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 				}
 			}
 		} else {
-			// Multi-tenancy modifications.
+			// Calico cloud modification. Get the ES admin secret from the operator namespace. We need this because ES isn't provisioned
+			// by the operator, so the admin credentials must be provided to us by the provisioner.
 			esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, common.OperatorNamespace())
 			if err != nil {
 				reqLogger.Error(err, "failed to get Elasticsearch admin user secret")

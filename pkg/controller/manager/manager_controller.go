@@ -359,7 +359,24 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
 
-	optionaUILayerNamespaces := []string{render.ManagerNamespace}
+	// Populate a list of namespaces to be displayed in the service graph Tigera infrastructure layer.
+	sgLayerTigeraNameSpaces := map[string]bool{
+		"tigera-compliance":            true,
+		"tigera-dpi":                   true,
+		"tigera-eck-operator":          true,
+		"tigera-elasticsearch":         true,
+		"tigera-fluentd":               true,
+		"tigera-intrusion-detection":   true,
+		"tigera-kibana":                true,
+		"tigera-operator":              true,
+		"tigera-packetcapture":         true,
+		"tigera-policy-recommendation": true,
+		"tigera-prometheus":            true,
+		"tigera-system":                true,
+		"calico-system":                true,
+		"tigera-manager":               true,
+	}
+
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -371,7 +388,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	} else if authenticationCR != nil {
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
-		optionaUILayerNamespaces = append(optionaUILayerNamespaces, render.DexNamespace)
+		if !sgLayerTigeraNameSpaces[render.DexNamespace] {
+			sgLayerTigeraNameSpaces[render.DexNamespace] = true
+		}
 	}
 
 	trustedBundle := certificateManager.CreateTrustedBundle()
@@ -526,30 +545,30 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	amz, err := utils.GetAmazonCloudIntegration(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Failed to  fetch GetAmazonCloudIntegration info")
-	} else if amz != nil {
-		optionaUILayerNamespaces = append(optionaUILayerNamespaces, render.AmazonCloudIntegrationNamespace)
+	} else if amz != nil && !sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] {
+		sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] = true
 	}
 
 	managerCfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:       keyValidatorConfig,
-		ESSecrets:                esSecrets,
-		TrustedCertBundle:        trustedBundle,
-		ESClusterConfig:          esClusterConfig,
-		TLSKeyPair:               tlsSecret,
-		VoltronLinseedKeyPair:    linseedVoltronSecret,
-		PullSecrets:              pullSecrets,
-		Openshift:                r.provider == operatorv1.ProviderOpenShift,
-		Installation:             installation,
-		ManagementCluster:        managementCluster,
-		TunnelSecret:             tunnelSecret,
-		InternalTrafficSecret:    internalTrafficSecret,
-		ClusterDomain:            r.clusterDomain,
-		ESLicenseType:            elasticLicenseType,
-		Replicas:                 replicas,
-		Compliance:               complianceCR,
-		ComplianceLicenseActive:  complianceLicenseFeatureActive,
-		UsePSP:                   r.usePSP,
-		OptionaUILayerNamespaces: optionaUILayerNamespaces,
+		KeyValidatorConfig:      keyValidatorConfig,
+		ESSecrets:               esSecrets,
+		TrustedCertBundle:       trustedBundle,
+		ESClusterConfig:         esClusterConfig,
+		TLSKeyPair:              tlsSecret,
+		VoltronLinseedKeyPair:   linseedVoltronSecret,
+		PullSecrets:             pullSecrets,
+		Openshift:               r.provider == operatorv1.ProviderOpenShift,
+		Installation:            installation,
+		ManagementCluster:       managementCluster,
+		TunnelSecret:            tunnelSecret,
+		InternalTrafficSecret:   internalTrafficSecret,
+		ClusterDomain:           r.clusterDomain,
+		ESLicenseType:           elasticLicenseType,
+		Replicas:                replicas,
+		Compliance:              complianceCR,
+		ComplianceLicenseActive: complianceLicenseFeatureActive,
+		UsePSP:                  r.usePSP,
+		SGLayerTigeraNameSpaces: sgLayerTigeraNameSpaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

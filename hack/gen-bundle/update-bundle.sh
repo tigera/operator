@@ -33,7 +33,7 @@ OPERATOR_IMAGE_DIGEST=$(echo $OPERATOR_IMAGE_INSPECT | jq -r '.[0].RepoDigests[]
 CSV=bundle/${VERSION}/manifests/operator.clusterserviceversion.yaml
 
 # Rearrange the bundle layout.
-mkdir bundle/${VERSION}
+mkdir -p bundle/${VERSION}
 mv bundle/{metadata,manifests} bundle/${VERSION}
 
 #

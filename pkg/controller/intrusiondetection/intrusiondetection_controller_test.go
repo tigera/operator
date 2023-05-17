@@ -167,7 +167,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-		// Managed clusters need the publi cert for Linseed as well.
+		// Managed clusters need the public cert for Linseed as well.
 		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(c, render.VoltronLinseedPublicCert, common.OperatorNamespace(), []string{render.VoltronLinseedPublicCert})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())

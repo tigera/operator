@@ -151,6 +151,7 @@ func add(c controller.Controller) error {
 			render.ElasticsearchPolicyRecommendationUserSecret,
 			certificatemanagement.CASecretName,
 			render.ManagerInternalTLSSecretName,
+			render.TigeraLinseedSecret,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("policy-recommendation-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -352,16 +353,30 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
+	var trustedBundle certificatemanagement.TrustedBundle
+	if !isManagedCluster {
+		linseedCertLocation := render.TigeraLinseedSecret
+		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if linseedCertificate == nil {
+			log.Info("Linseed certificate is not available yet, waiting until they become available")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+
+		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+	} else {
+		trustedBundle = certificateManager.CreateTrustedBundle(managerInternalTLSSecret)
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
+
+	// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
+	policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{render.PolicyRecommendationTLSSecretName})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
 
@@ -370,15 +385,16 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	reqLogger.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:   r.clusterDomain,
-		ESClusterConfig: esClusterConfig,
-		ESSecrets:       esSecrets,
-		Installation:    network,
-		ManagedCluster:  isManagedCluster,
-		PullSecrets:     pullSecrets,
-		TrustedBundle:   trustedBundle,
-		Openshift:       r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:          r.usePSP,
+		ClusterDomain:                  r.clusterDomain,
+		ESClusterConfig:                esClusterConfig,
+		ESSecrets:                      esSecrets,
+		Installation:                   network,
+		ManagedCluster:                 isManagedCluster,
+		PullSecrets:                    pullSecrets,
+		TrustedBundle:                  trustedBundle,
+		Openshift:                      r.provider == operatorv1.ProviderOpenShift,
+		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
+		UsePSP:                         r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -394,7 +410,10 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.PolicyRecommendationNamespace,
 			ServiceAccounts: []string{render.PolicyRecommendationName},
-			TrustedBundle:   trustedBundle,
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 

@@ -1820,9 +1820,9 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{"sh", "-c", "calico-node -hostpath-init"},
 		Env: []corev1.EnvVar{
-			{Name: "NODE_USER_ID", Value: "999"},
+			{Name: "NODE_USER_ID", Value: fmt.Sprintf("%d", securitycontext.GetNonRootUID())},
 		},
-		SecurityContext: securitycontext.NewRootContext(false),
+		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
 	}
 }

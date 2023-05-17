@@ -195,6 +195,19 @@
           "selector": "k8s-app == 'tigera-dpi'",
           "namespaceSelector": "name == 'tigera-dpi'"
         }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8444
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-policy-recommendation'",
+          "namespaceSelector": "name == 'tigera-policy-recommendation'"
+        }
       }
     ],
     "egress": [

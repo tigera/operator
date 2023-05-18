@@ -302,6 +302,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 	return corev1.Container{
 		Name:            AmazonCloudIntegrationComponentName,
 		Image:           c.image,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		ReadinessProbe: &corev1.Probe{

@@ -573,7 +573,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
 		Image:           c.image,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env:             envs,
 		// On OpenShift Fluentd needs privileged access to access logs on host path volume
 		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
@@ -1092,6 +1092,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					InitContainers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
 						Name:            eksLogForwarderName + "-startup",
 						Image:           c.image,
+						ImagePullPolicy: ImagePullPolicy(),
 						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:             envVars,
 						SecurityContext: c.securityContext(false),
@@ -1100,6 +1101,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
 						Name:            eksLogForwarderName,
 						Image:           c.image,
+						ImagePullPolicy: ImagePullPolicy(),
 						Env:             envVars,
 						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),

@@ -1,0 +1,26 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "GlobalNetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.node-local-dns"
+  },
+  "spec": {
+    "tier":"allow-tigera",
+    "order":10,
+    "selector": "projectcalico.org/namespace in {'calico-system','tigera-guardian','tigera-compliance','tigera-dex','tigera-elasticsearch','tigera-fluentd','tigera-intrusion-detection','tigera-kibana','tigera-manager','tigera-eck-operator','tigera-packetcapture','tigera-policy-recommendation','tigera-prometheus','tigera-system','tigera-skraper'}",
+    "egress":[
+       {
+         "action":"Allow",
+         "protocol":"UDP",
+         "source":{},
+         "destination":{
+           "nets": ["2002:a60:a::"],
+           "ports": ["53"]
+         }
+       }
+    ],
+    "types":[
+      "Egress"
+    ]
+  }
+}

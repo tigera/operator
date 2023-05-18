@@ -185,6 +185,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	controllerContainer := corev1.Container{
 		Name:            "policy-recommendation-controller",
 		Image:           pr.image,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env:             envs,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType()),

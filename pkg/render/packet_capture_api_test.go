@@ -199,8 +199,9 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		return []corev1.Container{
 			{
-				Name:  render.PacketCaptureContainerName,
-				Image: fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
+				Name:            render.PacketCaptureContainerName,
+				Image:           fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
+				ImagePullPolicy: corev1.PullIfNotPresent,
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 					Capabilities: &corev1.Capabilities{
@@ -437,5 +438,4 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
 	})
-
 })

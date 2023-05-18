@@ -12,7 +12,7 @@
       {
         "action":"Allow",
         "source":{
-          "selector":"projectcalico.org/namespace in {'tigera-guardian','tigera-compliance','tigera-dex','tigera-elasticsearch','tigera-fluentd','tigera-intrusion-detection','tigera-kibana','tigera-manager','tigera-prometheus','tigera-skraper','tigera-system'}",
+          "selector":"projectcalico.org/namespace in {'calico-system','tigera-guardian','tigera-compliance','tigera-dex','tigera-elasticsearch','tigera-fluentd','tigera-intrusion-detection','tigera-kibana','tigera-manager','tigera-eck-operator','tigera-packetcapture','tigera-policy-recommendation','tigera-prometheus','tigera-system','tigera-skraper'}",
           "namespaceSelector":"all()"
         },
         "destination":{}

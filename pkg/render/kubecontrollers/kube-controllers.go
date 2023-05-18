@@ -537,10 +537,11 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	sc.RunAsGroup = ptr.Int64ToPtr(0)
 
 	container := c.cloudDecorateContainer(corev1.Container{
-		Name:      c.kubeControllerName,
-		Image:     c.image,
-		Env:       env,
-		Resources: c.kubeControllersResources(),
+		Name:            c.kubeControllerName,
+		Image:           c.image,
+		ImagePullPolicy: render.ImagePullPolicy(),
+		Env:             env,
+		Resources:       c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
 			PeriodSeconds: int32(10),
 			ProbeHandler: corev1.ProbeHandler{
@@ -753,6 +754,17 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 		})
 	}
 
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   networkpolicy.PrometheusSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(uint16(cfg.MetricsPort)),
+			},
+		},
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -763,8 +775,9 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(KubeController),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
 			Egress:   egressRules,
+			Ingress:  ingressRules,
 		},
 	}
 }

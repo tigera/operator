@@ -318,7 +318,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				{
 					Name:            DeploymentName,
 					Image:           l.linseedImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: securitycontext.NewNonRootContext(),

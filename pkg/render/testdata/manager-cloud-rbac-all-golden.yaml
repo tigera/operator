@@ -588,7 +588,7 @@ spec:
           value: /etc/pki/tls/certs/tigera-ca-bundle.crt
         - name: ES_CURATOR_BACKEND_CERT
           value: /etc/pki/tls/certs/tigera-ca-bundle.crt
-        image: quay.io/tigera/cnx-manager:tesla-master
+        image: quay.io/tigera/cnx-manager:redacted-image-tag
         livenessProbe:
           httpGet:
             path: /
@@ -654,7 +654,7 @@ spec:
           value: /etc/pki/tls/certs/tigera-ca-bundle.crt
         - name: ES_CURATOR_BACKEND_CERT
           value: /etc/pki/tls/certs/tigera-ca-bundle.crt
-        image: gcr.io/tigera-tesla/tigera/es-proxy:tesla-master
+        image: gcr.io/tigera-tesla/tigera/es-proxy:redacted-image-tag
         livenessProbe:
           httpGet:
             path: /tigera-elasticsearch/version
@@ -755,7 +755,7 @@ spec:
           value: value2
         - name: VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3
           value: value3
-        image: quay.io/tigera/voltron:master
+        image: quay.io/tigera/voltron:redacted-image-tag
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

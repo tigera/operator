@@ -58,6 +58,9 @@ func ExpectMatchesGoldenYaml(filename string, actual any) {
 	// pod template hashes
 	actualBytes = regexp.MustCompile(`(hash.operator.tigera.io.*: )[a-z0-9]+`).ReplaceAll(actualBytes, []byte("$1 redacted-hash-value"))
 	//
+	// image tags
+	actualBytes = regexp.MustCompile(`(image: [^:]+).*`).ReplaceAll(actualBytes, []byte("$1:redacted-image-tag"))
+	//
 	// certs, note: `base64("-----BEGIN CERTIFICATE-----")=="LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t"`
 	actualBytes = regexp.MustCompile(`LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t.*`).ReplaceAll(actualBytes, []byte("redacted-certificate-data"))
 

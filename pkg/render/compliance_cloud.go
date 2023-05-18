@@ -1,3 +1,17 @@
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package render
 
 import (
@@ -15,33 +29,38 @@ const (
 	CloudComplianceServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cloud-" + ComplianceServerName
 )
 
-// replaceESIndexFixs adds the ELASTIC_INDEX_MIDFIX env variable as the tenant ID and changes the ELASTIC_INDEX_SUFFIX
-// to be the actual cluster name (as opposed to <tenant_id>.<cluster_name> as it currently does). This is needed only
-// for certain components that replace the cluster name with managed cluster names, i.e. compliance server.
-func (c *complianceComponent) replaceESIndexFixsEnvs(container corev1.Container) corev1.Container {
+// setTenantAndCluster sets the TENANT_ID and CLUSTER_NAME env variables to the correct values.
+//
+// The CLUSTER_NAME variable may have already been set by the render code, but in a multi-tenant environment the value
+// will not be correct as it will also include the tenant ID. This function corrects that.
+func (c *complianceComponent) setTenantAndCluster(container corev1.Container) corev1.Container {
 	// c.esClusterConfig.ClusterName() is likely not the "actual" cluster name, it contains the tenant id as well so
 	// we need to strip that out.
 	actualClusterName := c.cfg.ESClusterConfig.ClusterName()
-
 	clusterNameParts := strings.Split(c.cfg.ESClusterConfig.ClusterName(), ".")
 	if len(clusterNameParts) > 1 {
 		actualClusterName = clusterNameParts[1]
 	}
 
-	newEnv := make([]corev1.EnvVar, 0, len(container.Env))
-	for _, env := range container.Env {
-		if env.Name == "ELASTIC_INDEX_SUFFIX" {
+	// Set the TENANT_ID variable.
+	container.Env = append(container.Env, []corev1.EnvVar{
+		{Name: "TENANT_ID", Value: c.cfg.TenantID},
+	}...)
+
+	// Update the CLUSTER_NAME variable if present.
+	newEnv := []corev1.EnvVar{}
+	for _, e := range container.Env {
+		if e.Name == "CLUSTER_NAME" {
+			newEnv = append(newEnv, corev1.EnvVar{
+				Name:  "CLUSTER_NAME",
+				Value: actualClusterName,
+			})
 			continue
 		}
-		newEnv = append(newEnv, env)
+		newEnv = append(newEnv, e)
 	}
 
-	newEnv = append(newEnv,
-		corev1.EnvVar{Name: "ELASTIC_INDEX_MIDFIX", Value: c.cfg.TenantID},
-		corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: actualClusterName})
-
 	container.Env = newEnv
-
 	return container
 }
 

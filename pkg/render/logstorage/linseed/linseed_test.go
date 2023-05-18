@@ -76,6 +76,11 @@ var _ = Describe("Linseed rendering tests", func() {
 			{"tigera-linseed", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 		}
 
+		// Calico Cloud objects.
+		expectedResources = append(expectedResources, []resourceTestObj{
+			{CloudPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+		}...)
+
 		BeforeEach(func() {
 			installation = &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
@@ -544,6 +549,12 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:  "ELASTIC_CA",
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
+				},
+
+				// Cloud specific env.
+				{
+					Name:  "LINSEED_ENABLE_METRICS",
+					Value: "false",
 				},
 			},
 			VolumeMounts: []corev1.VolumeMount{

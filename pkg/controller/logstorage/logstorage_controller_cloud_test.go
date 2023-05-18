@@ -10,7 +10,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/imageassurance"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -353,7 +353,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, kbInterncalCertSecret)).ShouldNot(HaveOccurred())
 
-				externalCertsSecret := createPubSecret(esgateway.ExternalCertsSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
+				externalCertsSecret := createPubSecret(logstorage.ExternalCertsSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
 				Expect(cli.Create(ctx, externalCertsSecret)).ShouldNot(HaveOccurred())
 
 				kubeControllersElasticUserSecret := &corev1.Secret{
@@ -446,7 +446,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Create(ctx, kbInterncalCertSecret)).ShouldNot(HaveOccurred())
 
-				externalCertsSecret := createPubSecret(esgateway.ExternalCertsSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
+				externalCertsSecret := createPubSecret(logstorage.ExternalCertsSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
 				Expect(cli.Create(ctx, externalCertsSecret)).ShouldNot(HaveOccurred())
 
 				kubeControllersElasticUserSecret := &corev1.Secret{

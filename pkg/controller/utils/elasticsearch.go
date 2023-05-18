@@ -154,8 +154,10 @@ func (es *esClient) SetILMPolicies(ctx context.Context, ls *operatorv1.LogStorag
 }
 
 // listILMPolicies generates ILM policies based on disk space and retention in LogStorage
-// Allocate 70% of ES disk space to flows, dns and bgp logs [majorPctOfTotalDisk]
-// Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs.
+// Allocate 70% of ES disk space to flows, runtime, dns and bgp logs [majorPctOfTotalDisk]
+// Allocate 68.5% of the 70% ES disk space to flow logs.
+// Allocate 16.5% of the 70% ES disk space to runtime logs.
+// Allocate 5% of the 70% ES disk space to each dns, bgp and l7 logs.
 // Allocate 10% of ES disk space to logs that are NOT flows, dns or bgp [minorPctOfTotalDisk]
 // Equally distribute 10% of the ES disk space among these other log types
 func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]policyDetail {
@@ -170,10 +172,11 @@ func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]policy
 
 	// Retention is not set in LogStorage for l7, benchmark and events logs, set default values used by curator
 	return map[string]policyDetail{
-		"tigera_secure_ee_flows": buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.85, int(*ls.Spec.Retention.Flows)),
-		"tigera_secure_ee_dns":   buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.DNSLogs)),
-		"tigera_secure_ee_bgp":   buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.BGPLogs)),
-		"tigera_secure_ee_l7":    buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, 1),
+		"tigera_secure_ee_flows":   buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.685, int(*ls.Spec.Retention.Flows)),
+		"tigera_secure_ee_runtime": buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.165, int(*ls.Spec.Retention.RuntimeReports)),
+		"tigera_secure_ee_dns":     buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.DNSLogs)),
+		"tigera_secure_ee_bgp":     buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.BGPLogs)),
+		"tigera_secure_ee_l7":      buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, 1),
 
 		"tigera_secure_ee_audit_ee":           buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.AuditReports)),
 		"tigera_secure_ee_audit_kube":         buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.AuditReports)),

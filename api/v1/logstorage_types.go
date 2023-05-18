@@ -122,6 +122,12 @@ type Retention struct {
 	// +optional
 	Flows *int32 `json:"flows"`
 
+	// RuntimeReports configures the retention period for runtime logs, in days.  Logs written on a day that started at least this long ago
+	// are removed.  To keep logs for at least x days, use a retention period of x+1.
+	// Default: 8
+	// +optional
+	RuntimeReports *int32 `json:"runtimeReports"`
+
 	// AuditReports configures the retention period for audit logs, in days.  Logs written on a day that started at least this long ago are
 	// removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 91

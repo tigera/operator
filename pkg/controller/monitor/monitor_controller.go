@@ -64,11 +64,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	prometheusReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
+	reconciler := newReconciler(mgr, opts, tierWatchReady)
 
 	// Create a new controller
 	controller, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -80,6 +79,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err != nil {
 		log.Error(err, "Failed to establish a connection to k8s")
 		return err
+	}
+
+	if err := requiresPrometheusResources(k8sClient); err != nil {
+		log.Error(err, "cannot start monitor_controller until the CRDs for monitoring.coreos.com/v1 are present, "+
+			"starting a go routine to monitor monitoring.coreos.com/v1 CRDs")
+		go waitToAddPrometheusWatch(controller, k8sClient, log)
+		return nil // returning nil since we do not need a panic
 	}
 
 	policyNames := []types.NamespacedName{
@@ -96,21 +102,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
 
-	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
-
 	return add(mgr, controller)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
-		prometheusReady: prometheusReady,
-		tierWatchReady:  tierWatchReady,
-		clusterDomain:   opts.ClusterDomain,
-		usePSP:          opts.UsePSP,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		provider:       opts.DetectedProvider,
+		status:         status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
+		tierWatchReady: tierWatchReady,
+		clusterDomain:  opts.ClusterDomain,
+		usePSP:         opts.UsePSP,
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
@@ -174,14 +177,13 @@ func add(mgr manager.Manager, c controller.Controller) error {
 var _ reconcile.Reconciler = &ReconcileMonitor{}
 
 type ReconcileMonitor struct {
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	status          status.StatusManager
-	prometheusReady *utils.ReadyFlag
-	tierWatchReady  *utils.ReadyFlag
-	clusterDomain   string
-	usePSP          bool
+	client         client.Client
+	scheme         *runtime.Scheme
+	provider       operatorv1.Provider
+	status         status.StatusManager
+	tierWatchReady *utils.ReadyFlag
+	clusterDomain  string
+	usePSP         bool
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -239,12 +241,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	if !r.prometheusReady.IsReady() {
-		err = fmt.Errorf("waiting for Prometheus resources")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Prometheus resources to be ready", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

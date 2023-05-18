@@ -1378,6 +1378,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			"enabled":        true,
 			"licenseEdition": "enterpriseEdition",
 		},
+		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
+		// can still be overwritten in the Kibana Settings if the user desires it.
+		"telemetry.optIn": false,
 	}
 
 	var initContainers []corev1.Container

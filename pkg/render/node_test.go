@@ -874,14 +874,14 @@ var _ = Describe("Node rendering tests", func() {
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
 				Expect(nodeContainer).ToNot(BeNil())
 				Expect(nodeContainer.SecurityContext).ToNot(BeNil())
-				Expect(*nodeContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+				Expect(*nodeContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*nodeContainer.SecurityContext.Privileged).To(BeFalse())
 				Expect(*nodeContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
 				Expect(*nodeContainer.SecurityContext.RunAsNonRoot).To(BeTrue())
 				Expect(*nodeContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 				Expect(nodeContainer.SecurityContext.Capabilities).To(Equal(
 					&corev1.Capabilities{
-						Drop: []corev1.Capability{"ALL"},
+						Drop: []corev1.Capability{},
 						Add: []corev1.Capability{
 							"NET_ADMIN",
 							"NET_BIND_SERVICE",

@@ -896,7 +896,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// hostpath init container should have the correct env and security context.
 				hostPathContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "hostpath-init")
-				rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "999")
+				rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "10001")
 				Expect(*hostPathContainer.SecurityContext.RunAsUser).To(Equal(int64(0)))
 
 				// Verify hostpath init container volume mounts.

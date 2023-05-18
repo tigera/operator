@@ -996,6 +996,8 @@ func managerClusterWideDefaultView() *v3.UISettings {
 	}
 }
 
+// DefaultSGLayerTigeraNamespaces returns the default list of namespaces to be displayed in Service graph
+// map is used to avoid duplication of namespaces.
 func DefaultSGLayerTigeraNamespaces() map[string]bool {
 	return map[string]bool{
 		"tigera-compliance":            true,

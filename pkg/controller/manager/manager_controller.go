@@ -361,9 +361,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Populate a list of namespaces to be displayed in the service graph Tigera infrastructure layer.
 	sgLayerTigeraNameSpaces := render.DefaultSGLayerTigeraNamespaces()
-	if !sgLayerTigeraNameSpaces[render.ManagerNamespace] {
-		sgLayerTigeraNameSpaces[render.ManagerNamespace] = true
-	}
+	sgLayerTigeraNameSpaces[render.ManagerNamespace] = true
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
@@ -531,8 +529,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	amz, err := utils.GetAmazonCloudIntegration(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Failed to  fetch GetAmazonCloudIntegration info")
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the GetAmazonCloudIntegration configuration", err, reqLogger)
 	} else if amz != nil && !sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] {
 		sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] = true
 	}

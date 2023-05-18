@@ -78,12 +78,11 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		r = ReconcileMonitor{
-			client:          cli,
-			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
-			status:          mockStatus,
-			prometheusReady: &utils.ReadyFlag{},
-			tierWatchReady:  &utils.ReadyFlag{},
+			client:         cli,
+			scheme:         scheme,
+			provider:       operatorv1.ProviderNone,
+			status:         mockStatus,
+			tierWatchReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -112,7 +111,6 @@ var _ = Describe("Monitor controller tests", func() {
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 
 		// Mark that watches were successful.
-		r.prometheusReady.MarkAsReady()
 		r.tierWatchReady.MarkAsReady()
 	})
 

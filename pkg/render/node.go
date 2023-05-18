@@ -1228,6 +1228,9 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 			"NET_BIND_SERVICE",
 			"NET_RAW",
 		}
+		// Set the privilege escalation to true so that routes, ipsets can be programmed.
+		sc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+		sc.Capabilities.Drop = []corev1.Capability{}
 	}
 
 	lp, rp := c.nodeLivenessReadinessProbes()

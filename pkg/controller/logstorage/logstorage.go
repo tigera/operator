@@ -195,7 +195,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	}
 
 	components = append(components, logStorageComponent)
-	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+	if managementClusterConnection == nil && !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		// Render the key pair and trusted bundle into the Kibana namespace, which should be created by the log storage component above.
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

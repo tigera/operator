@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -168,9 +168,10 @@ func (c *windowsComponent) windowsUpgradeContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         common.CalicoWindowsUpgradeResourceName,
-		Image:        c.windowsUpgradeImage,
-		VolumeMounts: mounts,
+		Name:            common.CalicoWindowsUpgradeResourceName,
+		Image:           c.windowsUpgradeImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		VolumeMounts:    mounts,
 	}
 }
 

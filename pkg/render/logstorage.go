@@ -681,8 +681,9 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
 	initOSSettingsContainer := corev1.Container{
-		Name:  "elastic-internal-init-os-settings",
-		Image: es.esImage,
+		Name:            "elastic-internal-init-os-settings",
+		Image:           es.esImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Command: []string{
 			"/bin/sh",
 		},
@@ -705,8 +706,9 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		sc.Capabilities.Add = []corev1.Capability{"CHOWN"}
 
 		initKeystore := corev1.Container{
-			Name:  keystoreInitContainerName,
-			Image: es.esImage,
+			Name:            keystoreInitContainerName,
+			Image:           es.esImage,
+			ImagePullPolicy: ImagePullPolicy(),
 			Env: []corev1.EnvVar{
 				{
 					Name: ElasticsearchKeystoreEnvName,
@@ -739,9 +741,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		// If certificate management is used, we need to override a mounting options for this init container.
 		initFSName := "elastic-internal-init-filesystem"
 		initFSContainer := corev1.Container{
-			Name:    initFSName,
-			Image:   es.esImage,
-			Command: []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"},
+			Name:            initFSName,
+			Image:           es.esImage,
+			ImagePullPolicy: ImagePullPolicy(),
+			Command:         []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"},
 			Resources: corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					"cpu":    resource.MustParse("100m"),
@@ -1299,8 +1302,9 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					NodeSelector:       es.cfg.Installation.ControlPlaneNodeSelector,
 					Tolerations:        es.cfg.Installation.ControlPlaneTolerations,
 					Containers: []corev1.Container{{
-						Image: es.esOperatorImage,
-						Name:  "manager",
+						Image:           es.esOperatorImage,
+						ImagePullPolicy: ImagePullPolicy(),
+						Name:            "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",
@@ -1552,6 +1556,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 								relasticsearch.ContainerDecorate(corev1.Container{
 									Name:            EsCuratorName,
 									Image:           es.curatorImage,
+									ImagePullPolicy: ImagePullPolicy(),
 									Env:             es.curatorEnvVars(),
 									LivenessProbe:   elasticCuratorLivenessProbe,
 									SecurityContext: securitycontext.NewNonRootContext(),

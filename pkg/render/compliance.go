@@ -464,7 +464,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 				{
 					Name:            ComplianceControllerName,
 					Image:           c.controllerImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -648,7 +648,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					{
 						Name:            "reporter",
 						Image:           c.reporterImage,
-						ImagePullPolicy: corev1.PullIfNotPresent,
+						ImagePullPolicy: ImagePullPolicy(),
 						Env:             envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
@@ -848,7 +848,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 				c.replaceESIndexFixsEnvs(corev1.Container{
 					Name:            ComplianceServerName,
 					Image:           c.serverImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -1048,7 +1048,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				{
 					Name:            ComplianceSnapshotterName,
 					Image:           c.snapshotterImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -1241,7 +1241,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				{
 					Name:            ComplianceBenchmarkerName,
 					Image:           c.benchmarkerImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: securitycontext.NewRootContext(false),
 					VolumeMounts:    volMounts,

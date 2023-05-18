@@ -589,6 +589,7 @@ spec:
         - name: ES_CURATOR_BACKEND_CERT
           value: /etc/pki/tls/certs/tigera-ca-bundle.crt
         image: quay.io/tigera/cnx-manager:redacted-image-tag
+        imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
             path: /
@@ -655,6 +656,7 @@ spec:
         - name: ES_CURATOR_BACKEND_CERT
           value: /etc/pki/tls/certs/tigera-ca-bundle.crt
         image: gcr.io/tigera-tesla/tigera/es-proxy:redacted-image-tag
+        imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
             path: /tigera-elasticsearch/version

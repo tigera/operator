@@ -57,6 +57,9 @@ endif
 ifeq ($(ARCH),amd64)
 	TARGET_PLATFORM=amd64
 endif
+ifeq ($(ARCH),s390x)
+	TARGET_PLATFORM=s390x
+endif
 EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
 # location of docker credentials to push manifests
@@ -87,8 +90,7 @@ ifneq ($(BUILDARCH),$(ARCH))
 endif
 
 # list of arches *not* to build when doing *-all
-#    until s390x works correctly
-EXCLUDEARCH ?= s390x
+EXCLUDEARCH ?=
 # For operator-cloud we only need amd64 so overwrite any additional arches that
 # might be available in tigera/operator
 VALIDARCHES = amd64

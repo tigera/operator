@@ -359,6 +359,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
 
+	// Populate a list of namespaces to be displayed in the service graph Tigera infrastructure layer.
+	sgLayerTigeraNameSpaces := render.DefaultSGLayerTigeraNamespaces()
+	if !sgLayerTigeraNameSpaces[render.ManagerNamespace] {
+		sgLayerTigeraNameSpaces[render.ManagerNamespace] = true
+	}
+
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -370,6 +376,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	} else if authenticationCR != nil {
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
+		if !sgLayerTigeraNameSpaces[render.DexNamespace] {
+			sgLayerTigeraNameSpaces[render.DexNamespace] = true
+		}
 	}
 
 	trustedBundle := certificateManager.CreateTrustedBundle()
@@ -521,6 +530,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		replicas = &mcmReplicas
 	}
 
+	amz, err := utils.GetAmazonCloudIntegration(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Failed to  fetch GetAmazonCloudIntegration info")
+	} else if amz != nil && !sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] {
+		sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] = true
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
@@ -540,6 +556,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Compliance:              complianceCR,
 		ComplianceLicenseActive: complianceLicenseFeatureActive,
 		UsePSP:                  r.usePSP,
+		SGLayerTigeraNameSpaces: sgLayerTigeraNameSpaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

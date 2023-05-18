@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -202,7 +203,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-				{ExternalCertsSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{logstorage.ExternalCertsSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{CloudPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
@@ -212,7 +213,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 
 			cfg.Cloud = CloudConfig{
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ExternalCertsSecret, Namespace: common.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}},
 				"tenantId", true, true, "externalEs.com", "externalKb.com",
 			}
 			component := EsGateway(cfg)

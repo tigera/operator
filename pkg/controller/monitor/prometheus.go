@@ -16,6 +16,7 @@ package monitor
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -154,7 +155,7 @@ func requiresPrometheusResources(client kubernetes.Interface) error {
 	return nil
 }
 
-func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) {
+func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger) {
 	const (
 		initBackoff   = 30 * time.Second
 		maxBackoff    = 8 * time.Minute
@@ -169,14 +170,14 @@ func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interfa
 
 	for {
 		if err := requiresPrometheusResources(client); err != nil {
-			log.Info(fmt.Sprintf("%v. monitor-controller will retry.", err))
+			log.Info(fmt.Sprintf("%v. monitor-controller will retry checking for monitoring.coreos.com/v1 CRDs.", err))
 		} else {
 			// watch for prometheus resource changes
 			if err := addWatch(c); err != nil {
-				log.Info(fmt.Sprintf("%v. monitor-controller will retry.", err))
+				log.Info(fmt.Sprintf("%v. monitor-controller will retry checking for monitoring.coreos.com/v1 CRDs.", err))
 			} else {
-				readyFlag.MarkAsReady()
-				return
+				log.Info("Rebooting to enable monitor_controller now that monitoring.coreos.com/v1 CRDs are present.")
+				os.Exit(0)
 			}
 		}
 

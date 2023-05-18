@@ -1228,6 +1228,9 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 			"NET_BIND_SERVICE",
 			"NET_RAW",
 		}
+		// Set the privilege escalation to true so that routes, ipsets can be programmed.
+		sc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+		sc.Capabilities.Drop = []corev1.Capability{}
 	}
 
 	lp, rp := c.nodeLivenessReadinessProbes()
@@ -1820,9 +1823,9 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{"sh", "-c", "calico-node -hostpath-init"},
 		Env: []corev1.EnvVar{
-			{Name: "NODE_USER_ID", Value: "999"},
+			{Name: "NODE_USER_ID", Value: "10001"},
 		},
-		SecurityContext: securitycontext.NewRootContext(false),
+		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
 	}
 }

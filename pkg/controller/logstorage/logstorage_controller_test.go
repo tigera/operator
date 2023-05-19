@@ -1895,6 +1895,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			},
 			Retention: &operatorv1.Retention{
 				Flows:             &retention,
+				RuntimeReports:    &retention,
 				AuditReports:      &retention,
 				Snapshots:         &retention,
 				ComplianceReports: &retention,

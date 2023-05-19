@@ -1039,6 +1039,8 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.data":                   "true",
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
+		// Disable geoip downloader. This removes an error from the startup logs, because our network policy blocks it.
+		"ingest.geoip.downloader.enabled": false,
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
@@ -1380,6 +1382,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			"enabled":        true,
 			"licenseEdition": "enterpriseEdition",
 		},
+		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
+		// can still be overwritten in the Kibana Settings if the user desires it.
+		"telemetry.optIn": false,
 	}
 
 	var initContainers []corev1.Container

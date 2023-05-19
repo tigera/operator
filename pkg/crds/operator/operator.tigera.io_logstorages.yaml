@@ -262,6 +262,13 @@ spec:
                       period of x+1. Default: 8'
                     format: int32
                     type: integer
+                  runtimeReports:
+                    description: 'RuntimeReports configures the retention period for
+                      runtime logs, in days.  Logs written on a day that started at
+                      least this long ago are removed.  To keep logs for at least
+                      x days, use a retention period of x+1. Default: 8'
+                    format: int32
+                    type: integer
                   snapshots:
                     description: 'Snapshots configures the retention period for snapshots,
                       in days. Snapshots are periodic captures of resources which

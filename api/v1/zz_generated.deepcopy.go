@@ -3661,6 +3661,11 @@ func (in *Retention) DeepCopyInto(out *Retention) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.RuntimeReports != nil {
+		in, out := &in.RuntimeReports, &out.RuntimeReports
+		*out = new(int32)
+		**out = **in
+	}
 	if in.AuditReports != nil {
 		in, out := &in.AuditReports, &out.AuditReports
 		*out = new(int32)

@@ -490,7 +490,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
-		{Name: "VOLTRON_TENANT", Value: c.cfg.CloudResources.TenantID},
+		{Name: "VOLTRON_TENANT_ID", Value: c.cfg.CloudResources.TenantID},
 	}
 
 	if c.cfg.ManagementCluster != nil {
@@ -535,7 +535,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
-		{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.CloudResources.TenantID},
+		{Name: "TENANT_ID", Value: c.cfg.CloudResources.TenantID},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 	}

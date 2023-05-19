@@ -693,7 +693,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	if c.cfg.TenantId != "" {
 		container.Env = append(container.Env, []corev1.EnvVar{
-			{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.TenantId},
+			{Name: "TENANT_ID", Value: c.cfg.TenantId},
 		}...)
 	}
 

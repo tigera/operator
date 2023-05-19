@@ -490,7 +490,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.TenantId != "" {
-		env = append(env, corev1.EnvVar{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.TenantId})
+		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.TenantId})
 	}
 
 	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)

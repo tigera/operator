@@ -617,7 +617,7 @@ spec:
           value: https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:5601
         - name: FIPS_MODE_ENABLED
           value: "false"
-        - name: ELASTIC_INDEX_TENANT_ID
+        - name: TENANT_ID
         - name: LINSEED_CLIENT_CERT
           value: /manager-tls/tls.crt
         - name: LINSEED_CLIENT_KEY
@@ -729,7 +729,7 @@ spec:
           value: "false"
         - name: VOLTRON_FIPS_MODE_ENABLED
           value: "false"
-        - name: VOLTRON_TENANT
+        - name: VOLTRON_TENANT_ID
         - name: VOLTRON_K8S_CLIENT_QPS
           value: "20"
         - name: VOLTRON_K8S_CLIENT_BURST

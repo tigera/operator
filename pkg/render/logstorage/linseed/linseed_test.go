@@ -554,7 +554,15 @@ func expectedContainers() []corev1.Container {
 				// Cloud specific env.
 				{
 					Name:  "LINSEED_ENABLE_METRICS",
-					Value: "false",
+					Value: "true",
+				},
+				{
+					Name:  "LINSEED_METRICS_CERT",
+					Value: "/tigera-secure-linseed-cert/tls.crt",
+				},
+				{
+					Name:  "LINSEED_METRICS_KEY",
+					Value: "/tigera-secure-linseed-cert/tls.key",
 				},
 			},
 			VolumeMounts: []corev1.VolumeMount{

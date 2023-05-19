@@ -71,21 +71,23 @@ func setEnv(evs []corev1.EnvVar, name, value string) []corev1.EnvVar {
 	return envs
 }
 
-func (e *linseed) modifyDeploymentForCloud(d *appsv1.Deployment) {
+func (c *linseed) modifyDeploymentForCloud(d *appsv1.Deployment) {
 	envs := d.Spec.Template.Spec.Containers[0].Env
 
 	// Enable prometheus metrics endpoint at :METRICS_PORT/metrics (Default is 9095).
-	// TODO: This should be enabled, but we need to provide certs for the metrics endpoint.
-	envs = append(envs, corev1.EnvVar{Name: "LINSEED_ENABLE_METRICS", Value: "false"})
+	// We use the same certificate for TLS on the metrics endpoint as we do for the main API.
+	envs = append(envs, corev1.EnvVar{Name: "LINSEED_ENABLE_METRICS", Value: "true"})
+	envs = append(envs, corev1.EnvVar{Name: "LINSEED_METRICS_CERT", Value: c.cfg.KeyPair.VolumeMountCertificateFilePath()})
+	envs = append(envs, corev1.EnvVar{Name: "LINSEED_METRICS_KEY", Value: c.cfg.KeyPair.VolumeMountKeyFilePath()})
 
-	if e.cfg.Cloud.ExternalElastic {
+	if c.cfg.Cloud.ExternalElastic {
 		// Adjust the endpoint used for Elasticsearch to be the external ES.
-		envs = setEnv(envs, "ELASTIC_HOST", e.cfg.Cloud.ExternalESDomain)
+		envs = setEnv(envs, "ELASTIC_HOST", c.cfg.Cloud.ExternalESDomain)
 		envs = setEnv(envs, "ELASTIC_PORT", "443")
 		envs = setEnv(envs, "ELASTIC_POST", "443") // Typo in the Linseed code needs this! https://github.com/tigera/calico-private/pull/6263
 	}
 
-	if e.cfg.Cloud.EnableMTLS {
+	if c.cfg.Cloud.EnableMTLS {
 		// Enalbe Elastic mTLS in Linseed.
 		envs = setEnv(envs, "ELASTIC_MTLS_ENABLED", "true")
 
@@ -114,19 +116,19 @@ func (e *linseed) modifyDeploymentForCloud(d *appsv1.Deployment) {
 			}...)
 
 		// Update the annotations to include the hash for the external certs used for mTLS with ES.
-		if e.cfg.Cloud.ExternalCertsSecret != nil {
-			d.Spec.Template.ObjectMeta.Annotations["hash.operator.tigera.io/cloud-external-es-secrets"] = rmeta.SecretsAnnotationHash(e.cfg.Cloud.ExternalCertsSecret)
+		if c.cfg.Cloud.ExternalCertsSecret != nil {
+			d.Spec.Template.ObjectMeta.Annotations["hash.operator.tigera.io/cloud-external-es-secrets"] = rmeta.SecretsAnnotationHash(c.cfg.Cloud.ExternalCertsSecret)
 		}
 	}
 
-	if e.cfg.Cloud.TenantId != "" {
-		envs = append(envs, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: e.cfg.Cloud.TenantId})
+	if c.cfg.Cloud.TenantId != "" {
+		envs = append(envs, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: c.cfg.Cloud.TenantId})
 	}
 
 	d.Spec.Template.Spec.Containers[0].Env = envs
 }
 
-func (e *linseed) getCloudObjects() (toCreate []client.Object) {
+func (c *linseed) getCloudObjects() (toCreate []client.Object) {
 	s := []client.Object{}
 
 	// TODO: Both Linseed and es-gateway have this logic. It's only needed in one location.
@@ -138,13 +140,13 @@ func (e *linseed) getCloudObjects() (toCreate []client.Object) {
 	// 	s = append(s, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.Cloud.EsAdminUserSecret)...)...)
 	// }
 
-	s = append(s, e.allowTigeraPolicyForCloud())
+	s = append(s, c.allowTigeraPolicyForCloud())
 	return s
 }
 
-func (e *linseed) allowTigeraPolicyForCloud() *v3.NetworkPolicy {
+func (c *linseed) allowTigeraPolicyForCloud() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	if e.cfg.Cloud.ExternalElastic {
+	if c.cfg.Cloud.ExternalElastic {
 		// Allow egress traffic to the external Elasticsearch.
 		egressRules = append(egressRules,
 			v3.Rule{
@@ -152,7 +154,7 @@ func (e *linseed) allowTigeraPolicyForCloud() *v3.NetworkPolicy {
 				Protocol: &networkpolicy.TCPProtocol,
 				Destination: v3.EntityRule{
 					Ports:   []numorstring.Port{{MinPort: 443, MaxPort: 443}},
-					Domains: []string{e.cfg.Cloud.ExternalESDomain},
+					Domains: []string{c.cfg.Cloud.ExternalESDomain},
 				},
 			},
 		)

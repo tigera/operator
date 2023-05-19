@@ -121,10 +121,6 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				MountPath: filepath.Clean("/var/run"),
 			},
 			{
-				Name:      "etccalico",
-				MountPath: filepath.Clean("/etc/calico"),
-			},
-			{
 				Name:      "socket-dir",
 				MountPath: filepath.Clean("/csi"),
 			},
@@ -194,14 +190,6 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
 					Path: filepath.Clean("/var/run"),
-				},
-			},
-		},
-		{
-			Name: "etccalico",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: filepath.Clean("/etc/calico"),
 				},
 			},
 		},

@@ -529,6 +529,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	amz, err := utils.GetAmazonCloudIntegration(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the GetAmazonCloudIntegration configuration", err, reqLogger)
+		return reconcile.Result{}, nil
 	} else if amz != nil {
 		sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] = true
 	}

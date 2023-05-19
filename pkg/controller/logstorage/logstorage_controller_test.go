@@ -157,6 +157,7 @@ var _ = Describe("LogStorage controller", func() {
 				retain8 := int32(8)
 				retain91 := int32(91)
 				Expect(ls.Spec.Retention.Flows).To(Equal(&retain8))
+				Expect(ls.Spec.Retention.RuntimeReports).To(Equal(&retain8))
 				Expect(ls.Spec.Retention.AuditReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.ComplianceReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.Snapshots).To(Equal(&retain91))

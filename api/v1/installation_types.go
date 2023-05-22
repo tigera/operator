@@ -628,12 +628,16 @@ func (p *IPPool) ToCRD() *crdv1.IPPool {
 	switch p.Encapsulation {
 	case EncapsulationIPIP:
 		pool.Spec.IPIPMode = crdv1.IPIPModeAlways
+		pool.Spec.VXLANMode = crdv1.VXLANModeNever
 	case EncapsulationIPIPCrossSubnet:
 		pool.Spec.IPIPMode = crdv1.IPIPModeCrossSubnet
+		pool.Spec.VXLANMode = crdv1.VXLANModeNever
 	case EncapsulationVXLAN:
 		pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+		pool.Spec.IPIPMode = crdv1.IPIPModeNever
 	case EncapsulationVXLANCrossSubnet:
 		pool.Spec.VXLANMode = crdv1.VXLANModeCrossSubnet
+		pool.Spec.IPIPMode = crdv1.IPIPModeNever
 	}
 
 	// Set NAT

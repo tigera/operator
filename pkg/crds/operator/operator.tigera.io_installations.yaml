@@ -18829,6 +18829,50 @@ spec:
                   is an ImageSet that is being used. If an ImageSet is not being used
                   then this will not be set.
                 type: string
+              ipPools:
+                description: IPPools is the set of IP pools that exist in the cluster.
+                items:
+                  properties:
+                    blockSize:
+                      description: 'BlockSize specifies the CIDR prefex length to
+                        use when allocating per-node IP blocks from the main IP pool
+                        CIDR. Default: 26 (IPv4), 122 (IPv6)'
+                      format: int32
+                      type: integer
+                    cidr:
+                      description: CIDR contains the address range for the IP Pool
+                        in classless inter-domain routing format.
+                      type: string
+                    disableBGPExport:
+                      default: false
+                      description: 'DisableBGPExport specifies whether routes from
+                        this IP pool''s CIDR are exported over BGP. Default: false'
+                      type: boolean
+                    encapsulation:
+                      description: 'Encapsulation specifies the encapsulation type
+                        that will be used with the IP Pool. Default: IPIP'
+                      enum:
+                      - IPIPCrossSubnet
+                      - IPIP
+                      - VXLAN
+                      - VXLANCrossSubnet
+                      - None
+                      type: string
+                    natOutgoing:
+                      description: 'NATOutgoing specifies if NAT will be enabled or
+                        disabled for outgoing traffic. Default: Enabled'
+                      enum:
+                      - Enabled
+                      - Disabled
+                      type: string
+                    nodeSelector:
+                      description: 'NodeSelector specifies the node selector that
+                        will be set for the IP Pool. Default: ''all()'''
+                      type: string
+                  required:
+                  - cidr
+                  type: object
+                type: array
               mtu:
                 description: MTU is the most recently observed value for pod network
                   MTU. This may be an explicitly configured value, or based on Calico's

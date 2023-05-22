@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -613,6 +614,50 @@ type IPPool struct {
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
 }
 
+func (p *IPPool) ToCRD() *crdv1.IPPool {
+	name := strings.ReplaceAll(p.CIDR, "/", "-") // TODO: Better name generation. Handle v6.
+	pool := crdv1.IPPool{
+		TypeMeta:   metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: crdv1.IPPoolSpec{
+			CIDR: p.CIDR,
+		},
+	}
+
+	// Set encap.
+	switch p.Encapsulation {
+	case EncapsulationIPIP:
+		pool.Spec.IPIPMode = crdv1.IPIPModeAlways
+	case EncapsulationIPIPCrossSubnet:
+		pool.Spec.IPIPMode = crdv1.IPIPModeCrossSubnet
+	case EncapsulationVXLAN:
+		pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+	case EncapsulationVXLANCrossSubnet:
+		pool.Spec.VXLANMode = crdv1.VXLANModeCrossSubnet
+	}
+
+	// Set NAT
+	switch p.NATOutgoing {
+	case NATOutgoingEnabled:
+		pool.Spec.NATOutgoing = true
+	}
+
+	// Set BlockSize
+	if p.BlockSize != nil {
+		pool.Spec.BlockSize = int(*p.BlockSize)
+	}
+
+	// Set selector.
+	pool.Spec.NodeSelector = p.NodeSelector
+
+	// Set BGP export.
+	if p.DisableBGPExport != nil {
+		pool.Spec.DisableBGPExport = *p.DisableBGPExport
+	}
+
+	return &pool
+}
+
 // CNIPluginType describes the type of CNI plugin used.
 //
 // One of: Calico, GKE, AmazonVPC, AzureVNET
@@ -724,6 +769,9 @@ type InstallationStatus struct {
 	// that is being used. If an ImageSet is not being used then this will not be set.
 	// +optional
 	ImageSet string `json:"imageSet,omitempty"`
+
+	// IPPools is the set of IP pools that exist in the cluster.
+	IPPools []IPPool `json:"ipPools,omitempty"`
 
 	// Computed is the final installation including overlaid resources.
 	// +optional

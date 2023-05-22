@@ -88,6 +88,7 @@ type TyphaNodeTLS struct {
 type NodeConfiguration struct {
 	K8sServiceEp  k8sapi.ServiceEndpoint
 	Installation  *operatorv1.InstallationSpec
+	IPPools       []operatorv1.IPPool
 	TLS           *TyphaNodeTLS
 	ClusterDomain string
 
@@ -624,7 +625,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 
 	ipam := c.getCalicoIPAM()
 	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
-		ipam = buildHostLocalIPAM(c.cfg.Installation.CalicoNetwork)
+		ipam = buildHostLocalIPAM(c.cfg.IPPools)
 	}
 
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
@@ -770,12 +771,12 @@ func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
+	if v4pool := GetIPv4Pool(c.cfg.IPPools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
 		assign_ipv4 = "false"
 	}
-	if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
+	if v6pool := GetIPv6Pool(c.cfg.IPPools); v6pool != nil {
 		assign_ipv6 = "true"
 	} else {
 		assign_ipv6 = "false"
@@ -787,9 +788,9 @@ func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	}
 }
 
-func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) map[string]interface{} {
-	v6 := GetIPv6Pool(cns.IPPools) != nil
-	v4 := GetIPv4Pool(cns.IPPools) != nil
+func buildHostLocalIPAM(pools []operatorv1.IPPool) map[string]interface{} {
+	v6 := GetIPv6Pool(pools) != nil
+	v4 := GetIPv4Pool(pools) != nil
 
 	if v4 && v6 {
 		// Dual-stack
@@ -1442,11 +1443,11 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	}
 
 	// If there are no IP pools specified, then configure no default IP pools.
-	if c.cfg.Installation.CalicoNetwork == nil || len(c.cfg.Installation.CalicoNetwork.IPPools) == 0 {
+	if c.cfg.Installation.CalicoNetwork == nil || len(c.cfg.IPPools) == 0 {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 	} else {
 		// Configure IPv4 pool
-		if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
+		if v4pool := GetIPv4Pool(c.cfg.IPPools); v4pool != nil {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
 
 			switch v4pool.Encapsulation {
@@ -1481,7 +1482,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		}
 
 		// Configure IPv6 pool.
-		if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
+		if v6pool := GetIPv6Pool(c.cfg.IPPools); v6pool != nil {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
 
 			switch v6pool.Encapsulation {

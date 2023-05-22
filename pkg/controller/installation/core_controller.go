@@ -963,6 +963,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Wait for IP pools to exist before continuing to install remaining components.
+	if len(instanceStatus.IPPools) == 0 {
+		reqLogger.Info("Waiting for IP pools to be created")
+		return reconcile.Result{}, nil
+	}
+
 	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 	// the run the reset the degraded status and requeue the request.
 	if r.typhaAutoscaler.isDegraded() {
@@ -1344,6 +1350,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
 		Installation:            &instance.Spec,
+		IPPools:                 instance.Status.IPPools,
 		AmazonCloudIntegration:  aci,
 		LogCollector:            logCollector,
 		BirdTemplates:           birdTemplates,

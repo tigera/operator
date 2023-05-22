@@ -16,6 +16,7 @@ package ippool
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"time"
@@ -33,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -149,32 +151,44 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
+	// Get the APIServer. If healthy, we'll use it for managing pools.
+	// Otherwise, we'll use the CRD API for bootstrapping the cluster until the API server is available.
+	apiserver, _, err := utils.GetAPIServer(ctx, r.client)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+	apiAvailable := apiserver != nil && apiserver.Status.State == v1.TigeraStatusReady
+
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&instance.ObjectMeta)
 
 	// Get all IP pools in the cluster.
 	currentPools := &crdv1.IPPoolList{}
-	err := r.client.List(ctx, currentPools)
+	err = r.client.List(ctx, currentPools)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Create a lookup map of pools owned by this controller for easy access.
+	// This controller will ignore any IP pools that it itself did not create.
 	ourPools := map[string]crdv1.IPPool{}
 	for _, p := range currentPools.Items {
+		// TODO: Check if owned by this installation resource / controller.
 		ourPools[p.Spec.CIDR] = p
 	}
 
 	// For each pool that is desired, but doesn't exist, create it.
 	toCreate := []client.Object{}
 	for _, p := range instance.Spec.CalicoNetwork.IPPools {
-		if pool, ok := ourPools[p.CIDR]; !ok {
-			// Create a new pool.
-			toCreate = append(toCreate, p.ToCRD())
-		} else if !reflect.DeepEqual(pool, p) {
-			// Update existing pool that no longer matches.
-			toCreate = append(toCreate, p.ToCRD())
+		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool, p) {
+			// Create a new pool, or update an existing one.
+			res := p.ToCRD()
+			if apiAvailable {
+				toCreate = append(toCreate, crdToV3(res))
+			} else {
+				toCreate = append(toCreate, res)
+			}
 		}
 	}
 
@@ -182,6 +196,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// the Installation resource.
 	toDelete := []client.Object{}
 	for cidr, pool := range ourPools {
+		reqLogger.WithValues("cidr", cidr).Info("Checking if pool is still valid")
 		found := false
 		for _, p := range instance.Spec.CalicoNetwork.IPPools {
 			if p.CIDR == cidr {
@@ -190,8 +205,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			}
 		}
 		if !found {
-			// No match. Needs delete.
-			toDelete = append(toDelete, &pool)
+			reqLogger.WithValues("cidr", cidr).Info("Pool needs to be deleted")
+			if apiAvailable {
+				// No match. Needs delete. We only ever send deletes via the API server,
+				// since deletion requires rather complex logic. If the API server isn't available,
+				// we'll instead just mark the pool as disabled temporarily.
+				toDelete = append(toDelete, crdToV3(&pool))
+			} else {
+				// API server is not available. Just mark the pool as disabled so that new allocations
+				// don't come from this pool. We'll delete it once the API server is available.
+				pool.Spec.Disabled = true
+				toCreate = append(toCreate, &pool)
+			}
 		}
 	}
 
@@ -202,15 +227,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// - Verify that the pool doesn't overlap with existing IPAM blocks.
 	// We should add this validation to productize this. Ideally, we'd go through the API server (and maybe we should at steady-state).
 	// We only need to use the crd.projectcalico.org API for bootstrapping.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
 	passThru := render.NewPassthrough(toCreate...)
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating IPPools", err, log)
 		return reconcile.Result{}, err
 	}
 	delPassThru := render.NewDeletionPassthrough(toDelete...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, delPassThru, nil); err != nil {
-		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating IPPools", err, log)
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error deleting / updating IPPools", err, log)
 		return reconcile.Result{}, err
 	}
 
@@ -284,4 +310,18 @@ func crdToOperator(crd crdv1.IPPool) v1.IPPool {
 	}
 
 	return pool
+}
+
+func crdToV3(crd *crdv1.IPPool) *v3.IPPool {
+	bs, err := json.Marshal(crd)
+	if err != nil {
+		panic(err)
+	}
+
+	v3p := v3.IPPool{}
+	err = json.Unmarshal(bs, &v3p)
+	if err != nil {
+		panic(err)
+	}
+	return &v3p
 }

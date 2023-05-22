@@ -1,4 +1,16 @@
 // Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package esgateway
 
@@ -12,6 +24,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,9 +33,7 @@ import (
 )
 
 const (
-	ExternalCertsSecret     = "tigera-secure-external-es-certs"
-	ExternalCertsVolumeName = "tigera-secure-external-es-certs"
-	CloudPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "cloud-es-gateway-access"
+	CloudPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cloud-es-gateway-access"
 )
 
 type CloudConfig struct {
@@ -64,7 +75,7 @@ func (e *esGateway) modifyDeploymentForCloud(d *appsv1.Deployment) {
 	}
 
 	if e.cfg.Cloud.EnableMTLS {
-		//todo: delete these from the envVars
+		// todo: delete these from the envVars
 		envs = removeEnv(envs, "ES_GATEWAY_KIBANA_CLIENT_CERT_PATH")
 		envs = removeEnv(envs, "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH")
 
@@ -78,18 +89,18 @@ func (e *esGateway) modifyDeploymentForCloud(d *appsv1.Deployment) {
 		}...)
 
 		d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes, corev1.Volume{
-			Name: ExternalCertsVolumeName,
+			Name: logstorage.ExternalCertsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: ExternalCertsSecret,
+					SecretName: logstorage.ExternalCertsSecret,
 				},
 			},
 		})
 
 		d.Spec.Template.Spec.Containers[0].VolumeMounts = append(d.Spec.Template.Spec.Containers[0].VolumeMounts,
 			[]corev1.VolumeMount{
-				{Name: ExternalCertsVolumeName, MountPath: "/certs/elasticsearch/mtls", ReadOnly: true},
-				{Name: ExternalCertsVolumeName, MountPath: "/certs/kibana/mtls", ReadOnly: true},
+				{Name: logstorage.ExternalCertsVolumeName, MountPath: "/certs/elasticsearch/mtls", ReadOnly: true},
+				{Name: logstorage.ExternalCertsVolumeName, MountPath: "/certs/kibana/mtls", ReadOnly: true},
 			}...)
 	}
 
@@ -99,8 +110,7 @@ func (e *esGateway) modifyDeploymentForCloud(d *appsv1.Deployment) {
 
 	d.Spec.Template.Spec.Containers[0].Env = envs
 	if e.cfg.Cloud.ExternalCertsSecret != nil {
-		d.Spec.Template.ObjectMeta.Annotations["hash.operator.tigera.io/cloud-external-es-secrets"] =
-			rmeta.SecretsAnnotationHash(e.cfg.Cloud.ExternalCertsSecret)
+		d.Spec.Template.ObjectMeta.Annotations["hash.operator.tigera.io/cloud-external-es-secrets"] = rmeta.SecretsAnnotationHash(e.cfg.Cloud.ExternalCertsSecret)
 	}
 }
 

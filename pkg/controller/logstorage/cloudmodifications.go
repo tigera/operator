@@ -1,4 +1,16 @@
 // Copyright (c) 2022 Tigera, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package logstorage
 
@@ -20,8 +32,10 @@ import (
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/externalelasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 )
 
 // esGatewayAddCloudModificationsToConfig modifies the provided *esgateway.Config to include multi-tenancy specific configuration.
@@ -43,7 +57,7 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 	c.Cloud.ExternalKibanaDomain = cloudConfig.ExternalKibanaDomain()
 
 	if cloudConfig.EnableMTLS() {
-		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCertsSecret, common.OperatorNamespace())
+		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, logstorage.ExternalCertsSecret, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, err.Error())
 			r.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
@@ -51,6 +65,43 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 		}
 		if c.Cloud.ExternalCertsSecret == nil {
 			r.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
+			return reconcile.Result{}, false, nil
+		}
+		c.Cloud.EnableMTLS = cloudConfig.EnableMTLS()
+	}
+
+	if cloudConfig.TenantId() != "" {
+		c.Cloud.TenantId = cloudConfig.TenantId()
+	}
+
+	return reconcile.Result{}, true, nil
+}
+
+// linseedAddCloudModificationsToConfig modifies the provided *linseed.Config to include multi-tenancy specific configuration.
+func (r *ReconcileLogStorage) linseedAddCloudModificationsToConfig(
+	ctx context.Context,
+	c *linseed.Config,
+	esAdminUserSecret *corev1.Secret,
+	reqLogger logr.Logger,
+) (reconcile.Result, bool, error) {
+	c.Cloud.EsAdminUserSecret = esAdminUserSecret
+	c.Cloud.ExternalElastic = true
+
+	cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
+	if cloudConfig == nil || err != nil {
+		return reconcile.Result{}, false, err
+	}
+	c.Cloud.ExternalESDomain = cloudConfig.ExternalESDomain()
+
+	if cloudConfig.EnableMTLS() {
+		c.Cloud.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, logstorage.ExternalCertsSecret, common.OperatorNamespace())
+		if err != nil {
+			reqLogger.Error(err, err.Error())
+			r.SetDegraded("Waiting for external Elasticsearch client certificate secret to be available", "")
+			return reconcile.Result{}, false, err
+		}
+		if c.Cloud.ExternalCertsSecret == nil {
+			r.SetDegraded("Waiting for external Elasticsearch client certificate secret to be available", "")
 			return reconcile.Result{}, false, nil
 		}
 		c.Cloud.EnableMTLS = cloudConfig.EnableMTLS()

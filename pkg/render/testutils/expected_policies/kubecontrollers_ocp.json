@@ -10,7 +10,7 @@
     "tier": "allow-tigera",
     "selector": "k8s-app == 'calico-kube-controllers'",
     "types": [
-      "Egress"
+      "Egress","Ingress"
     ],
     "egress": [
       {
@@ -54,6 +54,21 @@
           "namespaceSelector": "projectcalico.org/name == 'tigera-manager'",
           "ports": [
             9443
+          ]
+        }
+      }
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')",
+          "namespaceSelector": "name == 'tigera-prometheus'"
+        },
+        "destination": {
+          "ports": [
+            "9094"
           ]
         }
       }

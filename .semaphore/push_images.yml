@@ -35,6 +35,9 @@ global_job_config:
       - 'cache restore bin-ppc64le-${SEMAPHORE_GIT_SHA}'
       - 'cache restore go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA}'
       - 'cache restore go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA}'
+      - 'cache restore bin-s390x-${SEMAPHORE_GIT_SHA}'
+      - 'cache restore go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA}'
+      - 'cache restore go-mod-cache-s390x-${SEMAPHORE_GIT_SHA}'
 
 blocks:
   - name: Push Images / Maybe Release

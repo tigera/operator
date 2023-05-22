@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,13 +20,13 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +47,7 @@ var _ = Describe("tier controller tests", func() {
 		scheme = runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(appsv1.AddToScheme(scheme))
 
 		// Create a client that will have a crud interface of k8s objects.
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -104,6 +105,11 @@ var _ = Describe("tier controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+		})).NotTo(HaveOccurred())
+
+		Expect(c.Create(ctx, &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-local-dns", Namespace: "kube-dns"},
+			TypeMeta:   metav1.TypeMeta{Kind: (&appsv1.DaemonSet{}).String()},
 		})).NotTo(HaveOccurred())
 	})
 

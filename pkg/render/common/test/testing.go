@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -103,6 +103,18 @@ func GetResource(resources []client.Object, name, ns, group, version, kind strin
 		om := resource.(metav1.ObjectMetaAccessor).GetObjectMeta()
 		if name == om.GetName() &&
 			ns == om.GetNamespace() &&
+			gvk == resource.GetObjectKind().GroupVersionKind() {
+			return resource
+		}
+	}
+	return nil
+}
+
+func GetGlobalResource(resources []client.Object, name, group, version, kind string) client.Object {
+	for _, resource := range resources {
+		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
+		om := resource.(metav1.ObjectMetaAccessor).GetObjectMeta()
+		if name == om.GetName() &&
 			gvk == resource.GetObjectKind().GroupVersionKind() {
 			return resource
 		}

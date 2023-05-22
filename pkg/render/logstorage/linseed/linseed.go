@@ -106,6 +106,9 @@ type Config struct {
 
 	// Elastic cluster configuration
 	ESClusterConfig *relasticsearch.ClusterConfig
+
+	// Configuration for Calico Cloud.
+	Cloud CloudConfig
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -143,6 +146,10 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	if l.cfg.UsePSP {
 		toCreate = append(toCreate, l.linseedPodSecurityPolicy())
 	}
+
+	// Add in Calico Cloud resources.
+	toCreate = append(toCreate, l.getCloudObjects()...)
+
 	return toCreate, toDelete
 }
 
@@ -311,7 +318,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				{
 					Name:            DeploymentName,
 					Image:           l.linseedImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: securitycontext.NewNonRootContext(),
@@ -342,7 +349,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
@@ -363,6 +370,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Replicas: l.cfg.Installation.ControlPlaneReplicas,
 		},
 	}
+	l.modifyDeploymentForCloud(d)
+	return d
 }
 
 func (l *linseed) linseedServiceAccount() *corev1.ServiceAccount {

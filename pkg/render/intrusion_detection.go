@@ -356,8 +356,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 	kScheme, kHost, kPort, _ := url.ParseEndpoint(rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain))
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
-		Name:  "elasticsearch-job-installer",
-		Image: c.jobInstallerImage,
+		Name:            "elasticsearch-job-installer",
+		Image:           c.jobInstallerImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -692,7 +693,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	if c.cfg.TenantId != "" {
 		container.Env = append(container.Env, []corev1.EnvVar{
-			{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.TenantId},
+			{Name: "TENANT_ID", Value: c.cfg.TenantId},
 		}...)
 	}
 
@@ -779,9 +780,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	}
 
 	return c.decorateIntrusionDetectionCloudContainer(corev1.Container{
-		Name:  "controller",
-		Image: c.controllerImage,
-		Env:   envs,
+		Name:            "controller",
+		Image:           c.controllerImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Env:             envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -1611,8 +1613,9 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 					InitContainers: initContainers,
 					Containers: []corev1.Container{
 						{
-							Name:  ADAPIObjectName,
-							Image: c.adAPIImage,
+							Name:            ADAPIObjectName,
+							Image:           c.adAPIImage,
+							ImagePullPolicy: ImagePullPolicy(),
 							Env: []corev1.EnvVar{
 								{Name: "LOG_LEVEL", Value: "info"},
 								{Name: "STORAGE_PATH", Value: adAPIStoragePath},
@@ -1771,6 +1774,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 	container := corev1.Container{
 		Name:            "adjobs",
 		Image:           c.adDetectorsImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             envVars,
 		VolumeMounts: append(

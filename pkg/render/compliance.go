@@ -461,10 +461,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				{
+				c.setTenantAndCluster(corev1.Container{
 					Name:            ComplianceControllerName,
 					Image:           c.controllerImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -476,7 +476,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    volumeMounts,
-				},
+				}),
 			},
 			Volumes: volumes,
 		},
@@ -645,10 +645,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				Containers: []corev1.Container{
-					{
+					c.setTenantAndCluster(corev1.Container{
 						Name:            "reporter",
 						Image:           c.reporterImage,
-						ImagePullPolicy: corev1.PullIfNotPresent,
+						ImagePullPolicy: ImagePullPolicy(),
 						Env:             envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
@@ -663,7 +663,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						// On OpenShift reporter needs privileged access to write compliance reports to host path volume
 						SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
 						VolumeMounts:    volumeMounts,
-					},
+					}),
 				},
 				Volumes: volumes,
 			},
@@ -845,10 +845,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
-				c.replaceESIndexFixsEnvs(corev1.Container{
+				c.setTenantAndCluster(corev1.Container{
 					Name:            ComplianceServerName,
 					Image:           c.serverImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -1045,10 +1045,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				{
+				c.setTenantAndCluster(corev1.Container{
 					Name:            ComplianceSnapshotterName,
 					Image:           c.snapshotterImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -1060,7 +1060,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    volumeMounts,
-				},
+				}),
 			},
 			Volumes: volumes,
 		},
@@ -1238,10 +1238,10 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Tolerations:        rmeta.TolerateAll,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				{
+				c.setTenantAndCluster(corev1.Container{
 					Name:            ComplianceBenchmarkerName,
 					Image:           c.benchmarkerImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: securitycontext.NewRootContext(false),
 					VolumeMounts:    volMounts,
@@ -1254,7 +1254,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 						},
 						PeriodSeconds: 300,
 					},
-				},
+				}),
 			},
 			Volumes: vols,
 		},

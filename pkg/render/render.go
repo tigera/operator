@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,4 +43,9 @@ func setNodeCriticalPod(t *corev1.PodTemplateSpec) {
 
 func SetClusterCriticalPod(t *corev1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = ClusterPriorityClassName
+}
+
+// ImagePullPolicy returns the image pull policy to use for all components.
+func ImagePullPolicy() corev1.PullPolicy {
+	return corev1.PullIfNotPresent
 }

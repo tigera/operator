@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,10 +28,12 @@ import (
 )
 
 const (
-	ClusterDNSPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cluster-dns"
+	ClusterDNSPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "cluster-dns"
+	NodeLocalDNSPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "node-local-dns"
 )
 
-var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
+var TigeraNamespaceSelector = createNamespaceSelector(
+	common.CalicoNamespace,
 	render.GuardianNamespace,
 	render.ComplianceNamespace,
 	render.DexNamespace,
@@ -40,9 +42,12 @@ var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
 	render.IntrusionDetectionNamespace,
 	render.KibanaNamespace,
 	render.ManagerNamespace,
+	render.ECKOperatorNamespace,
+	render.PacketCaptureNamespace,
+	render.PolicyRecommendationNamespace,
 	common.TigeraPrometheusNamespace,
-	"tigera-skraper",
 	rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+	"tigera-skraper",
 )
 
 var defaultTierOrder = 100.0
@@ -52,7 +57,13 @@ func Tiers(cfg *Config) render.Component {
 }
 
 type Config struct {
-	Openshift bool
+	Openshift      bool
+	DNSEgressCIDRs DNSEgressCIDR
+}
+
+type DNSEgressCIDR struct {
+	IPV4 []string
+	IPV6 []string
 }
 
 type tiersComponent struct {
@@ -69,7 +80,15 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 		t.allowTigeraClusterDNSPolicy(),
 	}
 
-	return objsToCreate, nil
+	objsToDelete := []client.Object{}
+
+	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 || len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
+		objsToCreate = append(objsToCreate, t.allowTigeraNodeLocalDNSPolicy())
+	} else {
+		objsToDelete = append(objsToDelete, t.allowTigeraNodeLocalDNSPolicy())
+	}
+
+	return objsToCreate, objsToDelete
 }
 
 func (t tiersComponent) Ready() bool {
@@ -121,7 +140,7 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 					Action: v3.Allow,
 					Source: v3.EntityRule{
 						NamespaceSelector: "all()",
-						Selector:          DNSIngressNamespaceSelector,
+						Selector:          TigeraNamespaceSelector,
 					},
 				},
 				{
@@ -138,7 +157,52 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func createDNSIngressNamespaceSelector(namespaces ...string) string {
+func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy {
+	nodeLocalDNSPolicySelector := TigeraNamespaceSelector
+
+	nodeLocalDNSPolicy := &v3.GlobalNetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: NodeLocalDNSPolicyName,
+		},
+		Spec: v3.GlobalNetworkPolicySpec{
+			Order:    &networkpolicy.AfterHighPrecendenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: nodeLocalDNSPolicySelector,
+			Egress:   []v3.Rule{},
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+		},
+	}
+
+	egressRuleTemplate := v3.Rule{
+		Action: v3.Allow,
+		Destination: v3.EntityRule{
+			// NodeLocal DNSCache creates and listens on the kube-dns ClusterIP on each node, so we can use
+			// kube-dns ClusterIPs address directly in the policy where a normal service IP wouldn't match.
+			Nets:  []string{},
+			Ports: networkpolicy.Ports(53),
+		},
+		Protocol: &networkpolicy.UDPProtocol,
+	}
+
+	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 {
+		IPV4Rule := egressRuleTemplate
+		IPV4Rule.Destination.Nets = append(IPV4Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV4...)
+
+		nodeLocalDNSPolicy.Spec.Egress = append(nodeLocalDNSPolicy.Spec.Egress, IPV4Rule)
+	}
+
+	if len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
+		IPV6Rule := egressRuleTemplate
+		IPV6Rule.Destination.Nets = append(IPV6Rule.Destination.Nets, t.cfg.DNSEgressCIDRs.IPV6...)
+
+		nodeLocalDNSPolicy.Spec.Egress = append(nodeLocalDNSPolicy.Spec.Egress, IPV6Rule)
+	}
+
+	return nodeLocalDNSPolicy
+}
+
+func createNamespaceSelector(namespaces ...string) string {
 	var builder strings.Builder
 	builder.WriteString("projectcalico.org/namespace in {")
 	for idx, namespace := range namespaces {

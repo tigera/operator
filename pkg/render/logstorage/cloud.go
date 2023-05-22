@@ -1,5 +1,5 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
-
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,16 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package components
+package logstorage
 
-var ({{ with index .Components "key-cert-provisioner" }}
-	ComponentCSRInitContainer = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
-	CommonImages = []component{
-		ComponentCSRInitContainer,
-	}
+const (
+	// Secret and volume name used for client certificate and key. Used by Linseed and es-gateway
+	// when mTLS to external Elasticsearch is enabled. The secret contains the client certificate
+	// and key to present to elastic.
+	ExternalCertsSecret     = "tigera-secure-external-es-certs"
+	ExternalCertsVolumeName = "tigera-secure-external-es-certs"
 )

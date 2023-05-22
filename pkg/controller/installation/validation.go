@@ -138,149 +138,151 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.CalicoNetwork != nil {
 		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 
-		nPools := len(instance.Spec.CalicoNetwork.IPPools)
-		if nPools > 2 {
-			return fmt.Errorf("only one IPPool per version is allowed")
+		if bpfDataplane &&
+			render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools) != nil &&
+			render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools) != nil {
+			return fmt.Errorf("BPF dataplane does not support dual stack")
 		}
 
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
-
-		if nPools == 2 {
-			if v4pool == nil {
-				return fmt.Errorf("multiple IPv6 pools detected: only one IPPool per version is allowed")
-			}
-			if v6pool == nil {
-				return fmt.Errorf("multiple IPv4 IPPools detected: only one IPPool per version is allowed")
-			}
+		if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+			return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
 		}
 
-		if bpfDataplane && v4pool != nil && v6pool != nil {
-			return fmt.Errorf("bpf dataplane does not support dual stack")
-		}
+		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
+			// Perform common validation first, before performing validation that varies based
+			// on IP address family.
 
-		if v4pool != nil {
-			_, cidr, err := net.ParseCIDR(v4pool.CIDR)
-			if err != nil {
-				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v4pool.CIDR, err)
+			// Verify NAT outgoing values.
+			switch pool.NATOutgoing {
+			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
+			default:
+				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
+					pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
 			}
 
-			if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-				return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
+			// Verify the node selector.
+			if pool.NodeSelector == "" {
+				return fmt.Errorf("ipPool.nodeSelector should not be empty")
+			}
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				if pool.NodeSelector != "all()" {
+					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()' when using non-Calico CNI plugin", pool.NodeSelector)
+				}
 			}
 
 			if instance.Spec.CNI.Type == operatorv1.PluginCalico {
 				switch instance.Spec.CNI.IPAM.Type {
 				case operatorv1.IPAMPluginCalico:
 					// Verify the specified encapsulation type is valid.
-					switch v4pool.Encapsulation {
+					switch pool.Encapsulation {
 					case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
 						// IPIP currently requires BGP to be running in order to program routes.
 						if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
 							return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
 						}
-					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
-					case operatorv1.EncapsulationNone:
-						// Unencapsulated currently requires BGP to be running in order to program routes.
-						if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-							return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
-						}
-					default:
-						return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
-							v4pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
 					}
 				case operatorv1.IPAMPluginHostLocal:
 					// Verify the specified encapsulation type is valid.
-					switch v4pool.Encapsulation {
+					switch pool.Encapsulation {
 					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
 						return fmt.Errorf("%s is invalid for ipPool.encapsulation with %s CNI and %s IPAM",
-							v4pool.Encapsulation,
+							pool.Encapsulation,
 							instance.Spec.CNI.Type,
 							instance.Spec.CNI.IPAM.Type)
 					}
 				}
 			} else {
 				// Verify the specified encapsulation type is valid.
-				switch v4pool.Encapsulation {
+				switch pool.Encapsulation {
 				case operatorv1.EncapsulationNone:
 				default:
 					return fmt.Errorf("%s is invalid for ipPool.encapsulation when using non-Calico CNI, should be None",
-						v4pool.Encapsulation)
+						pool.Encapsulation)
 				}
 				if instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
 					return fmt.Errorf("BGP is not supported when using non-Calico CNI")
 				}
-				if v4pool.NodeSelector != "all()" {
-					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()'", v4pool.NodeSelector)
-				}
 			}
 
-			if v4pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector should not be empty")
-			}
-
-			// Verify NAT outgoing values.
-			switch v4pool.NATOutgoing {
-			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
-			default:
-				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
-					v4pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
-			}
-
-			if v4pool.BlockSize != nil {
-				if *v4pool.BlockSize > 32 || *v4pool.BlockSize < 20 {
-					return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
+			// Perform validation based on IP address family.
+			if !strings.Contains(pool.CIDR, ":") {
+				// This is an IPv4 pool.
+				_, cidr, err := net.ParseCIDR(pool.CIDR)
+				if err != nil {
+					return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", pool.CIDR, err)
 				}
 
-				// Verify that the CIDR contains the blocksize.
-				ones, _ := cidr.Mask.Size()
-				if int32(ones) > *v4pool.BlockSize {
-					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
-				}
-			}
-		}
-
-		if v6pool != nil {
-			_, cidr, err := net.ParseCIDR(v6pool.CIDR)
-			if err != nil {
-				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)
-			}
-
-			if v6pool.Encapsulation == operatorv1.EncapsulationIPIP || v6pool.Encapsulation == operatorv1.EncapsulationIPIPCrossSubnet {
-				return fmt.Errorf("IPIP encapsulation is not supported by IPv6 pools, but it is set for %s", v6pool.CIDR)
-			}
-
-			if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
-				return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV6 is required for the BPF dataplane")
-			}
-
-			// Verify NAT outgoing values.
-			switch v6pool.NATOutgoing {
-			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
-				// Valid.
-			default:
-				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
-					v6pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
-			}
-
-			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-				if v6pool.NodeSelector != "all()" {
-					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()' when using non-Calico CNI plugin", v6pool.NodeSelector)
-				}
-			}
-			if v6pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector should not be empty")
-			}
-
-			if v6pool.BlockSize != nil {
-				if *v6pool.BlockSize > 128 || *v6pool.BlockSize < 116 {
-					return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
+				if instance.Spec.CNI.Type == operatorv1.PluginCalico {
+					switch instance.Spec.CNI.IPAM.Type {
+					case operatorv1.IPAMPluginCalico:
+						// Verify the specified encapsulation type is valid.
+						switch pool.Encapsulation {
+						case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
+							// IPIP currently requires BGP to be running in order to program routes.
+							if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+								return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+							}
+						case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
+						case operatorv1.EncapsulationNone:
+							// Unencapsulated currently requires BGP to be running in order to program routes.
+							if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+								return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+							}
+						default:
+							return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
+								pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
+						}
+					}
 				}
 
-				// Verify that the CIDR contains the blocksize.
-				ones, _ := cidr.Mask.Size()
-				if int32(ones) > *v6pool.BlockSize {
-					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+				if pool.BlockSize != nil {
+					if *pool.BlockSize > 32 || *pool.BlockSize < 20 {
+						return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
+					}
+
+					// Verify that the CIDR contains the blocksize.
+					ones, _ := cidr.Mask.Size()
+					if int32(ones) > *pool.BlockSize {
+						return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+					}
+				}
+			} else if strings.Contains(pool.CIDR, ":") {
+				// This is an IPv6 pool.
+				if pool.Encapsulation == operatorv1.EncapsulationIPIP || pool.Encapsulation == operatorv1.EncapsulationIPIPCrossSubnet {
+					return fmt.Errorf("IPIP encapsulation is not supported by IPv6 pools, but it is set for %s", pool.CIDR)
+				}
+				_, cidr, err := net.ParseCIDR(pool.CIDR)
+				if err != nil {
+					return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", pool.CIDR, err)
+				}
+
+				if pool.Encapsulation == operatorv1.EncapsulationIPIP || pool.Encapsulation == operatorv1.EncapsulationIPIPCrossSubnet {
+					return fmt.Errorf("IPIP encapsulation is not supported by IPv6 pools, but it is set for %s", pool.CIDR)
+				}
+
+				if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV6 is required for the BPF dataplane")
+				}
+
+				// Verify NAT outgoing values.
+				switch pool.NATOutgoing {
+				case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
+					// Valid.
+				default:
+					return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
+						pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
+				}
+
+				if pool.BlockSize != nil {
+					if *pool.BlockSize > 128 || *pool.BlockSize < 116 {
+						return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
+					}
+
+					// Verify that the CIDR contains the blocksize.
+					ones, _ := cidr.Mask.Size()
+					if int32(ones) > *pool.BlockSize {
+						return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+					}
 				}
 			}
 		}

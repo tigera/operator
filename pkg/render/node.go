@@ -1421,7 +1421,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "NO_DEFAULT_POOLS", Value: "true"},
 	}
+
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
 	if c.cfg.TLS.TyphaCommonName != "" {
@@ -1440,75 +1442,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginAmazonVPC {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
-	}
-
-	// If there are no IP pools specified, then configure no default IP pools.
-	if c.cfg.Installation.CalicoNetwork == nil || len(c.cfg.IPPools) == 0 {
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
-	} else {
-		// Configure IPv4 pool
-		if v4pool := GetIPv4Pool(c.cfg.IPPools); v4pool != nil {
-			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
-
-			switch v4pool.Encapsulation {
-			case operatorv1.EncapsulationIPIPCrossSubnet:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationIPIP:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-			case operatorv1.EncapsulationVXLAN:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
-			case operatorv1.EncapsulationVXLANCrossSubnet:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationNone:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
-			default:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-			}
-
-			if v4pool.BlockSize != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v4pool.BlockSize)})
-			}
-			if v4pool.NATOutgoing == operatorv1.NATOutgoingDisabled {
-				// Default for IPv4 NAT Outgoing is enabled so it is only necessary to
-				// set when it is being disabled.
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
-			}
-			if v4pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
-			}
-			if v4pool.DisableBGPExport != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v4pool.DisableBGPExport)})
-			}
-		}
-
-		// Configure IPv6 pool.
-		if v6pool := GetIPv6Pool(c.cfg.IPPools); v6pool != nil {
-			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
-
-			switch v6pool.Encapsulation {
-			case operatorv1.EncapsulationVXLAN:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Always"})
-			case operatorv1.EncapsulationVXLANCrossSubnet:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationNone:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Never"})
-			}
-
-			if v6pool.BlockSize != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
-			}
-			if v6pool.NATOutgoing == operatorv1.NATOutgoingEnabled {
-				// Default for IPv6 NAT Outgoing is disabled so it is only necessary to
-				// set when it is being enabled.
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "true"})
-			}
-			if v6pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
-			}
-			if v6pool.DisableBGPExport != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v6pool.DisableBGPExport)})
-			}
-		}
 	}
 
 	if c.bpfDataplaneEnabled() {

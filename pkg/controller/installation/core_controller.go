@@ -609,29 +609,52 @@ func fillDefaults(instance *operator.Installation) error {
 		needIPv4Autodetection = true
 	}
 
-	var v4pool, v6pool *operator.IPPool
-	v4pool = render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
-	v6pool = render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
-
-	if v4pool != nil {
-		if v4pool.Encapsulation == "" {
-			if instance.Spec.CNI.Type == operator.PluginCalico {
-				v4pool.Encapsulation = operator.EncapsulationIPIP
-			} else {
-				v4pool.Encapsulation = operator.EncapsulationNone
+	// Default any fields on IP pools, if needed.
+	for _, pool := range instance.Spec.CalicoNetwork.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil && addr.To4() != nil {
+			// This is an IPv4 pool.
+			if pool.Encapsulation == "" {
+				if instance.Spec.CNI.Type == operator.PluginCalico {
+					pool.Encapsulation = operator.EncapsulationIPIP
+				} else {
+					pool.Encapsulation = operator.EncapsulationNone
+				}
+			}
+			if pool.NATOutgoing == "" {
+				pool.NATOutgoing = operator.NATOutgoingEnabled
+			}
+			if pool.NodeSelector == "" {
+				pool.NodeSelector = operator.NodeSelectorDefault
+			}
+			if pool.BlockSize == nil {
+				var twentySix int32 = 26
+				pool.BlockSize = &twentySix
+			}
+			needIPv4Autodetection = true
+		} else if err == nil && addr.To16() != nil {
+			// This is an IPv6 pool.
+			if pool.Encapsulation == "" {
+				pool.Encapsulation = operator.EncapsulationNone
+			}
+			if pool.NATOutgoing == "" {
+				pool.NATOutgoing = operator.NATOutgoingDisabled
+			}
+			if pool.NodeSelector == "" {
+				pool.NodeSelector = operator.NodeSelectorDefault
+			}
+			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+				// Default IPv6 address detection to "first found" if not specified.
+				t := true
+				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+					FirstFound: &t,
+				}
+			}
+			if pool.BlockSize == nil {
+				var oneTwentyTwo int32 = 122
+				pool.BlockSize = &oneTwentyTwo
 			}
 		}
-		if v4pool.NATOutgoing == "" {
-			v4pool.NATOutgoing = operator.NATOutgoingEnabled
-		}
-		if v4pool.NodeSelector == "" {
-			v4pool.NodeSelector = operator.NodeSelectorDefault
-		}
-		if v4pool.BlockSize == nil {
-			var twentySix int32 = 26
-			v4pool.BlockSize = &twentySix
-		}
-		needIPv4Autodetection = true
 	}
 
 	if needIPv4Autodetection && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
@@ -662,29 +685,6 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds == nil {
 		var delay int32 = 0
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
-	}
-
-	if v6pool != nil {
-		if v6pool.Encapsulation == "" {
-			v6pool.Encapsulation = operator.EncapsulationNone
-		}
-		if v6pool.NATOutgoing == "" {
-			v6pool.NATOutgoing = operator.NATOutgoingDisabled
-		}
-		if v6pool.NodeSelector == "" {
-			v6pool.NodeSelector = operator.NodeSelectorDefault
-		}
-		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
-			// Default IPv6 address detection to "first found" if not specified.
-			t := true
-			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
-				FirstFound: &t,
-			}
-		}
-		if v6pool.BlockSize == nil {
-			var oneTwentyTwo int32 = 122
-			v6pool.BlockSize = &oneTwentyTwo
-		}
 	}
 
 	// While a number of the fields in this section are relevant to all CNI plugins,
@@ -964,6 +964,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceUpdateError, "Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Wait for IP pools to exist before continuing to install remaining components.
+	if len(instanceStatus.IPPools) == 0 {
+		reqLogger.Info("Waiting for IP pools to be created")
+		return reconcile.Result{}, nil
 	}
 
 	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
@@ -1347,6 +1353,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
 		Installation:            &instance.Spec,
+		IPPools:                 instance.Status.IPPools,
 		AmazonCloudIntegration:  aci,
 		LogCollector:            logCollector,
 		BirdTemplates:           birdTemplates,

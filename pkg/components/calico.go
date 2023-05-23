@@ -40,10 +40,20 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoKubeControllersFIPS = component{
+		Version: "master-fips",
+		Image:   "calico/kube-controllers",
+	}
+
 	ComponentCalicoNode = component{
 		Version:  "master",
 		Image:    "calico/node",
 		Registry: "",
+	}
+
+	ComponentCalicoNodeFIPS = component{
+		Version: "master-fips",
+		Image:   "calico/node",
 	}
 
 	ComponentCalicoTypha = component{
@@ -52,16 +62,31 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoTyphaFIPS = component{
+		Version: "master-fips",
+		Image:   "calico/typha",
+	}
+
 	ComponentFlexVolume = component{
 		Version:  "master",
 		Image:    "calico/pod2daemon-flexvol",
 		Registry: "",
 	}
 
+	ComponentFlexVolumeFIPS = component{
+		Version: "master-fips",
+		Image:   "calico/pod2daemon-flexvol",
+	}
+
 	ComponentCalicoAPIServer = component{
 		Version:  "master",
 		Image:    "calico/apiserver",
 		Registry: "",
+	}
+
+	ComponentCalicoAPIServerFIPS = component{
+		Version: "master-fips",
+		Image:   "calico/apiserver",
 	}
 
 	ComponentWindowsUpgrade = component{
@@ -76,11 +101,22 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoCSIFIPS = component{
+		Version: "master-fips",
+		Image:   "calico/csi",
+	}
+
 	ComponentCalicoCSIRegistrar = component{
 		Version:  "master",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
+
+	ComponentCalicoCSIRegistrarFIPS = component{
+		Version: "master-fips",
+		Image:   "calico/node-driver-registrar",
+	}
+
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -90,13 +126,20 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
+		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
+		ComponentCalicoNodeFIPS,
 		ComponentCalicoTypha,
+		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
+		ComponentFlexVolumeFIPS,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
+		ComponentCalicoAPIServerFIPS,
 		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
+		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalicoCSIRegistrarFIPS,
 	}
 )

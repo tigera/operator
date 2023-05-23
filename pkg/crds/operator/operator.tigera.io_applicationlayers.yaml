@@ -49,6 +49,10 @@ spec:
                       but >=1 is the typical setting.
                     format: int32
                     type: integer
+                  xffSkipAppend:
+                    description: If set to true, Envoy will not append the remote
+                      address to the x-forwarded-for HTTP header.
+                    type: boolean
                   xffUseRemoteAddress:
                     description: If set to true, the Envoy connection manager will
                       use the real remote address of the client connection when determining

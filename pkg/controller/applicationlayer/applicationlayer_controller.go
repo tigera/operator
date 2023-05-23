@@ -284,6 +284,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		ModSecurityConfigMap:   modSecurityRuleSet,
 		UseRemoteAddressXFF:    applicationLayer.Spec.EnvoySettings.XFFUseRemoteAddress,
 		NumTrustedHopsXFF:      applicationLayer.Spec.EnvoySettings.XFFNumTrustedHops,
+		SkipAppendXFF:          applicationLayer.Spec.EnvoySettings.XFFSkipAppend,
 		UsePSP:                 r.usePSP,
 	}
 	component := applicationlayer.ApplicationLayer(config)

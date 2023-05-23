@@ -58,6 +58,9 @@ type EnvoySettings struct {
 	// manipulating various headers.
 	// +optional
 	XFFUseRemoteAddress bool `json:"xffUseRemoteAddress,omitempty"`
+	//  If set to true, Envoy will not append the remote address to the x-forwarded-for HTTP header.
+	// +optional
+	XFFSkipAppend bool `json:"xffSkipAppend,omitempty"`
 }
 
 type LogCollectionSpec struct {

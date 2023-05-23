@@ -105,6 +105,7 @@ type Config struct {
 	// envoy user-configurable overrides
 	UseRemoteAddressXFF bool
 	NumTrustedHopsXFF   uint32
+	SkipAppendXFF       bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool

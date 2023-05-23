@@ -41,8 +41,8 @@
 
 {{- define "XFF" -}}
                 xff_num_trusted_hops: {{.NumTrustedHopsXFF}}
-                use_remote_address: true
-                skip_xff_append: false
+                use_remote_address: {{.UseRemoteAddressXFF}}
+                skip_xff_append: {{.SkipAppendXFF}}
 {{- end -}}
 
 static_resources:
@@ -82,7 +82,7 @@ static_resources:
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: ingress_http
-                {{if .UseRemoteAddressXFF}}{{template "XFF" .}}{{end}}
+                {{template "XFF" .}}
                 {{if .LogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
                 route_config:
                   name: local_service
@@ -108,7 +108,7 @@ static_resources:
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: ingress_http
-                {{if .UseRemoteAddressXFF}}{{template "XFF" .}}{{end}}
+                {{template "XFF" .}}
                 {{if .LogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
                 route_config:
                   name: local_service

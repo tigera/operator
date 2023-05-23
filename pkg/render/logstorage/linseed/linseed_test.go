@@ -342,7 +342,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
-			Verbs:     []string{"list", "watch"},
+			Verbs:     []string{"list", "watch", "get"},
 		},
 	}))
 	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)

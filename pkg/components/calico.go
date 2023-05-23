@@ -37,50 +37,50 @@ var (
 		Image:   "calico/kube-controllers",
 	}
 
-	ComponentCalicoKubeControllersFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/kube-controllers",
-	}
+        ComponentCalicoKubeControllersFIPS = component{
+                Version: "master-fips",
+                Image:   "calico/kube-controllers",
+        }
 
 	ComponentCalicoNode = component{
 		Version: "master",
 		Image:   "calico/node",
 	}
 
-	ComponentCalicoNodeFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/node",
-	}
+        ComponentCalicoNodeFIPS = component{
+                Version: "master-fips",
+                Image:   "calico/node",
+        }
 
 	ComponentCalicoTypha = component{
 		Version: "master",
 		Image:   "calico/typha",
 	}
 
-	ComponentCalicoTyphaFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/typha",
-	}
+        ComponentCalicoTyphaFIPS = component{
+                Version: "master-fips",
+                Image:   "calico/typha",
+        }
 
 	ComponentFlexVolume = component{
 		Version: "master",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 
-	ComponentFlexVolumeFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/pod2daemon-flexvol",
-	}
+        ComponentFlexVolumeFIPS = component{
+                Version: "master-fips",
+                Image:   "calico/pod2daemon-flexvol",
+        }
 
 	ComponentCalicoAPIServer = component{
 		Version: "master",
 		Image:   "calico/apiserver",
 	}
 
-	ComponentCalicoAPIServerFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/apiserver",
-	}
+        ComponentCalicoAPIServerFIPS = component{
+                Version: "master-fips",
+                Image:   "calico/apiserver",
+        }
 
 	ComponentWindowsUpgrade = component{
 		Version: "master",
@@ -92,21 +92,20 @@ var (
 		Image:   "calico/csi",
 	}
 
-	ComponentCalicoCSIFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/csi",
-	}
+        ComponentCalicoCSIFIPS = component{
+                Version: "master-fips",
+                Image:   "calico/csi",
+        }
 
 	ComponentCalicoCSIRegistrar = component{
 		Version: "master",
 		Image:   "calico/node-driver-registrar",
 	}
 
-	ComponentCalicoCSIRegistrarFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/node-driver-registrar",
-	}
-
+        ComponentCalicoCSIRegistrarFIPS = component{
+                Version: "master-fips",
+                Image:   "calico/node-driver-registrar",
+        }
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

@@ -161,11 +161,13 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
+			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))
+			c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolumeFIPS, reg, path, prefix, is))
 		} else {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
+			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
+			c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
 		}
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
 	}
 
 	if len(errMsgs) != 0 {

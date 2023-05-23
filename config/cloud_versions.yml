@@ -10,10 +10,10 @@ components:
     version: v1.6.2
   sasha:
     image: tigera/sasha
-    version: v1.6.0
+    version: master
   threat-id:
     image: tigera/threat-identification
-    version: v1.6.0
+    version: master
   cloud-rbac-api:
     image: tigera/cc-rbac-api
     version: v0.1.1-0-g74b6dbe

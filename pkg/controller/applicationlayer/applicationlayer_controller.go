@@ -282,6 +282,9 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
 		ModSecurityConfigMap:   modSecurityRuleSet,
+		UseRemoteAddressXFF:    applicationLayer.Spec.EnvoySettings.XFFUseRemoteAddress,
+		NumTrustedHopsXFF:      applicationLayer.Spec.EnvoySettings.XFFNumTrustedHops,
+		SkipAppendXFF:          applicationLayer.Spec.EnvoySettings.XFFSkipAppend,
 		UsePSP:                 r.usePSP,
 	}
 	component := applicationlayer.ApplicationLayer(config)
@@ -358,6 +361,10 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 
 	if al.Spec.ApplicationLayerPolicy == nil {
 		al.Spec.ApplicationLayerPolicy = &defaultApplicationLayerPolicyStatusType
+	}
+
+	if al.Spec.EnvoySettings == nil {
+		al.Spec.EnvoySettings = &operatorv1.EnvoySettings{}
 	}
 }
 

@@ -42,11 +42,23 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "calico/kube-controllers" }}
+	ComponentCalicoKubeControllersFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components  "calico/node" }}
 	ComponentCalicoNode = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components  "calico/node" }}
+	ComponentCalicoNodeFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -56,6 +68,12 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with .Components.typha }}
+	ComponentCalicoTyphaFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.flexvol }}
 	ComponentFlexVolume = component{
 		Version:  "{{ .Version }}",
@@ -63,11 +81,23 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with .Components.flexvol }}
+	ComponentFlexVolumeFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "calico/apiserver"}}
 	ComponentCalicoAPIServer = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/apiserver"}}
+	ComponentCalicoAPIServerFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
@@ -84,11 +114,23 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "calico/csi"}}
+	ComponentCalicoCSIFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
 	ComponentCalicoCSIRegistrar = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar"}}
+	ComponentCalicoCSIRegistrarFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 	ComponentOperatorInit = component{
@@ -100,13 +142,20 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
+		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
+		ComponentCalicoNodeFIPS,
 		ComponentCalicoTypha,
+		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
+		ComponentFlexVolumeFIPS,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
+		ComponentCalicoAPIServerFIPS,
 		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
+		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalicoCSIRegistrarFIPS,
 	}
 )

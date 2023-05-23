@@ -40,10 +40,10 @@ var (
 	}
 {{- end }}
 {{ with index .Components "calico/kube-controllers" }}
-        ComponentCalicoKubeControllersFIPS = component{
-                Version: "{{ .Version }}-fips",
-                Image:   "{{ .Image }}",
-        }
+	ComponentCalicoKubeControllersFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
 {{- end }}
 {{ with index .Components  "calico/node" }}
 	ComponentCalicoNode = component{
@@ -52,10 +52,10 @@ var (
 	}
 {{- end }}
 {{ with index .Components  "calico/node" }}
-        ComponentCalicoNodeFIPS = component{
-                Version: "{{ .Version }}-fips",
-                Image:   "{{ .Image }}",
-        }
+	ComponentCalicoNodeFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
 {{- end }}
 {{ with .Components.typha }}
 	ComponentCalicoTypha = component{
@@ -64,10 +64,10 @@ var (
 	}
 {{- end }}
 {{ with .Components.typha }}
-        ComponentCalicoTyphaFIPS = component{
-                Version: "{{ .Version }}-fips",
-                Image:   "{{ .Image }}",
-        }
+	ComponentCalicoTyphaFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
 {{- end }}
 {{ with .Components.flexvol }}
 	ComponentFlexVolume = component{
@@ -76,10 +76,10 @@ var (
 	}
 {{- end }}
 {{ with .Components.flexvol }}
-        ComponentFlexVolumeFIPS = component{
-                Version: "{{ .Version }}-fips",
-                Image:   "{{ .Image }}",
-        }
+	ComponentFlexVolumeFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
 {{- end }}
 {{ with index .Components "calico/apiserver"}}
 	ComponentCalicoAPIServer = component{
@@ -88,10 +88,10 @@ var (
 	}
 {{- end }}
 {{ with index .Components "calico/apiserver"}}
-        ComponentCalicoAPIServerFIPS = component{
-                Version: "{{ .Version }}-fips",
-                Image:   "{{ .Image }}",
-        }
+	ComponentCalicoAPIServerFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
 {{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
 	ComponentWindowsUpgrade = component{
@@ -106,10 +106,10 @@ var (
 	}
 {{- end }}
 {{ with index .Components "calico/csi"}}
-        ComponentCalicoCSIFIPS = component{
-                Version: "{{ .Version }}-fips",
-                Image:   "{{ .Image }}",
-        }
+	ComponentCalicoCSIFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
 	ComponentCalicoCSIRegistrar = component{
@@ -118,10 +118,10 @@ var (
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
-        ComponentCalicoCSIRegistrarFIPS = component{
-                Version: "{{ .Version }}-fips",
-                Image:   "{{ .Image }}",
-        }
+	ComponentCalicoCSIRegistrarFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
 {{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,

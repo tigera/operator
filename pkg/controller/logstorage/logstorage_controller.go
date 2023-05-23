@@ -869,16 +869,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if !proceed {
 			return result, err
 		}
-	} else if managementClusterConnection == nil {
-		// In Calico Cloud, if we're a management cluster and using an external ES, we need to create the linseed keypair
-		// as well as the trusted bundle.
-		//
-		// Create secrets in the tigera-elasticsearch namespace. We need to do this before the proceed check below,
-		// since ES becoming ready is dependent on the secrets created by this component.
-		if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle), r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 	}
 
 	if managementClusterConnection == nil {
@@ -891,7 +881,19 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 				reqLogger,
 				ctx,
 			)
-			if err != nil || !proceed {
+			log.WithValues("proceed", proceed, "error", err).V(1).Info("createExternalElasticsearch result")
+			if err != nil {
+				return result, err
+			}
+
+			// Create secrets in the tigera-elasticsearch namespace. We need to do this before the proceed check below,
+			// since ES becoming ready is dependent on the secrets created by this component.
+			if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle), r.status); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+
+			if !proceed {
 				return result, err
 			}
 		}

@@ -295,10 +295,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
-					"node.master":                 "true",
-					"node.data":                   "true",
-					"node.ingest":                 "true",
-					"cluster.max_shards_per_node": 10000,
+					"node.master":                     "true",
+					"node.data":                       "true",
+					"node.ingest":                     "true",
+					"cluster.max_shards_per_node":     10000,
+					"ingest.geoip.downloader.enabled": false,
 				}))
 				resultECK := rtest.GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace,
 					"apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
@@ -1389,11 +1390,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2a",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 
@@ -1409,11 +1411,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2b",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 				})
@@ -1479,12 +1482,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2a",
-						"node.attr.rack":              "rack1",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2a",
+						"node.attr.rack":                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 
@@ -1509,12 +1513,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2b",
-						"node.attr.rack":              "rack1",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2b",
+						"node.attr.rack":                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 				})

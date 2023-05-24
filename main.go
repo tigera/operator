@@ -271,10 +271,28 @@ func main() {
 		// Check if we need to do any cleanup.
 		client := mgr.GetClient()
 		instance := &v1.Installation{}
-		if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
-			log.Errorf("Error querying Installation: %s", err)
-			return
-		} else if instance.DeletionTimestamp == nil {
+		retries := 0
+		for {
+			if err := client.Get(ctx, utils.DefaultInstanceKey, instance); errors.IsNotFound(err) {
+				// No installation - we can exit immediately.
+				return
+			} else if err != nil {
+				// Error querying - retry after a small sleep.
+				if retries >= 5 {
+					log.Errorf("Too many retries, exiting with error: %s", err)
+					return
+				}
+				log.Errorf("Error querying Installation, will retry: %s", err)
+				retries++
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// Success
+			break
+		}
+
+		if instance.DeletionTimestamp == nil {
 			// Installation isn't terminating, so we can exit immediately.
 			return
 		}

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 package runtimesecurity
 
@@ -17,7 +17,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -40,10 +39,9 @@ const (
 	ResourceThreatIdDefaultCPURequest    = "100m"
 	ResourceThreatIdDefaultMemoryRequest = "100Mi"
 	SashaHistoryVolumeName               = "history"
-	SashaHistoryVolumeSizeLimit          = "100Mi"
 	SashaHistoryVolumeMountPath          = "/history"
 	SashaHistoryRetentionPeriod          = "6h"
-	SashaHistoryBuffer                   = "50Mi"
+	SashaHistoryDiskSpace                = "40Mi"
 )
 
 func RuntimeSecurity(config *Config) render.Component {
@@ -133,7 +131,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 		{Name: "SASHA_SECRETLOCATION", Value: SashaVerifyAuthFile},
 		{Name: "SASHA_HISTORYDIR", Value: SashaHistoryVolumeMountPath},
 		{Name: "SASHA_HISTORYRETENTION", Value: SashaHistoryRetentionPeriod},
-		{Name: "SASHA_HISTORYBUFFER", Value: SashaHistoryBuffer},
+		{Name: "SASHA_HISTORYDISKSPACE", Value: SashaHistoryDiskSpace},
 	}
 
 	rsSecretOptional := false
@@ -147,8 +145,6 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 		PeriodSeconds:    2,
 		FailureThreshold: 6,
 	}
-
-	historyVolumeSizeLimit := resource.MustParse(SashaHistoryVolumeSizeLimit)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -191,9 +187,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 						{
 							Name: SashaHistoryVolumeName,
 							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{
-									SizeLimit: &historyVolumeSizeLimit,
-								},
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
 						},
 						c.config.TrustedBundle.Volume(),

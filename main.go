@@ -22,9 +22,11 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
+	"time"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -44,6 +46,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/active"
@@ -163,7 +166,7 @@ func main() {
 
 	printVersion()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -209,6 +212,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// sigHandler is a context that is canceled when we receive a termination
+	// signal. We don't want to immeditely terminate upon receipt of such a signal since
+	// there may be cleanup required. So, we will pass a separate context to our controllers.
+	// That context will be canceled after a successful cleanup.
 	sigHandler := ctrl.SetupSignalHandler()
 	active.WaitUntilActive(cs, c, sigHandler, setupLog)
 	log.Info("Active operator: proceeding")
@@ -252,6 +259,50 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	// Start a goroutine to handle termination.
+	go func() {
+		// Cancel the main context when we are done.
+		defer cancel()
+
+		// Wait for a signal.
+		<-sigHandler.Done()
+
+		// Check if we need to do any cleanup.
+		client := mgr.GetClient()
+		instance := &v1.Installation{}
+		if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+			log.Errorf("Error querying Installation: %s", err)
+			return
+		} else if instance.DeletionTimestamp == nil {
+			// Installation isn't terminating, so we can exit immediately.
+			return
+		}
+
+		// We need to wait for termination to complete. We can do this by checking if the Installation
+		// resource has been cleaned up or not.
+		to := 60 * time.Second
+		log.Infof("Waiting up to %s for graceful termination to complete", to)
+		timeout := time.After(to)
+		for {
+			select {
+			case <-timeout:
+				// Timeout. Continue with shutdown.
+				log.Warning("Timed out waiting for graceful shutdown to complete")
+				return
+			default:
+				err := client.Get(ctx, utils.DefaultInstanceKey, instance)
+				if errors.IsNotFound(err) {
+					// Installation has been cleaned up, we can terminate.
+					log.Info("Graceful termination complete")
+					return
+				} else if err != nil {
+					log.Errorf("Error querying Installation: %s", err)
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
 
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
@@ -324,7 +375,7 @@ func main() {
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
-		ShutdownContext:     sigHandler,
+		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
 	}
 
@@ -335,7 +386,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(sigHandler); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

@@ -85,6 +85,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -138,6 +139,9 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, kiibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPolicyRecommendationUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
@@ -173,7 +177,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 					Namespace: render.PolicyRecommendationNamespace,
 				},
 			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
+			res := test.GetResource(c, &d)
+			Expect(res).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())

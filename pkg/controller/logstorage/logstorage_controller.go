@@ -451,6 +451,9 @@ func (r *ReconcileLogStorage) generateSecrets(
 		render.ComplianceSnapshotterSecret,
 		render.ComplianceBenchmarkerSecret,
 		render.ComplianceReporterSecret,
+
+		// Get certificate for policy-recommendation, which Linseed needs to trust.
+		render.PolicyRecommendationTLSSecretName,
 	}
 	for _, certName := range certs {
 		cert, err := cm.GetCertificate(r.client, certName, common.OperatorNamespace())

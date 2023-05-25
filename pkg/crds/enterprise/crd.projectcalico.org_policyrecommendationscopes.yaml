@@ -62,8 +62,8 @@ spec:
                       resource selectors.
                     type: string
                   tierName:
-                    description: 'The name of the policy recommendation tier for namespace-segmented
-                      policies. [Default: "namespace-segmentation"]'
+                    description: 'The name of the policy recommendation tier for namespace-isolated
+                      policies. [Default: "namespace-isolation"]'
                     type: string
                 required:
                 - selector

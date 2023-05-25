@@ -40,18 +40,23 @@ const (
 	PolicyRecommendationName       = "tigera-policy-recommendation"
 	PolicyRecommendationNamespace  = PolicyRecommendationName
 	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+
+	PolicyRecommendationTLSSecretName = "policy-recommendation-tls"
 )
+
+var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
-	ClusterDomain   string
-	ESClusterConfig *relasticsearch.ClusterConfig
-	ESSecrets       []*corev1.Secret
-	Installation    *operatorv1.InstallationSpec
-	ManagedCluster  bool
-	Openshift       bool
-	PullSecrets     []*corev1.Secret
-	TrustedBundle   certificatemanagement.TrustedBundle
+	ClusterDomain                  string
+	ESClusterConfig                *relasticsearch.ClusterConfig
+	ESSecrets                      []*corev1.Secret
+	Installation                   *operatorv1.InstallationSpec
+	ManagedCluster                 bool
+	Openshift                      bool
+	PullSecrets                    []*corev1.Secret
+	TrustedBundle                  certificatemanagement.TrustedBundle
+	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -86,22 +91,28 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
+	// Management and managed clusters need API access to the resources defined in the policy
+	// recommendation cluster role
 	objs := []client.Object{
 		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
+		networkpolicy.AllowTigeraDefaultDeny(PolicyRecommendationNamespace),
 	}
+
+	if pr.cfg.ManagedCluster {
+		// No further resources are needed for managed clusters
+		return objs, nil
+	}
+
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
-
-	// Deployment is for standalone or management cluster
-	if !pr.cfg.ManagedCluster {
-		objs = append(objs,
-			allowTigeraPolicyForPolicyRecommendation(pr.cfg),
-			pr.deployment(),
-		)
-	}
+	// The deployment is created on management/standalone clusters only
+	objs = append(objs,
+		pr.allowTigeraPolicyForPolicyRecommendation(),
+		pr.deployment(),
+	)
 
 	return objs, nil
 }
@@ -139,6 +150,14 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"flows",
+			},
+			Verbs: []string{"get"},
+		},
 	}
 
 	return &rbacv1.ClusterRole{
@@ -174,13 +193,42 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 	}
 }
 
+// deployment returns the policy recommendation deployments. It assumes that this is defined for
+// management and standalone clusters only.
 func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	envs := []corev1.EnvVar{
+		{
+			Name:  "LOG_LEVEL",
+			Value: "Info",
+		},
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: pr.cfg.TrustedBundle.MountPath(),
 		},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain),
+		},
+		{
+			Name:  "LINSEED_CA",
+			Value: pr.cfg.TrustedBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_CERT",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_KEY",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "LINSEED_TOKEN",
+			Value: GetLinseedTokenPath(false),
+		},
 	}
+
+	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
+	volumeMounts = append(volumeMounts, pr.cfg.PolicyRecommendationCertSecret.VolumeMount(pr.SupportedOSType()))
 
 	controllerContainer := corev1.Container{
 		Name:            "policy-recommendation-controller",
@@ -188,11 +236,12 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             envs,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType()),
+		VolumeMounts:    volumeMounts,
 	}
 
 	volumes := []corev1.Volume{
 		pr.cfg.TrustedBundle.Volume(),
+		pr.cfg.PolicyRecommendationCertSecret.Volume(),
 	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(
@@ -249,7 +298,7 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 }
 
 // allowTigeraPolicyForPolicyRecommendation defines an allow-tigera policy for policy recommendation.
-func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfiguration) *v3.NetworkPolicy {
+func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendation() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -261,13 +310,17 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: ManagerEntityRule,
 		},
-		{
+	}
+
+	if !pr.cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
-		},
+			Destination: networkpolicy.LinseedEntityRule,
+		})
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pr.cfg.Openshift)
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

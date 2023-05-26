@@ -231,6 +231,11 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, certificatemanagement.CSRClusterRole())
 	}
 
+	if c.cfg.MigrateNamespaces {
+		objs = append(objs, migration.AddClusterRoleForKubeSystemNode())
+		objs = append(objs, migration.AddClusterRoleBindingForKubeSystemNode())
+	}
+
 	if c.cfg.Terminating {
 		return objsToKeep, append(objs, objsToDelete...)
 	}
@@ -799,7 +804,7 @@ func (c *nodeComponent) birdTemplateConfigMap() *corev1.ConfigMap {
 }
 
 // clusterAdminClusterRoleBinding returns a ClusterRoleBinding for DockerEE to give
-// the cluster-admin role to calico-node, this is needed for calico-node to be
+// the cluster-admin role to calico-node and calico-cni-plugin, this is needed for calico-node/calico-cni-plugin to be
 // able to use hostNetwork in Docker Enterprise.
 func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
@@ -817,6 +822,11 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 			{
 				Kind:      "ServiceAccount",
 				Name:      CalicoNodeObjectName,
+				Namespace: common.CalicoNamespace,
+			},
+			{
+				Kind:      "ServiceAccount",
+				Name:      CalicoCNIPluginObjectName,
 				Namespace: common.CalicoNamespace,
 			},
 		},

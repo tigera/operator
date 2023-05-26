@@ -37,6 +37,7 @@ type ManagerCloudResources struct {
 	VoltronInternalHttpsPort uint16
 	VoltronExtraEnv          map[string]string
 
+	ManagerImage    string
 	ManagerExtraEnv map[string]string
 }
 

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -176,6 +177,11 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	// override manager image if specified
+	if managerImage := os.Getenv("MANAGER_IMAGE"); managerImage != "" {
+		c.managerImage = managerImage
 	}
 
 	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)

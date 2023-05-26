@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,6 +57,7 @@ const (
 	typhaDeploymentName          = "calico-typha"
 	nodeDaemonSetName            = "calico-node"
 	kubeControllerDeploymentName = "calico-kube-controllers"
+	calicoNodeMigrationName      = "calico-node-migration"
 
 	k8sServicesEndpointConfigMap = "kubernetes-services-endpoint"
 
@@ -188,6 +189,47 @@ func AddBindingForKubeSystemNode(crb *rbacv1.ClusterRoleBinding) {
 	})
 }
 
+func AddClusterRoleBindingForKubeSystemNode() *rbacv1.ClusterRoleBinding {
+	crb := &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: calicoNodeMigrationName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     calicoNodeMigrationName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "calico-node",
+				Namespace: kubeSystem,
+			},
+		},
+	}
+	return crb
+}
+
+func AddClusterRoleForKubeSystemNode() *rbacv1.ClusterRole {
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: calicoNodeMigrationName,
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"create"},
+			},
+		},
+	}
+	return role
+}
+
 // SetTyphaAntiAffinity updates the Deployment passed in with a PodAntiAffinity
 // to ensure the new typha pods will not be scheduled to the same nodes as the
 // 'old' typha pods.
@@ -251,6 +293,9 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	log.V(1).Info("kube-system typha deployment deleted")
 	if err := m.deleteKubeSystemServiceEndPointConfigMap(ctx, log); err != nil {
 		return fmt.Errorf("failed to delete kube-system k8sServicesEndpoint ConfigMap: %s", err.Error())
+	}
+	if err := m.deleteTemporaryCalicoNodeClusterRole(ctx); err != nil {
+		return fmt.Errorf("failed to delete calico-node-migration resources", err.Error())
 	}
 	log.Info("Namespace migration complete")
 
@@ -745,4 +790,17 @@ func (m *CoreNamespaceMigration) removeNodeLabel(ctx context.Context, nodeName, 
 		// no update needed
 		return true, nil
 	})
+}
+
+// remove temporary ClusterRole and CLusterRoleBinding that gives calico-node permission to create servicetoken in kube-system
+func (m *CoreNamespaceMigration) deleteTemporaryCalicoNodeClusterRole(ctx context.Context) error {
+	err := m.client.RbacV1().ClusterRoleBindings().Delete(ctx, calicoNodeMigrationName, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+	err = m.client.RbacV1().ClusterRoles().Delete(ctx, calicoNodeMigrationName, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }

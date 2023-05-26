@@ -189,6 +189,11 @@ func (r *ReconcileManager) cloudConfigOverride(ctx context.Context, mcr *render.
 			// the org ID
 			mcr.ManagerExtraEnv["CNX_AUTH0_ORG_ID"] = val
 		}
+
+		// special key used to control which image of manager is used
+		if key == "managerImage" {
+			mcr.ManagerImage = val
+		}
 	}
 
 	mcr.VoltronExtraEnv, err = r.getConfigMapData(ctx, CloudVoltronConfigOverrideName)

@@ -90,8 +90,7 @@ type GuardianConfiguration struct {
 	TunnelCAType      operatorv1.CAType
 
 	// Whether the cluster supports pod security policies.
-	UsePSP                  bool
-	SGLayerTigeraNameSpaces map[string]bool
+	UsePSP bool
 }
 
 type GuardianComponent struct {
@@ -133,7 +132,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(c.cfg.SGLayerTigeraNameSpaces),
+		managerClusterWideTigeraLayer(),
 		managerClusterWideDefaultView(),
 	)
 

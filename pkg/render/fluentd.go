@@ -627,7 +627,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
-		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagedCluster)},
+		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {

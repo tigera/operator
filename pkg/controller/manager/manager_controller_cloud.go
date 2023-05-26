@@ -23,6 +23,11 @@ import (
 	iarender "github.com/tigera/operator/pkg/render/imageassurance"
 )
 
+var (
+	CloudManagerConfigOverrideName = "cloud-manager-config"
+	CloudVoltronConfigOverrideName = "cloud-voltron-config"
+)
+
 func addCloudWatch(c controller.Controller) error {
 	if err := utils.AddImageAssuranceWatch(c, render.ManagerNamespace); err != nil {
 		return err
@@ -32,7 +37,7 @@ func addCloudWatch(c controller.Controller) error {
 		return err
 	}
 
-	if err := utils.AddConfigMapWatch(c, render.CloudVoltronConfigOverrideName, common.OperatorNamespace()); err != nil {
+	if err := utils.AddConfigMapWatch(c, CloudVoltronConfigOverrideName, common.OperatorNamespace()); err != nil {
 		return err
 	}
 	return nil
@@ -44,6 +49,7 @@ func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger l
 	mcr := render.ManagerCloudResources{
 		VoltronMetricsEnabled:    true,
 		VoltronInternalHttpsPort: 9444,
+		ManagerExtraEnv:          map[string]string{},
 	}
 
 	result, err := r.handleImageAssuranceResources(ctx, &mcr, reqLogger)
@@ -53,6 +59,10 @@ func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger l
 
 	err = r.handleCloudRBACResources(ctx, &mcr, reqLogger)
 	if err != nil {
+		return mcr, nil, err
+	}
+
+	if err := r.cloudConfigOverride(ctx, &mcr, reqLogger); err != nil {
 		return mcr, nil, err
 	}
 
@@ -160,16 +170,32 @@ func (r *ReconcileManager) handleImageAssuranceResources(ctx context.Context, mc
 }
 
 // cloudConfigOverride set manager and voltron renderer env override
-func (r *ReconcileManager) cloudConfigOverride(ctx context.Context) error {
+func (r *ReconcileManager) cloudConfigOverride(ctx context.Context, mcr *render.ManagerCloudResources, reqLogger logr.Logger) error {
 	var err error
-	render.ManagerExtraEnv, err = r.getConfigMapData(ctx, render.CloudManagerConfigOverrideName)
+	managerCfg, err := r.getConfigMapData(ctx, CloudManagerConfigOverrideName)
 	if err != nil {
 		return err
 	}
-	render.VoltronExtraEnv, err = r.getConfigMapData(ctx, render.CloudVoltronConfigOverrideName)
+	for key, val := range managerCfg {
+		if key == "portalAPIURL" {
+			// support legacy functionality where 'portalAPIURL' was a special field used to set
+			// the portal url and enable support.
+			mcr.ManagerExtraEnv["CNX_PORTAL_URL"] = val
+			mcr.ManagerExtraEnv["ENABLE_PORTAL_SUPPORT"] = "true"
+		}
+
+		if key == "auth0OrgID" {
+			// support legacy functionality where 'auth0OrgID' was a special field used to set
+			// the org ID
+			mcr.ManagerExtraEnv["CNX_AUTH0_ORG_ID"] = val
+		}
+	}
+
+	mcr.VoltronExtraEnv, err = r.getConfigMapData(ctx, CloudVoltronConfigOverrideName)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

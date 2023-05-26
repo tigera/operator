@@ -19,13 +19,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
-var (
-	CloudManagerConfigOverrideName = "cloud-manager-config"
-	CloudVoltronConfigOverrideName = "cloud-voltron-config"
-	ManagerExtraEnv                = map[string]string{}
-	VoltronExtraEnv                = map[string]string{}
-)
-
 const (
 	ImageAssurancePolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "image-assurance-access"
 	CloudRBACAPIPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "cloud-rbac-api"
@@ -42,6 +35,9 @@ type ManagerCloudResources struct {
 
 	VoltronMetricsEnabled    bool
 	VoltronInternalHttpsPort uint16
+	VoltronExtraEnv          map[string]string
+
+	ManagerExtraEnv map[string]string
 }
 
 func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Container) corev1.Container {
@@ -91,7 +87,7 @@ func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Contai
 	// move extra env vars into Voltron, but sort them alphabetically first,
 	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
 	// which will cause another reconciliation event when Voltron is updated.
-	sortedKeysIterate(VoltronExtraEnv, func(key, val string) {
+	sortedKeysIterate(c.cfg.CloudResources.VoltronExtraEnv, func(key, val string) {
 		container.Env = append(container.Env, corev1.EnvVar{Name: key, Value: val})
 	})
 	return container
@@ -203,23 +199,7 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 	// move extra env vars into Manager, but sort them alphabetically first,
 	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
 	// which will cause another reconciliation event when Manager is updated.
-	sortedKeysIterate(ManagerExtraEnv, func(key, val string) {
-		if key == "portalAPIURL" {
-			// support legacy functionality where 'portalAPIURL' was a special field used to set
-			// the portal url and enable support.
-			envs = append(envs,
-				corev1.EnvVar{Name: "CNX_PORTAL_URL", Value: val},
-				corev1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"})
-			return
-		}
-
-		if key == "auth0OrgID" {
-			// support legacy functionality where 'auth0OrgID' was a special field used to set
-			// the org ID
-			envs = append(envs, corev1.EnvVar{Name: "CNX_AUTH0_ORG_ID", Value: val})
-			return
-		}
-
+	sortedKeysIterate(c.cfg.CloudResources.ManagerExtraEnv, func(key, val string) {
 		envs = append(envs, corev1.EnvVar{Name: key, Value: val})
 	})
 

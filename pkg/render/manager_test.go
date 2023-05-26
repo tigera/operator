@@ -874,6 +874,7 @@ type renderConfig struct {
 	openshift               bool
 	cloudRBACEnabled        bool
 	voltronMetricsEnabled   bool
+	cloudResources          render.ManagerCloudResources
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -911,11 +912,9 @@ func renderObjects(roc renderConfig) []client.Object {
 	managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
 	Expect(err).NotTo(HaveOccurred())
 
-	var cloudResources render.ManagerCloudResources
-
 	if roc.imageAssuranceEnabled {
 		voltronTls := rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain)
-		cloudResources.ImageAssuranceResources = &rcimageassurance.Resources{
+		roc.cloudResources.ImageAssuranceResources = &rcimageassurance.Resources{
 			ConfigurationConfigMap: &corev1.ConfigMap{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "ConfigMap",
@@ -934,14 +933,14 @@ func renderObjects(roc renderConfig) []client.Object {
 	}
 
 	if roc.cloudRBACEnabled {
-		cloudResources.CloudRBACResources = &cloudrbac.Resources{
+		roc.cloudResources.CloudRBACResources = &cloudrbac.Resources{
 			TLSSecret: rtest.CreateCertSecret(cloudrbac.TLSSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain),
 		}
 	}
 
 	if roc.voltronMetricsEnabled {
-		cloudResources.VoltronMetricsEnabled = true
-		cloudResources.VoltronInternalHttpsPort = 9444
+		roc.cloudResources.VoltronMetricsEnabled = true
+		roc.cloudResources.VoltronInternalHttpsPort = 9444
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1)
@@ -958,7 +957,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ClusterDomain:           dns.DefaultClusterDomain,
 		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                roc.installation.ControlPlaneReplicas,
-		CloudResources:          cloudResources,
+		CloudResources:          roc.cloudResources,
 		Compliance:              roc.compliance,
 		ComplianceLicenseActive: roc.complianceFeatureActive,
 		Openshift:               roc.openshift,

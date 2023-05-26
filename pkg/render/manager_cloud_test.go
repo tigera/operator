@@ -153,10 +153,12 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		)
 	})
 
-	render.VoltronExtraEnv = map[string]string{
-		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE1": "value1",
-		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3": "value3",
-		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2": "value2",
+	cloudResources := render.ManagerCloudResources{
+		VoltronExtraEnv: map[string]string{
+			"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE1": "value1",
+			"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3": "value3",
+			"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2": "value2",
+		},
 	}
 	resources := renderObjects(renderConfig{
 		oidc:                  false,
@@ -164,6 +166,7 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		installation:          installation,
 		cloudRBACEnabled:      true,
 		voltronMetricsEnabled: true,
+		cloudResources:        cloudResources,
 	})
 
 	deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

@@ -824,6 +824,11 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 				Name:      CalicoNodeObjectName,
 				Namespace: common.CalicoNamespace,
 			},
+			{
+				Kind:      "ServiceAccount",
+				Name:      CalicoCNIPluginObjectName,
+				Namespace: common.CalicoNamespace,
+			},
 		},
 	}
 	return crb

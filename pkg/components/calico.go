@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,52 +23,52 @@ var (
 	CalicoRelease string = "v3.26.0"
 
 	ComponentCalicoCNI = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/cni",
 	}
 
 	ComponentCalicoCNIFIPS = component{
-		Version: "release-v3.26-fips",
+		Version: "v3.26.0-fips",
 		Image:   "calico/cni",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/kube-controllers",
 	}
 
 	ComponentCalicoNode = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/node",
 	}
 
 	ComponentCalicoTypha = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/typha",
 	}
 
 	ComponentFlexVolume = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/apiserver",
 	}
 
 	ComponentWindowsUpgrade = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/windows-upgrade",
 	}
 
 	ComponentCalicoCSI = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/csi",
 	}
 
 	ComponentCalicoCSIRegistrar = component{
-		Version: "release-v3.26",
+		Version: "v3.26.0",
 		Image:   "calico/node-driver-registrar",
 	}
 	ComponentOperatorInit = component{

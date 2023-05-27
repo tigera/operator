@@ -964,6 +964,10 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"calico-system",
 		"tigera-amazon-cloud-integration",
 		"tigera-firewall-controller",
+		"calico-cloud",
+		"tigera-image-assurance",
+		"tigera-runtime-security",
+		"tigera-skraper",
 	}
 	nodes := make([]v3.UIGraphNode, len(namespaces))
 	for i := range namespaces {

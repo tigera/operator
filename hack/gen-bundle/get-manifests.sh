@@ -83,6 +83,7 @@ ippools
 kubecontrollersconfigurations
 networkpolicies
 networksets
+policyrecommendationscopes
 "
 
     # Download the Calico CRDs into CRD dir.

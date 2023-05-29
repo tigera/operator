@@ -464,6 +464,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			Verbs:     []string{"create"},
 		},
 		{
+			// Add write/read/delete access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"threatfeeds_ipset", "threatfeeds_domainnameset"},
+			Verbs:     []string{"create", "delete", "get"},
+		},
+		{
 			// Add read access to Linseed APIs.
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{

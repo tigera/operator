@@ -38,6 +38,81 @@ spec:
               dashboard:
                 description: Dashboard data. One of View, Layer or Dashboard should
                   be specified.
+                properties:
+                  dashboardData:
+                    description: Array of dashboard data
+                    items:
+                      properties:
+                        layout:
+                          description: Layout information of the dashboard card
+                          properties:
+                            height:
+                              description: Height of the dashboard card
+                              format: int32
+                              type: integer
+                            index:
+                              description: Index of the dashboard
+                              type: string
+                            isInNamespaceView:
+                              description: Whether this dashboard is in namespace
+                                view or not
+                              type: boolean
+                            isResizable:
+                              description: Whether this dashboard card should be re-sizeable
+                                or not
+                              type: boolean
+                            isVisible:
+                              description: Whether this dashboard card should be visible
+                                or not
+                              type: boolean
+                            maxHeight:
+                              description: Maximum limit set for the size of the dashboard
+                                card height
+                              format: int32
+                              type: integer
+                            maxWidth:
+                              description: Maximum limit set for the size of the dashboard
+                                card width
+                              format: int32
+                              type: integer
+                            minHeight:
+                              description: Minimum limit set for the size of the dashboard
+                                card height
+                              format: int32
+                              type: integer
+                            minWidth:
+                              description: Minimum limit set for the size of the dashboard
+                                card width
+                              format: int32
+                              type: integer
+                            width:
+                              description: Width of the dashboard card
+                              format: int32
+                              type: integer
+                            xPos:
+                              description: X coordinate of the top-left corner of
+                                the dashboard card
+                              format: int32
+                              type: integer
+                            yPos:
+                              description: Y coordinate of the top-left corner of
+                                the dashboard card
+                              format: int32
+                              type: integer
+                          required:
+                          - height
+                          - width
+                          - xPos
+                          - yPos
+                          type: object
+                        selectedNamespace:
+                          description: Namespace user selected for the dashboard
+                          type: string
+                        type:
+                          description: Type of the dashboard
+                          type: string
+                      type: object
+                    type: array
                 type: object
               description:
                 description: This description is displayed by the UI.

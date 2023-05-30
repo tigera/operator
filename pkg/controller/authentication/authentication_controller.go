@@ -267,7 +267,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Secret used for TLS between dex and other components.
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err

@@ -57,9 +57,11 @@ const (
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
 )
 
-var DefaultInstanceKey = client.ObjectKey{Name: "default"}
-var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
-var OverlayInstanceKey = client.ObjectKey{Name: "overlay"}
+var (
+	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
+	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
+	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+)
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
@@ -180,9 +182,6 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 // will be generated.
 func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-	if objMeta.GetNamespace() == "" {
-		return fmt.Errorf("No namespace provided for namespaced watch")
-	}
 	pred := createPredicateForObject(objMeta)
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
 }
@@ -493,17 +492,23 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 			duration = maxDuration
 		}
 		ticker.Reset(duration)
+
 		for obj := range resourcesToWatch {
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
 			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
-				objLog.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+				msg := "Failed to check if resource is ready - will retry"
+				if errors.IsNotFound(err) {
+					objLog.WithValues("Error", err).V(2).Info(msg)
+				} else {
+					objLog.WithValues("Error", err).Info(msg)
+				}
 			} else if !ok {
 				objLog.Info("Waiting for resource to be ready - will retry")
 			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
 				objLog.WithValues("Error", err).Info("Failed to watch resource - will retry")
 			} else {
-				objLog.Info("Successfully watching resource")
+				objLog.V(2).Info("Successfully watching resource")
 				delete(resourcesToWatch, obj)
 			}
 		}

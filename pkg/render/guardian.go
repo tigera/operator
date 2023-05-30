@@ -127,9 +127,12 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
 		// Add tigera-manager service account for impersonation
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
-		managerServiceAccount(),
+		managerServiceAccount("tigera-manager"), // TODO
 		managerClusterRole(false, true, c.cfg.UsePSP),
-		managerClusterRoleBinding(),
+		// TODO: Use dynamic namespace. This might actually be tricky, because
+		// we need namespaces in the managed cluster to match up with the management cluster
+		// for RBAC to work properly. We may need to rethink this appraoch a bit.
+		managerClusterRoleBinding(ManagerNamespace),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
 		managerClusterWideTigeraLayer(),

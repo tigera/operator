@@ -136,8 +136,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch for changes to the secrets associated with the PacketCapture APIs.
-	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureCertSecret, err)
+	if err = utils.AddSecretsWatch(c, render.PacketCaptureServerCert(false, "").Name(), common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert(false, "").Name(), err)
 	}
 	// Watch for changes to the secrets associated with Prometheus.
 	if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
@@ -249,7 +249,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -278,7 +278,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	for _, secretName := range []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)} {
+	for _, secretName := range []string{render.PacketCaptureServerCert(false, "").Name(), monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)

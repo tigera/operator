@@ -50,9 +50,41 @@ const (
 	PacketCapturePodSecurityPolicyName  = PacketCaptureName
 	PacketCapturePolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PacketCaptureName
 	PacketCapturePort                   = 8444
-
-	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
 )
+
+// Secret is a helper struct for managing secrets in both single and multi
+// tenant clusters. It
+type Secret interface {
+	Name() string
+	Namespace() string
+}
+
+type packetCaptureSecret struct {
+	name string
+	mtns string
+	mt   bool
+}
+
+func (s *packetCaptureSecret) Name() string {
+	return s.name
+}
+
+func (s *packetCaptureSecret) Namespace() string {
+	if s.mt {
+		// TODO: Right now, packetcapture doesn't support
+		// multi-tenancy. This secret will always be in "tigera-packetcapture".
+		// return s.mtns
+	}
+	return "tigera-packetcapture"
+}
+
+func PacketCaptureServerCert(mt bool, multiTenantNS string) Secret {
+	return &packetCaptureSecret{
+		mt:   mt,
+		name: "tigera-packetcapture-server-tls",
+		mtns: multiTenantNS,
+	}
+}
 
 var (
 	PacketCaptureEntityRule       = networkpolicy.CreateEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName, PacketCapturePort)

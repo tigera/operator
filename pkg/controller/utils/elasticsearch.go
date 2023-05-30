@@ -80,7 +80,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 		esUserSecret := &corev1.Secret{}
 		err := cli.Get(ctx, types.NamespacedName{
 			Name:      userSecretName,
-			Namespace: common.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(), // TODO
 		}, esUserSecret)
 		if err != nil {
 			return nil, err
@@ -341,7 +341,7 @@ func extractPolicyDetails(policy map[string]interface{}) (string, string, string
 
 func getTotalEsDisk(ls *operatorv1.LogStorage) int64 {
 	defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", render.DefaultElasticStorageGi))
-	var totalEsStorage = defaultStorage.Value()
+	totalEsStorage := defaultStorage.Value()
 	if ls.Spec.Nodes.ResourceRequirements != nil {
 		if val, ok := ls.Spec.Nodes.ResourceRequirements.Requests["storage"]; ok {
 			totalEsStorage = val.Value()

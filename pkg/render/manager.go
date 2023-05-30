@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -179,16 +178,6 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	// support legacy override if specified
-	if managerImage := os.Getenv("MANAGER_IMAGE"); managerImage != "" {
-		c.managerImage = managerImage
-	}
-
-	// override manager image if specified
-	if c.cfg.CloudResources.ManagerImage != "" {
-		c.managerImage = c.cfg.CloudResources.ManagerImage
-	}
-
 	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -202,6 +191,10 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
+
+	// run cloud image customizations
+	c.resolveCloudImages()
+
 	return nil
 }
 

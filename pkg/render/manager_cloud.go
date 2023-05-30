@@ -3,6 +3,7 @@
 package render
 
 import (
+	"os"
 	"sort"
 	"strconv"
 
@@ -252,6 +253,18 @@ func (c *managerComponent) managerToCloudRBACAPINetworkPolicy(rbacResources *clo
 				},
 			},
 		},
+	}
+}
+
+func (c *managerComponent) resolveCloudImages() {
+	// support legacy override if specified
+	if managerImage := os.Getenv("MANAGER_IMAGE"); managerImage != "" {
+		c.managerImage = managerImage
+	}
+
+	// override manager image if specified
+	if c.cfg.CloudResources.ManagerImage != "" {
+		c.managerImage = c.cfg.CloudResources.ManagerImage
 	}
 }
 

@@ -157,10 +157,6 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, CloudManagerConfigOverrideName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
 	if elasticExternal {
 		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)

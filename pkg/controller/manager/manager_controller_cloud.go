@@ -40,6 +40,11 @@ func addCloudWatch(c controller.Controller) error {
 	if err := utils.AddConfigMapWatch(c, CloudVoltronConfigOverrideName, common.OperatorNamespace()); err != nil {
 		return err
 	}
+
+	if err := utils.AddConfigMapWatch(c, CloudManagerConfigOverrideName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
 	return nil
 }
 

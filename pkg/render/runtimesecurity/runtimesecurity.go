@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -39,9 +40,16 @@ const (
 	ResourceThreatIdDefaultCPURequest    = "100m"
 	ResourceThreatIdDefaultMemoryRequest = "100Mi"
 	SashaHistoryVolumeName               = "history"
-	SashaHistoryVolumeMountPath          = "/history"
-	SashaHistoryRetentionPeriod          = "6h"
-	SashaHistoryDiskSpace                = "40Mi"
+	// SashaHistoryVolumeSizeLimit is a back stop that we don't want ever to be hit in practice.
+	// (If it is hit, it causes the Sasha pod to be evicted, which is safe in a sense - in that
+	// it's the same as starting again from scratch - but is a very blunt instrument.)  Actual
+	// disk usage for history DB files can be 2 to 2.5 times SashaHistoryDiskSpace - because of
+	// how sqlite works - so we configure SashaHistoryVolumeSizeLimit to be 4 times
+	// SashaHistoryDiskSpace.
+	SashaHistoryVolumeSizeLimit = "160Mi"
+	SashaHistoryVolumeMountPath = "/history"
+	SashaHistoryRetentionPeriod = "6h"
+	SashaHistoryDiskSpace       = "40Mi"
 )
 
 func RuntimeSecurity(config *Config) render.Component {
@@ -146,6 +154,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 		FailureThreshold: 6,
 	}
 
+	historyVolumeSizeLimit := resource.MustParse(SashaHistoryVolumeSizeLimit)
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -187,7 +197,9 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 						{
 							Name: SashaHistoryVolumeName,
 							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
+								EmptyDir: &corev1.EmptyDirVolumeSource{
+									SizeLimit: &historyVolumeSizeLimit,
+								},
 							},
 						},
 						c.config.TrustedBundle.Volume(),

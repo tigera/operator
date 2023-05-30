@@ -181,7 +181,12 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			// Need to be able to list managed clusters
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
-			Verbs:     []string{"list", "watch"},
+			Verbs: []string{
+				"list",
+				"watch",
+				// get is needed for voltron auth check before proxy
+				"get",
+			},
 		},
 	}
 

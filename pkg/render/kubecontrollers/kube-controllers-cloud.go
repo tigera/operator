@@ -28,6 +28,7 @@ func (c *kubeControllersComponent) cloudDecorateContainer(container corev1.Conta
 		container.Env = append(container.Env,
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_ADMISSION_CONTROLLER_CLUSTER_ROLE_NAME", Value: imageassurance.AdmissionControllerAPIClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_CR_ADAPTOR_CLUSTER_ROLE_NAME", Value: imageassurance.CRAdaptorAPIClusterRoleName},
+			corev1.EnvVar{Name: "IMAGE_ASSURANCE_CLUSTER_SCANNER_CLUSTER_ROLE_NAME", Value: "tigera-image-assurance-cluster-scanner-api-access"},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_INTRUSION_DETECTION_CONTROLLER_CLUSTER_ROLE_NAME", Value: render.IntrusionDetectionControllerImageAssuranceAPIClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLUSTER_ROLE_NAME", Value: imageassurance.ScannerAPIAccessResourceName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_CLUSTER_ROLE_NAME", Value: imageassurance.ScannerCLIClusterRoleName},

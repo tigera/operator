@@ -327,6 +327,7 @@ var HostPortsTypes []HostPortsType = []HostPortsType{
 	HostPortsEnabled,
 	HostPortsDisabled,
 }
+
 var HostPortsTypesString []string = []string{
 	HostPortsEnabled.String(),
 	HostPortsDisabled.String(),
@@ -502,6 +503,7 @@ var EncapsulationTypes []EncapsulationType = []EncapsulationType{
 	EncapsulationVXLANCrossSubnet,
 	EncapsulationNone,
 }
+
 var EncapsulationTypesString []string = []string{
 	EncapsulationIPIPCrossSubnet.String(),
 	EncapsulationIPIP.String(),
@@ -524,6 +526,7 @@ var NATOutgoingTypes []NATOutgoingType = []NATOutgoingType{
 	NATOutgoingEnabled,
 	NATOutgoingDisabled,
 }
+
 var NATOutgoingTypesString []string = []string{
 	NATOutgoingEnabled.String(),
 	NATOutgoingDisabled.String(),
@@ -588,6 +591,7 @@ var CNIPluginTypes []CNIPluginType = []CNIPluginType{
 	PluginAmazonVPC,
 	PluginAzureVNET,
 }
+
 var CNIPluginTypesString []string = []string{
 	PluginCalico.String(),
 	PluginGKE.String(),

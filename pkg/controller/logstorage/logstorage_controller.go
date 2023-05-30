@@ -297,10 +297,6 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 		var fr int32 = 8
 		opr.Spec.Retention.Flows = &fr
 	}
-	if opr.Spec.Retention.RuntimeReports == nil {
-		var rr int32 = 8
-		opr.Spec.Retention.RuntimeReports = &rr
-	}
 	if opr.Spec.Retention.AuditReports == nil {
 		var arr int32 = 91
 		opr.Spec.Retention.AuditReports = &arr

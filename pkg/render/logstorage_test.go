@@ -118,7 +118,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					Retention: &operatorv1.Retention{
 						Flows:             &retention,
-						RuntimeReports:    &retention,
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
@@ -1053,7 +1052,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					Retention: &operatorv1.Retention{
 						Flows:             &retention,
-						RuntimeReports:    &retention,
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
@@ -1544,7 +1542,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					Retention: &operatorv1.Retention{
 						Flows:             &retention,
-						RuntimeReports:    &retention,
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
@@ -1661,7 +1658,6 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 					},
 					Retention: &operatorv1.Retention{
 						Flows:             &retention,
-						RuntimeReports:    &retention,
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,

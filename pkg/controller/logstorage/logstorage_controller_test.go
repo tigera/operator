@@ -157,7 +157,6 @@ var _ = Describe("LogStorage controller", func() {
 				retain8 := int32(8)
 				retain91 := int32(91)
 				Expect(ls.Spec.Retention.Flows).To(Equal(&retain8))
-				Expect(ls.Spec.Retention.RuntimeReports).To(Equal(&retain8))
 				Expect(ls.Spec.Retention.AuditReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.ComplianceReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.Snapshots).To(Equal(&retain91))
@@ -1826,7 +1825,6 @@ var _ = Describe("LogStorage controller", func() {
 		fillDefaults(&ls)
 
 		var fr int32 = 8
-		var rr int32 = 8
 		var arr int32 = 91
 		var sr int32 = 91
 		var crr int32 = 91
@@ -1842,7 +1840,6 @@ var _ = Describe("LogStorage controller", func() {
 			Nodes: &operatorv1.Nodes{Count: 1},
 			Retention: &operatorv1.Retention{
 				Flows:             &fr,
-				RuntimeReports:    &rr,
 				AuditReports:      &arr,
 				Snapshots:         &sr,
 				ComplianceReports: &crr,
@@ -1895,7 +1892,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			},
 			Retention: &operatorv1.Retention{
 				Flows:             &retention,
-				RuntimeReports:    &retention,
 				AuditReports:      &retention,
 				Snapshots:         &retention,
 				ComplianceReports: &retention,

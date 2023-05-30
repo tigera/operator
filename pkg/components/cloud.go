@@ -34,12 +34,12 @@ var (
 	}
 
 	ComponentSasha = component{
-		Version: "master",
+		Version: "v1.7.0",
 		Image:   "tigera/sasha",
 	}
 
 	ComponentThreatId = component{
-		Version: "master",
+		Version: "v1.7.0",
 		Image:   "tigera/threat-identification",
 	}
 

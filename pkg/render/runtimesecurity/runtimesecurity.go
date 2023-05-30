@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 package runtimesecurity
 
@@ -40,10 +40,16 @@ const (
 	ResourceThreatIdDefaultCPURequest    = "100m"
 	ResourceThreatIdDefaultMemoryRequest = "100Mi"
 	SashaHistoryVolumeName               = "history"
-	SashaHistoryVolumeSizeLimit          = "100Mi"
-	SashaHistoryVolumeMountPath          = "/history"
-	SashaHistoryRetentionPeriod          = "6h"
-	SashaHistoryBuffer                   = "50Mi"
+	// SashaHistoryVolumeSizeLimit is a back stop that we don't want ever to be hit in practice.
+	// (If it is hit, it causes the Sasha pod to be evicted, which is safe in a sense - in that
+	// it's the same as starting again from scratch - but is a very blunt instrument.)  Actual
+	// disk usage for history DB files can be 2 to 2.5 times SashaHistoryDiskSpace - because of
+	// how sqlite works - so we configure SashaHistoryVolumeSizeLimit to be 4 times
+	// SashaHistoryDiskSpace.
+	SashaHistoryVolumeSizeLimit = "160Mi"
+	SashaHistoryVolumeMountPath = "/history"
+	SashaHistoryRetentionPeriod = "6h"
+	SashaHistoryDiskSpace       = "40Mi"
 )
 
 func RuntimeSecurity(config *Config) render.Component {
@@ -133,7 +139,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 		{Name: "SASHA_SECRETLOCATION", Value: SashaVerifyAuthFile},
 		{Name: "SASHA_HISTORYDIR", Value: SashaHistoryVolumeMountPath},
 		{Name: "SASHA_HISTORYRETENTION", Value: SashaHistoryRetentionPeriod},
-		{Name: "SASHA_HISTORYBUFFER", Value: SashaHistoryBuffer},
+		{Name: "SASHA_HISTORYDISKSPACE", Value: SashaHistoryDiskSpace},
 	}
 
 	rsSecretOptional := false

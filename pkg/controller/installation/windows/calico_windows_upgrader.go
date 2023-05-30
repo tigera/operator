@@ -44,9 +44,7 @@ const (
 	defaultMaxUnavailable int32 = 1
 )
 
-var (
-	windowsLog = logf.Log.WithName("windows_upgrader")
-)
+var windowsLog = logf.Log.WithName("windows_upgrader")
 
 type CalicoWindowsUpgrader interface {
 	UpdateConfig(install *operatorv1.InstallationSpec)
@@ -301,7 +299,7 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 				if w.install.KubernetesProvider == operatorv1.ProviderAKS {
 					w.updateWindowsNodes()
 				} else {
-					windowsLog.V(1).Info("windows upgrader only runs on AKS, skipping update call")
+					windowsLog.V(2).Info("windows upgrader only runs on AKS, skipping update call")
 				}
 			case <-ctx.Done():
 				windowsLog.Info("Stopping main loop")

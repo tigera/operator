@@ -1541,6 +1541,20 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 	return &adPVC
 }
 
+/*
+	{
+		Name:  "CLUSTER_NAME",
+		Value: c.cfg.ESClusterConfig.ClusterName(),
+	},
+		{
+			// Add write access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create"},
+		},
+
+*/
+
 func (c *intrusionDetectionComponent) adAPIPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	return podsecuritypolicy.NewBasePolicy(ADAPIPodSecurityPolicyName)
 }
@@ -1688,6 +1702,12 @@ func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 				"update",
 			},
 		},
+		{
+			// Add write access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create"},
+		},
 	}
 
 	if c.cfg.UsePSP {
@@ -1740,6 +1760,7 @@ func (c *intrusionDetectionComponent) adDetectorPodTemplates() []client.Object {
 
 func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateName string) corev1.PodTemplate {
 	envVars := []corev1.EnvVar{
+		// WHERE IS CLUSTER NAME ?
 		{
 			Name:  "MODEL_STORAGE_API_HOST",
 			Value: ADAPIExpectedServiceName,
@@ -1760,6 +1781,26 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 			Name:  "FIPS_MODE_ENABLED",
 			Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 		},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain),
+		},
+		{
+			Name:  "LINSEED_CA",
+			Value: c.cfg.TrustedCertBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_CERT",
+			Value: c.cfg.IntrusionDetectionCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_KEY",
+			Value: c.cfg.IntrusionDetectionCertSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "LINSEED_TOKEN",
+			Value: GetLinseedTokenPath(false),
+		},
 	}
 
 	container := corev1.Container{
@@ -1771,6 +1812,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		VolumeMounts: append(
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
+			c.cfg.IntrusionDetectionCertSecret.VolumeMount(c.SupportedOSType()),
 		),
 	}
 
@@ -1795,10 +1837,12 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				Volumes: []corev1.Volume{
 					c.cfg.TrustedCertBundle.Volume(),
 					c.cfg.ADAPIServerCertSecret.Volume(),
+					c.cfg.IntrusionDetectionCertSecret.Volume(),
 				},
-				DNSPolicy:          corev1.DNSClusterFirst,
-				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
-				RestartPolicy:      corev1.RestartPolicyOnFailure,
+				DNSPolicy:        corev1.DNSClusterFirst,
+				ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
+				RestartPolicy:    corev1.RestartPolicyOnFailure,
+				//TODO: ALINA - ADD THIS TO LINSEED
 				ServiceAccountName: adDetectorName,
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 				Containers: []corev1.Container{
@@ -1977,10 +2021,16 @@ func (c *intrusionDetectionComponent) adDetectorAllowTigeraPolicy() *v3.NetworkP
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
+		// TODO: ALINA - REMOVE THIS ONCE WE NO LONGER HAVE ES GATEWAY ACCESS
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.CreateEntityRule(ElasticsearchNamespace, "tigera-secure-es-gateway", 5554, 9200),
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.LinseedEntityRule,
 		},
 		{
 			Action:      v3.Allow,

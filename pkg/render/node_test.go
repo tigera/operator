@@ -2237,7 +2237,8 @@ var _ = Describe("Node rendering tests", func() {
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
-				Expect(len(resources)).To(Equal(defaultNumExpectedResources), fmt.Sprintf("resources are %v", resources))
+				// +2 for temporary calico-node ClusterRole and ClusterRoleBinding during namespace migration
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources+2), fmt.Sprintf("resources are %v", resources))
 
 				// Should render the correct resources.
 				Expect(rtest.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())

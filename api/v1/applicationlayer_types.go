@@ -31,7 +31,7 @@ type ApplicationLayerSpec struct {
 	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
 	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 	// User-configurable settings for the Envoy proxy.
-	EnvoySettings *EnvoySettings `json:"envoySettings,omitempty"`
+	EnvoySettings *EnvoySettings `json:"envoy,omitempty"`
 }
 
 type LogCollectionStatusType string
@@ -57,10 +57,10 @@ type EnvoySettings struct {
 	// of the client connection when determining internal versus external origin and
 	// manipulating various headers.
 	// +optional
-	XFFUseRemoteAddress bool `json:"xffUseRemoteAddress,omitempty"`
+	UseRemoteAddress bool `json:"useRemoteAddress,omitempty"`
 	//  If set to true, Envoy will not append the remote address to the x-forwarded-for HTTP header.
 	// +optional
-	XFFSkipAppend bool `json:"xffSkipAppend,omitempty"`
+	SkipXFFAppend bool `json:"skipXFFAppend,omitempty"`
 }
 
 type LogCollectionSpec struct {

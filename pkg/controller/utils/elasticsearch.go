@@ -150,6 +150,7 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 // SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
 func (es *esClient) SetILMPolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
 	policyList := es.listILMPolicies(ls)
+	es.tweakILMPoliciesForCloud(ls, policyList)
 	return es.createOrUpdatePolicies(ctx, policyList)
 }
 

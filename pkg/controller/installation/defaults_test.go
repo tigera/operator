@@ -194,7 +194,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpBPF := operator.LinuxDataplaneBPF
-		hpDisabled := operator.HostPortsDisabled
+		hpEnabled := operator.HostPortsEnabled
 		npDisabled := operator.NonPrivilegedDisabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
@@ -230,7 +230,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						FirstFound: &false_,
 					},
 					MultiInterfaceMode: &miMode,
-					HostPorts:          &hpDisabled, // Only one valid value in BPF mode.
+					HostPorts:          &hpEnabled,
 				},
 				ControlPlaneReplicas: &replicas,
 				NodeMetricsPort:      &nodeMetricsPort,

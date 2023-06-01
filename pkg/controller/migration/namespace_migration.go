@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,6 +57,7 @@ const (
 	typhaDeploymentName          = "calico-typha"
 	nodeDaemonSetName            = "calico-node"
 	kubeControllerDeploymentName = "calico-kube-controllers"
+	calicoNodeMigrationName      = "calico-node-migration"
 
 	k8sServicesEndpointConfigMap = "kubernetes-services-endpoint"
 
@@ -186,6 +187,55 @@ func AddBindingForKubeSystemNode(crb *rbacv1.ClusterRoleBinding) {
 		Kind:     "Group",
 		Name:     "system:nodes",
 	})
+}
+
+// We create a cluster role and cluster role binding to give the kube-system calico-node
+// permissions to create serviceaccount tokens. This is needed to make sure that the down-level calico-node maintains
+// the permissions it needs in order to launch, since the calico-node clusterrole is shared with the
+// operator resource and the operator removes this permission on upgrade (instead
+// delegating this power to the cni-plugin in the calico-system namespace).
+//
+// This logic can likely be removed after Calico v3.35, as we'll no longer need to support upgrading from versions
+// where calico-node needed this permission.
+func ClusterRoleBindingForKubeSystemNode() *rbacv1.ClusterRoleBinding {
+	crb := &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: calicoNodeMigrationName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     calicoNodeMigrationName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "calico-node",
+				Namespace: kubeSystem,
+			},
+		},
+	}
+	return crb
+}
+
+func ClusterRoleForKubeSystemNode() *rbacv1.ClusterRole {
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: calicoNodeMigrationName,
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"create"},
+			},
+		},
+	}
+	return role
 }
 
 // SetTyphaAntiAffinity updates the Deployment passed in with a PodAntiAffinity

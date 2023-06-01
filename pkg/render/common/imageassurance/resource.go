@@ -20,7 +20,7 @@ const (
 	ImageAssuranceRuntimeCleanerAPITokenHashAnnontation = "hash.operator.tigera.io/runtime-cleaner-image-assurance-api-token"
 	ImageAssuranceSecretName                            = "tigera-image-assurance-api-cert"
 	ScannerCLITokenSecretName                           = "tigera-image-assurance-scanner-cli-token"
-	ScannerCLIDownloadURL                               = "https://docs.calicocloud.io/image-assurance/scan-image-registries#start-the-cli-scanner"
+	ScannerCLIDownloadURL                               = "https://docs.calicocloud.io/image-assurance/scanners/cli-based-scanner#start-the-cli-scanner"
 )
 
 // Resources contains all the resource needed for Image Assurance.

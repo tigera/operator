@@ -24,3 +24,6 @@ blocks:
             - 'cache delete bin-ppc64le-${SEMAPHORE_GIT_SHA}'
             - 'cache delete go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA}'
             - 'cache delete go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA}'
+            - 'cache delete bin-s390x-${SEMAPHORE_GIT_SHA}'
+            - 'cache delete go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA}'
+            - 'cache delete go-mod-cache-s390x-${SEMAPHORE_GIT_SHA}'

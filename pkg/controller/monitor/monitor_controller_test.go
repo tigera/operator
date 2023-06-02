@@ -73,6 +73,7 @@ var _ = Describe("Monitor controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("RemoveDeployments", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", common.TigeraPrometheusNamespace)
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 

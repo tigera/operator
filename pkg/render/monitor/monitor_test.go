@@ -143,7 +143,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(1))
+		Expect(toDelete).To(HaveLen(2))
 
 		// Check the namespace.
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -590,7 +590,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(1))
+		Expect(toDelete).To(HaveLen(2))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)

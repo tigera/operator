@@ -191,6 +191,10 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
+
+	// run cloud image customizations
+	c.resolveCloudImages()
+
 	return nil
 }
 

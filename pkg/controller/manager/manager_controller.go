@@ -157,10 +157,6 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.CloudManagerConfigOverrideName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
 	if elasticExternal {
 		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
@@ -546,11 +542,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		} else {
 			elasticLicenseType = render.ElasticsearchLicenseTypeBasic
 		}
-	}
-
-	// Cloud modifications
-	if err = r.cloudConfigOverride(ctx); err != nil {
-		return reconcile.Result{}, err
 	}
 
 	var mcr render.ManagerCloudResources

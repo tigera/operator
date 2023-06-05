@@ -153,38 +153,39 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		)
 	})
 
-	render.VoltronExtraEnv = map[string]string{
-		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE1": "value1",
-		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3": "value3",
-		"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2": "value2",
-	}
-	resources := renderObjects(renderConfig{
-		oidc:                  false,
-		managementCluster:     nil,
-		installation:          installation,
-		cloudRBACEnabled:      true,
-		voltronMetricsEnabled: true,
-	})
+	Describe("voltron", func() {
+		cloudResources := render.ManagerCloudResources{
+			VoltronExtraEnv: map[string]string{
+				"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE1": "value1",
+				"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3": "value3",
+				"VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2": "value2",
+			},
+		}
+		resources := renderObjects(renderConfig{
+			oidc:                  false,
+			managementCluster:     nil,
+			installation:          installation,
+			cloudRBACEnabled:      true,
+			voltronMetricsEnabled: true,
+			cloudResources:        cloudResources,
+		})
 
-	deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-	template := deployment.Spec.Template.Spec
+		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		template := deployment.Spec.Template.Spec
 
-	It("should render voltron resources for Cloud RBAC", func() {
+		var voltron corev1.Container
+		BeforeEach(func() {
+			Expect(len(template.Containers)).Should(Equal(3))
+			voltron = template.Containers[2]
+		})
 
-		Expect(len(template.Containers)).Should(Equal(3))
-		var manager = template.Containers[0]
-		var esProxy = template.Containers[1]
-		var voltron = template.Containers[2]
+		It("should set image correctly", func() {
+			Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
+		})
 
-		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
-		Expect(esProxy.Image).Should(Equal(components.CloudRegistry + "tigera/es-proxy:tesla-" + components.ComponentEsProxy.Version))
-		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
-
-		testsupport.ExpectMatchesGoldenYaml("manager-cloud-rbac-all", resources)
-	})
-
-	Context("voltron", func() {
-		var voltron = template.Containers[2]
+		It("should match golden file", func() {
+			testsupport.ExpectMatchesGoldenYaml("manager-cloud-rbac-all", resources)
+		})
 
 		It("should have the ca secret volume", func() {
 			Expect(template.Volumes).To(ContainElement(
@@ -231,6 +232,41 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 				{Name: "VOLTRON_EXTRA_ENVIRONMENT_VARIABLE2", Value: "value2"},
 				{Name: "VOLTRON_EXTRA_ENVIRONMENT_VARIABLE3", Value: "value3"},
 			}))
+		})
+	})
+
+	Describe("manager", func() {
+		const customImage = "overridden/image"
+
+		resources := renderObjects(renderConfig{
+			installation: installation,
+			cloudResources: render.ManagerCloudResources{
+				ManagerImage: customImage,
+				ManagerExtraEnv: map[string]string{
+					"FOO": "bar",
+					"BAZ": "ban",
+				},
+			},
+		})
+
+		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		template := deployment.Spec.Template.Spec
+
+		var manager corev1.Container
+		BeforeEach(func() {
+			Expect(len(template.Containers)).Should(Equal(3))
+			manager = template.Containers[0]
+		})
+
+		It("overrides image", func() {
+			Expect(manager.Image).To(Equal(customImage))
+		})
+
+		It("custom env vars", func() {
+			Expect(manager.Env).To(ContainElements(
+				corev1.EnvVar{Name: "FOO", Value: "bar"},
+				corev1.EnvVar{Name: "BAZ", Value: "ban"},
+			))
 		})
 	})
 })

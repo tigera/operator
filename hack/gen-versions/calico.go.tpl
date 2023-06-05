@@ -46,6 +46,7 @@ var (
 	ComponentCalicoKubeControllersFIPS = component{
 		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components  "calico/node" }}
@@ -59,6 +60,7 @@ var (
 	ComponentCalicoNodeFIPS = component{
 		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -72,6 +74,7 @@ var (
 	ComponentCalicoTyphaFIPS = component{
 		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.flexvol }}
@@ -92,6 +95,7 @@ var (
 	ComponentCalicoAPIServerFIPS = component{
 		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
@@ -112,6 +116,7 @@ var (
 	ComponentCalicoCSIFIPS = component{
 		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
@@ -125,6 +130,7 @@ var (
 	ComponentCalicoCSIRegistrarFIPS = component{
 		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 	ComponentOperatorInit = component{

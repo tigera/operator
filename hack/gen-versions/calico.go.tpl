@@ -39,16 +39,37 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/kube-controllers" }}
+	ComponentCalicoKubeControllersFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components  "calico/node" }}
 	ComponentCalicoNode = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components  "calico/node" }}
+	ComponentCalicoNodeFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with .Components.typha }}
 	ComponentCalicoTypha = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with .Components.typha }}
+	ComponentCalicoTyphaFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.flexvol }}
@@ -63,6 +84,13 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/apiserver"}}
+	ComponentCalicoAPIServerFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
 	ComponentWindowsUpgrade = component{
 		Version: "{{ .Version }}",
@@ -75,10 +103,24 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/csi"}}
+	ComponentCalicoCSIFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
 	ComponentCalicoCSIRegistrar = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar"}}
+	ComponentCalicoCSIRegistrarFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 	ComponentOperatorInit = component{
@@ -90,13 +132,19 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
+		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
+		ComponentCalicoNodeFIPS,
 		ComponentCalicoTypha,
+		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
+		ComponentCalicoAPIServerFIPS,
 		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
+		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalicoCSIRegistrarFIPS,
 	}
 )

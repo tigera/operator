@@ -47,7 +47,6 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 			ComponentCalicoKubeControllers,
 			ComponentCalicoKubeControllersFIPS,
 			ComponentFlexVolume,
-			ComponentFlexVolumeFIPS,
 			ComponentCalicoAPIServer,
 			ComponentCalicoAPIServerFIPS,
 			ComponentWindowsUpgrade,

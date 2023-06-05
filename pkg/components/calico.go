@@ -67,11 +67,6 @@ var (
 		Image:   "calico/pod2daemon-flexvol",
 	}
 
-	ComponentFlexVolumeFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/pod2daemon-flexvol",
-	}
-
 	ComponentCalicoAPIServer = component{
 		Version: "master",
 		Image:   "calico/apiserver",

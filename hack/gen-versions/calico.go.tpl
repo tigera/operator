@@ -75,12 +75,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with .Components.flexvol }}
-	ComponentFlexVolumeFIPS = component{
-		Version: "{{ .Version }}-fips",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 {{ with index .Components "calico/apiserver"}}
 	ComponentCalicoAPIServer = component{
 		Version: "{{ .Version }}",

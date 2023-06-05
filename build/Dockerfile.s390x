@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG QEMU_IMAGE=calico/go-build:v0.76-ppc64le
+ARG QEMU_IMAGE=calico/go-build:v0.84-s390x
 FROM ${QEMU_IMAGE} as qemu
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.8 AS ubi
@@ -34,8 +34,6 @@ COPY --from=qemu /usr/bin/qemu-*-static /usr/bin/
 COPY --from=ubi /licenses /licenses
 COPY --from=ubi /etc/pki /etc/pki
 COPY --from=ubi /usr/share/pki /usr/share/pki
-COPY --from=ubi /lib /lib
-COPY --from=ubi /lib64 /lib64
 
 ARG GIT_VERSION=unknown
 LABEL name="Tigera Operator" \
@@ -50,7 +48,7 @@ ENV OPERATOR=/usr/local/bin/operator \
     USER_UID=10001
 
 # Install operator binary
-COPY build/_output/bin/operator-ppc64le ${OPERATOR}
+COPY build/_output/bin/operator-s390x ${OPERATOR}
 
 # The exec form of ENTRYPOINT does not invoke a command shell.
 # This means that normal shell processing does not happen, so will not

@@ -874,14 +874,14 @@ var _ = Describe("Node rendering tests", func() {
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
 				Expect(nodeContainer).ToNot(BeNil())
 				Expect(nodeContainer.SecurityContext).ToNot(BeNil())
-				Expect(*nodeContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+				Expect(*nodeContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*nodeContainer.SecurityContext.Privileged).To(BeFalse())
 				Expect(*nodeContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
 				Expect(*nodeContainer.SecurityContext.RunAsNonRoot).To(BeTrue())
 				Expect(*nodeContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 				Expect(nodeContainer.SecurityContext.Capabilities).To(Equal(
 					&corev1.Capabilities{
-						Drop: []corev1.Capability{"ALL"},
+						Drop: []corev1.Capability{},
 						Add: []corev1.Capability{
 							"NET_ADMIN",
 							"NET_BIND_SERVICE",
@@ -896,7 +896,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// hostpath init container should have the correct env and security context.
 				hostPathContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "hostpath-init")
-				rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "999")
+				rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "10001")
 				Expect(*hostPathContainer.SecurityContext.RunAsUser).To(Equal(int64(0)))
 
 				// Verify hostpath init container volume mounts.
@@ -2237,7 +2237,8 @@ var _ = Describe("Node rendering tests", func() {
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
-				Expect(len(resources)).To(Equal(defaultNumExpectedResources), fmt.Sprintf("resources are %v", resources))
+				// +2 for temporary calico-node ClusterRole and ClusterRoleBinding during namespace migration
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources+2), fmt.Sprintf("resources are %v", resources))
 
 				// Should render the correct resources.
 				Expect(rtest.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())

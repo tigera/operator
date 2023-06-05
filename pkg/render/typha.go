@@ -505,6 +505,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	return corev1.Container{
 		Name:            TyphaContainerName,
 		Image:           c.typhaImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(),
 		VolumeMounts:    c.typhaVolumeMounts(),

@@ -366,6 +366,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
 			Image:              &mc.alertmanagerImage,
+			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
 			Replicas:           ptr.Int32ToPtr(3),
@@ -471,8 +472,9 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
 				Containers: []corev1.Container{
 					{
-						Name:  "authn-proxy",
-						Image: mc.prometheusServiceImage,
+						Name:            "authn-proxy",
+						Image:           mc.prometheusServiceImage,
+						ImagePullPolicy: render.ImagePullPolicy(),
 						Ports: []corev1.ContainerPort{
 							{
 								ContainerPort: PrometheusProxyPort,
@@ -501,6 +503,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					},
 				},
 				Image:            &mc.prometheusImage,
+				ImagePullPolicy:  render.ImagePullPolicy(),
 				ImagePullSecrets: secret.GetReferenceList(mc.cfg.PullSecrets),
 				InitContainers:   initContainers,
 				// ListenLocal makes the Prometheus server listen on loopback, so that it

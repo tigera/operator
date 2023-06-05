@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -246,10 +248,11 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:         DeploymentName,
-					Image:        e.esGatewayImage,
-					Env:          envVars,
-					VolumeMounts: volumeMounts,
+					Name:            DeploymentName,
+					Image:           e.esGatewayImage,
+					ImagePullPolicy: render.ImagePullPolicy(),
+					Env:             envVars,
+					VolumeMounts:    volumeMounts,
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -282,7 +285,11 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: ptr.IntOrStrPtr("0"),
+					MaxSurge:       ptr.IntOrStrPtr("100%"),
+				},
 			},
 			Template: *podTemplate,
 			Replicas: e.cfg.Installation.ControlPlaneReplicas,

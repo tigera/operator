@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,18 +23,21 @@ var (
 	CalicoRelease string = "master"
 
 	ComponentCalicoCNI = component{
-		Version: "master",
-		Image:   "calico/cni",
+		Version:  "master",
+		Image:    "calico/cni",
+		Registry: "",
 	}
 
 	ComponentCalicoCNIFIPS = component{
-		Version: "master-fips",
-		Image:   "calico/cni",
+		Version:  "master-fips",
+		Image:    "calico/cni",
+		Registry: "",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version: "master",
-		Image:   "calico/kube-controllers",
+		Version:  "master",
+		Image:    "calico/kube-controllers",
+		Registry: "",
 	}
 
 	ComponentCalicoKubeControllersFIPS = component{
@@ -43,8 +46,9 @@ var (
 	}
 
 	ComponentCalicoNode = component{
-		Version: "master",
-		Image:   "calico/node",
+		Version:  "master",
+		Image:    "calico/node",
+		Registry: "",
 	}
 
 	ComponentCalicoNodeFIPS = component{
@@ -53,8 +57,9 @@ var (
 	}
 
 	ComponentCalicoTypha = component{
-		Version: "master",
-		Image:   "calico/typha",
+		Version:  "master",
+		Image:    "calico/typha",
+		Registry: "",
 	}
 
 	ComponentCalicoTyphaFIPS = component{
@@ -63,13 +68,15 @@ var (
 	}
 
 	ComponentFlexVolume = component{
-		Version: "master",
-		Image:   "calico/pod2daemon-flexvol",
+		Version:  "master",
+		Image:    "calico/pod2daemon-flexvol",
+		Registry: "",
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version: "master",
-		Image:   "calico/apiserver",
+		Version:  "master",
+		Image:    "calico/apiserver",
+		Registry: "",
 	}
 
 	ComponentCalicoAPIServerFIPS = component{
@@ -78,13 +85,15 @@ var (
 	}
 
 	ComponentWindowsUpgrade = component{
-		Version: "master",
-		Image:   "calico/windows-upgrade",
+		Version:  "master",
+		Image:    "calico/windows-upgrade",
+		Registry: "",
 	}
 
 	ComponentCalicoCSI = component{
-		Version: "master",
-		Image:   "calico/csi",
+		Version:  "master",
+		Image:    "calico/csi",
+		Registry: "",
 	}
 
 	ComponentCalicoCSIFIPS = component{
@@ -93,8 +102,9 @@ var (
 	}
 
 	ComponentCalicoCSIRegistrar = component{
-		Version: "master",
-		Image:   "calico/node-driver-registrar",
+		Version:  "master",
+		Image:    "calico/node-driver-registrar",
+		Registry: "",
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = component{

@@ -95,7 +95,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
 		Image:           c.csiImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: ImagePullPolicy(),
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
 			"--loglevel=$(LOG_LEVEL)",
@@ -121,10 +121,6 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				MountPath: filepath.Clean("/var/run"),
 			},
 			{
-				Name:      "etccalico",
-				MountPath: filepath.Clean("/etc/calico"),
-			},
-			{
 				Name:      "socket-dir",
 				MountPath: filepath.Clean("/csi"),
 			},
@@ -140,7 +136,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	registrarContainer := corev1.Container{
 		Name:            CSIRegistrarContainerName,
 		Image:           c.csiRegistrarImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: ImagePullPolicy(),
 		Args: []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
@@ -194,14 +190,6 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
 					Path: filepath.Clean("/var/run"),
-				},
-			},
-		},
-		{
-			Name: "etccalico",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: filepath.Clean("/etc/calico"),
 				},
 			},
 		},

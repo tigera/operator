@@ -33,6 +33,7 @@ const (
 )
 
 var TigeraNamespaceSelector = createNamespaceSelector(
+	common.CalicoNamespace,
 	render.GuardianNamespace,
 	render.ComplianceNamespace,
 	render.DexNamespace,

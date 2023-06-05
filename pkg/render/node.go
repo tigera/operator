@@ -232,6 +232,14 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, certificatemanagement.CSRClusterRole())
 	}
 
+	if c.cfg.MigrateNamespaces {
+		objs = append(objs, migration.ClusterRoleForKubeSystemNode())
+		objs = append(objs, migration.ClusterRoleBindingForKubeSystemNode())
+	} else {
+		objsToDelete = append(objsToDelete, migration.ClusterRoleForKubeSystemNode())
+		objsToDelete = append(objsToDelete, migration.ClusterRoleBindingForKubeSystemNode())
+	}
+
 	if c.cfg.Terminating {
 		return objsToKeep, append(objs, objsToDelete...)
 	}
@@ -800,7 +808,7 @@ func (c *nodeComponent) birdTemplateConfigMap() *corev1.ConfigMap {
 }
 
 // clusterAdminClusterRoleBinding returns a ClusterRoleBinding for DockerEE to give
-// the cluster-admin role to calico-node, this is needed for calico-node to be
+// the cluster-admin role to calico-node and calico-cni-plugin, this is needed for calico-node/calico-cni-plugin to be
 // able to use hostNetwork in Docker Enterprise.
 func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
@@ -818,6 +826,11 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 			{
 				Kind:      "ServiceAccount",
 				Name:      CalicoNodeObjectName,
+				Namespace: common.CalicoNamespace,
+			},
+			{
+				Kind:      "ServiceAccount",
+				Name:      CalicoCNIPluginObjectName,
 				Namespace: common.CalicoNamespace,
 			},
 		},
@@ -1118,6 +1131,7 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{"/opt/cni/bin/install"},
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
@@ -1135,6 +1149,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "flexvol-driver",
 		Image:           c.flexvolImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,
 	}
@@ -1171,6 +1186,7 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "mount-bpffs",
 		Image:           c.nodeImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{CalicoNodeObjectName, "-init"},
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
@@ -1226,6 +1242,9 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 			"NET_BIND_SERVICE",
 			"NET_RAW",
 		}
+		// Set the privilege escalation to true so that routes, ipsets can be programmed.
+		sc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+		sc.Capabilities.Drop = []corev1.Capability{}
 	}
 
 	lp, rp := c.nodeLivenessReadinessProbes()
@@ -1233,6 +1252,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
@@ -1812,13 +1832,14 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:    "hostpath-init",
-		Image:   c.nodeImage,
-		Command: []string{"sh", "-c", "calico-node -hostpath-init"},
+		Name:            "hostpath-init",
+		Image:           c.nodeImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{"sh", "-c", "calico-node -hostpath-init"},
 		Env: []corev1.EnvVar{
-			{Name: "NODE_USER_ID", Value: "999"},
+			{Name: "NODE_USER_ID", Value: "10001"},
 		},
-		SecurityContext: securitycontext.NewRootContext(false),
+		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
 	}
 }

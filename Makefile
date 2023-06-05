@@ -57,6 +57,9 @@ endif
 ifeq ($(ARCH),amd64)
 	TARGET_PLATFORM=amd64
 endif
+ifeq ($(ARCH),s390x)
+	TARGET_PLATFORM=s390x
+endif
 EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
 # location of docker credentials to push manifests
@@ -87,8 +90,7 @@ ifneq ($(BUILDARCH),$(ARCH))
 endif
 
 # list of arches *not* to build when doing *-all
-#    until s390x works correctly
-EXCLUDEARCH ?= s390x
+EXCLUDEARCH ?=
 VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 # We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
@@ -104,7 +106,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.84
+GO_BUILD_VER?=v0.85
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')

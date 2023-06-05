@@ -311,7 +311,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				{
 					Name:            DeploymentName,
 					Image:           l.linseedImage,
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: securitycontext.NewNonRootContext(),
@@ -524,6 +524,12 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      dpi.DPISourceEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.PolicyRecommendationEntityRule,
 					Destination: linseedIngressDestinationEntityRule,
 				},
 			},

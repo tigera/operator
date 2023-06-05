@@ -938,10 +938,11 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	apiServer := corev1.Container{
-		Name:  APIServerContainerName,
-		Image: c.apiServerImage,
-		Args:  c.startUpArgs(),
-		Env:   env,
+		Name:            APIServerContainerName,
+		Image:           c.apiServerImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Args:            c.startUpArgs(),
+		Env:             env,
 		// OpenShift apiserver needs privileged access to write audit logs to host path volume.
 		// Audit logs are owned by root on hosts so we need to be root user and group.
 		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
@@ -1034,9 +1035,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	container := corev1.Container{
-		Name:  TigeraAPIServerQueryServerContainerName,
-		Image: c.queryServerImage,
-		Env:   env,
+		Name:            TigeraAPIServerQueryServerContainerName,
+		Image:           c.queryServerImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Env:             env,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{

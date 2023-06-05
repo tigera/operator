@@ -359,9 +359,6 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 				return err
 			}
 			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrarFIPS, reg, path, prefix, is)
-			if err != nil {
-				return err
-			}
 		} else {
 			c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
 			if err != nil {

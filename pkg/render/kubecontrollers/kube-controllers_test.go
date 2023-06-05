@@ -583,6 +583,26 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(passed).To(Equal(true))
 	})
 
+	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
+		cfg.Installation.Variant = operatorv1.Calico
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*appsv1.Deployment)
+
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name == kubecontrollers.KubeController {
+				Expect(container.Image).To(ContainSubstring("-fips"))
+				break
+			}
+		}
+
+	})
+
 	It("should add the OIDC prefix env variables", func() {
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true

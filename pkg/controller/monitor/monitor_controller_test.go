@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -73,6 +73,7 @@ var _ = Describe("Monitor controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("RemoveDeployments", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", common.TigeraPrometheusNamespace)
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 

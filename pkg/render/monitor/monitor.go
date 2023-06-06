@@ -21,6 +21,7 @@ import (
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -214,9 +215,13 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, mc.prometheusOperatorPodSecurityPolicy())
 	}
 
-	// Remove the pod monitor that existed prior to v1.25.
 	var toDelete []client.Object
-	toDelete = append(toDelete, &monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}})
+	toDelete = append(toDelete,
+		// Remove the pod monitor that existed prior to v1.25.
+		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}},
+		// Remove the tigera-prometheus-api deployment that was part of release-v1.23, but has been removed since.
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-api", Namespace: common.TigeraPrometheusNamespace}},
+	)
 
 	return toCreate, toDelete
 }

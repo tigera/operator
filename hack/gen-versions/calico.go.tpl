@@ -41,9 +41,8 @@ var (
 {{- end }}
 {{ with index .Components "calico/kube-controllers" }}
 	ComponentCalicoKubeControllersFIPS = component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components  "calico/node" }}
@@ -54,9 +53,8 @@ var (
 {{- end }}
 {{ with index .Components  "calico/node" }}
 	ComponentCalicoNodeFIPS = component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -67,9 +65,8 @@ var (
 {{- end }}
 {{ with .Components.typha }}
 	ComponentCalicoTyphaFIPS = component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with .Components.flexvol }}
@@ -86,9 +83,8 @@ var (
 {{- end }}
 {{ with index .Components "calico/apiserver"}}
 	ComponentCalicoAPIServerFIPS = component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
@@ -105,9 +101,8 @@ var (
 {{- end }}
 {{ with index .Components "calico/csi"}}
 	ComponentCalicoCSIFIPS = component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
@@ -118,9 +113,8 @@ var (
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
 	ComponentCalicoCSIRegistrarFIPS = component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 	ComponentOperatorInit = component{

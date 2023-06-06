@@ -375,6 +375,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
 
+	// Populate a list of namespaces to be displayed in the service graph Tigera infrastructure layer.
+	sgLayerTigeraNameSpaces := render.DefaultSGLayerTigeraNamespaces()
+	sgLayerTigeraNameSpaces[render.ManagerNamespace] = true
+
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -386,6 +390,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	} else if authenticationCR != nil {
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
+		sgLayerTigeraNameSpaces[render.DexNamespace] = true
 	}
 
 	// Create trusted bundle.
@@ -564,6 +569,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		replicas = &mcmReplicas
 	}
 
+	amz, err := utils.GetAmazonCloudIntegration(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the GetAmazonCloudIntegration configuration", err, reqLogger)
+		return reconcile.Result{}, nil
+	} else if amz != nil {
+		sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] = true
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
@@ -584,6 +597,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ComplianceLicenseActive: complianceLicenseFeatureActive,
 		CloudResources:          mcr,
 		UsePSP:                  r.usePSP,
+		SGLayerTigeraNameSpaces: sgLayerTigeraNameSpaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

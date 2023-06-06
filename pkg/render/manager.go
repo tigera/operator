@@ -156,6 +156,8 @@ type ManagerConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	SGLayerTigeraNameSpaces map[string]bool
 }
 
 type managerComponent struct {
@@ -216,7 +218,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
+		managerClusterWideTigeraLayer(c.cfg.SGLayerTigeraNameSpaces),
 		managerClusterWideDefaultView(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
@@ -964,33 +966,15 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 // all of the tigera namespaces.
 //
 // Calico Enterprise only
-func managerClusterWideTigeraLayer() *v3.UISettings {
-	namespaces := []string{
-		"tigera-compliance",
-		"tigera-dex",
-		"tigera-dpi",
-		"tigera-eck-operator",
-		"tigera-elasticsearch",
-		"tigera-fluentd",
-		"tigera-guardian",
-		"tigera-intrusion-detection",
-		"tigera-kibana",
-		"tigera-manager",
-		"tigera-operator",
-		"tigera-packetcapture",
-		"tigera-policy-recommendation",
-		"tigera-prometheus",
-		"tigera-system",
-		"calico-system",
-	}
-	nodes := make([]v3.UIGraphNode, len(namespaces))
-	for i := range namespaces {
-		ns := namespaces[i]
-		nodes[i] = v3.UIGraphNode{
+func managerClusterWideTigeraLayer(namespaces map[string]bool) *v3.UISettings {
+
+	nodes := make([]v3.UIGraphNode, 0, len(namespaces))
+	for ns := range namespaces {
+		nodes = append(nodes, v3.UIGraphNode{
 			ID:   "namespace/" + ns,
 			Type: "namespace",
 			Name: ns,
-		}
+		})
 	}
 
 	return &v3.UISettings{
@@ -1031,5 +1015,25 @@ func managerClusterWideDefaultView() *v3.UISettings {
 				}},
 			},
 		},
+	}
+}
+
+// DefaultSGLayerTigeraNamespaces returns the default list of namespaces to be displayed in Service graph
+// map is used to avoid duplication of namespaces.
+func DefaultSGLayerTigeraNamespaces() map[string]bool {
+	return map[string]bool{
+		"tigera-compliance":            true,
+		"tigera-dpi":                   true,
+		"tigera-eck-operator":          true,
+		"tigera-elasticsearch":         true,
+		"tigera-fluentd":               true,
+		"tigera-intrusion-detection":   true,
+		"tigera-kibana":                true,
+		"tigera-operator":              true,
+		"tigera-packetcapture":         true,
+		"tigera-policy-recommendation": true,
+		"tigera-prometheus":            true,
+		"tigera-system":                true,
+		"calico-system":                true,
 	}
 }

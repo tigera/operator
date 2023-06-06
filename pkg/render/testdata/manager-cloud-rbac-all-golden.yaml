@@ -346,55 +346,7 @@ spec:
   description: Tigera Infrastructure
   group: cluster-settings
   layer:
-    nodes:
-    - id: namespace/tigera-compliance
-      name: tigera-compliance
-      type: namespace
-    - id: namespace/tigera-dex
-      name: tigera-dex
-      type: namespace
-    - id: namespace/tigera-dpi
-      name: tigera-dpi
-      type: namespace
-    - id: namespace/tigera-eck-operator
-      name: tigera-eck-operator
-      type: namespace
-    - id: namespace/tigera-elasticsearch
-      name: tigera-elasticsearch
-      type: namespace
-    - id: namespace/tigera-fluentd
-      name: tigera-fluentd
-      type: namespace
-    - id: namespace/tigera-guardian
-      name: tigera-guardian
-      type: namespace
-    - id: namespace/tigera-intrusion-detection
-      name: tigera-intrusion-detection
-      type: namespace
-    - id: namespace/tigera-kibana
-      name: tigera-kibana
-      type: namespace
-    - id: namespace/tigera-manager
-      name: tigera-manager
-      type: namespace
-    - id: namespace/tigera-operator
-      name: tigera-operator
-      type: namespace
-    - id: namespace/tigera-packetcapture
-      name: tigera-packetcapture
-      type: namespace
-    - id: namespace/tigera-policy-recommendation
-      name: tigera-policy-recommendation
-      type: namespace
-    - id: namespace/tigera-prometheus
-      name: tigera-prometheus
-      type: namespace
-    - id: namespace/tigera-system
-      name: tigera-system
-      type: namespace
-    - id: namespace/calico-system
-      name: calico-system
-      type: namespace
+    nodes: []
 
 ---
 apiVersion: projectcalico.org/v3

@@ -331,16 +331,29 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	// Populate a list of namespaces to be displayed in the service graph Tigera infrastructure layer.
+	sgLayerTigeraNameSpaces := render.DefaultSGLayerTigeraNamespaces()
+	sgLayerTigeraNameSpaces[render.GuardianNamespace] = true
+
+	amz, err := utils.GetAmazonCloudIntegration(ctx, r.Client)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the GetAmazonCloudIntegration configuration", err, reqLogger)
+		return reconcile.Result{}, nil
+	} else if amz != nil {
+		sgLayerTigeraNameSpaces[render.AmazonCloudIntegrationNamespace] = true
+	}
+
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
-		TunnelCAType:      managementClusterConnection.Spec.TLS.CA,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
-		Installation:      instl,
-		TunnelSecret:      tunnelSecret,
-		TrustedCertBundle: trustedCertBundle,
-		UsePSP:            r.usePSP,
+		URL:                     managementClusterConnection.Spec.ManagementClusterAddr,
+		TunnelCAType:            managementClusterConnection.Spec.TLS.CA,
+		PullSecrets:             pullSecrets,
+		Openshift:               r.Provider == operatorv1.ProviderOpenShift,
+		Installation:            instl,
+		TunnelSecret:            tunnelSecret,
+		TrustedCertBundle:       trustedCertBundle,
+		UsePSP:                  r.usePSP,
+		SGLayerTigeraNameSpaces: sgLayerTigeraNameSpaces,
 	}
 
 	components := []render.Component{render.Guardian(guardianCfg)}

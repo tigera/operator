@@ -38,9 +38,8 @@ var (
 	}
 
 	ComponentCalicoKubeControllersFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/kube-controllers",
-		Registry: "",
+		Version: "v3.25.1-fips",
+		Image:   "calico/kube-controllers",
 	}
 
 	ComponentCalicoNode = component{
@@ -49,9 +48,8 @@ var (
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/node",
-		Registry: "",
+		Version: "v3.25.1-fips",
+		Image:   "calico/node",
 	}
 
 	ComponentCalicoTypha = component{
@@ -60,9 +58,8 @@ var (
 	}
 
 	ComponentCalicoTyphaFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/typha",
-		Registry: "",
+		Version: "v3.25.1-fips",
+		Image:   "calico/typha",
 	}
 
 	ComponentFlexVolume = component{
@@ -76,9 +73,8 @@ var (
 	}
 
 	ComponentCalicoAPIServerFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/apiserver",
-		Registry: "",
+		Version: "v3.25.1-fips",
+		Image:   "calico/apiserver",
 	}
 
 	ComponentWindowsUpgrade = component{
@@ -92,9 +88,8 @@ var (
 	}
 
 	ComponentCalicoCSIFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/csi",
-		Registry: "",
+		Version: "v3.25.1-fips",
+		Image:   "calico/csi",
 	}
 
 	ComponentCalicoCSIRegistrar = component{
@@ -103,9 +98,8 @@ var (
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/node-driver-registrar",
-		Registry: "",
+		Version: "v3.25.1-fips",
+		Image:   "calico/node-driver-registrar",
 	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,

@@ -39,6 +39,26 @@ spec:
                   with HTTP Match rules may be defined to opt-in workloads for traffic
                   enforcement on the application layer.
                 type: string
+              envoy:
+                description: User-configurable settings for the Envoy proxy.
+                properties:
+                  useRemoteAddress:
+                    default: false
+                    description: If set to true, the Envoy connection manager will
+                      use the real remote address of the client connection when determining
+                      internal versus external origin and manipulating various headers.
+                    type: boolean
+                  xffNumTrustedHops:
+                    default: 0
+                    description: The number of additional ingress proxy hops from
+                      the right side of the x-forwarded-for HTTP header to trust when
+                      determining the origin client’s IP address. 0 is permitted,
+                      but >=1 is the typical setting.
+                    format: int32
+                    maximum: 2147483647
+                    minimum: 0
+                    type: integer
+                type: object
               logCollection:
                 description: Specification for application layer (L7) log collection.
                 properties:

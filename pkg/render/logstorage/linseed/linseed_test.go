@@ -524,24 +524,22 @@ func expectedContainers() []corev1.Container {
 					Value: "9200",
 				},
 				{
-					Name:  "ELASTIC_USERNAME",
-					Value: "",
+					Name: "ELASTIC_USERNAME",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "tigera-ee-linseed-elasticsearch-access-gateway",
+								Name: "tigera-ee-linseed-elasticsearch-user-secret",
 							},
 							Key: "username",
 						},
 					},
 				},
 				{
-					Name:  "ELASTIC_PASSWORD",
-					Value: "",
+					Name: "ELASTIC_PASSWORD",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "tigera-ee-linseed-elasticsearch-access-gateway",
+								Name: "tigera-ee-linseed-elasticsearch-user-secret",
 							},
 							Key: "password",
 						},

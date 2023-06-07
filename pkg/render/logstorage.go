@@ -91,7 +91,7 @@ const (
 	ElasticsearchInternalPort       = 9300
 	ElasticsearchOperatorUserSecret = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret    = "tigera-secure-es-elastic-user"
-	ElasticsearchLinseedUserSecret  = "tigera-ee-linseed-elasticsearch-access-gateway"
+	ElasticsearchLinseedUserSecret  = "tigera-ee-linseed-elasticsearch-user-secret"
 	ElasticsearchPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-access"
 	ElasticsearchInternalPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-internal"
 

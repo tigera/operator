@@ -42,10 +42,6 @@ spec:
               envoy:
                 description: User-configurable settings for the Envoy proxy.
                 properties:
-                  skipXFFAppend:
-                    description: If set to true, Envoy will not append the remote
-                      address to the x-forwarded-for HTTP header.
-                    type: boolean
                   useRemoteAddress:
                     description: If set to true, the Envoy connection manager will
                       use the real remote address of the client connection when determining

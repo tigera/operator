@@ -172,7 +172,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling ApplicationLayer")
 
-	alp, err := getApplicationLayer(ctx, r.client)
+	instance, err := getApplicationLayer(ctx, r.client)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -190,7 +190,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&alp.ObjectMeta)
+	defer r.status.SetMetaData(&instance.ObjectMeta)
 
 	// Changes for updating application layer status conditions.
 	if request.Name == ResourceName && request.Namespace == "" {
@@ -199,24 +199,24 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		alp.Status.Conditions = status.UpdateStatusCondition(alp.Status.Conditions, ts.Status.Conditions)
-		if err := r.client.Status().Update(ctx, alp); err != nil {
+		instance.Status.Conditions = status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions)
+		if err := r.client.Status().Update(ctx, instance); err != nil {
 			log.WithValues("reason", err).Info("Failed to create ApplicationLayer status conditions.")
 			return reconcile.Result{}, err
 		}
 	}
 
-	preDefaultPatchFrom := client.MergeFrom(alp.DeepCopy())
+	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
-	updateApplicationLayerWithDefaults(alp)
+	updateApplicationLayerWithDefaults(instance)
 
-	if err = validateApplicationLayer(alp); err != nil {
+	if err = validateApplicationLayer(instance); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	// Write the application layer back to the datastore, so the controllers depending on this can reconcile.
-	if err = r.client.Patch(ctx, alp, preDefaultPatchFrom); err != nil {
+	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults to applicationLayer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -249,14 +249,14 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	// Patch felix configuration if necessary.
-	if err = r.patchFelixConfiguration(ctx, alp); err != nil {
+	if err = r.patchFelixConfiguration(ctx, instance); err != nil {
 		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	var passthroughModSecurityRuleSet bool
 	var modSecurityRuleSet *corev1.ConfigMap
-	if r.isWAFEnabled(&alp.Spec) {
+	if r.isWAFEnabled(&instance.Spec) {
 		if modSecurityRuleSet, passthroughModSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall ModSecurity rule set", err, reqLogger)
 			return reconcile.Result{}, err
@@ -267,29 +267,24 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		}
 	}
 
-	// prior client.Patch may nil out missing fields (in cases of outdated crd spec).
-	// We need to re-fill out defaults again. We don't need to do this if CRD is updated to match.
-	updateApplicationLayerWithDefaults(alp)
-
-	lcSpec := alp.Spec.LogCollection
+	lcSpec := instance.Spec.LogCollection
 	config := &applicationlayer.Config{
 		PullSecrets:            pullSecrets,
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
-		WAFEnabled:             r.isWAFEnabled(&alp.Spec),
-		LogsEnabled:            r.isLogsCollectionEnabled(&alp.Spec),
-		ALPEnabled:             r.isALPEnabled(&alp.Spec),
+		WAFEnabled:             r.isWAFEnabled(&instance.Spec),
+		LogsEnabled:            r.isLogsCollectionEnabled(&instance.Spec),
+		ALPEnabled:             r.isALPEnabled(&instance.Spec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
 		ModSecurityConfigMap:   modSecurityRuleSet,
-		UseRemoteAddressXFF:    alp.Spec.EnvoySettings.UseRemoteAddress,
-		NumTrustedHopsXFF:      alp.Spec.EnvoySettings.XFFNumTrustedHops,
-		SkipAppendXFF:          alp.Spec.EnvoySettings.SkipXFFAppend,
+		UseRemoteAddressXFF:    instance.Spec.EnvoySettings.UseRemoteAddress,
+		NumTrustedHopsXFF:      instance.Spec.EnvoySettings.XFFNumTrustedHops,
 		UsePSP:                 r.usePSP,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
-	ch := utils.NewComponentHandler(log, r.client, r.scheme, alp)
+	ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
@@ -320,8 +315,8 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	// Everything is available - update the CRD status.
-	alp.Status.State = operatorv1.TigeraStatusReady
-	if err = r.client.Status().Update(ctx, alp); err != nil {
+	instance.Status.State = operatorv1.TigeraStatusReady
+	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
 

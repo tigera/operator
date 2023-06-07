@@ -277,7 +277,6 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		envoyConfigMapContents := envoyConfigMap.Data[applicationlayer.EnvoyConfigMapKey]
 		Expect(envoyConfigMapContents).To(ContainSubstring("xff_num_trusted_hops: 1"))
 		Expect(envoyConfigMapContents).To(ContainSubstring("use_remote_address: true"))
-		Expect(envoyConfigMapContents).To(ContainSubstring("skip_xff_append: false"))
 	})
 
 	It("should render with default l7 ALP configuration", func() {

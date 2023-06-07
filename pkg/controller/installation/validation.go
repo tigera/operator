@@ -317,10 +317,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if err != nil {
 				return err
 			}
-
-			if *instance.Spec.CalicoNetwork.HostPorts != operatorv1.HostPortsDisabled && bpfDataplane {
-				return fmt.Errorf("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane")
-			}
 		}
 
 		if instance.Spec.CalicoNetwork.MultiInterfaceMode != nil {

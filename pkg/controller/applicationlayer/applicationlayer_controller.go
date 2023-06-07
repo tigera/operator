@@ -359,7 +359,10 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	}
 
 	if al.Spec.EnvoySettings == nil {
-		al.Spec.EnvoySettings = &operatorv1.EnvoySettings{}
+		al.Spec.EnvoySettings = &operatorv1.EnvoySettings{
+			UseRemoteAddress:  false,
+			XFFNumTrustedHops: 0,
+		}
 	}
 }
 

@@ -11,9 +11,13 @@ URL=$1
 # personalRemote is the fork where branches will be pushed to and pull requests submitted from.
 # can be the same as 'origin' but recommended to be a personal fork or bot-owned fork.
 personalRemote=${REMOTE:-git@github.com:tigera/operator-cloud.git}
-releaseName=`curl $URL/pinned_versions.yml | yq r - "[0].release_name"`
-releaseAlias=`echo $releaseName | cut -d- -f6`
-operatorVersionString=`curl $URL/pinned_versions.yml | yq r - "[0].tigera-operator.version"`
+
+versions=$(curl $URL/pinned_versions.yml | yq r - "[0]")
+releaseName=$(yq r - "release_name" <<< $versions)
+releaseNickname=$(cut -d- -f6 <<< $releaseName)
+operatorImageVersion=$(yq r - "tigera-operator.version" <<< $versions)
+branch=release-$(cut -d '.' -f 1,2 <<< $operatorImageVersion)
+commit=$(cut -d- -f3 <<< $operatorImageVersion | cut -c 2-)
 
 dir=$(mktemp -d)
 
@@ -24,16 +28,6 @@ function precheck(){
     else
         echo "Updating fork for $releaseName"
     fi
-}
-
-function getOperatorReleaseVersion(){
-    # eg. v1.30
-    echo $operatorVersionString | cut -d '.' -f 1,2
-}
-
-function getOperatorCommit(){
-    # eg. 108e449986a2
-    echo $operatorVersionString | cut -d- -f3 | cut -c 2-
 }
 
 function clone() {
@@ -56,17 +50,15 @@ function clone() {
 
 function merge() {
     pushd $dir
-    operatorCommit=$(getOperatorCommit)
-    git checkout -b update-to-$releaseAlias-hashrelease $operatorCommit
-    git merge $operatorCommit
+    git checkout -b update-$branch origin/$branch
+    git merge $commit
     popd
 }
 
 function pullrequest() {
     pushd $dir
-    operatorBranch=release-$(getOperatorReleaseVersion)
-    git push personal update-to-$releaseAlias-hashrelease 
-    gh pr create --base $operatorBranch --title "merge upstream updates from $releaseAlias hashrelease" --body "Merging upstream operator updates based on [$releaseAlias enterprise hashrelease]($URL)"
+    git push personal update-$branch
+    gh pr create --base $branch --title "merge upstream $branch" --body "Merging upstream operator updates to $branch up to $commit in sync with [enterprise hashrelease '$releaseNickname']($URL)"
 }
 
 precheck

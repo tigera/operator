@@ -72,6 +72,12 @@ func (e *esGateway) modifyDeploymentForCloud(d *appsv1.Deployment) {
 			Name:  "ES_GATEWAY_KIBANA_ENDPOINT",
 			Value: "https://" + e.cfg.Cloud.ExternalKibanaDomain + ":443",
 		})
+		// Enable this so that fluentd cannot modify ILM but the POSTs fluentd performs
+		// still succeed.
+		envs = append(envs, corev1.EnvVar{
+			Name:  "ES_GATEWAY_ILM_DUMMY_ROUTE_ENABLED",
+			Value: "true",
+		})
 	}
 
 	if e.cfg.Cloud.EnableMTLS {

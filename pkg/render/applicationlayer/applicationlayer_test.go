@@ -245,6 +245,40 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 	})
 
+	It("should render with custom l7 envoy configuration", func() {
+		// create component with render the correct resources.
+		// Should render the correct resources.
+		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
+			PullSecrets:            nil,
+			Installation:           installation,
+			OsType:                 rmeta.OSTypeLinux,
+			LogsEnabled:            true,
+			LogIntervalSeconds:     ptr.Int64ToPtr(5),
+			LogRequestsPerInterval: ptr.Int64ToPtr(-1),
+			UseRemoteAddressXFF:    true,
+			NumTrustedHopsXFF:      1,
+		})
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		envoyConfigMap := rtest.GetResource(resources, applicationlayer.EnvoyConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		envoyConfigMapContents := envoyConfigMap.Data[applicationlayer.EnvoyConfigMapKey]
+		Expect(envoyConfigMapContents).To(ContainSubstring("xff_num_trusted_hops: 1"))
+		Expect(envoyConfigMapContents).To(ContainSubstring("use_remote_address: true"))
+	})
+
 	It("should render with default l7 ALP configuration", func() {
 		expectedResources := []struct {
 			name    string

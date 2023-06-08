@@ -64,10 +64,9 @@
         "protocol": "TCP",
         "destination": {
           "ports": [
-            5554,
-            9200
+            8444
           ],
-          "selector": "k8s-app == 'tigera-secure-es-gateway'",
+          "selector": "k8s-app == 'tigera-linseed'",
           "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'"
         }
       },

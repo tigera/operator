@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -103,6 +103,9 @@ func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityS
 	case operatorv1.ProviderOpenShift:
 		ns.Labels["openshift.io/run-level"] = "0"
 		ns.Annotations["openshift.io/node-selector"] = ""
+		ns.Annotations["security.openshift.io/scc.podSecurityLabelSync"] = "false"
+		ns.Labels["pod-security.kubernetes.io/audit"] = string(pss)
+		ns.Labels["pod-security.kubernetes.io/warn"] = string(pss)
 	case operatorv1.ProviderAKS:
 		ns.Labels["control-plane"] = "true"
 	}

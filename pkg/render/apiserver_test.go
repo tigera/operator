@@ -368,10 +368,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		cfg.Installation.FIPSMode = &fipsEnabled
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
+
 	})
 
 	It("should render an API server with custom configuration", func() {

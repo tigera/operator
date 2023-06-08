@@ -245,6 +245,19 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 	})
 
+	It("should render proper image when FIPS mode is enabled", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
+		cfg.ALPEnabled = true
+		component := applicationlayer.ApplicationLayer(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		dikastesContainer := ds.Spec.Template.Spec.Containers[2]
+		Expect(dikastesContainer.Image).To(ContainSubstring("-fips"))
+
+	})
+
 	It("should render with default l7 ALP configuration", func() {
 		expectedResources := []struct {
 			name    string

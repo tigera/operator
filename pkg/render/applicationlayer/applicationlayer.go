@@ -127,8 +127,11 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
-
-	c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
+	if operatorv1.IsFIPSModeEnabled(c.config.Installation.FIPSMode) {
+		c.config.dikastesImage, err = components.GetReference(components.ComponentDikastesFIPS, reg, path, prefix, is)
+	} else {
+		c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
+	}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

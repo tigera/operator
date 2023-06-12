@@ -60,6 +60,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	var bundle certificatemanagement.TrustedBundle
 	var adAPIKeyPair certificatemanagement.KeyPairInterface
 	var keyPair certificatemanagement.KeyPairInterface
+	var anomalyKeyPair certificatemanagement.KeyPairInterface
 
 	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")
 	expectedIDPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed.json")
@@ -84,6 +85,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.IntrusionDetectionTLSSecretName, "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
 		keyPair = certificatemanagement.NewKeyPair(secretTLS, []string{""}, "")
+		anomalySecretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.AnomalyDetectorTLSSecretName, "", "", nil)
+		Expect(err).NotTo(HaveOccurred())
+		anomalyKeyPair = certificatemanagement.NewKeyPair(anomalySecretTLS, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -91,6 +95,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			TrustedCertBundle:            bundle,
 			ADAPIServerCertSecret:        adAPIKeyPair,
 			IntrusionDetectionCertSecret: keyPair,
+			AnomalyDetectorCertSecret:    anomalyKeyPair,
 			Installation:                 &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			ESClusterConfig:              relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
 			ClusterDomain:                dns.DefaultClusterDomain,
@@ -615,8 +620,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		expectedADEnvs := []expectedEnvVar{
 			{"LINSEED_URL", "https://tigera-linseed.tigera-elasticsearch.svc", "", ""},
 			{"LINSEED_CA", certificatemanagement.TrustedCertBundleMountPath, "", ""},
-			{"LINSEED_CLIENT_CERT", cfg.IntrusionDetectionCertSecret.VolumeMountCertificateFilePath(), "", ""},
-			{"LINSEED_CLIENT_KEY", cfg.IntrusionDetectionCertSecret.VolumeMountKeyFilePath(), "", ""},
+			{"LINSEED_CLIENT_CERT", cfg.AnomalyDetectorCertSecret.VolumeMountCertificateFilePath(), "", ""},
+			{"LINSEED_CLIENT_KEY", cfg.AnomalyDetectorCertSecret.VolumeMountKeyFilePath(), "", ""},
 			{"LINSEED_TOKEN", "/var/run/secrets/kubernetes.io/serviceaccount/token", "", ""},
 			{"MODEL_STORAGE_API_HOST", render.ADAPIExpectedServiceName, "", ""},
 			{"MODEL_STORAGE_API_PORT", strconv.Itoa(8080), "", ""},

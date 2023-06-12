@@ -49,6 +49,7 @@ import (
 const (
 	IntrusionDetectionNamespace = "tigera-intrusion-detection"
 	IntrusionDetectionName      = "intrusion-detection-controller"
+	AnomalyDetectorsName        = "anomaly-detectors"
 
 	ElasticsearchIntrusionDetectionUserSecret    = "tigera-ee-intrusion-detection-elasticsearch-access"
 	ElasticsearchIntrusionDetectionJobUserSecret = "tigera-ee-installer-elasticsearch-access"
@@ -65,6 +66,7 @@ const (
 	ADAPIObjectPortName             = "anomaly-detection-api-https"
 	ADAPITLSSecretName              = "anomaly-detection-api-tls"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
+	AnomalyDetectorTLSSecretName    = "anomaly-detector-tls"
 	DPITLSSecretName                = "deep-packet-inspection-tls"
 	ADAPIExpectedServiceName        = "anomaly-detection-api.tigera-intrusion-detection.svc"
 	ADAPIPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
@@ -125,6 +127,7 @@ type IntrusionDetectionConfiguration struct {
 	TrustedCertBundle            certificatemanagement.TrustedBundle
 	ADAPIServerCertSecret        certificatemanagement.KeyPairInterface
 	IntrusionDetectionCertSecret certificatemanagement.KeyPairInterface
+	AnomalyDetectorCertSecret    certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -1820,11 +1823,11 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		},
 		{
 			Name:  "LINSEED_CLIENT_CERT",
-			Value: c.cfg.IntrusionDetectionCertSecret.VolumeMountCertificateFilePath(),
+			Value: c.cfg.AnomalyDetectorCertSecret.VolumeMountCertificateFilePath(),
 		},
 		{
 			Name:  "LINSEED_CLIENT_KEY",
-			Value: c.cfg.IntrusionDetectionCertSecret.VolumeMountKeyFilePath(),
+			Value: c.cfg.AnomalyDetectorCertSecret.VolumeMountKeyFilePath(),
 		},
 		{
 			Name:  "LINSEED_TOKEN",
@@ -1841,7 +1844,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		VolumeMounts: append(
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
-			c.cfg.IntrusionDetectionCertSecret.VolumeMount(c.SupportedOSType()),
+			c.cfg.AnomalyDetectorCertSecret.VolumeMount(c.SupportedOSType()),
 		),
 	}
 

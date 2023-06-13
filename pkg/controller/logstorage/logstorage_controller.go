@@ -403,6 +403,7 @@ func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle
 			esmetrics.ElasticsearchMetricsName,
 			render.IntrusionDetectionName,
 			dpi.DeepPacketInspectionName,
+			render.AnomalyDetectorsName,
 		},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			// We do not want to delete the elastic keypair secret from the tigera-elasticsearch namespace when CertificateManagement is
@@ -446,6 +447,7 @@ func (r *ReconcileLogStorage) generateSecrets(
 
 		// Get certificate for intrusion detection controller, which Linseed needs to trust in a standalone or management cluster.
 		render.IntrusionDetectionTLSSecretName,
+		render.AnomalyDetectorTLSSecretName,
 
 		// Get certificate for DPI, which Linseed needs to trust in a standalone or management cluster.
 		render.DPITLSSecretName,

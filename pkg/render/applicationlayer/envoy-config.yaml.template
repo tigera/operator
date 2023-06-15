@@ -39,6 +39,11 @@
                       transport_api_version: V3
 {{- end -}}
 
+{{- define "XFF" -}}
+                xff_num_trusted_hops: {{.NumTrustedHopsXFF}}
+                use_remote_address: {{.UseRemoteAddressXFF}}
+{{- end -}}
+
 static_resources:
   listeners:
     - name: services
@@ -76,6 +81,7 @@ static_resources:
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: ingress_http
+                {{template "XFF" .}}
                 {{if .LogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
                 route_config:
                   name: local_service
@@ -101,6 +107,7 @@ static_resources:
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: ingress_http
+                {{template "XFF" .}}
                 {{if .LogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
                 route_config:
                   name: local_service

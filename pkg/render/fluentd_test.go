@@ -145,6 +145,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
 			},
+			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 		))
 
 		container := ds.Spec.Template.Spec.Containers[0]
@@ -272,6 +273,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
 			},
+			{Name: "LINSEED_TOKEN", Value: "c:/var/run/secrets/kubernetes.io/serviceaccount/token"},
 		}
 		for _, expected := range expectedEnvs {
 			Expect(envs).To(ContainElement(expected))

@@ -540,6 +540,12 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 					Source:      dpi.DPISourceEntityRule,
 					Destination: linseedIngressDestinationEntityRule,
 				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.PolicyRecommendationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
+				},
 			},
 			Egress: egressRules,
 		},

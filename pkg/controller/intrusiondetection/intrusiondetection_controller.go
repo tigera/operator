@@ -527,6 +527,11 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	anomalyDetectorKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.AnomalyDetectorTLSSecretName, common.OperatorNamespace(), []string{render.AnomalyDetectorTLSSecretName})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	if !r.dpiAPIReady.IsReady() {
 		log.Info("Waiting for DeepPacketInspection API to be ready")
@@ -614,6 +619,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		TrustedCertBundle:            trustedBundle,
 		ADAPIServerCertSecret:        adAPIServerTLSSecret,
 		IntrusionDetectionCertSecret: intrusionDetectionKeyPair,
+		AnomalyDetectorCertSecret:    anomalyDetectorKeyPair,
 		UsePSP:                       r.usePSP,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
@@ -664,17 +670,11 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,
-			ServiceAccounts: []string{render.IntrusionDetectionName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.IntrusionDetectionCertSecret, true, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.IntrusionDetectionNamespace,
-			ServiceAccounts: []string{render.IntrusionDetectionName, render.ADAPIObjectName},
+			ServiceAccounts: []string{render.IntrusionDetectionName, render.ADAPIObjectName, render.AnomalyDetectorsName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.IntrusionDetectionCertSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.AnomalyDetectorCertSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -683,13 +683,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, false, true),
-			},
-			TrustedBundle: typhaNodeTLS.TrustedBundle,
-		}),
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       dpi.DeepPacketInspectionNamespace,
-			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(dpiKeyPair, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,

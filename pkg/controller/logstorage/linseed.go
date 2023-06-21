@@ -16,7 +16,6 @@ package logstorage
 
 import (
 	"context"
-	"fmt"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
@@ -36,7 +35,6 @@ func (r *ReconcileLogStorage) createLinseed(
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,
-	esAdminUserSecret *corev1.Secret,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
@@ -47,17 +45,6 @@ func (r *ReconcileLogStorage) createLinseed(
 	usePSP bool,
 	esClusterConfig *relasticsearch.ClusterConfig,
 ) (reconcile.Result, bool, error) {
-	// This secret should only ever contain one key.
-	if len(esAdminUserSecret.Data) != 1 {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("secret should have exactly one entry. found %d", len(esAdminUserSecret.Data)), nil, reqLogger)
-		return reconcile.Result{}, false, nil
-	}
-
-	var esAdminUserName string
-	for k := range esAdminUserSecret.Data {
-		esAdminUserName = k
-		break
-	}
 
 	cfg := &linseed.Config{
 		Installation:      install,
@@ -66,7 +53,6 @@ func (r *ReconcileLogStorage) createLinseed(
 		ClusterDomain:     r.clusterDomain,
 		KeyPair:           linseedKeyPair,
 		TokenKeyPair:      tokenKeyPair,
-		ESAdminUserName:   esAdminUserName,
 		UsePSP:            usePSP,
 		ESClusterConfig:   esClusterConfig,
 		ManagementCluster: managementCluster,

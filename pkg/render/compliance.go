@@ -437,6 +437,11 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
+
+	var initContainers []corev1.Container
+	if c.cfg.ControllerKeyPair != nil && c.cfg.ControllerKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(ComplianceNamespace))
+	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
@@ -447,6 +452,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceControllerName,
@@ -1017,6 +1023,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				MountPath: LinseedVolumeMountPath,
 			})
 	}
+	var initContainers []corev1.Container
+	if c.cfg.SnapshotterKeyPair != nil && c.cfg.SnapshotterKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(ComplianceNamespace))
+	}
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1028,6 +1038,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceSnapshotterName,
@@ -1210,6 +1221,10 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			})
 	}
 
+	var initContainers []corev1.Container
+	if c.cfg.BenchmarkerKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(ComplianceNamespace))
+	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
@@ -1220,6 +1235,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			HostPID:            true,
 			Tolerations:        rmeta.TolerateAll,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceBenchmarkerName,

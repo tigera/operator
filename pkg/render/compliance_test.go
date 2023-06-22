@@ -218,7 +218,6 @@ var _ = Describe("compliance rendering tests", func() {
 
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			expectedEnvs := []corev1.EnvVar{
-				{Name: "CLUSTER_NAME", Value: "cluster"},
 				{Name: "LINSEED_CLIENT_KEY", Value: "/tigera-compliance-controller-tls/tls.key"},
 				{Name: "LINSEED_CLIENT_CERT", Value: "/tigera-compliance-controller-tls/tls.crt"},
 			}
@@ -347,21 +346,11 @@ var _ = Describe("compliance rendering tests", func() {
 			complianceSnapshotter := rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			complianceBenchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))

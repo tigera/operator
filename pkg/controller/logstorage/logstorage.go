@@ -184,7 +184,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.KibanaNamespace,
-				ServiceAccounts: []string{render.KibanaName},
+				ServiceAccounts: []string{render.KibanaObjectName},
 				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 					// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
 					// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation

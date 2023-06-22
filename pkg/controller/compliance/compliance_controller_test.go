@@ -392,6 +392,10 @@ var _ = Describe("Compliance controller tests", func() {
 			Name: "tigera-compliance-snapshotter:csr-creator",
 		}, &crb)).NotTo(HaveOccurred())
 		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name: "tigera-compliance-reporter:csr-creator",
+		}, &crb)).NotTo(HaveOccurred())
+		Expect(crb.Subjects).To(HaveLen(1))
 	})
 
 	Context("image reconciliation", func() {

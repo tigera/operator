@@ -309,7 +309,13 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// patch and get the felix configuration
-	fc, err := r.patchFelixConfig(ctx)
+	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		if fc.Spec.PolicySyncPathPrefix != "" {
+			return false // don't proceed with the patch
+		}
+		fc.Spec.PolicySyncPathPrefix = "/var/run/nodeagent"
+		return true // proceed with this patch
+	})
 	if err != nil {
 		reqLogger.Error(err, "Error patching felix configuration")
 		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
@@ -428,26 +434,6 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	egw.Status.State = operatorv1.TigeraStatusReady
 	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
 	return nil
-}
-
-func (r *ReconcileEgressGateway) patchFelixConfig(ctx context.Context) (*crdv1.FelixConfiguration, error) {
-	// Fetch any existing default FelixConfiguration object.
-	fc := &crdv1.FelixConfiguration{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, log)
-		return nil, err
-	}
-
-	patchFrom := client.MergeFrom(fc.DeepCopy())
-	if fc.Spec.PolicySyncPathPrefix != "" {
-		return fc, nil
-	}
-	fc.Spec.PolicySyncPathPrefix = "/var/run/nodeagent"
-	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
-		return nil, err
-	}
-	return fc, nil
 }
 
 // getRequestedEgressGateway returns the namespaced EgressGateway instance.

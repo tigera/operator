@@ -1951,7 +1951,6 @@ var _ = Describe("Node rendering tests", func() {
 					// The OpenShift envvar overrides.
 					{Name: "FELIX_HEALTHPORT", Value: "9199"},
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
-					{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -2046,7 +2045,6 @@ var _ = Describe("Node rendering tests", func() {
 
 					// The RKE2 envvar overrides.
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
-					{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)

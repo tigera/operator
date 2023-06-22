@@ -30,6 +30,8 @@ type ApplicationLayerSpec struct {
 	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
 	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
 	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
+	// User-configurable settings for the Envoy proxy.
+	EnvoySettings *EnvoySettings `json:"envoy,omitempty"`
 }
 
 type LogCollectionStatusType string
@@ -45,8 +47,24 @@ const (
 	ApplicationLayerPolicyDisabled ApplicationLayerPolicyStatusType = "Disabled"
 )
 
-type LogCollectionSpec struct {
+type EnvoySettings struct {
+	// The number of additional ingress proxy hops from the right side of the
+	// x-forwarded-for HTTP header to trust when determining the origin client’s
+	// IP address. 0 is permitted, but >=1 is the typical setting.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
+	// +kubebuilder:default:=0
+	// +optional
+	XFFNumTrustedHops int32 `json:"xffNumTrustedHops,omitempty"`
+	// If set to true, the Envoy connection manager will use the real remote address
+	// of the client connection when determining internal versus external origin and
+	// manipulating various headers.
+	// +kubebuilder:default:=false
+	// +optional
+	UseRemoteAddress bool `json:"useRemoteAddress,omitempty"`
+}
 
+type LogCollectionSpec struct {
 	// This setting enables or disable log collection.
 	// Allowed values are Enabled or Disabled.
 	// +optional

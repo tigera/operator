@@ -397,7 +397,7 @@ func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace: render.ElasticsearchNamespace,
 		ServiceAccounts: []string{
-			render.ElasticsearchName,
+			render.ElasticsearchObjectName,
 			linseed.ServiceAccountName,
 			esgateway.ServiceAccountName,
 			esmetrics.ElasticsearchMetricsName,

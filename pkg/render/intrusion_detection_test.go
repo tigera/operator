@@ -15,6 +15,7 @@
 package render_test
 
 import (
+	"fmt"
 	"strconv"
 
 	. "github.com/onsi/ginkgo"
@@ -28,11 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -40,6 +43,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -56,11 +60,14 @@ type expectedEnvVar struct {
 }
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
-	var cfg *render.IntrusionDetectionConfiguration
-	var bundle certificatemanagement.TrustedBundle
-	var adAPIKeyPair certificatemanagement.KeyPairInterface
-	var keyPair certificatemanagement.KeyPairInterface
-	var anomalyKeyPair certificatemanagement.KeyPairInterface
+	var (
+		cfg            *render.IntrusionDetectionConfiguration
+		bundle         certificatemanagement.TrustedBundle
+		adAPIKeyPair   certificatemanagement.KeyPairInterface
+		keyPair        certificatemanagement.KeyPairInterface
+		anomalyKeyPair certificatemanagement.KeyPairInterface
+		cli            client.Client
+	)
 
 	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")
 	expectedIDPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed.json")
@@ -76,7 +83,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
@@ -938,6 +945,44 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		for i, expectedRes := range expectedResourcesToRemove {
 			rtest.ExpectResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+	})
+
+	It("should render an init container for pods when certificate management is enabled", func() {
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+
+		intrusionDetectionCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.IntrusionDetectionCertSecret = intrusionDetectionCertSecret
+
+		anomalyDetectorCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.AnomalyDetectorTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.AnomalyDetectorCertSecret = anomalyDetectorCertSecret
+
+		adServerSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.ADAPITLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.ADAPIServerCertSecret = adServerSecret
+
+		component := render.IntrusionDetection(cfg)
+		toCreate, _ := component.Objects()
+
+		intrusionDetectionDeploy := rtest.GetResource(toCreate, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer := intrusionDetectionDeploy.Spec.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.IntrusionDetectionTLSSecretName)))
+
+		adDeploy := rtest.GetResource(toCreate, render.ADAPIObjectName, "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(adDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer = adDeploy.Spec.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ADAPITLSSecretName)))
+
+		adPodTemplate := rtest.GetResource(toCreate, "tigera.io.detectors.training", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		Expect(adPodTemplate.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer = adPodTemplate.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.AnomalyDetectorTLSSecretName)))
 	})
 })
 

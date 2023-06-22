@@ -615,6 +615,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				MountPath: LinseedVolumeMountPath,
 			})
 	}
+	var initContainers []corev1.Container
+	if c.cfg.ReporterKeyPair != nil && c.cfg.ReporterKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(ComplianceNamespace))
+	}
 
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
@@ -638,6 +642,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+				InitContainers:     initContainers,
 				Containers: []corev1.Container{
 					{
 						Name:            "reporter",

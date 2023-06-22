@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -24,24 +26,31 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("Policy recommendation rendering tests", func() {
-	var cfg *render.PolicyRecommendationConfiguration
-	var bundle certificatemanagement.TrustedBundle
-	var keyPair certificatemanagement.KeyPairInterface
+	var (
+		cfg     *render.PolicyRecommendationConfiguration
+		bundle  certificatemanagement.TrustedBundle
+		keyPair certificatemanagement.KeyPairInterface
+		cli     client.Client
+	)
 
 	// Fetch expectations from utilities that require Ginkgo context.
 	expectedUnmanagedPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation.json")
@@ -50,7 +59,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		bundle = certificateManager.CreateTrustedBundle()
@@ -199,6 +208,27 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+	})
+
+	It("should render an init container when certificate management is enabled", func() {
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+
+		policyRecommendationCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.PolicyRecommendationCertSecret = policyRecommendationCertSecret
+
+		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
+		component := render.PolicyRecommendation(cfg)
+		resources, _ := component.Objects()
+
+		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer := idc.Spec.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.PolicyRecommendationTLSSecretName)))
 	})
 
 	Context("allow-tigera rendering", func() {

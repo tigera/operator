@@ -475,7 +475,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       render.ComplianceNamespace,
-		ServiceAccounts: []string{render.ComplianceServerServiceAccount, render.ComplianceBenchmarkerServiceAccount, render.ComplianceSnapshotterServiceAccount, render.ComplianceControllerServiceAccount},
+		ServiceAccounts: []string{render.ComplianceServerServiceAccount, render.ComplianceBenchmarkerServiceAccount, render.ComplianceSnapshotterServiceAccount, render.ComplianceControllerServiceAccount, render.ComplianceReporterServiceAccount},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			rcertificatemanagement.NewKeyPairOption(complianceServerKeyPair, true, true),
 			rcertificatemanagement.NewKeyPairOption(controllerKeyPair.Interface, true, true),

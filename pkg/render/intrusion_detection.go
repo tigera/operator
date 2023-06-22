@@ -1852,7 +1852,10 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 			c.cfg.AnomalyDetectorCertSecret.VolumeMount(c.SupportedOSType()),
 		),
 	}
-
+	var initContainers []corev1.Container
+	if c.cfg.AnomalyDetectorCertSecret != nil && c.cfg.AnomalyDetectorCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.AnomalyDetectorCertSecret.InitContainer(IntrusionDetectionNamespace))
+	}
 	return corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PodTemplate",
@@ -1882,6 +1885,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				ServiceAccountName: adDetectorName,
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 				Containers:         []corev1.Container{container},
+				InitContainers:     initContainers,
 			},
 		},
 	}

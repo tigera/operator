@@ -1073,6 +1073,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fc.Spec.RouteTableRange).To(BeNil())
 		})
 
+		It("generates FelixConfiguration with correct DNS service for Rancher", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderRKE2
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// We should get a felix configuration with Rancher's DNS service.
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.DNSTrustedServers).NotTo(BeNil())
+			Expect(*fc.Spec.DNSTrustedServers).To(ConsistOf("k8s-service:kube-system/rke2-coredns-rke2-coredns"))
+		})
+
 		It("should Reconcile with AWS CNI config", func() {
 			cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginAmazonVPC}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())

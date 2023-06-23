@@ -74,6 +74,16 @@ spec:
                             via.
                           type: string
                       type: object
+                    gatewayPreference:
+                      default: None
+                      description: GatewayPreference specifies which egress gateways
+                        to use. If set to PreferNodeLocal, egress gateways in the
+                        same node as the client will be used if available. Otherwise
+                        all the active egress gateways will be used.
+                      enum:
+                      - None
+                      - PreferNodeLocal
+                      type: string
                   type: object
                 type: array
             type: object

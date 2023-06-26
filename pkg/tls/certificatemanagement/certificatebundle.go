@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -110,7 +111,7 @@ func (t *trustedBundle) MountPath() string {
 func (t *trustedBundle) HashAnnotations() map[string]string {
 	annotations := make(map[string]string)
 	for hash, cert := range t.certificates {
-		annotations[fmt.Sprintf("hash.operator.tigera.io/%s", cert.GetName())] = hash
+		annotations[fmt.Sprintf("hash.operator.tigera.io/%s-%s", cert.GetNamespace(), cert.GetName())] = hash
 	}
 	if len(t.systemCertificates) > 0 {
 		annotations["hash.operator.tigera.io/system"] = rmeta.AnnotationHash(t.systemCertificates)
@@ -161,15 +162,29 @@ func (t *trustedBundle) Volume() corev1.Volume {
 
 func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 	pemBuf := bytes.Buffer{}
+
+	// Sort the certificates so that we get a consistent ordering.
+	// This reduces the number of changes we see in the configmap.
+	certs := []CertificateInterface{}
 	for _, cert := range t.certificates {
-		pemBuf.WriteString(fmt.Sprintf("# certificate name: %s\n%s\n\n",
-			cert.GetName(), string(cert.GetCertificatePEM()))) // err is always nil
+		certs = append(certs, cert)
 	}
+	sort.Slice(certs, func(i, j int) bool {
+		return certs[i].GetName() < certs[j].GetName()
+	})
+	for _, cert := range certs {
+		pemBuf.WriteString(fmt.Sprintf("# certificate name: %s/%s\n%s\n\n", cert.GetNamespace(), cert.GetName(), string(cert.GetCertificatePEM())))
+	}
+
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TrustedCertConfigMapName,
 			Namespace: namespace,
+
+			// Include the hash annotations on the configmap, so that downstrream controllers
+			// can easily acquire them without loading all of the certificates.
+			Annotations: t.HashAnnotations(),
 		},
 		Data: map[string]string{
 			RHELRootCertificateBundleName: string(t.systemCertificates),
@@ -179,14 +194,15 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 }
 
 // NewCertificate creates a new certificate.
-func NewCertificate(name string, pem []byte, issuer CertificateInterface) CertificateInterface {
-	return &certificate{name: name, pem: pem, issuer: issuer}
+func NewCertificate(name, ns string, pem []byte, issuer CertificateInterface) CertificateInterface {
+	return &certificate{name: name, namespace: ns, pem: pem, issuer: issuer}
 }
 
 type certificate struct {
-	name   string
-	issuer CertificateInterface
-	pem    []byte
+	name      string
+	namespace string
+	issuer    CertificateInterface
+	pem       []byte
 }
 
 func (c *certificate) GetCertificatePEM() []byte {
@@ -195,6 +211,10 @@ func (c *certificate) GetCertificatePEM() []byte {
 
 func (c *certificate) GetName() string {
 	return c.name
+}
+
+func (c *certificate) GetNamespace() string {
+	return c.namespace
 }
 
 func (c *certificate) GetIssuer() CertificateInterface {

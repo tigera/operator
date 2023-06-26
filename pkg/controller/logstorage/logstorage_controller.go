@@ -851,7 +851,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			install,
 			variant,
 			pullSecrets,
-			esAdminUserSecret,
 			hdler,
 			reqLogger,
 			ctx,

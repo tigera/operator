@@ -284,7 +284,7 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(fmt.Sprintf("%s%s:%s", components.CalicoRegistry, components.ComponentCalicoCSIRegistrar.Image, components.ComponentCalicoCSIRegistrar.Version)))
 	})
 
-	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+	It("should render the correct env and/or images when FIPS mode is enabled", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		cfg.Installation.FIPSMode = &fipsEnabled
 		cfg.Installation.Variant = operatorv1.Calico
@@ -293,6 +293,14 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(comp.ResolveImages(nil)).To(BeNil())
 		createObjs, _ := comp.Objects()
 		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(ContainSubstring("-fips"))
+
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		comp = render.CSI(&cfg)
+		Expect(comp.ResolveImages(nil)).To(BeNil())
+		createObjs, _ = comp.Objects()
+		dsResource = rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(ContainSubstring("-fips"))
 	})

@@ -26,6 +26,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "cnx-apiserver" }}
+	ComponentAPIServerFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "compliance-benchmarker" }}
 	ComponentComplianceBenchmarker = component{
 		Version:  "{{ .Version }}",
@@ -254,6 +261,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "dikastes" }}
+	ComponentDikastesFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = component{
 		Version:  "{{ .Version }}",
@@ -301,6 +315,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "cnx-kube-controllers" }}
+	ComponentTigeraKubeControllersFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "cnx-node" }}
 	ComponentTigeraNode = component{
 		Version:  "{{ .Version }}",
@@ -308,9 +329,23 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "cnx-node" }}
+	ComponentTigeraNodeFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with .Components.typha }}
 	ComponentTigeraTypha = component{
 		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with .Components.typha }}
+	ComponentTigeraTyphaFIPS = component{
+		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
@@ -364,9 +399,23 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "csi" }}
+	ComponentCSIPrivateFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "csi-node-driver-registrar" }}
 	ComponentCSINodeDriverRegistrarPrivate = component{
 		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar" }}
+	ComponentCSINodeDriverRegistrarPrivateFIPS = component{
+		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}

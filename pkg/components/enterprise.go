@@ -26,6 +26,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentAPIServerFIPS = component{
+		Version:  "master-fips",
+		Image:    "tigera/cnx-apiserver",
+		Registry: "",
+	}
+
 	ComponentComplianceBenchmarker = component{
 		Version:  "master",
 		Image:    "tigera/compliance-benchmarker",
@@ -221,6 +227,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentDikastesFIPS = component{
+		Version:  "master-fips",
+		Image:    "tigera/dikastes",
+		Registry: "",
+	}
+
 	ComponentCoreOSPrometheus = component{
 		Version:  "v2.43.1",
 		Registry: "",
@@ -261,14 +273,32 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraKubeControllersFIPS = component{
+		Version:  "master-fips",
+		Image:    "tigera/kube-controllers",
+		Registry: "",
+	}
+
 	ComponentTigeraNode = component{
 		Version:  "master",
 		Image:    "tigera/cnx-node",
 		Registry: "",
 	}
 
+	ComponentTigeraNodeFIPS = component{
+		Version:  "master-fips",
+		Image:    "tigera/cnx-node",
+		Registry: "",
+	}
+
 	ComponentTigeraTypha = component{
 		Version:  "master",
+		Image:    "tigera/typha",
+		Registry: "",
+	}
+
+	ComponentTigeraTyphaFIPS = component{
+		Version:  "master-fips",
 		Image:    "tigera/typha",
 		Registry: "",
 	}
@@ -315,8 +345,20 @@ var (
 		Registry: "",
 	}
 
+	ComponentCSIPrivateFIPS = component{
+		Version:  "master-fips",
+		Image:    "tigera/csi",
+		Registry: "",
+	}
+
 	ComponentCSINodeDriverRegistrarPrivate = component{
 		Version:  "master",
+		Image:    "tigera/node-driver-registrar",
+		Registry: "",
+	}
+
+	ComponentCSINodeDriverRegistrarPrivateFIPS = component{
+		Version:  "master-fips",
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
 	}

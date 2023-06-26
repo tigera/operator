@@ -346,12 +346,20 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.csiImage, err = components.GetReference(components.ComponentCSIPrivate, reg, path, prefix, is)
-		if err != nil {
-			return err
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.csiImage, err = components.GetReference(components.ComponentCSIPrivateFIPS, reg, path, prefix, is)
+			if err != nil {
+				return err
+			}
+			c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivateFIPS, reg, path, prefix, is)
+		} else {
+			c.csiImage, err = components.GetReference(components.ComponentCSIPrivate, reg, path, prefix, is)
+			if err != nil {
+				return err
+			}
+			c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivate, reg, path, prefix, is)
 		}
 
-		c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivate, reg, path, prefix, is)
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.csiImage, err = components.GetReference(components.ComponentCalicoCSIFIPS, reg, path, prefix, is)

@@ -144,7 +144,7 @@ var _ = Describe("Typha rendering tests", func() {
 			}))
 	})
 
-	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+	It("should render the correct env and/or images when FIPS mode is enabled", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		cfg.Installation.FIPSMode = &fipsEnabled
 		cfg.Installation.Variant = operatorv1.Calico
@@ -158,6 +158,18 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
 
 		tc := d.Spec.Template.Spec.Containers[0]
+		Expect(tc.Image).To(ContainSubstring("-fips"))
+
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		component = render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ = component.Objects()
+		dResource = rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		d = dResource.(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		tc = d.Spec.Template.Spec.Containers[0]
 		Expect(tc.Image).To(ContainSubstring("-fips"))
 	})
 

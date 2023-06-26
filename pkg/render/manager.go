@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
@@ -86,43 +87,14 @@ const (
 	defaultTunnelVoltronPort = "9449"
 )
 
-var (
-	// TODO: NetworkPolicy rules will need to be generated dynamically for each namespace.
-	// Each tenant will need its own policies to ensure only its own components within its namespace can talk.
-	ManagerEntityRule       = networkpolicy.CreateEntityRule("tigera-manager", ManagerDeploymentName, managerPort)
-	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule("tigera-manager", ManagerDeploymentName)
-)
-
 // ManagerClusterScoped returns a component for rendering cluster-scoped manager resources.
 func ManagerClusterScoped(cfg *ManagerConfiguration, namespaces []string) (Component, error) {
-	return &managerClusterScopedComponent{
-		cfg:        cfg,
-		namespaces: namespaces,
-	}, nil
+	objs := []client.Object{managerClusterRoleBinding(namespaces)}
+	return NewPassthrough(objs...), nil
 }
 
-type managerClusterScopedComponent struct {
-	cfg        *ManagerConfiguration
-	namespaces []string
-}
-
-func (m *managerClusterScopedComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	return nil
-}
-
-func (m *managerClusterScopedComponent) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
-	objs := []client.Object{
-		managerClusterRoleBinding(m.namespaces),
-	}
-	return objs, nil
-}
-
-func (m *managerClusterScopedComponent) Ready() bool {
-	return true
-}
-
-func (m *managerClusterScopedComponent) SupportedOSType() rmeta.OSType {
-	return rmeta.OSTypeLinux
+func managerClusterRoleBinding(namespaces []string) client.Object {
+	return rcomponents.ClusterRoleBinding(ManagerClusterRoleBinding, ManagerClusterRole, ManagerServiceAccount, namespaces)
 }
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -181,7 +153,7 @@ type ManagerConfiguration struct {
 
 	// Certificate bundle used by the manager pod to verify certificates presented
 	// by clients as part of mTLS authentication.
-	TrustedCertBundle certificatemanagement.TrustedBundle
+	TrustedCertBundle certificatemanagement.TrustedBundleRO
 
 	ClusterDomain           string
 	ESLicenseType           ElasticsearchLicenseType
@@ -194,7 +166,7 @@ type ManagerConfiguration struct {
 	Namespace string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
-	MultiTenant bool
+	Tenant *operatorv1.Tenant
 }
 
 type managerComponent struct {
@@ -301,7 +273,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	// Containers for the manager pod.
 	managerContainer := c.managerContainer()
 	esProxyContainer := c.managerEsProxyContainer()
-	if !c.cfg.MultiTenant {
+	if c.cfg.Tenant == nil {
 		// If we're running in multi-tenant mode, we don't need ES credentials as these are used for Kibana login. Otherwise, add them.
 		managerContainer = relasticsearch.ContainerDecorate(managerContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
 		esProxyContainer = relasticsearch.ContainerDecorate(esProxyContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
@@ -420,7 +392,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 
 func (c *managerComponent) kibanaEnabled() bool {
 	enableKibana := !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode)
-	if c.cfg.MultiTenant {
+	if c.cfg.Tenant != nil {
 		enableKibana = false
 	}
 	return enableKibana
@@ -430,7 +402,7 @@ func (c *managerComponent) kibanaEnabled() bool {
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	// Prepare conditional env vars up-front.
 	queryURL := "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"
-	if c.cfg.MultiTenant {
+	if c.cfg.Tenant != nil {
 		queryURL = ""
 	}
 
@@ -518,7 +490,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		linseedKeyPath, linseedCertPath = c.cfg.VoltronLinseedKeyPair.VolumeMountKeyFilePath(), c.cfg.VoltronLinseedKeyPair.VolumeMountCertificateFilePath()
 	}
 	defaultForwardServer := "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"
-	if c.cfg.MultiTenant {
+	if c.cfg.Tenant != nil {
 		// Use the local namespace instead of tigera-elasticsearch.
 		defaultForwardServer = fmt.Sprintf("tigera-secure-es-gateway-http.%s.svc:9200", c.cfg.Namespace)
 	}
@@ -595,6 +567,13 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!c.kibanaEnabled())},
+	}
+
+	// Determine the Linseed location. Use code default unless in multi-tenant mode,
+	// in which case use the Linseed in the current namespace.
+	if c.cfg.Tenant != nil {
+		env = append(env, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Namespace)})
+		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 
 	volumeMounts := append(
@@ -827,29 +806,6 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool, kubernet
 	return cr
 }
 
-// managerClusterRoleBinding returns a clusterrolebinding that gives the tigera-manager serviceaccount
-// the permissions in the tigera-manager-role.
-func managerClusterRoleBinding(namespaces []string) *rbacv1.ClusterRoleBinding {
-	subjects := []rbacv1.Subject{}
-	for _, ns := range namespaces {
-		subjects = append(subjects, rbacv1.Subject{
-			Kind:      "ServiceAccount",
-			Name:      ManagerServiceAccount,
-			Namespace: ns,
-		})
-	}
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ManagerClusterRole,
-		},
-		Subjects: subjects,
-	}
-}
-
 // TODO: Can we get rid of this and instead just bind to default ones?
 func (c *managerComponent) securityContextConstraints() *ocsv1.SecurityContextConstraints {
 	privilegeEscalation := false
@@ -900,13 +856,13 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ESGatewaySourceEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

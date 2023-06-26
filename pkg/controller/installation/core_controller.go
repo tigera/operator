@@ -1663,24 +1663,29 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 		dnsService := ""
 		switch install.Spec.KubernetesProvider {
 		case operator.ProviderOpenShift:
-			dnsService = "openshift-dns/dns-default"
+			dnsService = "k8s-service:openshift-dns/dns-default"
 		case operator.ProviderRKE2:
-			dnsService = "kube-system/rke2-coredns-rke2-coredns"
+			dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
 		}
 		if dnsService != "" {
 			felixDefault := "k8s-service:kube-dns"
-			trustedServers := []string{"k8s-service:" + dnsService}
-			// Keep any other values that are already configured, excepting the kube-dns
-			// default.
+			trustedServers := []string{dnsService}
+			// Keep any other values that are already configured, excepting the value
+			// that we are setting and the kube-dns default.
+			existingSetting := ""
 			if fc.Spec.DNSTrustedServers != nil {
+				existingSetting = strings.Join(*(fc.Spec.DNSTrustedServers), ",")
 				for _, server := range *(fc.Spec.DNSTrustedServers) {
-					if server != felixDefault {
+					if server != felixDefault && server != dnsService {
 						trustedServers = append(trustedServers, server)
 					}
 				}
 			}
-			fc.Spec.DNSTrustedServers = &trustedServers
-			updated = true
+			newSetting := strings.Join(trustedServers, ",")
+			if newSetting != existingSetting {
+				fc.Spec.DNSTrustedServers = &trustedServers
+				updated = true
+			}
 		}
 	}
 	return updated

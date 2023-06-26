@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logstorage
+package elastic
 
 import (
 	"context"
@@ -32,7 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func (r *ReconcileLogStorage) createESKubeControllers(
+// TODO: Move this out of this controller.
+func (r *ElasticSubController) createESKubeControllers(
 	install *operatorv1.InstallationSpec,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,

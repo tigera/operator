@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logstorage
+package linseed
 
 import (
 	"context"
@@ -22,6 +22,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -30,18 +32,28 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-func (r *ReconcileLogStorage) createESGateway(
+func (r *LinseedSubController) createESGateway(
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,
-	esAdminUserSecret *corev1.Secret,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
-	gatewayKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 	usePSP bool,
 ) (reconcile.Result, bool, error) {
+	// Get the ES admin user secret. This is provisioned by the ECK operator as part of installing Elasticsearch,
+	// and so may not be immediately available.
+	esAdminUserSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
+	if err != nil {
+		reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch admin user secret", err, reqLogger)
+		return reconcile.Result{}, false, err
+	} else if esAdminUserSecret == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for elasticsearch admin secret", nil, reqLogger)
+		return reconcile.Result{}, false, nil
+	}
+
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch admin user secret contains too many entries", nil, reqLogger)
@@ -52,6 +64,18 @@ func (r *ReconcileLogStorage) createESGateway(
 	for k := range esAdminUserSecret.Data {
 		esAdminUserName = k
 		break
+	}
+
+	// Collect the certificates we need to provision ESGW. These will have been provisioned already by the ES secrets controller.
+	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		return reconcile.Result{}, false, err
+	}
+	gatewayKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return reconcile.Result{}, false, err
 	}
 
 	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)

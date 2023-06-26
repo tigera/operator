@@ -27,11 +27,11 @@ var (
 	}
 {{- end }}
 {{ with index .Components "cnx-apiserver" }}
-	  ComponentAPIServerFIPS = component{
-		    Version:  "{{ .Version }}-fips",
-		    Image:    "{{ .Image }}",
-		    Registry: "{{ .Registry }}",
-	  }
+	ComponentAPIServerFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
 {{- end }}
 {{ with index .Components "compliance-benchmarker" }}
 	ComponentComplianceBenchmarker = component{
@@ -262,11 +262,11 @@ var (
 	}
 {{- end }}
 {{ with index .Components "dikastes" }}
-	  ComponentDikastesFIPS = component{
-		    Version:  "{{ .Version }}-fips",
-		    Image:    "{{ .Image }}",
-		    Registry: "{{ .Registry }}",
-	  }
+	ComponentDikastesFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
 {{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = component{
@@ -316,11 +316,11 @@ var (
 	}
 {{- end }}
 {{ with index .Components "cnx-kube-controllers" }}
-	  ComponentTigeraKubeControllersFIPS = component{
-		    Version:  "{{ .Version }}-fips",
-		    Image:    "{{ .Image }}",
-		    Registry: "{{ .Registry }}",
-	  }
+	ComponentTigeraKubeControllersFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
 {{- end }}
 {{ with index .Components "cnx-node" }}
 	ComponentTigeraNode = component{
@@ -330,11 +330,11 @@ var (
 	}
 {{- end }}
 {{ with index .Components "cnx-node" }}
-	  ComponentTigeraNodeFIPS = component{
-		    Version:  "{{ .Version }}-fips",
-		    Image:    "{{ .Image }}",
-		    Registry: "{{ .Registry }}",
-	  }
+	ComponentTigeraNodeFIPS = component{
+		Version:  "{{ .Version }}-fips",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
 {{- end }}
 {{ with .Components.typha }}
 	ComponentTigeraTypha = component{

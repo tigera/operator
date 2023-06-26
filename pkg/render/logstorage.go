@@ -224,6 +224,7 @@ type ElasticsearchConfiguration struct {
 	UnusedTLSSecret             *corev1.Secret
 	ApplyTrial                  bool
 	KeyStoreSecret              *corev1.Secret
+	KibanaEnabled               bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -336,7 +337,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 				es.eckOperatorPodSecurityPolicy(),
 				es.elasticsearchPodSecurityPolicy(),
 			)
-			if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+			if es.cfg.KibanaEnabled {
 				toCreate = append(toCreate,
 					es.kibanaClusterRoleBinding(),
 					es.kibanaClusterRole(),
@@ -369,7 +370,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
-		if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		if es.cfg.KibanaEnabled {
 			// Kibana CRs
 			// In order to use restricted, we need to change elastic-internal-init-config:
 			// - securityContext.allowPrivilegeEscalation=false
@@ -1830,12 +1831,12 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
@@ -1868,13 +1869,13 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.LinseedSourceEntityRule,
+					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).LinseedSourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
@@ -1951,7 +1952,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
 		},
 	}...)
 
@@ -1991,7 +1992,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant
 					Destination: kibanaPortIngressDestination,
 				},
 				{
@@ -2013,7 +2014,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
 		Source:      v3.EntityRule{},
-		Destination: networkpolicy.ESGatewayEntityRule,
+		Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
 	})
 
 	return &v3.NetworkPolicy{

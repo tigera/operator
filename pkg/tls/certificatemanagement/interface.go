@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	TenantCASecretName                = "tigera-ca-private-tenant"
 	CASecretName                      = "tigera-ca-private"
 	TrustedCertConfigMapName          = "tigera-ca-bundle"
 	TrustedCertConfigMapKeyName       = "tigera-ca-bundle.crt"
@@ -63,4 +64,12 @@ type TrustedBundle interface {
 	VolumeMounts(osType meta.OSType) []corev1.VolumeMount
 	Volume() corev1.Volume
 	AddCertificates(certificates ...CertificateInterface)
+}
+
+// Read-only version of a trusted bundle, useful for rendering components without needing to parse certificates.
+type TrustedBundleRO interface {
+	MountPath() string
+	HashAnnotations() map[string]string
+	VolumeMounts(osType meta.OSType) []corev1.VolumeMount
+	Volume() corev1.Volume
 }

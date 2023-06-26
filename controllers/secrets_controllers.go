@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,20 +22,29 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	installation "github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/secrets"
 )
 
-// InstallationReconciler reconciles a Installation object
-type InstallationReconciler struct {
+// LogStorageReconciler reconciles a LogStorage object
+type SecretsReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages/status,verbs=get;update;patch
 
-func (r *InstallationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return installation.Add(mgr, opts)
+func (r *SecretsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	if err := secrets.AddClusterCAController(mgr, opts); err != nil {
+		return err
+	}
+	if err := secrets.AddTenantController(mgr, opts); err != nil {
+		return err
+	}
+	if err := secrets.AddBundleController(mgr, opts); err != nil {
+		return err
+	}
+	return nil
 }

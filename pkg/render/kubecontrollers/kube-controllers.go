@@ -209,7 +209,11 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.image, err = components.GetReference(components.ComponentTigeraKubeControllersFIPS, reg, path, prefix, is)
+		} else {
+			c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
+		}
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.image, err = components.GetReference(components.ComponentCalicoKubeControllersFIPS, reg, path, prefix, is)

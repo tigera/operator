@@ -136,7 +136,11 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.apiServerImage, err = components.GetReference(components.ComponentAPIServerFIPS, reg, path, prefix, is)
+		} else {
+			c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+		}
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}

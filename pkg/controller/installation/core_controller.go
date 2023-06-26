@@ -1133,15 +1133,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Fetch any existing default FelixConfiguration object.
-	felixConfiguration := &crdv1.FelixConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
-	if err != nil && !apierrors.IsNotFound(err) {
-		r.status.SetDegraded(operator.ResourceReadError, "Unable to read FelixConfiguration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	if err = r.setDefaultsOnFelixConfiguration(ctx, instance, felixConfiguration, reqLogger); err != nil {
+	// Set any non-default FelixConfiguration values that we need.
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		return r.setDefaultsOnFelixConfiguration(instance, fc)
+	})
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -1618,11 +1614,8 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 }
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
-// based on the install config. If the FelixConfig ResourceVersion is empty,
-// then the FelixConfig default will be created, otherwise a patch will be performed.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
-	patchFrom := client.MergeFrom(fc.DeepCopy())
-	fc.ObjectMeta.Name = "default"
+// based on the install config.
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1665,21 +1658,37 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		updated = true
 	}
 
-	if !updated {
-		return nil
-	}
-	if fc.ResourceVersion == "" {
-		if err := r.client.Create(ctx, fc); err != nil {
-			r.status.SetDegraded(operator.ResourceCreateError, "Unable to Create default FelixConfiguration", err, log)
-			return err
+	if install.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
+		dnsService := ""
+		switch install.Spec.KubernetesProvider {
+		case operator.ProviderOpenShift:
+			dnsService = "k8s-service:openshift-dns/dns-default"
+		case operator.ProviderRKE2:
+			dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
 		}
-	} else {
-		if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
-			r.status.SetDegraded(operator.ResourcePatchError, "Unable to Patch default FelixConfiguration", err, log)
-			return err
+		if dnsService != "" {
+			felixDefault := "k8s-service:kube-dns"
+			trustedServers := []string{dnsService}
+			// Keep any other values that are already configured, excepting the value
+			// that we are setting and the kube-dns default.
+			existingSetting := ""
+			if fc.Spec.DNSTrustedServers != nil {
+				existingSetting = strings.Join(*(fc.Spec.DNSTrustedServers), ",")
+				for _, server := range *(fc.Spec.DNSTrustedServers) {
+					if server != felixDefault && server != dnsService {
+						trustedServers = append(trustedServers, server)
+					}
+				}
+			}
+			newSetting := strings.Join(trustedServers, ",")
+			if newSetting != existingSetting {
+				fc.Spec.DNSTrustedServers = &trustedServers
+				updated = true
+			}
 		}
 	}
-	return nil
+	return updated
 }
 
 var osExitOverride = os.Exit

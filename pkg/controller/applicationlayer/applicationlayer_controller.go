@@ -521,58 +521,47 @@ func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLaye
 // patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
 func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
-	// Fetch any existing default FelixConfiguration object.
-	fc := &crdv1.FelixConfiguration{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-	if err != nil && !apierrors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, log)
-		return err
-	}
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		var tproxyMode crdv1.TPROXYModeOption
+		if ok, v := r.getTProxyMode(al); ok {
+			tproxyMode = v
+		} else {
+			if fc.Spec.TPROXYMode == nil {
+				// Workaround: we'd like to always force the value to be the correct one, matching the operator's
+				// configuration.  However, during an upgrade from a version that predates the TPROXYMode option,
+				// Felix hits a bug and gets confused by the new config parameter, which in turn triggers a restart.
+				// Work around that by relying on Disabled being the default value for the field instead.
+				//
+				// The felix bug was fixed in v3.16, v3.15.1 and v3.14.4; it should be safe to set new config fields
+				// once we know we're only upgrading from those versions and above.
+				return false
+			}
 
-	patchFrom := client.MergeFrom(fc.DeepCopy())
-
-	var tproxyMode crdv1.TPROXYModeOption
-	if ok, v := r.getTProxyMode(al); ok {
-		tproxyMode = v
-	} else {
-		if fc.Spec.TPROXYMode == nil {
-			// Workaround: we'd like to always force the value to be the correct one, matching the operator's
-			// configuration.  However, during an upgrade from a version that predates the TPROXYMode option,
-			// Felix hits a bug and gets confused by the new config parameter, which in turn triggers a restart.
-			// Work around that by relying on Disabled being the default value for the field instead.
-			//
-			// The felix bug was fixed in v3.16, v3.15.1 and v3.14.4; it should be safe to set new config fields
-			// once we know we're only upgrading from those versions and above.
-			return nil
+			// If the mode is already set, fall through to the normal logic, it's safe to force-set the field now.
+			// This also avoids churning the config if a previous version of the operator set it to Disabled already,
+			// we avoid setting it back to nil.
+			tproxyMode = crdv1.TPROXYModeOptionDisabled
 		}
 
-		// If the mode is already set, fall through to the normal logic, it's safe to force-set the field now.
-		// This also avoids churning the config if a previous version of the operator set it to Disabled already,
-		// we avoid setting it back to nil.
-		tproxyMode = crdv1.TPROXYModeOptionDisabled
-	}
+		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al)
+		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
+		tproxyModeSetDesired := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
 
-	policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al)
-	policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
-	tproxyModeSetDesired := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
+		// If tproxy mode is already set to desired state return false to indicate patch not needed.
+		if policySyncPrefixSetDesired && tproxyModeSetDesired {
+			return false
+		}
 
-	// If tproxy mode is already set to desired state return nil.
-	if policySyncPrefixSetDesired && tproxyModeSetDesired {
-		return nil
-	}
+		fc.Spec.TPROXYMode = &tproxyMode
+		fc.Spec.PolicySyncPathPrefix = policySyncPrefix
 
-	fc.Spec.TPROXYMode = &tproxyMode
-	fc.Spec.PolicySyncPathPrefix = policySyncPrefix
+		log.Info(
+			"Patching FelixConfiguration: ",
+			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+			"tproxyMode", string(tproxyMode),
+		)
+		return true
+	})
 
-	log.Info(
-		"Patching FelixConfiguration: ",
-		"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
-		"tproxyMode", string(tproxyMode),
-	)
-
-	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }

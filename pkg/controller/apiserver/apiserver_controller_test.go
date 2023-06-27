@@ -104,7 +104,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
-		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureCertSecret, common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
+		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureServerCert(false, "").Name(), common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Authentication{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -224,7 +224,7 @@ var _ = Describe("apiserver controller tests", func() {
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PacketCaptureCertSecret,
+					Name:      render.PacketCaptureServerCert(false, "").Name(),
 					Namespace: "tigera-operator",
 				},
 			}
@@ -310,7 +310,7 @@ var _ = Describe("apiserver controller tests", func() {
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PacketCaptureCertSecret,
+					Name:      render.PacketCaptureServerCert(false, "").Name(),
 					Namespace: "tigera-operator",
 				},
 			}
@@ -344,7 +344,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(apiSecret2.GetOwnerReferences()).To(HaveLen(0))
 
 			packetCaptureSecret2 := &corev1.Secret{}
-			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, packetCaptureSecret2)).ShouldNot(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureServerCert(false, "").Name()}, packetCaptureSecret2)).ShouldNot(HaveOccurred())
 			Expect(packetCaptureSecret2.GetOwnerReferences()).To(HaveLen(0))
 		})
 
@@ -368,7 +368,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 
-			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, secret)).ShouldNot(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureServerCert(false, "").Name()}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 

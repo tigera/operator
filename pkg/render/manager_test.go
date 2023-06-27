@@ -394,7 +394,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain)
+			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
 			tunnelSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronTunnelSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
@@ -415,7 +415,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				VoltronLinseedKeyPair: voltronLinseedCert,
 				InternalTrafficSecret: internalTraffic,
 				Installation:          installation,
-				ESClusterConfig:       &relasticsearch.ClusterConfig{},
+				ClusterConfig:         &relasticsearch.ClusterConfig{},
 			}
 		})
 
@@ -668,7 +668,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		bundle = certificateManager.CreateTrustedBundle()
 	})
@@ -678,7 +678,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		cfg := &render.ManagerConfiguration{
 			TrustedCertBundle:     bundle,
-			ESClusterConfig:       &relasticsearch.ClusterConfig{},
+			ClusterConfig:         &relasticsearch.ClusterConfig{},
 			TLSKeyPair:            kp,
 			VoltronLinseedKeyPair: voltronLinseedKP,
 			Installation:          i,
@@ -877,7 +877,7 @@ func renderObjects(roc renderConfig) []client.Object {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-	certificateManager, err := certificatemanager.Create(cli, roc.installation, clusterDomain)
+	certificateManager, err := certificatemanager.Create(cli, roc.installation, clusterDomain, common.OperatorNamespace())
 	Expect(err).NotTo(HaveOccurred())
 	bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 
@@ -897,7 +897,7 @@ func renderObjects(roc renderConfig) []client.Object {
 	cfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      dexCfg,
 		TrustedCertBundle:       bundle,
-		ESClusterConfig:         esConfigMap,
+		ClusterConfig:           esConfigMap,
 		TLSKeyPair:              managerTLS,
 		Installation:            roc.installation,
 		ManagementCluster:       roc.managementCluster,

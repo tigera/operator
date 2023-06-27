@@ -92,13 +92,13 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Namespace: render.GuardianNamespace,
 			},
 		}
-		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		secret, err := certificateManager.GetOrCreateKeyPair(c, render.GuardianSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
-		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{"a"})
+		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert(false, "").Name(), common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
 		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})

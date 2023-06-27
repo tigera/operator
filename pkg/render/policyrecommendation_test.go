@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/common"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +33,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -59,8 +59,9 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		bundle = certificateManager.CreateTrustedBundle()
 		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.PolicyRecommendationTLSSecretName, "", "", nil)
@@ -214,7 +215,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 
 		policyRecommendationCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{""})

@@ -125,8 +125,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		internalManagerTLSSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
@@ -479,7 +479,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(cli,
 			kubecontrollers.KubeControllerPrometheusTLSSecret,
@@ -1107,7 +1107,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, dns.DefaultClusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		tls, err := certificateManager.GetOrCreateKeyPair(cli, kubecontrollers.KubeControllerPrometheusTLSSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())

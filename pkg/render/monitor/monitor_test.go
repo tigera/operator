@@ -76,7 +76,7 @@ var _ = Describe("monitor rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		prometheusKeyPair, err = certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())

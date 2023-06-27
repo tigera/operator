@@ -522,9 +522,27 @@ var _ = Describe("compliance rendering tests", func() {
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
 			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
 			Expect(err).NotTo(HaveOccurred())
+
 			complianceTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 			cfg.ServerKeyPair = complianceTLS
+
+			controllerKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceControllerSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ControllerKeyPair = controllerKeyPair
+
+			benchmarkerKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceBenchmarkerSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.BenchmarkerKeyPair = benchmarkerKeyPair
+
+			snapshotterKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceSnapshotterSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.SnapshotterKeyPair = snapshotterKeyPair
+
+			reporterKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceReporterSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ReporterKeyPair = reporterKeyPair
+
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
@@ -583,6 +601,26 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(server.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 			csrInitContainer := server.Spec.Template.Spec.InitContainers[0]
 			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceServerCertSecret)))
+
+			controller := rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(controller.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = controller.Spec.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceControllerSecret)))
+
+			benchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(benchmarker.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = benchmarker.Spec.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceBenchmarkerSecret)))
+
+			snapshotter := rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(snapshotter.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = snapshotter.Spec.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceSnapshotterSecret)))
+
+			reporter := rtest.GetResource(resources, "tigera.io.report", ns, "", "v1", "PodTemplate").(*corev1.PodTemplate)
+			Expect(reporter.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = reporter.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceReporterSecret)))
 		})
 	})
 

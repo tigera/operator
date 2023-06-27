@@ -61,12 +61,11 @@ type expectedEnvVar struct {
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
 	var (
-		cfg            *render.IntrusionDetectionConfiguration
-		bundle         certificatemanagement.TrustedBundle
-		adAPIKeyPair   certificatemanagement.KeyPairInterface
-		keyPair        certificatemanagement.KeyPairInterface
-		anomalyKeyPair certificatemanagement.KeyPairInterface
-		cli            client.Client
+		cfg          *render.IntrusionDetectionConfiguration
+		bundle       certificatemanagement.TrustedBundle
+		adAPIKeyPair certificatemanagement.KeyPairInterface
+		keyPair      certificatemanagement.KeyPairInterface
+		cli          client.Client
 	)
 
 	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")

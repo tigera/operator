@@ -416,6 +416,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				InternalTrafficSecret: internalTraffic,
 				Installation:          installation,
 				ClusterConfig:         &relasticsearch.ClusterConfig{},
+				Namespace:             render.ManagerNamespace,
 			}
 		})
 
@@ -685,6 +686,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
 			Replicas:              &replicas,
 			UsePSP:                true,
+			Namespace:             render.ManagerNamespace,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -911,6 +913,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ComplianceLicenseActive: roc.complianceFeatureActive,
 		Openshift:               roc.openshift,
 		UsePSP:                  true,
+		Namespace:               render.ManagerNamespace,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

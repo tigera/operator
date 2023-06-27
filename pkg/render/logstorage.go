@@ -63,7 +63,8 @@ const (
 	ECKOperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
 	ECKEnterpriseTrial      = "eck-trial-license"
 
-	ElasticsearchNamespace = "tigera-elasticsearch"
+	ElasticsearchObjectName = "tigera-elasticsearch"
+	ElasticsearchNamespace  = ElasticsearchObjectName
 
 	// TigeraLinseedSecret is the name of the secret that holds the TLS key pair mounted into Linseed.
 	// The secret contains server key and certificate.
@@ -96,8 +97,9 @@ const (
 	ElasticsearchInternalPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-internal"
 
 	KibanaName         = "tigera-secure"
-	KibanaNamespace    = "tigera-kibana"
-	KibanaBasePath     = "tigera-kibana"
+	KibanaObjectName   = "tigera-kibana"
+	KibanaNamespace    = KibanaObjectName
+	KibanaBasePath     = KibanaObjectName
 	KibanaServiceName  = "tigera-secure-kb-http"
 	KibanaDefaultRoute = "/app/kibana#/dashboards?%s&title=%s"
 	KibanaPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
@@ -502,7 +504,7 @@ func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.Cluste
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-linseed",
-				Namespace: "tigera-elasticsearch",
+				Namespace: ElasticsearchNamespace,
 			},
 		},
 	}
@@ -541,7 +543,7 @@ func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service 
 func (es elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-elasticsearch",
+			Name:      ElasticsearchObjectName,
 			Namespace: ElasticsearchNamespace,
 		},
 	}
@@ -751,7 +753,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 					"memory": resource.MustParse("50Mi"),
 				},
 			},
-			SecurityContext: securitycontext.NewRootContext(false),
+			// Without a root context, it is not able to ln and chown.
+			SecurityContext: securitycontext.NewRootContext(true),
 			VolumeMounts: []corev1.VolumeMount{
 				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
 				{
@@ -834,7 +837,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			ImagePullSecrets:             secret.GetReferenceList(es.cfg.PullSecrets),
 			NodeSelector:                 nodeSels,
 			Tolerations:                  es.cfg.Installation.ControlPlaneTolerations,
-			ServiceAccountName:           "tigera-elasticsearch",
+			ServiceAccountName:           ElasticsearchObjectName,
 			Volumes:                      volumes,
 			AutomountServiceAccountToken: &autoMountToken,
 		},
@@ -1354,7 +1357,7 @@ func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.P
 func (es elasticsearchComponent) kibanaServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-kibana",
+			Name:      KibanaObjectName,
 			Namespace: KibanaNamespace,
 		},
 	}
@@ -1467,7 +1470,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				},
 				Spec: corev1.PodSpec{
 					ImagePullSecrets:             secret.GetReferenceList(es.cfg.PullSecrets),
-					ServiceAccountName:           "tigera-kibana",
+					ServiceAccountName:           KibanaObjectName,
 					NodeSelector:                 es.cfg.Installation.ControlPlaneNodeSelector,
 					Tolerations:                  es.cfg.Installation.ControlPlaneTolerations,
 					InitContainers:               initContainers,
@@ -1643,7 +1646,7 @@ func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-elasticsearch",
+			Name: ElasticsearchObjectName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1651,7 +1654,7 @@ func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole 
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-elasticsearch"},
+				ResourceNames: []string{ElasticsearchObjectName},
 			},
 		},
 	}
@@ -1660,17 +1663,17 @@ func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole 
 func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-elasticsearch",
+			Name: ElasticsearchObjectName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "tigera-elasticsearch",
+			Name:     ElasticsearchObjectName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-elasticsearch",
+				Name:      ElasticsearchObjectName,
 				Namespace: ElasticsearchNamespace,
 			},
 		},
@@ -1678,7 +1681,7 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 }
 
 func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy("tigera-elasticsearch")
+	psp := podsecuritypolicy.NewBasePolicy(ElasticsearchObjectName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.RequiredDropCapabilities = nil
@@ -1694,7 +1697,7 @@ func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1
 func (es elasticsearchComponent) kibanaClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-kibana",
+			Name: KibanaObjectName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1702,7 +1705,7 @@ func (es elasticsearchComponent) kibanaClusterRole() *rbacv1.ClusterRole {
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-kibana"},
+				ResourceNames: []string{KibanaObjectName},
 			},
 		},
 	}
@@ -1711,17 +1714,17 @@ func (es elasticsearchComponent) kibanaClusterRole() *rbacv1.ClusterRole {
 func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-kibana",
+			Name: KibanaObjectName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "tigera-kibana",
+			Name:     KibanaObjectName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-kibana",
+				Name:      KibanaObjectName,
 				Namespace: KibanaNamespace,
 			},
 		},
@@ -1729,7 +1732,7 @@ func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleB
 }
 
 func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy("tigera-kibana")
+	return podsecuritypolicy.NewBasePolicy(KibanaObjectName)
 }
 
 func (es elasticsearchComponent) oidcUserRole() client.Object {

@@ -437,6 +437,10 @@ func (r *ReconcileLogStorage) generateSecrets(
 		// Get certificate for es-proxy, which Linseed and es-gateway need to trust.
 		render.ManagerTLSSecretName,
 
+		// Linseed needs the manager internal cert in order to verify the cert presented by Voltron when provisioning
+		// tokens into managed clusters.
+		render.ManagerInternalTLSSecretName,
+
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.
 		render.FluentdPrometheusTLSSecretName,
 

@@ -64,7 +64,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	expectedManagerOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/manager_ocp.json")
 
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -446,7 +453,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: &operatorv1.ManagementCluster{}, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       &operatorv1.ManagementCluster{},
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -726,6 +740,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
 		})
 
 		// Should render the correct resources.
@@ -778,6 +793,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -794,6 +810,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -804,7 +821,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	It("should set the right env when FIPS is enabled", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		installation.FIPSMode = &fipsEnabled
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -838,6 +862,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					installation:            installation,
 					compliance:              compliance,
 					complianceFeatureActive: true,
+					ns:                      render.ManagerNamespace,
 				})
 
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
@@ -849,6 +874,81 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
 		)
 	})
+
+	It("multi-tenant rendering", func() {
+		tenantANamespace := "tenant-a"
+		tenantBNamespace := "tenant-b"
+
+		tenantAResources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      tenantANamespace,
+		})
+
+		expectedTenantAResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: tenantANamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.ManagerPolicyName, ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: render.ManagerServiceAccount, ns: tenantANamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: "tigera-manager", ns: tenantANamespace, group: "", version: "v1", kind: "Service"},
+			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "tigera-manager", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
+		}
+
+		for i, expectedRes := range expectedTenantAResources {
+			rtest.ExpectResource(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+
+		tenantBResources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      tenantBNamespace,
+		})
+
+		expectedTenantBResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: tenantBNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.ManagerPolicyName, ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: render.ManagerServiceAccount, ns: tenantBNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: "tigera-manager", ns: tenantBNamespace, group: "", version: "v1", kind: "Service"},
+			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "tigera-manager", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
+		}
+
+		for i, expectedRes := range expectedTenantBResources {
+			rtest.ExpectResource(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+	})
 })
 
 type renderConfig struct {
@@ -858,6 +958,7 @@ type renderConfig struct {
 	compliance              *operatorv1.Compliance
 	complianceFeatureActive bool
 	openshift               bool
+	ns                      string
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -913,7 +1014,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ComplianceLicenseActive: roc.complianceFeatureActive,
 		Openshift:               roc.openshift,
 		UsePSP:                  true,
-		Namespace:               render.ManagerNamespace,
+		Namespace:               roc.ns,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

@@ -82,6 +82,28 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should create and query multiple tenant manager instances", func() {
+		tenantANamespace := "tenant-a"
+		instanceA := &operatorv1.Manager{
+			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantANamespace},
+		}
+		err := c.Create(ctx, instanceA)
+		Expect(err).NotTo(HaveOccurred())
+		instance, err = GetManager(ctx, c, tenantANamespace)
+		Expect(err).NotTo(HaveOccurred())
+
+		tenantBNamespace := "tenant-b"
+		instanceB := &operatorv1.Manager{
+			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantBNamespace},
+		}
+		err = c.Create(ctx, instanceB)
+		Expect(err).NotTo(HaveOccurred())
+		instance, err = GetManager(ctx, c, tenantBNamespace)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	Context("cert tests", func() {
 		var r ReconcileManager
 		var cr *operatorv1.Manager

@@ -348,6 +348,14 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			ResourceNames: []string{common.TyphaDeploymentName},
 		})
 	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
 	return role
 }
 

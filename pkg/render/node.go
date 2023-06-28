@@ -712,6 +712,17 @@ func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
 	return portmapPlugin
 }
 
+func (c *nodeComponent) createTuningPlugin() map[string]interface{} {
+	// tuning plugin (sysctl)
+	tuningPlugin := map[string]interface{}{
+		"type":   "tuning",
+		"sysctl": map[string]string{},
+	}
+	tuningPlugin["sysctl"] = *c.cfg.Installation.CalicoNetwork.SysctlTuning
+
+	return tuningPlugin
+}
+
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
@@ -728,6 +739,11 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	if c.cfg.Installation.CalicoNetwork.HostPorts != nil &&
 		*c.cfg.Installation.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
 		plugins = append(plugins, c.createPortmapPlugin())
+	}
+
+	// optional tuning plugin
+	if c.cfg.Installation.CalicoNetwork.SysctlTuning != nil {
+		plugins = append(plugins, c.createTuningPlugin())
 	}
 
 	pluginsArray, _ := json.Marshal(plugins)

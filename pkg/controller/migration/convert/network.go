@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package convert
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -196,6 +197,42 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	} else {
 		hp := v1.HostPortsDisabled
 		install.Spec.CalicoNetwork.HostPorts = &hp
+	}
+
+	type TuningSpec struct {
+		Sysctl *map[operatorv1.SysctlTuningKey]string `json:"sysctl,omitempty"`
+		Type   string                                 `json:"type"`
+	}
+
+	// CNI tuning plugin
+	if pluginData, ok := c.cni.Plugins["tuning"]; ok {
+		// parse JSON data
+		var tuningSpecData TuningSpec
+		if err := json.Unmarshal([]byte(pluginData.Bytes), &tuningSpecData); err != nil {
+
+			return ErrIncompatibleCluster{
+				err:       "error parsing CNI config plugin type 'tuning'",
+				component: ComponentCNIConfig,
+				fix:       "fix CNI config",
+			}
+		}
+
+		// sysctl settings
+		allowedKeys := map[operatorv1.SysctlTuningKey]struct{}{
+			"net.ipv4.tcp_keepalive_intvl":  {},
+			"net.ipv4.tcp_keepalive_probes": {},
+			"net.ipv4.tcp_keepalive_time":   {},
+		}
+		sysctlTuning := make(map[operatorv1.SysctlTuningKey]string)
+		for key, value := range *tuningSpecData.Sysctl {
+			if _, allowed := allowedKeys[key]; allowed {
+				sysctlTuning[key] = value
+			}
+		}
+
+		if len(sysctlTuning) > 0 {
+			install.Spec.CalicoNetwork.SysctlTuning = &sysctlTuning
+		}
 	}
 
 	if c.cni.ConfigName != "k8s-pod-network" {

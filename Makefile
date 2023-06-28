@@ -688,7 +688,7 @@ generate:
 
 GO_GET_CONTAINER=docker run --rm \
 		-v $(CURDIR)/$(BINDIR):/go/bin:rw \
-		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
+		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \q
 		-e GOPATH=/go \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS) \
@@ -801,6 +801,7 @@ CRS_ARCHIVE_SRC := https://github.com/coreruleset/coreruleset/archive/refs/tags/
 CRS_ARCHIVE_TAR := v$(CRS_VERSION).tar.gz
 CRS_ARCHIVE_SHA := 821796a48bbedd1a0d962614ef473625da85feae
 CRS_ARCHIVE_TMP := $(shell mktemp -d)
+CRS_CONF_PATH :=  https://raw.githubusercontent.com/SpiderLabs/ModSecurity/v3/master/modsecurity.conf-recommended
 CHECKSUM_CMD := shasum
 .PHONY: pkg/render/applicationlayer/coreruleset
 pkg/render/applicationlayer/coreruleset:
@@ -815,5 +816,9 @@ pkg/render/applicationlayer/coreruleset:
 	tar xzvf $(CRS_ARCHIVE_TAR) -C $(CRS_ARCHIVE_TMP)
 	-rm -rf $(CRS_ARCHIVE_TAR)
 	ls $(CRS_ARCHIVE_TMP)
-	rm -rf $@ && \
-	mv $(CRS_ARCHIVE_TMP)/coreruleset-$(CRS_VERSION)/ $@
+	rm -rf $@ 
+	mkdir -p $@
+	mv $(CRS_ARCHIVE_TMP)/coreruleset-$(CRS_VERSION)/rules $@
+	mkdir -p $@/setup
+	mv $(CRS_ARCHIVE_TMP)/coreruleset-$(CRS_VERSION)/crs-setup.conf.example $@/setup/crs-setup.conf
+	cd $@/setup && { curl $(CRS_CONF_PATH) -o modsecdefault.conf; cd -; }

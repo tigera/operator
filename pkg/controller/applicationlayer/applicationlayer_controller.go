@@ -16,7 +16,6 @@ package applicationlayer
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -420,23 +419,18 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 }
 
 func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
+	data, err := applicationlayer.CoreRuleSetFilesMap()
+	if err != nil {
+		return nil, err
+	}
 	ruleset := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
 			Namespace: common.OperatorNamespace(),
 		},
-		Data: make(map[string]string),
+		Data: data,
 	}
-
-	for filename, dataBase64 := range applicationlayer.ModsecurityCoreRuleSet {
-		if data, err := base64.StdEncoding.DecodeString(dataBase64); err == nil {
-			ruleset.Data[filename] = string(data)
-		} else {
-			return nil, err
-		}
-	}
-
 	return ruleset, nil
 }
 

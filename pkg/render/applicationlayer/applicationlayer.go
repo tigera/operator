@@ -16,8 +16,9 @@ package applicationlayer
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"fmt"
+	"io/fs"
 	"strconv"
 	"strings"
 	"text/template"
@@ -61,6 +62,33 @@ const (
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
 	CalicoLogsVolumeName             = "var-log-calico"
 )
+
+var (
+	//go:embed coreruleset
+	coreRuleSetFiles embed.FS
+)
+
+func CoreRuleSetFilesMap() (map[string]string, error) {
+	res := make(map[string]string)
+	var walkFn fs.WalkDirFunc = func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if b, err := fs.ReadFile(coreRuleSetFiles, path); err != nil {
+			return err
+		} else {
+			res[d.Name()] = string(b)
+		}
+		return nil
+	}
+
+	if err := fs.WalkDir(coreRuleSetFiles, ".", walkFn); err != nil {
+		return nil, fmt.Errorf("failed to walk core ruleset files: %w", err)
+	}
+
+	return res, nil
+}
 
 func ApplicationLayer(
 	config *Config,

@@ -478,6 +478,36 @@ var _ = Describe("Installation merge tests", func() {
 					HostPorts: &_hpe,
 				}),
 		)
+
+		_sysctlTuningA := map[opv1.SysctlTuningKey]string{
+			"net.ipv4.tcp_keepalive_time":   "40",
+			"net.ipv4.tcp_keepalive_intvl":  "15",
+			"net.ipv4.tcp_keepalive_probes": "6",
+		}
+		_sysctlTuningB := map[opv1.SysctlTuningKey]string{}
+		DescribeTable("merge CNI Tuning", func(main, second, expect *map[opv1.SysctlTuningKey]string) {
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{SysctlTuning: main}
+			}
+			if second != nil {
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{SysctlTuning: second}
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNetwork).To(BeNil())
+			} else {
+				Expect(*inst.CalicoNetwork.SysctlTuning).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", &_sysctlTuningA, nil, &_sysctlTuningA),
+			Entry("Second only set", nil, &_sysctlTuningB, &_sysctlTuningB),
+			Entry("Both set equal", &_sysctlTuningA, &_sysctlTuningA, &_sysctlTuningA),
+			Entry("Both set not matching", &_sysctlTuningA, &_sysctlTuningB, &_sysctlTuningB),
+		)
+
 	})
 
 	DescribeTable("merge NodeMetricsPort", func(main, second, expect *int32) {

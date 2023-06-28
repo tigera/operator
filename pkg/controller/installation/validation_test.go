@@ -411,6 +411,16 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("should error on not-allowed CNI sysctl tuning plugin config", func() {
+		instance.Spec.CalicoNetwork.SysctlTuning = &map[operator.SysctlTuningKey]string{
+			"net.ipv4.not_allowed_setting":  "15",
+			"net.ipv4.tcp_keepalive_probes": "6",
+			"net.ipv4.tcp_keepalive_time":   "40",
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
 	Describe("validate Calico CNI plugin Type", func() {
 		DescribeTable("test invalid IPAM",
 			func(ipam operator.IPAMPluginType) {

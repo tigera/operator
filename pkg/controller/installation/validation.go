@@ -336,6 +336,30 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("spec.calicoNetwork.containerIPForwarding is supported only for Calico CNI")
 			}
 		}
+
+		type TuningSpec struct {
+			Sysctl *map[operatorv1.SysctlTuningKey]string `json:"sysctl,omitempty"`
+			Type   string                                 `json:"type"`
+		}
+
+		if instance.Spec.CalicoNetwork.SysctlTuning != nil {
+			// CNI tuning plugin
+			pluginData := instance.Spec.CalicoNetwork.SysctlTuning
+
+			// sysctl settings
+			allowedKeys := map[operatorv1.SysctlTuningKey]struct{}{
+				"net.ipv4.tcp_keepalive_intvl":  {},
+				"net.ipv4.tcp_keepalive_probes": {},
+				"net.ipv4.tcp_keepalive_time":   {},
+			}
+
+			for key, value := range *pluginData {
+				if _, allowed := allowedKeys[key]; !allowed {
+					return fmt.Errorf("value %s not allowed in spec.calicoNetwork.sysctlTuning", value)
+				}
+			}
+
+		}
 	}
 
 	// Verify that the flexvolume path is valid - either "None" (to disable) or a valid absolute path.

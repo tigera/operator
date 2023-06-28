@@ -1483,6 +1483,12 @@ spec:
                           on interfaces that do not match the given regex.
                         type: string
                     type: object
+                  sysctlTuning:
+                    additionalProperties:
+                      type: string
+                    description: SysctlTuning configures sysctl parameters for tuning
+                      plugin
+                    type: object
                   windowsDataplane:
                     description: 'WindowsDataplane is used to select the dataplane
                       used for Windows nodes. In particular, it causes the operator
@@ -10584,6 +10590,12 @@ spec:
                             description: SkipInterface enables IP auto-detection based
                               on interfaces that do not match the given regex.
                             type: string
+                        type: object
+                      sysctlTuning:
+                        additionalProperties:
+                          type: string
+                        description: SysctlTuning configures sysctl parameters for
+                          tuning plugin
                         type: object
                       windowsDataplane:
                         description: 'WindowsDataplane is used to select the dataplane

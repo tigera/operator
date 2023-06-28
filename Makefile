@@ -794,3 +794,26 @@ install-git-hooks:
 .PHONY: pre-commit
 pre-commit:
 	$(CONTAINERIZED) $(CALICO_BUILD) git-hooks/pre-commit-in-container
+
+
+CRS_VERSION := 3.3.4
+CRS_ARCHIVE_SRC := https://github.com/coreruleset/coreruleset/archive/refs/tags/v$(CRS_VERSION).tar.gz
+CRS_ARCHIVE_TAR := v$(CRS_VERSION).tar.gz
+CRS_ARCHIVE_SHA := 821796a48bbedd1a0d962614ef473625da85feae
+CRS_ARCHIVE_TMP := $(shell mktemp -d)
+CHECKSUM_CMD := shasum
+.PHONY: pkg/render/applicationlayer/coreruleset
+pkg/render/applicationlayer/coreruleset:
+	cd $(CRS_ARCHIVE_TMP)
+	curl -O -L $(CRS_ARCHIVE_SRC)
+	CHECKSUM=`$(CHECKSUM_CMD) $(CRS_ARCHIVE_TAR)`; \
+	case "$$CHECKSUM" in \
+		($(CRS_ARCHIVE_SHA)\ *) : ok ;; \
+		(*) echo $(CRS_ARCHIVE_TAR) checksum mismatch, expected=\"$(CRS_ARCHIVE_SHA)\" actual=\"$$CHECKSUM\"; \
+		exit 1 ;; \
+	esac
+	tar xzvf $(CRS_ARCHIVE_TAR) -C $(CRS_ARCHIVE_TMP)
+	-rm -rf $(CRS_ARCHIVE_TAR)
+	ls $(CRS_ARCHIVE_TMP)
+	rm -rf $@ && \
+	mv $(CRS_ARCHIVE_TMP)/coreruleset-$(CRS_VERSION)/ $@

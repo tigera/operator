@@ -102,6 +102,10 @@ type Config struct {
 	dikastesEnabled bool
 	envoyConfigMap  *corev1.ConfigMap
 
+	// envoy user-configurable overrides
+	UseRemoteAddressXFF bool
+	NumTrustedHopsXFF   int32
+
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }

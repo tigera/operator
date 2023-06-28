@@ -139,7 +139,7 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should prevent host ports if BPF is enabled", func() {
+	It("should allow host ports if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		hp := operator.HostPortsEnabled
@@ -148,7 +148,7 @@ var _ = Describe("Installation validation tests", func() {
 			CanReach: "8.8.8.8",
 		}
 		err := validateCustomResource(instance)
-		Expect(err).To(MatchError("spec.calicoNetwork.hostPorts is not supported with the eBPF dataplane"))
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should allow disabled host ports if BPF is enabled", func() {

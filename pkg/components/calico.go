@@ -40,14 +40,32 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoKubeControllersFIPS = component{
+		Version:  "master-fips",
+		Image:    "calico/kube-controllers",
+		Registry: "",
+	}
+
 	ComponentCalicoNode = component{
 		Version:  "master",
 		Image:    "calico/node",
 		Registry: "",
 	}
 
+	ComponentCalicoNodeFIPS = component{
+		Version:  "master-fips",
+		Image:    "calico/node",
+		Registry: "",
+	}
+
 	ComponentCalicoTypha = component{
 		Version:  "master",
+		Image:    "calico/typha",
+		Registry: "",
+	}
+
+	ComponentCalicoTyphaFIPS = component{
+		Version:  "master-fips",
 		Image:    "calico/typha",
 		Registry: "",
 	}
@@ -64,6 +82,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoAPIServerFIPS = component{
+		Version:  "master-fips",
+		Image:    "calico/apiserver",
+		Registry: "",
+	}
+
 	ComponentWindowsUpgrade = component{
 		Version:  "master",
 		Image:    "calico/windows-upgrade",
@@ -76,8 +100,20 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoCSIFIPS = component{
+		Version:  "master-fips",
+		Image:    "calico/csi",
+		Registry: "",
+	}
+
 	ComponentCalicoCSIRegistrar = component{
 		Version:  "master",
+		Image:    "calico/node-driver-registrar",
+		Registry: "",
+	}
+
+	ComponentCalicoCSIRegistrarFIPS = component{
+		Version:  "master-fips",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
@@ -90,13 +126,19 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
+		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
+		ComponentCalicoNodeFIPS,
 		ComponentCalicoTypha,
+		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
+		ComponentCalicoAPIServerFIPS,
 		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
+		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalicoCSIRegistrarFIPS,
 	}
 )

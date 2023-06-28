@@ -2006,5 +2006,19 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
 		})
+		It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+			fipsEnabled := operatorv1.FIPSModeEnabled
+			cfg.Installation.FIPSMode = &fipsEnabled
+
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
+		})
+
 	})
 })

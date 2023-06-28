@@ -49,6 +49,7 @@ import (
 const (
 	IntrusionDetectionNamespace = "tigera-intrusion-detection"
 	IntrusionDetectionName      = "intrusion-detection-controller"
+	AnomalyDetectorsName        = "anomaly-detectors"
 
 	ElasticsearchIntrusionDetectionUserSecret    = "tigera-ee-intrusion-detection-elasticsearch-access"
 	ElasticsearchIntrusionDetectionJobUserSecret = "tigera-ee-installer-elasticsearch-access"
@@ -65,6 +66,7 @@ const (
 	ADAPIObjectPortName             = "anomaly-detection-api-https"
 	ADAPITLSSecretName              = "anomaly-detection-api-tls"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
+	AnomalyDetectorTLSSecretName    = "anomaly-detector-tls"
 	DPITLSSecretName                = "deep-packet-inspection-tls"
 	ADAPIExpectedServiceName        = "anomaly-detection-api.tigera-intrusion-detection.svc"
 	ADAPIPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
@@ -125,6 +127,7 @@ type IntrusionDetectionConfiguration struct {
 	TrustedCertBundle            certificatemanagement.TrustedBundle
 	ADAPIServerCertSecret        certificatemanagement.KeyPairInterface
 	IntrusionDetectionCertSecret certificatemanagement.KeyPairInterface
+	AnomalyDetectorCertSecret    certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -236,7 +239,9 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.adDetectorServiceAccount(),
 			c.adDetectorSecret(),
 			c.adDetectorAccessRole(),
+			c.adDetectorAccessClusterRole(),
 			c.adDetectorRoleBinding(),
+			c.adDetectorClusterRoleBinding(),
 		)
 		adObjs = append(adObjs, c.adDetectorPodTemplates()...)
 
@@ -462,6 +467,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"events"},
 			Verbs:     []string{"create"},
+		},
+		{
+			// Add write/read/delete access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"threatfeeds_ipset", "threatfeeds_domainnameset"},
+			Verbs:     []string{"create", "delete", "get"},
 		},
 		{
 			// Add read access to Linseed APIs.
@@ -692,6 +703,10 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		}
 		container.Env = append(container.Env, envVars...)
 	}
+	var initContainers []corev1.Container
+	if c.cfg.IntrusionDetectionCertSecret != nil && c.cfg.IntrusionDetectionCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.IntrusionDetectionCertSecret.InitContainer(IntrusionDetectionNamespace))
+	}
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -704,6 +719,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: IntrusionDetectionName,
 			ImagePullSecrets:   ps,
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				container,
 			},
@@ -1713,6 +1729,33 @@ func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 		Rules: rules,
 	}
 }
+func (c *intrusionDetectionComponent) adDetectorAccessClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: adDetectorName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Add write access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"events"},
+				Verbs:     []string{"create"},
+			},
+			{
+				// Add read access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"dnslogs",
+					"l7logs",
+					"flowlogs",
+				},
+				Verbs: []string{"get"},
+			},
+		},
+	}
+
+}
 
 func (c *intrusionDetectionComponent) adDetectorRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
@@ -1724,6 +1767,27 @@ func (c *intrusionDetectionComponent) adDetectorRoleBinding() *rbacv1.RoleBindin
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
+			Name:     adDetectorName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      adDetectorName,
+				Namespace: IntrusionDetectionNamespace,
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) adDetectorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: adDetectorName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
 			Name:     adDetectorName,
 		},
 		Subjects: []rbacv1.Subject{
@@ -1765,6 +1829,26 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 			Name:  "FIPS_MODE_ENABLED",
 			Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 		},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain),
+		},
+		{
+			Name:  "LINSEED_CA",
+			Value: c.cfg.TrustedCertBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_CERT",
+			Value: c.cfg.AnomalyDetectorCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_KEY",
+			Value: c.cfg.AnomalyDetectorCertSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "LINSEED_TOKEN",
+			Value: GetLinseedTokenPath(false),
+		},
 	}
 
 	container := corev1.Container{
@@ -1776,9 +1860,13 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		VolumeMounts: append(
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
+			c.cfg.AnomalyDetectorCertSecret.VolumeMount(c.SupportedOSType()),
 		),
 	}
-
+	var initContainers []corev1.Container
+	if c.cfg.AnomalyDetectorCertSecret != nil && c.cfg.AnomalyDetectorCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.AnomalyDetectorCertSecret.InitContainer(IntrusionDetectionNamespace))
+	}
 	return corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PodTemplate",
@@ -1800,15 +1888,15 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				Volumes: []corev1.Volume{
 					c.cfg.TrustedCertBundle.Volume(),
 					c.cfg.ADAPIServerCertSecret.Volume(),
+					c.cfg.AnomalyDetectorCertSecret.Volume(),
 				},
 				DNSPolicy:          corev1.DNSClusterFirst,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				RestartPolicy:      corev1.RestartPolicyOnFailure,
 				ServiceAccountName: adDetectorName,
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
-				Containers: []corev1.Container{
-					relasticsearch.ContainerDecorate(container, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchADJobUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
-				},
+				Containers:         []corev1.Container{container},
+				InitContainers:     initContainers,
 			},
 		},
 	}
@@ -1985,7 +2073,7 @@ func (c *intrusionDetectionComponent) adDetectorAllowTigeraPolicy() *v3.NetworkP
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.CreateEntityRule(ElasticsearchNamespace, "tigera-secure-es-gateway", 5554, 9200),
+			Destination: networkpolicy.LinseedEntityRule,
 		},
 		{
 			Action:      v3.Allow,

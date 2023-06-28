@@ -211,7 +211,11 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	} else {
-		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, prefix, is)
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.image, err = components.GetReference(components.ComponentCalicoKubeControllersFIPS, reg, path, prefix, is)
+		} else {
+			c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, prefix, is)
+		}
 	}
 	return err
 }
@@ -524,12 +528,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		container = relasticsearch.ContainerDecorate(container, render.DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
 	}
-
+	var initContainers []corev1.Container
+	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(common.CalicoNamespace))
+	}
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
 		ServiceAccountName: c.kubeControllerServiceAccountName,
+		InitContainers:     initContainers,
 		Containers:         []corev1.Container{container},
 		Volumes:            c.kubeControllersVolumes(),
 	}

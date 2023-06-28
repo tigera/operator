@@ -435,8 +435,12 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+	}
+
+	var initContainers []corev1.Container
+	if c.cfg.ControllerKeyPair != nil && c.cfg.ControllerKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(ComplianceNamespace))
 	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -448,6 +452,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceControllerName,
@@ -568,7 +573,6 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 
@@ -609,6 +613,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				MountPath: LinseedVolumeMountPath,
 			})
 	}
+	var initContainers []corev1.Container
+	if c.cfg.ReporterKeyPair != nil && c.cfg.ReporterKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(ComplianceNamespace))
+	}
 
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
@@ -632,6 +640,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+				InitContainers:     initContainers,
 				Containers: []corev1.Container{
 					{
 						Name:            "reporter",
@@ -809,7 +818,6 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
@@ -994,7 +1002,6 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 
@@ -1021,6 +1028,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				MountPath: LinseedVolumeMountPath,
 			})
 	}
+	var initContainers []corev1.Container
+	if c.cfg.SnapshotterKeyPair != nil && c.cfg.SnapshotterKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(ComplianceNamespace))
+	}
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1032,6 +1043,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceSnapshotterName,
@@ -1147,7 +1159,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "CLUSTER_NAME", Value: c.cfg.ESClusterConfig.ClusterName()},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
 
@@ -1215,6 +1226,10 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			})
 	}
 
+	var initContainers []corev1.Container
+	if c.cfg.BenchmarkerKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(ComplianceNamespace))
+	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
@@ -1225,6 +1240,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			HostPID:            true,
 			Tolerations:        rmeta.TolerateAll,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:            ComplianceBenchmarkerName,

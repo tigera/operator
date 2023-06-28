@@ -687,13 +687,7 @@ func fillDefaults(instance *operator.Installation) error {
 	// Handle those here.
 	if instance.Spec.CNI.Type == operator.PluginCalico {
 		if instance.Spec.CalicoNetwork.HostPorts == nil {
-			var hp operator.HostPortsType
-			if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
-				// Host ports not supported with BPF mode.
-				hp = operator.HostPortsDisabled
-			} else {
-				hp = operator.HostPortsEnabled
-			}
+			hp := operator.HostPortsEnabled
 			instance.Spec.CalicoNetwork.HostPorts = &hp
 		}
 

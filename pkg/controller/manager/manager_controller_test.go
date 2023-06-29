@@ -794,5 +794,64 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 			})
 		})
+
+		It("Multi-tenant/namespaced reconciliation", func() {
+			r.multiTenant = true
+			tenantANamespace := "tenant-a"
+			tenantBNamespace := "tenant-b"
+
+			Expect(c.Create(ctx, &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantANamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantBNamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			tenantADeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-manager",
+					Namespace: tenantANamespace,
+				},
+			}
+
+			tenantBDeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-manager",
+					Namespace: tenantBNamespace,
+				},
+			}
+
+			// We called Reconcile without specifying a namespace, so neither of these namespaced deployments should
+			// exist yet
+			Expect(test.GetResource(c, &tenantADeployment)).NotTo((BeNil()))
+			Expect(test.GetResource(c, &tenantBDeployment)).NotTo((BeNil()))
+
+			// Now reconcile only tenant A's namespace and check that its deployment exists, but tenant B's deployment
+			// still hasn't been reconciled so it should still not exist
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(c, &tenantADeployment)).To((BeNil()))
+			Expect(test.GetResource(c, &tenantBDeployment)).NotTo((BeNil()))
+
+			// Now reconcile tenant B's namespace and check that its deployment exists now alongside tenant A's
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(c, &tenantADeployment)).To((BeNil()))
+			Expect(test.GetResource(c, &tenantBDeployment)).To((BeNil()))
+		})
 	})
 })

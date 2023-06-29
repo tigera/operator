@@ -240,7 +240,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		// TODO: The namespace should be pre-created in multi-tenant environments.
 		// Maybe we should do this for single-tenant as well, to keep them more similar?
-		CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+		CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted), // TODO: Try making this conditional on the ns field being non-empty
 		c.managerAllowTigeraNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
 	}

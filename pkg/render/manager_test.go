@@ -218,6 +218,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				installation:            installation,
 				compliance:              complianceCR,
 				complianceFeatureActive: licenseFeatureActive,
+				ns:                      render.ManagerNamespace,
 			})
 
 			deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -234,11 +235,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	)
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
-		Expect(rtest.GetResource(resources, "tigera-manager", "tigera-manager", "apps", "v1", "Deployment")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment")).ToNot(BeNil())
 
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
@@ -385,7 +393,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(renderConfig{oidc: true, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    true,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.

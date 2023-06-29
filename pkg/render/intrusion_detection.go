@@ -390,10 +390,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Value: c.cfg.TrustedCertBundle.MountPath(),
 			},
 			{
-				Name:  "CLUSTER_NAME",
-				Value: c.cfg.ESClusterConfig.ClusterName(),
-			},
-			{
 				Name:  "FIPS_MODE_ENABLED",
 				Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 			},
@@ -712,10 +708,6 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() corev1.Container {
 	envs := []corev1.EnvVar{
-		{
-			Name:  "CLUSTER_NAME",
-			Value: c.cfg.ESClusterConfig.ClusterName(),
-		},
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: c.cfg.TrustedCertBundle.MountPath(),

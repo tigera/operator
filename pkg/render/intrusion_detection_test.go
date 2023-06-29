@@ -591,7 +591,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []expectedEnvVar{
-			{"CLUSTER_NAME", cfg.ESClusterConfig.ClusterName(), "", ""},
 			{"MULTI_CLUSTER_FORWARDING_CA", cfg.TrustedCertBundle.MountPath(), "", ""},
 			{"IDS_ENABLE_EVENT_FORWARDING", "true", "", ""},
 		}
@@ -718,7 +717,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
-			corev1.EnvVar{Name: "CLUSTER_NAME", Value: cfg.ESClusterConfig.ClusterName()},
 			corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: cfg.TrustedCertBundle.MountPath()},
 			corev1.EnvVar{Name: "DISABLE_ALERTS", Value: "yes"},
 			corev1.EnvVar{Name: "DISABLE_ANOMALY_DETECTION", Value: "yes"},

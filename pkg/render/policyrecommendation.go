@@ -243,6 +243,10 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		pr.cfg.TrustedBundle.Volume(),
 		pr.cfg.PolicyRecommendationCertSecret.Volume(),
 	}
+	var initContainers []corev1.Container
+	if pr.cfg.PolicyRecommendationCertSecret != nil && pr.cfg.PolicyRecommendationCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, pr.cfg.PolicyRecommendationCertSecret.InitContainer(PolicyRecommendationNamespace))
+	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(
 		relasticsearch.ContainerDecorate(
@@ -269,7 +273,8 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				container,
 			},
-			Volumes: volumes,
+			InitContainers: initContainers,
+			Volumes:        volumes,
 		},
 	}, pr.cfg.ESClusterConfig, pr.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 

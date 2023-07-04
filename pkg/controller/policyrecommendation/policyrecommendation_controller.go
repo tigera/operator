@@ -65,6 +65,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	licenseAPIReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
+	policyRecScopeWatchReady := &utils.ReadyFlag{}
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
@@ -83,6 +84,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	go utils.WaitToAddLicenseKeyWatch(policyRecController, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddPolicyRecommendationScopeWatch(policyRecController, k8sClient, log, policyRecScopeWatchReady)
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, policyRecController, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(policyRecController, k8sClient, log, []types.NamespacedName{
 		{Name: render.PolicyRecommendationPolicyName, Namespace: render.PolicyRecommendationNamespace},
@@ -124,12 +126,6 @@ func add(c controller.Controller) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.PolicyRecommendation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
-	}
-
-	// Watch for changes to primary resource PolicyRecommendationScope
-	err = c.Watch(&source.Kind{Type: &v3.PolicyRecommendationScope{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("policy-recommendation-controller failed to watch policy recommendation scope resource: %w", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {

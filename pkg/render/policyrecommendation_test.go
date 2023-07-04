@@ -78,6 +78,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			ManagedCluster:                 notManagedCluster,
 			PolicyRecommendationCertSecret: keyPair,
 			UsePSP:                         true,
+			Namespace:                      render.PolicyRecommendationNamespace,
 		}
 	})
 
@@ -259,5 +260,66 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
 		)
+	})
+
+	It("multi-tenant rendering", func() {
+		tenantANamespace := "tenant-a"
+		tenantBNamespace := "tenant-b"
+
+		cfg.Namespace = tenantANamespace
+		tenantAPolicyRec := render.PolicyRecommendation(cfg)
+
+		tenantAResources, _ := tenantAPolicyRec.Objects()
+
+		// Should render the correct resources.
+		tenantAExpectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: tenantANamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "allow-tigera.default-deny", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "allow-tigera.tigera-policy-recommendation", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
+		}
+
+		Expect(len(tenantAResources)).To(Equal(len(tenantAExpectedResources)))
+
+		for i, expectedRes := range tenantAExpectedResources {
+			rtest.ExpectResource(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+
+		cfg.Namespace = tenantBNamespace
+		tenantBPolicyRec := render.PolicyRecommendation(cfg)
+
+		tenantBResources, _ := tenantBPolicyRec.Objects()
+
+		// Should render the correct resources.
+		tenantBExpectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: tenantBNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "allow-tigera.default-deny", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "allow-tigera.tigera-policy-recommendation", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
+		}
+
+		Expect(len(tenantBResources)).To(Equal(len(tenantBExpectedResources)))
+
+		for i, expectedRes := range tenantBExpectedResources {
+			rtest.ExpectResource(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
 	})
 })

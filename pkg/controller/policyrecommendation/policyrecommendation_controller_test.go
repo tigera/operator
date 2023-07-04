@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -306,6 +308,76 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 
 			prs := operatorv1.PolicyRecommendation{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 			Expect(test.GetResource(c, &prs)).To(BeNil())
+		})
+
+		It("Multi-tenant/namespaced reconciliation", func() {
+			r.multiTenant = true
+			tenantANamespace := "tenant-a"
+			tenantBNamespace := "tenant-b"
+
+			certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+			linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
+
+			certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
+			linseedTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantBNamespace, []string{render.TigeraLinseedSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.PolicyRecommendation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantANamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.PolicyRecommendation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantBNamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			// We check for correct rendering of all resources in policyrecommendation_test.go, so use the SA
+			// merely as a proxy here that the creation of our PolicyRecommendation went smoothly
+			tenantAServiceAccount := corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+				Name:      render.PolicyRecommendationName,
+				Namespace: tenantANamespace,
+			}}
+
+			tenantBServiceAccount := corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+				Name:      render.PolicyRecommendationName,
+				Namespace: tenantBNamespace,
+			}}
+
+			// We called Reconcile without specifying a namespace, so neither of these namespaced objects should
+			// exist yet
+			Expect(test.GetResource(c, &tenantAServiceAccount)).NotTo(BeNil())
+			Expect(test.GetResource(c, &tenantBServiceAccount)).NotTo(BeNil())
+
+			// Now reconcile only tenant A's namespace and check that its PolicyRecommendation exists, but tenant B's
+			// PolicyRecommendation still hasn't been reconciled so it should still not exist
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(c, &tenantAServiceAccount)).To((BeNil()))
+			Expect(test.GetResource(c, &tenantBServiceAccount)).NotTo((BeNil()))
+
+			// Now reconcile tenant B's namespace and check that its PolicyRecommendation exists now alongside tenant A's
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(c, &tenantAServiceAccount)).To((BeNil()))
+			Expect(test.GetResource(c, &tenantBServiceAccount)).To((BeNil()))
 		})
 	})
 })

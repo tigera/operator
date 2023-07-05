@@ -125,13 +125,11 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
-		// Add tigera-manager service account for impersonation
+		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
+		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
-		managerServiceAccount("tigera-manager"), // TODO
+		managerServiceAccount(ManagerNamespace),
 		managerClusterRole(false, true, c.cfg.UsePSP),
-		// TODO: Use dynamic namespace. This might actually be tricky, because
-		// we need namespaces in the managed cluster to match up with the management cluster
-		// for RBAC to work properly. We may need to rethink this appraoch a bit.
 		managerClusterRoleBinding(ManagerNamespace),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),

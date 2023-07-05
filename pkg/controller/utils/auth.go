@@ -36,7 +36,7 @@ import (
 func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticationCR *operatorv1.Authentication, clusterDomain string) (rauth.KeyValidatorConfig, error) {
 	var keyValidatorConfig rauth.KeyValidatorConfig
 	if authenticationCR != nil {
-		idpSecret, err := GetIdpSecret(ctx, cli, authenticationCR)
+		idpSecret, err := GetIDPSecret(ctx, cli, authenticationCR)
 		if err != nil {
 			return nil, err
 		}
@@ -73,10 +73,9 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 	return keyValidatorConfig, nil
 }
 
-// GetIdpSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
+// GetIDPSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
 // operatorv1.Authentication CR.
-// TODO: This needs to be updated to support multiple tenants IDP secrets.
-func GetIdpSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
+func GetIDPSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
 	var secretName string
 	var requiredFields []string
 	if authentication.Spec.OIDC != nil {

@@ -287,7 +287,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	idpSecret, err := utils.GetIdpSecret(ctx, r.client, authentication)
+	idpSecret, err := utils.GetIDPSecret(ctx, r.client, authentication)
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid or missing identity provider secret", err, reqLogger)
 		return reconcile.Result{}, err

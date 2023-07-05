@@ -15,38 +15,23 @@
 package controller
 
 import (
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"k8s.io/apimachinery/pkg/types"
 )
 
-type ManagerRequest struct {
-	CommonRequest
-	Manager *operatorv1.Manager
-}
-
-type LogStorageRequest struct {
-	CommonRequest
-	LogStorage *operatorv1.LogStorage
-}
-
-func NewCommonRequest(r types.NamespacedName, mt bool, defaultNS string) CommonRequest {
-	return CommonRequest{
+func NewRequest(r types.NamespacedName, mt bool, defaultNS string) Request {
+	return Request{
 		NamespacedName:        r,
 		multiTenant:           mt,
 		singleTenantNamespace: defaultNS,
 	}
 }
 
-// CommonRequest has common fields used by all controllers.
-type CommonRequest struct {
+// Request wraps a standard request and provides utilities to support both
+// single and multi-tenant operator modes.
+type Request struct {
 	// The name and namespace of the object that triggered this request.
 	types.NamespacedName
-
-	Variant      operatorv1.ProductVariant
-	Installation *operatorv1.InstallationSpec
-	License      v3.LicenseKey
 
 	// Whether the operator is running in multi-tenant or single-tenant mode.
 	multiTenant bool
@@ -58,7 +43,7 @@ type CommonRequest struct {
 // InstallNamespace returns the namespace that components will be installed into.
 // for single-tenant clusters, this is tigera-manager. For multi-tenancy, this
 // will be the tenant's namespace.
-func (r *CommonRequest) InstallNamespace() string {
+func (r *Request) InstallNamespace() string {
 	if !r.multiTenant {
 		return r.singleTenantNamespace
 	}
@@ -68,7 +53,7 @@ func (r *CommonRequest) InstallNamespace() string {
 // TruthNamespace returns the namespace to use as the source of truth for storing data.
 // For single-tenant installs, this is the tigera-operator namespace.
 // For multi-tenant installs, this is tenant's namespace.
-func (r *CommonRequest) TruthNamespace() string {
+func (r *Request) TruthNamespace() string {
 	if !r.multiTenant {
 		return common.OperatorNamespace()
 	}

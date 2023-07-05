@@ -157,7 +157,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 	}
 
 	for _, secretName := range []string{
-		"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureServerCert(false, "").Name(),
+		"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureServerCert,
 		certificatemanagement.CASecretName, render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -408,7 +408,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if variant == operatorv1.TigeraSecureEnterprise {
 		packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
-			render.PacketCaptureServerCert(false, "").Name(),
+			render.PacketCaptureServerCert,
 			common.OperatorNamespace(),
 			dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain))
 		if err != nil {

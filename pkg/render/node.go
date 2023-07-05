@@ -734,7 +734,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	config := fmt.Sprintf(`{
 			  "name": "k8s-pod-network",
 			  "cniVersion": "0.3.1",
-			  "plugins": %s 
+			  "plugins": %s
 			}`, string(pluginsArray))
 
 	return &corev1.ConfigMap{
@@ -1657,15 +1657,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	case operatorv1.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
-		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
-			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
-		}
-	case operatorv1.ProviderRKE2:
-		// For RKE2, configure a non-default trusted DNS server, as the DNS service is not named "kube-dns".
-		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"})
-		}
 	// For AKS/AzureVNET and EKS/VPCCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
 	case operatorv1.ProviderAKS:
 		if c.cfg.Installation.CNI.Type == operatorv1.PluginAzureVNET {

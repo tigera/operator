@@ -19,7 +19,6 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -41,23 +40,23 @@ func (r *LinseedSubController) createESGateway(
 	ctx context.Context,
 	trustedBundle certificatemanagement.TrustedBundle,
 	usePSP bool,
-) (reconcile.Result, bool, error) {
+) error {
 	// Get the ES admin user secret. This is provisioned by the ECK operator as part of installing Elasticsearch,
 	// and so may not be immediately available.
 	esAdminUserSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
 	if err != nil {
 		reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch admin user secret", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	} else if esAdminUserSecret == nil {
 		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for elasticsearch admin secret", nil, reqLogger)
-		return reconcile.Result{}, false, nil
+		return nil
 	}
 
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch admin user secret contains too many entries", nil, reqLogger)
-		return reconcile.Result{}, false, nil
+		return nil
 	}
 
 	var esAdminUserName string
@@ -70,18 +69,18 @@ func (r *LinseedSubController) createESGateway(
 	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 	gatewayKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create kube-controllers secrets for Elasticsearch gateway", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	cfg := &esgateway.Config{
@@ -99,14 +98,14 @@ func (r *LinseedSubController) createESGateway(
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	for _, comp := range []render.Component{esGatewayComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
-			return reconcile.Result{}, false, err
+			return err
 		}
 	}
-	return reconcile.Result{}, true, nil
+	return nil
 }

@@ -247,7 +247,6 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		ESClusterConfig:   esClusterConfig,
 		ManagementCluster: managementCluster != nil,
 	}
-
 	linseedComponent := linseed.Linseed(cfg)
 
 	if err := imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {
@@ -263,8 +262,8 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	// TODO: For now, just do ESGW here since it serves a similar purpose.
-	if result, _, err := r.createESGateway(
+	// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
+	if err := r.createESGateway(
 		install,
 		variant,
 		pullSecrets,
@@ -274,7 +273,24 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		trustedBundle,
 		r.usePSP,
 	); err != nil {
-		return result, err
+		return reconcile.Result{}, err
+	}
+
+	// TODO: For now, install this here. It probably should have its own controller.
+	if err := r.createESMetrics(
+		install,
+		variant,
+		managementClusterConnection,
+		pullSecrets,
+		reqLogger,
+		esClusterConfig,
+		ctx,
+		hdler,
+		trustedBundle,
+		r.usePSP,
+		cm,
+	); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil

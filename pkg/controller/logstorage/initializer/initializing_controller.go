@@ -20,7 +20,10 @@ import (
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -239,55 +241,50 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// TODO: What is this finalizer business and where should it live?
-	// Determine if we're terminating, and thus if we need to clean up our finalizers.
-	// elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	// if err != nil {
-	// 	r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-	// 	return reconcile.Result{}, err
-	// }
-	// var kibana *kbv1.Kibana
-	// if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
-	// 	kibana, err = r.getKibana(ctx)
-	// 	if err != nil {
-	// 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
-	// 		return reconcile.Result{}, err
-	// 	}
-	// }
-	// finalizerCleanup := false
-	// if ls != nil && ls.DeletionTimestamp != nil && elasticsearch == nil && kibana == nil {
-	// 	finalizerCleanup = true
-	// }
+	// Determine if we're terminating, and thus if we need to clean up our finalizers. We add a finalizer to the LogStorage
+	// so that we can block deletion of it until downstream resources have termianted. Specifically, the Elasticsearch and Kibana
+	// instances. So, check if those have been deleted before removing the finalizer.
+	if ls != nil && ls.DeletionTimestamp != nil {
+		prePatch := client.MergeFrom(ls.DeepCopy())
 
-	// if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup {
-	// 	ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
-	//
-	// 	// Write the logstorage back to the datastore
-	// 	if patchErr := r.client.Patch(ctx, ls, preDefaultingPatchFrom); patchErr != nil {
-	// 		reqLogger.Error(patchErr, "Error patching the log-storage")
-	// 		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching the log-storage", patchErr, reqLogger)
-	// 		return reconcile.Result{}, patchErr
-	// 	}
-	// }
+		// Get Installation resource.
+		_, install, err := utils.GetInstallation(context.Background(), r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 
-	// TODO: This needs to find a home.
-	// if managementClusterConnection == nil {
-	// 	result, proceed, err = r.createESMetrics(
-	// 		install,
-	// 		variant,
-	// 		pullSecrets,
-	// 		reqLogger,
-	// 		clusterConfig,
-	// 		ctx,
-	// 		hdler,
-	// 		keyPairs.metricsServer,
-	// 		trustedBundle,
-	// 		r.usePSP,
-	// 	)
-	// 	if err != nil || !proceed {
-	// 		return result, err
-	// 	}
-	// }
+		// Check whether ES and Kibana CRs exist.
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		var kibana *kbv1.Kibana
+		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+			err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kibana)
+			if err != nil && !errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
+		// Remove the finalizer if both ES and Kibana have been cleaned up.
+		if elasticsearch == nil && kibana == nil {
+			ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+
+			// Write the logstorage back to the datastore
+			if patchErr := r.client.Patch(ctx, ls, prePatch); patchErr != nil {
+				reqLogger.Error(patchErr, "Error patching the log-storage")
+				r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching the log-storage", patchErr, reqLogger)
+				return reconcile.Result{}, patchErr
+			}
+		}
+	}
 
 	r.status.ClearDegraded()
 

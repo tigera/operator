@@ -621,6 +621,11 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
 		return reconcile.Result{}, err
 	}
+	clusterScopedComponent, err := render.ManagerClusterScoped(managerCfg, []string{request.InstallNamespace()}) // TODO: All namespaces.
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
+		return reconcile.Result{}, err
+	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, args.Variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
@@ -629,6 +634,7 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 
 	components := []render.Component{
 		component,
+		clusterScopedComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       request.InstallNamespace(),
 			TruthNamespace:  request.TruthNamespace(),

@@ -93,6 +93,39 @@ var (
 	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule("tigera-manager", ManagerDeploymentName)
 )
 
+// ManagerClusterScoped returns a component for rendering cluster-scoped manager resources.
+func ManagerClusterScoped(cfg *ManagerConfiguration, namespaces []string) (Component, error) {
+	return &managerClusterScopedComponent{
+		cfg:        cfg,
+		namespaces: namespaces,
+	}, nil
+}
+
+type managerClusterScopedComponent struct {
+	cfg        *ManagerConfiguration
+	namespaces []string
+}
+
+func (m *managerClusterScopedComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	return nil
+}
+
+func (m *managerClusterScopedComponent) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
+	objs := []client.Object{
+		managerClusterRoleBinding(m.namespaces),
+	}
+	return objs, nil
+}
+
+func (m *managerClusterScopedComponent) Ready() bool {
+	return true
+}
+
+func (m *managerClusterScopedComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
+}
+
+// Manager returns a component for rendering namespaced manager resources.
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := cfg.TrustedCertBundle.HashAnnotations()
@@ -216,7 +249,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs,
 		managerServiceAccount(c.cfg.Namespace),
 		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP),
-		managerClusterRoleBinding(c.cfg.Namespace),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
 		managerClusterWideTigeraLayer(),
@@ -613,9 +645,7 @@ func managerServiceAccount(ns string) *corev1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-// TODO: This is global. We probably want one of the following:
-// - Name this based on tenant, e.g., "tigera-manager-<tenant_id>"
-// - Move this into a different component that manages all of the "shared" resources.
+// TODO: This is global. It should be moved to the cluster scoped manager component.
 func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -776,7 +806,15 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 
 // managerClusterRoleBinding returns a clusterrolebinding that gives the tigera-manager serviceaccount
 // the permissions in the tigera-manager-role.
-func managerClusterRoleBinding(ns string) *rbacv1.ClusterRoleBinding {
+func managerClusterRoleBinding(namespaces []string) *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{}
+	for _, ns := range namespaces {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      ManagerServiceAccount,
+			Namespace: ns,
+		})
+	}
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
@@ -785,15 +823,7 @@ func managerClusterRoleBinding(ns string) *rbacv1.ClusterRoleBinding {
 			Kind:     "ClusterRole",
 			Name:     ManagerClusterRole,
 		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind: "ServiceAccount",
-				Name: ManagerServiceAccount,
-				// TODO - this probably needs to have a list of subjects, one for each tenant.
-				// This nudges us towards a "common" component that manages shared resources separately.
-				Namespace: ns,
-			},
-		},
+		Subjects: subjects,
 	}
 }
 
@@ -829,6 +859,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 	return objs
 }
 
+// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	return podsecuritypolicy.NewBasePolicy("tigera-manager")
 }
@@ -942,7 +973,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 // managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced.
+// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerClusterWideSettingsGroup() *v3.UISettingsGroup {
 	return &v3.UISettingsGroup{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
@@ -958,7 +989,7 @@ func managerClusterWideSettingsGroup() *v3.UISettingsGroup {
 // managerUserSpecificSettingsGroup returns a UISettingsGroup with the description "user settings"
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced.
+// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 	return &v3.UISettingsGroup{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
@@ -976,7 +1007,7 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 // all of the tigera namespaces.
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced.
+// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerClusterWideTigeraLayer() *v3.UISettings {
 	namespaces := []string{
 		"tigera-compliance",
@@ -1031,7 +1062,7 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 // everything and uses the tigera-infrastructure layer.
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced.
+// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerClusterWideDefaultView() *v3.UISettings {
 	return &v3.UISettings{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},

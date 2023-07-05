@@ -135,6 +135,8 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				"policyrecommendationscopes/status",
 				"stagednetworkpolicies",
 				"tier.stagednetworkpolicies",
+				"networkpolicies",
+				"tier.networkpolicies",
 				"globalnetworksets",
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},

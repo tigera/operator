@@ -122,6 +122,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					"policyrecommendationscopes/status",
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
 					"globalnetworksets",
 				},
 				Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},

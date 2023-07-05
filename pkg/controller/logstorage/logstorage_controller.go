@@ -26,7 +26,6 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 
-	octrl "github.com/tigera/operator/pkg/controller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -137,7 +136,6 @@ func newReconciler(
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
 		usePSP:         opts.UsePSP,
-		multiTenant:    opts.MultiTenant,
 	}
 
 	c.status.Run(opts.ShutdownContext)
@@ -263,7 +261,6 @@ type ReconcileLogStorage struct {
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
 	usePSP         bool
-	multiTenant    bool
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -394,12 +391,11 @@ func (c *keyPairCollection) trustedBundle(cm certificatemanager.CertificateManag
 	return cm.CreateTrustedBundle(append(certs, c.upstreamCerts...)...)
 }
 
-func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle, request octrl.CommonRequest) render.Component {
+func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle) render.Component {
 	// Create a render.Component to provision or update key pairs and the trusted bundle.
 	c.log.V(1).WithValues("keyPairs", c).Info("Generating a certificate management component for tigera-elasticsearch")
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		Namespace:      request.InstallNamespace(),
-		TruthNamespace: request.TruthNamespace(),
+		Namespace: render.ElasticsearchNamespace,
 		ServiceAccounts: []string{
 			render.ElasticsearchObjectName,
 			linseed.ServiceAccountName,
@@ -429,7 +425,6 @@ func (r *ReconcileLogStorage) generateSecrets(
 	log logr.Logger,
 	cm certificatemanager.CertificateManager,
 	fipsMode *operatorv1.FIPSMode,
-	req octrl.CommonRequest,
 ) (*keyPairCollection, error) {
 	collection := keyPairCollection{log: log}
 
@@ -467,7 +462,7 @@ func (r *ReconcileLogStorage) generateSecrets(
 		render.PolicyRecommendationTLSSecretName,
 	}
 	for _, certName := range certs {
-		cert, err := cm.GetCertificate(r.client, certName, req.TruthNamespace())
+		cert, err := cm.GetCertificate(r.client, certName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
 			return nil, err
@@ -482,35 +477,33 @@ func (r *ReconcileLogStorage) generateSecrets(
 	// Generate a keypair for elasticsearch.
 	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
 	// It will be provisioned into the cluster in the render stage later on.
-	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, req.InstallNamespace(), r.clusterDomain)
-	elasticKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, req.TruthNamespace(), esDNSNames)
+	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	elasticKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
 		return nil, err
 	}
 	collection.elastic = elasticKeyPair
 
-	if !r.multiTenant {
-		// Generate a keypair for Kibana.
-		// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
-		// It will be provisioned into the cluster in the render stage later on.
-		if !operatorv1.IsFIPSModeEnabled(fipsMode) {
-			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-			kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, req.TruthNamespace(), kbDNSNames)
-			if err != nil {
-				log.Error(err, err.Error())
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
-				return nil, err
-			}
-			collection.kibana = kibanaKeyPair
+	// Generate a keypair for Kibana.
+	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+	// It will be provisioned into the cluster in the render stage later on.
+	if !operatorv1.IsFIPSModeEnabled(fipsMode) {
+		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+		kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
+			return nil, err
 		}
+		collection.kibana = kibanaKeyPair
 	}
 
 	// Create a server key pair for Linseed to present to clients.
 	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
 	// It will be provisioned into the cluster in the render stage later on.
-	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, req.InstallNamespace(), r.clusterDomain)
-	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, req.TruthNamespace(), linseedDNSNames)
+	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, common.OperatorNamespace(), linseedDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err
@@ -518,7 +511,7 @@ func (r *ReconcileLogStorage) generateSecrets(
 	collection.linseed = linseedKeyPair
 
 	// Create a key pair for Linseed to use for tokens.
-	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, req.TruthNamespace(), []string{"localhost"})
+	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, common.OperatorNamespace(), []string{"localhost"})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err
@@ -526,8 +519,8 @@ func (r *ReconcileLogStorage) generateSecrets(
 	collection.linseedTokenKeyPair = linseedTokenKP
 
 	// Create a server key pair for the ES metrics server.
-	metricsDNSNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, req.InstallNamespace(), r.clusterDomain)
-	metricsServerKeyPair, err := cm.GetOrCreateKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, req.TruthNamespace(), metricsDNSNames)
+	metricsDNSNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, r.clusterDomain)
+	metricsServerKeyPair, err := cm.GetOrCreateKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), metricsDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate", err, log)
 		return nil, err
@@ -535,9 +528,9 @@ func (r *ReconcileLogStorage) generateSecrets(
 	collection.metricsServer = metricsServerKeyPair
 
 	// ES gateway keypair.
-	gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, req.InstallNamespace(), r.clusterDomain)
-	gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, req.InstallNamespace(), r.clusterDomain)...)
-	gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, req.TruthNamespace(), gatewayDNSNames)
+	gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
+	gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), gatewayDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err
@@ -553,25 +546,13 @@ func (r *ReconcileLogStorage) generateSecrets(
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	common := octrl.NewCommonRequest(request.NamespacedName, r.multiTenant, "tigera-elasticsearch")
-	req := octrl.LogStorageRequest{
-		CommonRequest: common,
-	}
-	return r.reconcile(ctx, req)
-}
-
-func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogStorageRequest) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
 	var preDefaultPatchFrom client.Patch
 
 	ls := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
-	if r.multiTenant {
-		key.Namespace = request.Namespace
-	}
-	err := r.client.Get(ctx, key, ls)
+	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
@@ -607,7 +588,7 @@ func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogSt
 		// SetMetaData in the TigeraStatus such as observedGenerations.
 		defer r.status.SetMetaData(&ls.ObjectMeta)
 		// Changes for updating LogStorage status conditions.
-		if request.Name == ResourceName && request.Namespace == "" { // TODO: This no longer works in mult-tenant mode.
+		if request.Name == ResourceName && request.Namespace == "" {
 			ts := &operatorv1.TigeraStatus{}
 			err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts)
 			if err != nil {
@@ -692,25 +673,21 @@ func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogSt
 		return reconcile.Result{}, err
 	}
 
-	var kbService *corev1.Service
-	if !r.multiTenant {
-		// For now, Kibana is only supported in single tenant configurations.
-		kbService, err = r.getKibanaService(ctx)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve the Kibana service", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	kbService, err := r.getKibanaService(ctx)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve the Kibana service", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, request.TruthNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	certificateManager.AddToStatusManager(r.status, request.InstallNamespace())
+	certificateManager.AddToStatusManager(r.status, render.ElasticsearchNamespace)
 
 	// Gather all the secrets we need.
-	keyPairs, err := r.generateSecrets(reqLogger, certificateManager, install.FIPSMode, request.CommonRequest)
+	keyPairs, err := r.generateSecrets(reqLogger, certificateManager, install.FIPSMode)
 	if err != nil {
 		// Status manager is handled in r.generateSecrets, so we can just return
 		return reconcile.Result{}, err
@@ -733,9 +710,7 @@ func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogSt
 		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 		// Get the admin user secret to copy to the operator namespace.
-		// TODO: For multi-tenant, we might still want this code. But, it doesn't necessarily need to run for every tenant. And we certainly don't want to
-		// pass admin creds into each tenant's namespace. Making a note to dig into this.
-		esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, request.InstallNamespace())
+		esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch admin user secret", err, reqLogger)
@@ -745,7 +720,6 @@ func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogSt
 			esAdminUserSecret = rsecret.CopyToNamespace(common.OperatorNamespace(), esAdminUserSecret)[0]
 		}
 
-		// TODO can just get rid of this once we get rid of curator.
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get curator credentials", err, reqLogger)
@@ -759,7 +733,7 @@ func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogSt
 			}
 
 			keyStoreSecret = &corev1.Secret{}
-			if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchKeystoreSecret, Namespace: request.TruthNamespace()}, keyStoreSecret); err != nil {
+			if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchKeystoreSecret, Namespace: common.OperatorNamespace()}, keyStoreSecret); err != nil {
 				if errors.IsNotFound(err) {
 					// We need to render a new one.
 					keyStoreSecret = render.CreateElasticsearchKeystoreSecret()
@@ -791,7 +765,6 @@ func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogSt
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
-	// TODO: Is this ever going to be used in multi-tenant?
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
@@ -839,7 +812,7 @@ func (r *ReconcileLogStorage) reconcile(ctx context.Context, request octrl.LogSt
 	if managementClusterConnection == nil {
 		// Create secrets in the tigera-elasticsearch namespace. We need to do this before the proceed check below,
 		// since ES becoming ready is dependent on the secrets created by this component.
-		if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle, request.CommonRequest), r.status); err != nil {
+		if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}

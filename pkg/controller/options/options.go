@@ -34,6 +34,11 @@ type AddOptions struct {
 	ManageCRDs          bool
 	ShutdownContext     context.Context
 
+	// Whether or not the operator is running in multi-tenant mode.
+	// When true, this means some CRDs are installed as namespace scoped
+	// instead of cluster scoped.
+	MultiTenant bool
+
 	// Whether or not the cluster supports PodSecurityPolicies.
 	UsePSP bool
 }

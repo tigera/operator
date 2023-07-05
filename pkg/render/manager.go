@@ -102,7 +102,6 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 		tlsAnnotations[cfg.VoltronLinseedKeyPair.HashAnnotationKey()] = cfg.VoltronLinseedKeyPair.HashAnnotationValue()
 	}
 
-	// TODO: We probably just disable support for KeyValidatorConfig in multi-tenant environments.
 	if cfg.KeyValidatorConfig != nil {
 		tlsSecrets = append(tlsSecrets, cfg.KeyValidatorConfig.RequiredSecrets(cfg.Namespace)...)
 		for key, value := range cfg.KeyValidatorConfig.RequiredAnnotations() {
@@ -159,6 +158,9 @@ type ManagerConfiguration struct {
 	// Whether the cluster supports pod security policies.
 	UsePSP    bool
 	Namespace string
+
+	// Whether or not to run the rendered components in multi-tenant mode.
+	MultiTenant bool
 }
 
 type managerComponent struct {
@@ -380,12 +382,20 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 
 // managerEnvVars returns the envvars for the manager container.
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
+	// Prepare conditional env vars up-front.
+	queryURL := "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"
+	// Kibana does not have a FIPS compatible mode, therefore we disable the button in the UI.
+	enableKibana := !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode)
+	if c.cfg.MultiTenant {
+		queryURL = ""
+		enableKibana = false
+	}
+
 	envs := []corev1.EnvVar{
 		// TODO: Prometheus URL will need to change.
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
-		// TODO: Check what the API_URL is used for, and verify this is OK for multi-tenant.
-		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
+		{Name: "CNX_QUERY_API_URL", Value: queryURL},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
 		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("/%s", KibanaBasePath)},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
@@ -393,8 +403,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		// Kibana does not have a FIPS compatible mode, therefore we disable the button in the UI.
-		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
+		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(enableKibana)},
 		// Currently, we do not support anomaly detection when FIPS mode is enabled, therefore we disable the button in the UI.
 		{Name: "ENABLE_ANOMALY_DETECTION", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
 		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
@@ -465,6 +474,12 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	if c.cfg.VoltronLinseedKeyPair != nil {
 		linseedKeyPath, linseedCertPath = c.cfg.VoltronLinseedKeyPair.VolumeMountKeyFilePath(), c.cfg.VoltronLinseedKeyPair.VolumeMountCertificateFilePath()
 	}
+	defaultForwardServer := "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"
+	if c.cfg.MultiTenant {
+		// Use the local namespace instead of tigera-elasticsearch.
+		defaultForwardServer = fmt.Sprintf("tigera-secure-es-gateway-http.%s.svc:9200", c.cfg.Namespace)
+	}
+
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.cfg.ClusterDomain)},
@@ -476,7 +491,6 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		// TODO: QueryserverNamespace needs to be calculated for multi-tenant envs.
 		{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", QueryserverServiceName, QueryserverNamespace, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/https:%s:%d/proxy/", QueryserverNamespace, QueryserverServiceName, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -488,8 +502,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
-		// TODO: VOLTRON_DEFAULT_FORWARD_SERVER should not be set for multi-tenant envs.
-		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
+		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: defaultForwardServer},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
@@ -592,7 +605,6 @@ func (c *managerComponent) managerService() *corev1.Service {
 }
 
 // managerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
-// TODO: Needs dynamic namespace in multi-tenant mode.
 func managerServiceAccount(ns string) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},

@@ -67,7 +67,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	tierWatchReady := &utils.ReadyFlag{}
 	policyRecScopeWatchReady := &utils.ReadyFlag{}
 
-	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady, policyRecScopeWatchReady)
 
 	policyRecController, err := controller.New(PolicyRecommendationControllerName, mgr,
 		controller.Options{
@@ -100,17 +100,19 @@ func newReconciler(
 	opts options.AddOptions,
 	licenseAPIReady *utils.ReadyFlag,
 	tierWatchReady *utils.ReadyFlag,
+	policyRecScopeWatchReady *utils.ReadyFlag,
 ) reconcile.Reconciler {
 
 	r := &ReconcilePolicyRecommendation{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "policy-recommendation", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		licenseAPIReady: licenseAPIReady,
-		tierWatchReady:  tierWatchReady,
-		usePSP:          opts.UsePSP,
+		client:                   mgr.GetClient(),
+		scheme:                   mgr.GetScheme(),
+		provider:                 opts.DetectedProvider,
+		status:                   status.New(mgr.GetClient(), "policy-recommendation", opts.KubernetesVersion),
+		clusterDomain:            opts.ClusterDomain,
+		licenseAPIReady:          licenseAPIReady,
+		tierWatchReady:           tierWatchReady,
+		policyRecScopeWatchReady: policyRecScopeWatchReady,
+		usePSP:                   opts.UsePSP,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -186,14 +188,15 @@ var _ reconcile.Reconciler = &ReconcilePolicyRecommendation{}
 type ReconcilePolicyRecommendation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	clusterDomain   string
-	licenseAPIReady *utils.ReadyFlag
-	scheme          *runtime.Scheme
-	status          status.StatusManager
-	tierWatchReady  *utils.ReadyFlag
-	provider        operatorv1.Provider
-	usePSP          bool
+	client                   client.Client
+	clusterDomain            string
+	licenseAPIReady          *utils.ReadyFlag
+	scheme                   *runtime.Scheme
+	status                   status.StatusManager
+	tierWatchReady           *utils.ReadyFlag
+	policyRecScopeWatchReady *utils.ReadyFlag
+	provider                 operatorv1.Provider
+	usePSP                   bool
 }
 
 func GetPolicyRecommendation(ctx context.Context, cli client.Client) (*operatorv1.PolicyRecommendation, error) {
@@ -244,6 +247,12 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", err, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Validate that the policy recommendation scope watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.policyRecScopeWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for PolicyRecommendationScope watch to be established", err, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

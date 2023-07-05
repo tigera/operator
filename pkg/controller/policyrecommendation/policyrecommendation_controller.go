@@ -99,7 +99,6 @@ func newReconciler(
 	licenseAPIReady *utils.ReadyFlag,
 	tierWatchReady *utils.ReadyFlag,
 ) reconcile.Reconciler {
-
 	r := &ReconcilePolicyRecommendation{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -366,7 +365,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	if !isManagedCluster {
-		certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+		certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 			return reconcile.Result{}, err

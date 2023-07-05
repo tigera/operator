@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -65,7 +66,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
+	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatorv1.AddToScheme(scheme))
 	utilruntime.Must(operatorv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
@@ -254,6 +255,14 @@ func main() {
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
 
+	// Determine if we're running in single or multi-tenant mode.
+	multiTenant, err := utils.MultiTenant(ctx, clientset)
+	if err != nil {
+		log.Error(err, "Failed to discovery tenancy mode")
+		os.Exit(1)
+	}
+	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
+
 	// Determine if PodSecurityPolicies are supported. PSPs were removed in
 	// Kubernetes v1.25. We can remove this check once the operator not longer
 	// supports Kubernetes < v1.25.0.
@@ -304,6 +313,7 @@ func main() {
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     sigHandler,
+		MultiTenant:         multiTenant,
 	}
 
 	err = controllers.AddToManager(mgr, options)

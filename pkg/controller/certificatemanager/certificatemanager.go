@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import (
 
 	"github.com/openshift/library-go/pkg/crypto"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -39,16 +38,17 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	log = logf.Log.WithName("tls")
-)
+var log = logf.Log.WithName("tls")
 
 func ErrInvalidCertDNSNames(secretName, secretNamespace string) error {
+	log.V(1).Info("Certificate has wrong DNS names", "namespace", secretNamespace, "name", secretName)
 	return fmt.Errorf("certificate %s/%s has the wrong DNS names", secretNamespace, secretName)
 }
+
 func errNoPrivateKeyPEM(secretName, secretNamespace string) error {
 	return fmt.Errorf("key pair %s/%s is missing a private key", secretNamespace, secretName)
 }
+
 func errNoCertificatePEM(secretName, secretNamespace string) error {
 	return fmt.Errorf("certificate PEM is missing for %s/%s ", secretNamespace, secretName)
 }
@@ -85,14 +85,18 @@ type CertificateManager interface {
 
 // Create creates a signer of new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
 // brings their own secrets, CertificateManager will preserve and return them.
-func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain string) (CertificateManager, error) {
+func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string) (CertificateManager, error) {
 	var (
 		cryptoCA                      *crypto.CA
 		csrImage                      string
 		privateKeyPEM, certificatePEM []byte
+		certificateManagement         *operatorv1.CertificateManagement
+		err                           error
 	)
-	var certificateManagement *operatorv1.CertificateManagement
+
 	if installation != nil && installation.CertificateManagement != nil {
+		// Configured to use certificate management. Get the CACert from
+		// the installation spec.
 		certificateManagement = installation.CertificateManagement
 		imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
 		if err != nil {
@@ -110,17 +114,17 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		}
 		certificatePEM = certificateManagement.CACert
 	} else {
+		// Using operator-managed certificates. Check to see if we have already provisioned one.
 		caSecret := &corev1.Secret{}
-		err := cli.Get(context.Background(), types.NamespacedName{
-			Name:      certificatemanagement.CASecretName,
-			Namespace: common.OperatorNamespace(),
-		}, caSecret)
-		if err != nil && !kerrors.IsNotFound(err) {
+		k := types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: ns}
+		if err = cli.Get(context.Background(), k, caSecret); err != nil && !kerrors.IsNotFound(err) {
 			return nil, err
 		}
+
 		if len(caSecret.Data) == 0 ||
 			len(caSecret.Data[corev1.TLSPrivateKeyKey]) == 0 ||
 			len(caSecret.Data[corev1.TLSCertKey]) == 0 {
+			// No existing CA data - we need to generate a new one.
 			cryptoCA, err = tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 			if err != nil {
 				return nil, err
@@ -131,6 +135,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			}
 			privateKeyPEM, certificatePEM = keyContent.Bytes(), crtContent.Bytes()
 		} else {
+			// Found an existing CA - use that.
 			privateKeyPEM, certificatePEM = caSecret.Data[corev1.TLSPrivateKeyKey], caSecret.Data[corev1.TLSCertKey]
 			cryptoCA, err = crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
 			if err != nil {
@@ -138,6 +143,9 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			}
 		}
 	}
+
+	// At this point, we've located an existing CA or genrated a new one. Build a certificateManager
+	// instance based on it.
 	x509Cert, err := certificatemanagement.ParseCertificate(certificatePEM)
 	if err != nil {
 		return nil, err
@@ -185,6 +193,8 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 			log.V(3).Info("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
 			return keyPair, nil
 		}
+	} else if keyPair == nil {
+		log.V(1).Info("Keypair wasn't found, create a new one", "namespace", secretNamespace, "name", secretName)
 	}
 
 	// If we reach here, it means we need to create a new KeyPair.
@@ -274,7 +284,6 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		CertificatePEM: certPEM,
 		OriginalSecret: secret,
 	}, x509Cert, nil
-
 }
 
 // GetCertificate returns a Certificate. If the certificate is not found or outdated, a k8s.io NotFound error is returned.

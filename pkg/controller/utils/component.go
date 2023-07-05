@@ -136,7 +136,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 		logCtx.Info("Ignoring annotated object")
 		return nil
 	}
-	logCtx.V(1).Info("Resource already exists, update it")
+	logCtx.V(2).Info("Resource already exists, update it")
 
 	// if mergeState returns nil we don't want to update the object
 	if mobj := mergeState(obj, cur); mobj != nil {

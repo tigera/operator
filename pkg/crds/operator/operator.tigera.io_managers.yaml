@@ -11,7 +11,7 @@ spec:
     listKind: ManagerList
     plural: managers
     singular: manager
-  scope: Cluster
+  scope: Namespaced
   versions:
   - name: v1
     schema:

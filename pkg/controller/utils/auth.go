@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -75,6 +75,7 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 
 // GetIdpSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
 // operatorv1.Authentication CR.
+// TODO: This needs to be updated to support multiple tenants IDP secrets.
 func GetIdpSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
 	var secretName string
 	var requiredFields []string

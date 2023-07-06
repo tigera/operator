@@ -151,6 +151,10 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Int
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
 }
 
+func WaitToAddPolicyRecommendationScopeWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.PolicyRecommendationScope{TypeMeta: metav1.TypeMeta{Kind: v3.KindPolicyRecommendationScope}}})
+}
+
 func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, policies []types.NamespacedName) {
 	objs := []client.Object{}
 	for _, policy := range policies {

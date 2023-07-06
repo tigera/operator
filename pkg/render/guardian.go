@@ -130,7 +130,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(ManagerNamespace),
 		managerClusterRole(false, true, c.cfg.UsePSP),
-		managerClusterRoleBinding(ManagerNamespace),
+		managerClusterRoleBinding([]string{ManagerNamespace}),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
 		managerClusterWideTigeraLayer(),

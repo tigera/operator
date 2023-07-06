@@ -50,8 +50,7 @@ const (
 	PacketCapturePodSecurityPolicyName  = PacketCaptureName
 	PacketCapturePolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PacketCaptureName
 	PacketCapturePort                   = 8444
-
-	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
+	PacketCaptureServerCert             = "tigera-packetcapture-server-tls"
 )
 
 var (

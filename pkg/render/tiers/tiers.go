@@ -32,6 +32,7 @@ const (
 	NodeLocalDNSPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "node-local-dns"
 )
 
+// TODO: Needs to be updated for multi-tenancy.
 var TigeraNamespaceSelector = createNamespaceSelector(
 	common.CalicoNamespace,
 	render.GuardianNamespace,

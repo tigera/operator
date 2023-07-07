@@ -888,7 +888,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(true, ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant. Not needed in multi-tenant.
 		},
 		{
 			Action:      v3.Allow,

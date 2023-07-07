@@ -109,20 +109,31 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
+	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
+	// For single-tenant, everything is installed in the tigera-manager namespace.
+	installNS := render.ElasticsearchNamespace
+	truthNS := common.OperatorNamespace()
+	if opts.MultiTenant {
+		// For multi-tenant, the manager could be installed in any number of namespaces.
+		// So, we need to watch the resources we care about across all namespaces.
+		installNS = ""
+		truthNS = ""
+	}
+
 	// Watch all the elasticsearch user secrets in the operator namespace.
 	// TODO: In the future, we may want put this logic in the utils folder where the other watch logic is.
 	if err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == common.OperatorNamespace() && hasLabel
+			return e.Object.GetNamespace() == truthNS && hasLabel
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			_, hasLabel := e.ObjectNew.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.ObjectNew.GetNamespace() == common.OperatorNamespace() && hasLabel
+			return e.ObjectNew.GetNamespace() == truthNS && hasLabel
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == common.OperatorNamespace() && hasLabel
+			return e.Object.GetNamespace() == truthNS && hasLabel
 		},
 	}); err != nil {
 		return err
@@ -135,28 +146,28 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.TigeraLinseedSecret,
 	} {
-		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, truthNS); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, truthNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
-	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, truthNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
+	if err := utils.AddServiceWatch(c, esgateway.ServiceName, installNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddServiceWatch(c, render.LinseedServiceName, render.ElasticsearchNamespace); err != nil {
+	if err := utils.AddServiceWatch(c, render.LinseedServiceName, installNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 	return nil

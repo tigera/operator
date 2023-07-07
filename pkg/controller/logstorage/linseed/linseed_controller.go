@@ -363,5 +363,7 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		}
 	}
 
+	r.status.ReadyToMonitor()
+	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
 }

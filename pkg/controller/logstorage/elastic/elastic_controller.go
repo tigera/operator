@@ -390,8 +390,10 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
+	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
+
 	// Wait for dependencies to exist.
-	if elasticKeyPair == nil || kibanaKeyPair == nil {
+	if elasticKeyPair == nil || kibanaEnabled && kibanaKeyPair == nil {
 		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for elastic / kibana secrets to be available", err, log)
 		return reconcile.Result{}, nil
 	}
@@ -481,7 +483,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	var kibana *kbv1.Kibana
-	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+	if kibanaEnabled {
 		kibana, err = r.getKibana(ctx)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
@@ -531,7 +533,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	var kbService *corev1.Service
-	if !r.multiTenant {
+	if kibanaEnabled {
 		// For now, Kibana is only supported in single tenant configurations.
 		kbService, err = r.getKibanaService(ctx)
 		if err != nil {
@@ -588,6 +590,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		UsePSP:                      r.usePSP,
 		ApplyTrial:                  applyTrial,
 		KeyStoreSecret:              keyStoreSecret,
+		KibanaEnabled:               kibanaEnabled,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -607,7 +610,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, nil
 		}
 
-		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
+		if kibanaEnabled && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be operational", nil, reqLogger)
 			return reconcile.Result{}, nil
 		}
@@ -622,6 +625,9 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return result, err
 		}
 	}
+
+	r.status.ReadyToMonitor()
+	r.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
 }

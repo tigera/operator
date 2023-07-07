@@ -286,6 +286,8 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Mark the status as available.
+	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 
 	// Since we don't poll for the object we need to make sure the object wouldn't have been deleted on the patch

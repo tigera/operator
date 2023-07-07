@@ -134,6 +134,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+			relasticsearch.PublicCertSecret,
 			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {

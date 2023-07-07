@@ -1912,7 +1912,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
 		})
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
@@ -1961,7 +1961,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigera
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.ESGatewayEntityRule,
+		Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
 	})
 
 	return &v3.NetworkPolicy{

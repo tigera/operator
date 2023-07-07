@@ -763,7 +763,7 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(true, cfg.Namespace).ESGatewayEntityRule(), // TODO: multi-tenant
 		},
 		{
 			Action:      v3.Allow,

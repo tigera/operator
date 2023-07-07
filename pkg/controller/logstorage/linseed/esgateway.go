@@ -21,7 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
+	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -32,15 +32,20 @@ import (
 )
 
 func (r *LinseedSubController) createESGateway(
+	ctx context.Context,
+	request octrl.Request,
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
-	ctx context.Context,
-	trustedBundle certificatemanagement.TrustedBundle,
 	usePSP bool,
 ) error {
+	// Create a trusted bundle to pass to the render pacakge. The actual contents of this bundle don't matter - the ConfigMap
+	// itself will be managed by the Secret controller. But, we need an interface to use as an argument to render in order
+	// to configure volume mounts properly.
+	trustedBundle := certificatemanagement.CreateTrustedBundle()
+
 	// Get the ES admin user secret. This is provisioned by the ECK operator as part of installing Elasticsearch,
 	// and so may not be immediately available.
 	esAdminUserSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
@@ -66,18 +71,21 @@ func (r *LinseedSubController) createESGateway(
 	}
 
 	// Collect the certificates we need to provision ESGW. These will have been provisioned already by the ES secrets controller.
-	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
+	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, request.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return err
 	}
-	gatewayKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace())
+	gatewayKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, request.TruthNamespace())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "Error getting TLS certificate", err, log)
+		return err
+	} else if gatewayKeyPair == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "es-gateway key pair not yet available", err, log)
 		return err
 	}
 
-	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)
+	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client, request)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create kube-controllers secrets for Elasticsearch gateway", err, reqLogger)
 		return err
@@ -92,6 +100,8 @@ func (r *LinseedSubController) createESGateway(
 		EsAdminUserName:            esAdminUserName,
 		ESGatewayKeyPair:           gatewayKeyPair,
 		UsePSP:                     usePSP,
+		Namespace:                  request.InstallNamespace(),
+		TruthNamespace:             request.TruthNamespace(),
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

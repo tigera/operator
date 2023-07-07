@@ -329,22 +329,35 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		}
 	}
 
+	// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
+	if err := r.createESGateway(
+		ctx,
+		request,
+		install,
+		variant,
+		pullSecrets,
+		hdler,
+		reqLogger,
+		r.usePSP,
+	); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// TODO: This is a temporary location for this. Ideally this goes in its own controller, as it likely
+	// needs to be multi-tenant!
+	if err := r.createESKubeControllers(
+		ctx,
+		request,
+		install,
+		hdler,
+		reqLogger,
+		managementCluster,
+	); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// TODO: Do we need either of these for multi-tenant systems?
 	if !r.multiTenant {
-		// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
-		if err := r.createESGateway(
-			install,
-			variant,
-			pullSecrets,
-			hdler,
-			reqLogger,
-			ctx,
-			trustedBundle,
-			r.usePSP,
-		); err != nil {
-			return reconcile.Result{}, err
-		}
-
 		// TODO: For now, install this here. It probably should have its own controller.
 		if err := r.createESMetrics(
 			install,

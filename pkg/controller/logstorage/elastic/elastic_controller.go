@@ -291,8 +291,13 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// We found the LogStorage instance.
-	// TODO: Wait for defaults to be filled before continuing.
 	r.status.OnCRFound()
+
+	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
+	if ls.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 
 	// Get Installation resource.
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)

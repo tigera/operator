@@ -290,15 +290,13 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 
 	// Since we don't poll for the object we need to make sure the object wouldn't have been deleted on the patch
 	// that may have removed the finalizers.
-	// TODO We may want to just return if we remove the finalizers from the LogStorage object.
-	// TODO TODO: CASEY What is this???
-	// if ls != nil && (ls.DeletionTimestamp == nil || len(ls.GetFinalizers()) > 0) {
-	// 	ls.Status.State = operatorv1.TigeraStatusReady
-	// 	if err := r.client.Status().Update(ctx, ls); err != nil {
-	// 		r.status.SetDegraded(operatorv1.ResourceUpdateError, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady), err, reqLogger)
-	// 		return reconcile.Result{}, err
-	// 	}
-	// }
+	if ls != nil && (ls.DeletionTimestamp == nil || len(ls.GetFinalizers()) > 0) {
+		ls.Status.State = operatorv1.TigeraStatusReady
+		if err := r.client.Status().Update(ctx, ls); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
 
 	return reconcile.Result{}, nil
 }

@@ -108,9 +108,9 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version:  "master",
-		Image:    "tigera/es-proxy",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/es-proxy",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentESGateway = component{

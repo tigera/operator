@@ -114,9 +114,9 @@ var (
 	}
 
 	ComponentESGateway = component{
-		Version:  "master",
-		Image:    "tigera/es-gateway",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/es-gateway",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentLinseed = component{

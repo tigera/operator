@@ -551,21 +551,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
-	// TODO: This is a temporary location for this. Ideally this goes in its own controller, as it likely
-	// needs to be multi-tenant!
-	result, _, err := r.createESKubeControllers(
-		install,
-		hdler,
-		reqLogger,
-		managementCluster,
-		authentication,
-		esLicenseType,
-		ctx,
-	)
-	if err != nil {
-		return result, err
-	}
-
 	logStorageCfg := &render.ElasticsearchConfiguration{
 		LogStorage:                  ls,
 		Installation:                install,

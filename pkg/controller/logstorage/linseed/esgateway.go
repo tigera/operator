@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	octrl "github.com/tigera/operator/pkg/controller"
@@ -27,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -105,13 +107,22 @@ func (r *LinseedSubController) createESGateway(
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)
-
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return err
 	}
 
-	for _, comp := range []render.Component{esGatewayComponent} {
+	// Copy the es admin user secret to the namespace so that es-gateway has access to it. For single-tenant, this is essentially a no-op.
+	// For multi-tenant, this means copying the es-gateway admin secret to the tenant's namespace.
+	// TODO: We shouldn't use the admin secret here, this is just for prototyping purposes. Instead, each tenant's esgw should get its own credentials.
+	// Potentially, we do away with es-gateway in multi-tenant setups entirely - kube-controllers can talk to ES with its own non-admin credentials, since
+	// es-kube-controllers is the only thing that needs to talk to ES (aside from Linseed) in multi-tenant setups. We could get rid of that need as well if
+	// we have the operator provision Linseed's secret instead of kube-controllers.
+	copied := []client.Object{}
+	copied = append(copied, secret.CopyToNamespace(request.InstallNamespace(), esAdminUserSecret)[0])
+	createSecretComponent := render.NewPassthrough(copied...)
+
+	for _, comp := range []render.Component{createSecretComponent, esGatewayComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return err

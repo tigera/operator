@@ -345,14 +345,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Package up the request parameters needed to reconcile
-	commonReq := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.ManagerNamespace)
+	req := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.ManagerNamespace)
 	args := ReconcileArgs{
 		Manager:      instance,
 		Variant:      variant,
 		Installation: installation,
 		License:      license,
 	}
-	return r.reconcileInstance(ctx, logc, args, commonReq)
+	return r.reconcileInstance(ctx, logc, args, req)
 }
 
 type ReconcileArgs struct {

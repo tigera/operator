@@ -98,7 +98,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		secret, err := certificateManager.GetOrCreateKeyPair(c, render.GuardianSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
-		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert(false, "").Name(), common.OperatorNamespace(), []string{"a"})
+		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
 		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})

@@ -313,19 +313,25 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Package up the request parameters needed to reconcile
-	common := octrl.NewCommonRequest(request.NamespacedName, r.multiTenant, render.PolicyRecommendationNamespace)
-	common.Variant = variant
-	common.Installation = network
-	common.License = license
-	req := octrl.PolicyRecommendationRequest{
-		CommonRequest:        common,
+	req := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.PolicyRecommendationNamespace)
+	args := ReconcileArgs{
+		Variant:              variant,
+		Installation:         network,
+		License:              license,
 		PolicyRecommendation: instance,
 	}
-	return r.reconcileInstance(ctx, reqLogger, req)
+	return r.reconcileInstance(ctx, reqLogger, args, req)
 }
 
-func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, logc logr.Logger, request octrl.PolicyRecommendationRequest) (reconcile.Result, error) {
-	pullSecrets, err := utils.GetNetworkingPullSecrets(request.Installation, r.client)
+type ReconcileArgs struct {
+	Variant              operatorv1.ProductVariant
+	Installation         *operatorv1.InstallationSpec
+	PolicyRecommendation *operatorv1.PolicyRecommendation
+	License              v3.LicenseKey
+}
+
+func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, logc logr.Logger, args ReconcileArgs, request octrl.Request) (reconcile.Result, error) {
+	pullSecrets, err := utils.GetNetworkingPullSecrets(args.Installation, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve pull secrets", err, logc)
 		return reconcile.Result{}, err
@@ -375,14 +381,14 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, request.PolicyRecommendation)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, args.PolicyRecommendation)
 
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
 		ClusterDomain:   r.clusterDomain,
 		ESClusterConfig: esClusterConfig,
 		ESSecrets:       esSecrets,
-		Installation:    request.Installation,
+		Installation:    args.Installation,
 		ManagedCluster:  isManagedCluster,
 		PullSecrets:     pullSecrets,
 		Openshift:       r.provider == operatorv1.ProviderOpenShift,
@@ -393,7 +399,7 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 	// Render the desired objects from the CRD and create or update them.
 	component := render.PolicyRecommendation(policyRecommendationCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, request.Variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, args.Variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
 		return reconcile.Result{}, err
 	}
@@ -403,7 +409,7 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 	}
 
 	if !isManagedCluster {
-		certificateManager, err := certificatemanager.Create(r.client, request.Installation, r.clusterDomain, request.TruthNamespace())
+		certificateManager, err := certificatemanager.Create(r.client, args.Installation, r.clusterDomain, request.TruthNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 			return reconcile.Result{}, err
@@ -456,7 +462,7 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 		)
 	}
 
-	if hasNoLicense := !utils.IsFeatureActive(request.License, common.PolicyRecommendationFeature); hasNoLicense {
+	if hasNoLicense := !utils.IsFeatureActive(args.License, common.PolicyRecommendationFeature); hasNoLicense {
 		log.V(4).Info("PolicyRecommendation is not activated as part of this license")
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, logc)
 		return reconcile.Result{}, nil
@@ -479,8 +485,8 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 	}
 
 	// Everything is available - update the CRD status.
-	request.PolicyRecommendation.Status.State = operatorv1.TigeraStatusReady
-	if err = r.client.Status().Update(ctx, request.PolicyRecommendation); err != nil {
+	args.PolicyRecommendation.Status.State = operatorv1.TigeraStatusReady
+	if err = r.client.Status().Update(ctx, args.PolicyRecommendation); err != nil {
 		return reconcile.Result{}, err
 	}
 

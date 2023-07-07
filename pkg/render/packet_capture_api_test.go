@@ -61,7 +61,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
-		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert(false, "").Name(), common.OperatorNamespace(), []string{""})
+		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -185,7 +185,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	expectedVolumeMounts := func() []corev1.VolumeMount {
 		volumeMounts := []corev1.VolumeMount{
 			{
-				Name:      render.PacketCaptureServerCert(false, "").Name(),
+				Name:      render.PacketCaptureServerCert,
 				MountPath: "/tigera-packetcapture-server-tls",
 				ReadOnly:  true,
 			},
@@ -248,17 +248,17 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		var volumes []corev1.Volume
 		if useCSR {
 			volumes = append(volumes, corev1.Volume{
-				Name: render.PacketCaptureServerCert(false, "").Name(),
+				Name: render.PacketCaptureServerCert,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			})
 		} else {
 			volumes = append(volumes, corev1.Volume{
-				Name: render.PacketCaptureServerCert(false, "").Name(),
+				Name: render.PacketCaptureServerCert,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName:  render.PacketCaptureServerCert(false, "").Name(),
+						SecretName:  render.PacketCaptureServerCert,
 						DefaultMode: ptr.Int32ToPtr(420),
 					},
 				},
@@ -289,7 +289,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		// Check init containers
 		if useCSR {
 			Expect(len(deployment.Spec.Template.Spec.InitContainers)).To(Equal(1))
-			Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.PacketCaptureServerCert(false, "").Name())))
+			Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.PacketCaptureServerCert)))
 		}
 
 		// Check volumes
@@ -381,7 +381,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
 		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
-		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert(false, "").Name(), common.OperatorNamespace(), []string{""})
+		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 
 		resources := renderPacketCapture(installation, nil)

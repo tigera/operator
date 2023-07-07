@@ -1624,7 +1624,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
 		})
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
@@ -1666,7 +1666,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
 		},
 		{
 			Action:      v3.Allow,

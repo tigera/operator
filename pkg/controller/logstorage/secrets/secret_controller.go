@@ -407,17 +407,17 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, req oct
 			return nil, err
 		}
 		collection.keypairs = append(collection.keypairs, metricsServerKeyPair)
-
-		// ES gateway keypair.
-		gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, req.InstallNamespace(), r.clusterDomain)
-		gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, req.InstallNamespace(), r.clusterDomain)...)
-		gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, req.TruthNamespace(), gatewayDNSNames)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
-			return nil, err
-		}
-		collection.keypairs = append(collection.keypairs, gatewayKeyPair)
 	}
+
+	// ES gateway keypair.
+	gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, req.InstallNamespace(), r.clusterDomain)
+	gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, req.InstallNamespace(), r.clusterDomain)...)
+	gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, req.TruthNamespace(), gatewayDNSNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return nil, err
+	}
+	collection.keypairs = append(collection.keypairs, gatewayKeyPair)
 
 	// Create a server key pair for Linseed to present to clients.
 	//

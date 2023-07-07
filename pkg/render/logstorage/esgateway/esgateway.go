@@ -30,7 +30,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -82,6 +81,8 @@ type Config struct {
 	TrustedBundle              certificatemanagement.TrustedBundle
 	ClusterDomain              string
 	EsAdminUserName            string
+	Namespace                  string
+	TruthNamespace             string
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -118,11 +119,12 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayRoleBinding())
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
-	// The following secret is used by the kube controllers and sent to managed clusters. It is also used by manifests in our docs.
+
+	// The following secret is used by kube controllers and sent to managed clusters. It is also used by manifests in our docs.
 	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
-		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.Installation.CertificateManagement.CACert, elasticsearch.PublicCertSecret, common.OperatorNamespace()))
+		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.Installation.CertificateManagement.CACert, elasticsearch.PublicCertSecret, e.cfg.TruthNamespace))
 	} else {
-		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, common.OperatorNamespace()))
+		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, e.cfg.TruthNamespace))
 	}
 	if e.cfg.UsePSP {
 		toCreate = append(toCreate, e.esGatewayPodSecurityPolicy())
@@ -161,7 +163,7 @@ func (e *esGateway) esGatewayRole() *rbacv1.Role {
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
-			Namespace: render.ElasticsearchNamespace,
+			Namespace: e.cfg.Namespace,
 		},
 		Rules: rules,
 	}
@@ -172,7 +174,7 @@ func (e *esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
-			Namespace: render.ElasticsearchNamespace,
+			Namespace: e.cfg.Namespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "Role",
@@ -183,7 +185,7 @@ func (e *esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      ServiceAccountName,
-				Namespace: render.ElasticsearchNamespace,
+				Namespace: e.cfg.Namespace,
 			},
 		},
 	}
@@ -218,7 +220,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, e.cfg.ESGatewayKeyPair.InitContainer(render.ElasticsearchNamespace))
+		initContainers = append(initContainers, e.cfg.ESGatewayKeyPair.InitContainer(e.cfg.Namespace))
 	}
 
 	volumes := []corev1.Volume{
@@ -236,7 +238,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,
-			Namespace:   render.ElasticsearchNamespace,
+			Namespace:   e.cfg.Namespace,
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
@@ -271,14 +273,14 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 	}
 
 	if e.cfg.Installation.ControlPlaneReplicas != nil && *e.cfg.Installation.ControlPlaneReplicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchNamespace)
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, e.cfg.Namespace)
 	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
-			Namespace: render.ElasticsearchNamespace,
+			Namespace: e.cfg.Namespace,
 			Labels: map[string]string{
 				"k8s-app": DeploymentName,
 			},
@@ -301,7 +303,7 @@ func (e *esGateway) esGatewayServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceAccountName,
-			Namespace: render.ElasticsearchNamespace,
+			Namespace: e.cfg.Namespace,
 		},
 	}
 }
@@ -311,7 +313,7 @@ func (e *esGateway) esGatewayService() *corev1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName,
-			Namespace: render.ElasticsearchNamespace,
+			Namespace: e.cfg.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": DeploymentName},
@@ -368,7 +370,7 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PolicyName,
-			Namespace: render.ElasticsearchNamespace,
+			Namespace: e.cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

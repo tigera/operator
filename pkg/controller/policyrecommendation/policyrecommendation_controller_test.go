@@ -95,12 +95,13 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcilePolicyRecommendation{
-			client:          c,
-			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
-			status:          mockStatus,
-			licenseAPIReady: &utils.ReadyFlag{},
-			tierWatchReady:  &utils.ReadyFlag{},
+			client:                   c,
+			scheme:                   scheme,
+			provider:                 operatorv1.ProviderNone,
+			status:                   mockStatus,
+			licenseAPIReady:          &utils.ReadyFlag{},
+			tierWatchReady:           &utils.ReadyFlag{},
+			policyRecScopeWatchReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -165,6 +166,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		// mark that the watches were successful
 		r.licenseAPIReady.MarkAsReady()
 		r.tierWatchReady.MarkAsReady()
+		r.policyRecScopeWatchReady.MarkAsReady()
 	})
 
 	Context("image reconciliation", func() {
@@ -231,12 +233,13 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			readyFlag = &utils.ReadyFlag{}
 			readyFlag.MarkAsReady()
 			r = ReconcilePolicyRecommendation{
-				client:          c,
-				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
-				status:          mockStatus,
-				licenseAPIReady: readyFlag,
-				tierWatchReady:  readyFlag,
+				client:                   c,
+				scheme:                   scheme,
+				provider:                 operatorv1.ProviderNone,
+				status:                   mockStatus,
+				licenseAPIReady:          readyFlag,
+				tierWatchReady:           readyFlag,
+				policyRecScopeWatchReady: readyFlag,
 			}
 		})
 

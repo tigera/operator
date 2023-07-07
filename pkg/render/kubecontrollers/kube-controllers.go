@@ -526,8 +526,14 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	if c.kubeControllerName == EsKubeController {
-		container = relasticsearch.ContainerDecorate(container, render.DefaultElasticsearchClusterName,
-			ElasticsearchKubeControllersUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
+		container = relasticsearch.DecorateEnvironment(
+			container,
+			c.cfg.Namespace,
+			render.DefaultElasticsearchClusterName,
+			ElasticsearchKubeControllersUserSecret,
+			c.cfg.ClusterDomain,
+			rmeta.OSTypeLinux,
+		)
 	}
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {

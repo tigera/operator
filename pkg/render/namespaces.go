@@ -103,9 +103,6 @@ func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityS
 	case operatorv1.ProviderOpenShift:
 		ns.Labels["openshift.io/run-level"] = "0"
 		ns.Annotations["openshift.io/node-selector"] = ""
-		ns.Annotations["security.openshift.io/scc.podSecurityLabelSync"] = "false"
-		ns.Labels["pod-security.kubernetes.io/audit"] = string(pss)
-		ns.Labels["pod-security.kubernetes.io/warn"] = string(pss)
 	case operatorv1.ProviderAKS:
 		ns.Labels["control-plane"] = "true"
 	}

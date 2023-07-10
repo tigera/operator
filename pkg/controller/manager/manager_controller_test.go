@@ -78,7 +78,29 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c)
+		instance, err = GetManager(ctx, c, "")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should create and query multiple tenant manager instances", func() {
+		tenantANamespace := "tenant-a"
+		instanceA := &operatorv1.Manager{
+			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantANamespace},
+		}
+		err := c.Create(ctx, instanceA)
+		Expect(err).NotTo(HaveOccurred())
+		instance, err = GetManager(ctx, c, tenantANamespace)
+		Expect(err).NotTo(HaveOccurred())
+
+		tenantBNamespace := "tenant-b"
+		instanceB := &operatorv1.Manager{
+			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantBNamespace},
+		}
+		err = c.Create(ctx, instanceB)
+		Expect(err).NotTo(HaveOccurred())
+		instance, err = GetManager(ctx, c, tenantBNamespace)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -165,12 +187,12 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
 			// Provision certificates that the controller will query as part of the test.
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -386,12 +408,12 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			// Provision certificates that the controller will query as part of the test.
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -620,7 +642,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -644,7 +666,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -688,7 +710,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -748,7 +770,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -771,6 +793,65 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 				Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 			})
+		})
+
+		It("Multi-tenant/namespaced reconciliation", func() {
+			r.multiTenant = true
+			tenantANamespace := "tenant-a"
+			tenantBNamespace := "tenant-b"
+
+			Expect(c.Create(ctx, &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantANamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantBNamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			tenantADeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-manager",
+					Namespace: tenantANamespace,
+				},
+			}
+
+			tenantBDeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-manager",
+					Namespace: tenantBNamespace,
+				},
+			}
+
+			// We called Reconcile without specifying a namespace, so neither of these namespaced deployments should
+			// exist yet
+			Expect(test.GetResource(c, &tenantADeployment)).NotTo((BeNil()))
+			Expect(test.GetResource(c, &tenantBDeployment)).NotTo((BeNil()))
+
+			// Now reconcile only tenant A's namespace and check that its deployment exists, but tenant B's deployment
+			// still hasn't been reconciled so it should still not exist
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(c, &tenantADeployment)).To((BeNil()))
+			Expect(test.GetResource(c, &tenantBDeployment)).NotTo((BeNil()))
+
+			// Now reconcile tenant B's namespace and check that its deployment exists now alongside tenant A's
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(c, &tenantADeployment)).To((BeNil()))
+			Expect(test.GetResource(c, &tenantBDeployment)).To((BeNil()))
 		})
 	})
 })

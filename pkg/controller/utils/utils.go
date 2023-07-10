@@ -381,6 +381,17 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	return authentication, nil
 }
 
+// Get the Tenant instance in the given namespace.
+func GetTenant(ctx context.Context, cli client.Client, ns string) (*operatorv1.Tenant, error) {
+	key := client.ObjectKey{Name: "default", Namespace: ns}
+	instance := &operatorv1.Tenant{}
+	err := cli.Get(ctx, key, instance)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
 // GetInstallationStatus returns the current installation status, for use by other controllers.
 func GetInstallationStatus(ctx context.Context, client client.Client) (*operatorv1.InstallationStatus, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".

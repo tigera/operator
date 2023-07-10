@@ -25,7 +25,6 @@ import (
 	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
-	omanager "github.com/tigera/operator/pkg/controller/manager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -104,13 +103,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch Manager resource: %w", err)
+		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-controller failed to watch Tenant resource: %w", err)
 		}
 	}
 
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the tigera-manager namespace.
 	installNS := render.ElasticsearchNamespace
 	truthNS := common.OperatorNamespace()
 	if opts.MultiTenant {
@@ -197,25 +195,29 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 
 	// When running in multi-tenant mode, we need to install Linseed in tenant Namespaces. However, the LogStorage
 	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
-	// which tenant namespaces require a Linseed instance. We use the manager API to determine the set of namespaces that should have a Linseed.
-	var manager *operatorv1.Manager
-	if r.multiTenant && request.Namespace != "" {
+	// which tenant namespaces require a Linseed instance. We use the tenant API to determine the set of namespaces that should have a Linseed.
+	var tenant *operatorv1.Tenant
+	if r.multiTenant {
+		if request.Namespace == "" {
+			// In multi-tenant mode, we only handle namespaced reconcile triggers.
+			return reconcile.Result{}, nil
+		}
+
 		// Check if there is a manager in this namespace.
-		manager, err = omanager.GetManager(ctx, r.client, request.Namespace)
+		tenant, err = utils.GetTenant(ctx, r.client, request.Namespace)
 		if errors.IsNotFound(err) {
-			// No manager in this namespace. Ignore the update.
-			// TODO: Maybe just treat this as a global update?
-			reqLogger.Info("No Manager in this Namespace, skip")
+			// No tenant in this namespace. Ignore the update.
+			reqLogger.Info("No Tenant in this Namespace, skip")
 			return reconcile.Result{}, nil
 		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Manager", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
 
 	// Generate keys for Tigera components if we're running in multi-tenant mode and this is a reconcile
 	// for a particular tenant, or if not in multi-tenant mode.
-	reconcileTigeraSecrets := !r.multiTenant || r.multiTenant && manager != nil
+	reconcileTigeraSecrets := !r.multiTenant || r.multiTenant && tenant != nil
 
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if ls.Status.State != operatorv1.TigeraStatusReady {
@@ -337,10 +339,10 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	trustedBundle := keyPairs.trustedBundle(appCM)
 
 	// If we're running in multi-tenant mode, these should be owned by the
-	// Manager instance for that tenant. Otherwise, it's owned by the LogStorage instance.
+	// Tenant instance for that tenant. Otherwise, it's owned by the LogStorage instance.
 	if r.multiTenant {
-		// For multi-tenant mode, secrets are owned by the manager instance.
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, manager)
+		// For multi-tenant mode, secrets are owned by the tenant instance.
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
 	}
 
 	if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle, req), r.status); err != nil {

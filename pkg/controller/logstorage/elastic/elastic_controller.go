@@ -600,12 +600,17 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, nil
 		}
 
-		// TODO: Need to handle this gracefully, since these will only succeed after ES is properly running.
-		result, _, err := r.applyILMPolicies(ls, reqLogger, ctx)
-		if err != nil {
-			return result, err
+		if !r.multiTenant {
+			// TODO: Need to handle this gracefully, since these will only succeed after ES is properly running.
+			// In multi-tenant mode, and probably single-tenant as well, this should be handled by someone other than the operator.
+			// Either out of band, or by Linseed.
+			result, _, err := r.applyILMPolicies(ls, reqLogger, ctx)
+			if err != nil {
+				return result, err
+			}
 		}
-		result, _, err = r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
+
+		result, _, err := r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
 		if err != nil {
 			return result, err
 		}
@@ -648,6 +653,8 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 	return nil
 }
 
+// TODO: This shouldn't be done in the operator. Linseed should probably hanle this for single-tenant setups, and multi-tenant should
+// either be handled by Linseed or out-of-band.
 func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) (reconcile.Result, bool, error) {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
 	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.HTTPSEndpoint(rmeta.OSTypeLinux, r.clusterDomain))

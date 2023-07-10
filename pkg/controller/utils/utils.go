@@ -549,12 +549,17 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				// No name or namespace match was specified. Match everything.
 				return true
 			}
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match.
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Return a match if the namespaces match, or if no namespace match was given.
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -563,7 +568,7 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
 				return false
 			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
+			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -572,7 +577,7 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 	}
 }

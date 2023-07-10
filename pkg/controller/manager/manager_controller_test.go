@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	kerror "k8s.io/apimachinery/pkg/api/errors"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -82,6 +84,8 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	// This test uses a mock client, so ultimately we're just testing that a namespaced `GetManager` call
+	// functions correctly
 	It("should create and query multiple tenant manager instances", func() {
 		tenantANamespace := "tenant-a"
 		instanceA := &operatorv1.Manager{
@@ -102,6 +106,13 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		instance, err = GetManager(ctx, c, tenantBNamespace)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should return expected error when querying namespace that does not contain a manager instance", func() {
+		nsWithoutManager := "non-manager-ns"
+		instance, err := GetManager(ctx, c, nsWithoutManager)
+		Expect(kerror.IsNotFound(err)).To(BeTrue())
+		Expect(instance).To(BeNil())
 	})
 
 	Context("cert tests", func() {
@@ -795,63 +806,77 @@ var _ = Describe("Manager controller tests", func() {
 			})
 		})
 
-		It("Multi-tenant/namespaced reconciliation", func() {
-			r.multiTenant = true
+		Context("Multi-tenant/namespaced reconciliation", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
+			BeforeEach(func() {
+				r.multiTenant = true
+			})
+			It("should reconcile both with and without namespace provided while namespaced managers exist", func() {
+				err := c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: tenantANamespace,
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &operatorv1.Manager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-secure",
-					Namespace: tenantANamespace,
-				},
-			})).NotTo(HaveOccurred())
+				err = c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: tenantBNamespace,
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &operatorv1.Manager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-secure",
-					Namespace: tenantBNamespace,
-				},
-			})).NotTo(HaveOccurred())
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
+				tenantADeployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: tenantANamespace,
+					},
+				}
 
-			tenantADeployment := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-manager",
-					Namespace: tenantANamespace,
-				},
-			}
+				tenantBDeployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: tenantBNamespace,
+					},
+				}
 
-			tenantBDeployment := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-manager",
-					Namespace: tenantBNamespace,
-				},
-			}
+				// We called Reconcile without specifying a namespace, so neither of these namespaced deployments should
+				// exist yet
+				err = test.GetResource(c, &tenantADeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 
-			// We called Reconcile without specifying a namespace, so neither of these namespaced deployments should
-			// exist yet
-			Expect(test.GetResource(c, &tenantADeployment)).NotTo((BeNil()))
-			Expect(test.GetResource(c, &tenantBDeployment)).NotTo((BeNil()))
+				err = test.GetResource(c, &tenantBDeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 
-			// Now reconcile only tenant A's namespace and check that its deployment exists, but tenant B's deployment
-			// still hasn't been reconciled so it should still not exist
-			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
-			Expect(err).ShouldNot(HaveOccurred())
+				// Now reconcile only tenant A's namespace and check that its deployment exists, but tenant B's deployment
+				// still hasn't been reconciled so it should still not exist
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+				Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(test.GetResource(c, &tenantADeployment)).To((BeNil()))
-			Expect(test.GetResource(c, &tenantBDeployment)).NotTo((BeNil()))
+				err = test.GetResource(c, &tenantADeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
-			// Now reconcile tenant B's namespace and check that its deployment exists now alongside tenant A's
-			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
-			Expect(err).ShouldNot(HaveOccurred())
+				err = test.GetResource(c, &tenantBDeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 
-			Expect(test.GetResource(c, &tenantADeployment)).To((BeNil()))
-			Expect(test.GetResource(c, &tenantBDeployment)).To((BeNil()))
+				// Now reconcile tenant B's namespace and check that its deployment exists now alongside tenant A's
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = test.GetResource(c, &tenantADeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				err = test.GetResource(c, &tenantBDeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+			})
 		})
 	})
 })

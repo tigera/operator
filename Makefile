@@ -111,6 +111,7 @@ CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./controllers -name '*.go')
+SRC_FILES+=$(shell find ./test -name '*.go')
 SRC_FILES+=main.go
 
 EXTRA_DOCKER_ARGS += -e GO111MODULE=on -e GOPRIVATE=github.com/tigera/*
@@ -292,14 +293,14 @@ GINKGO_FOCUS?=.*
 ut:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage "./vendor,./test" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -r --skipPackage "./test" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
 ## Run the functional tests
 fv: cluster-create run-fvs cluster-destroy
 run-fvs:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -pkgdir test -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -r --skipPackage "./pkg" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml

@@ -899,7 +899,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	} else {
 		setInstallationFinalizer(instance)
 	}
-
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
@@ -995,7 +994,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			os.Exit(0)
 		}
 	}
-
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
@@ -1096,7 +1094,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
-
 	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
@@ -1195,7 +1192,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operator.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
 	// Secure calico kube controller metrics.
 	var kubeControllerTLS certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
@@ -1297,7 +1293,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		UsePSP:                 r.usePSP,
 	}
 	components = append(components, render.Typha(&typhaCfg))
-
 	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
 	nodeTerminating := false
 	if terminating {
@@ -1403,7 +1398,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operator.ResourceValidationError, "Error resolving ImageSet for components", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
 	// Create a component handler to create or update the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {

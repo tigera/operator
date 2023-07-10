@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/tenancy"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -83,18 +85,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the tigera-manager namespace.
-	installNS := render.ManagerNamespace
-	truthNS := common.OperatorNamespace()
-	watchNamespaces := []string{installNS, truthNS}
-	if opts.MultiTenant {
-		// For multi-tenant, the manager could be installed in any number of namespaces.
-		// So, we need to watch the resources we care about across all namespaces.
-		installNS = ""
-		truthNS = ""
-		watchNamespaces = []string{""}
-	}
+	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.ManagerNamespace)
 
 	err = utils.AddSecretsWatch(managerController, render.VoltronLinseedTLS, installNS)
 	if err != nil {

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/tenancy"
+
 	octrl "github.com/tigera/operator/pkg/controller"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -85,18 +87,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	// The namespace(s) we need to monitor depends upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the tigera-manager namespace.
-	installNS := render.ManagerNamespace
-	truthNS := common.OperatorNamespace()
-	watchNamespaces := []string{installNS, truthNS}
-	if opts.MultiTenant {
-		// For multi-tenant, the manager could be installed in any number of namespaces.
-		// So, we need to watch the resources we care about across all namespaces.
-		installNS = ""
-		truthNS = ""
-		watchNamespaces = []string{""}
-	}
+	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.PolicyRecommendationNamespace)
 
 	go utils.WaitToAddLicenseKeyWatch(policyRecController, k8sClient, log, licenseAPIReady)
 	go utils.WaitToAddPolicyRecommendationScopeWatch(policyRecController, k8sClient, log, policyRecScopeWatchReady)
@@ -436,13 +427,13 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 		}
 
 		linseedCertLocation := render.TigeraLinseedSecret
-		linseedCertificate, err := certificateManager.GetKeyPair(r.client, linseedCertLocation, request.TruthNamespace())
+		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, request.TruthNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, logc)
 			return reconcile.Result{}, err
 		} else if linseedCertificate == nil {
 			log.Info("Linseed certificate is not available yet, waiting until they become available")
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificates are not available yet, waiting until they become available", nil, logc)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, logc)
 			return reconcile.Result{}, nil
 		}
 

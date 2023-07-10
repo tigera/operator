@@ -143,7 +143,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.TigeraLinseedSecret,
 		monitor.PrometheusClientTLSSecretName,
 	} {
-		if err = utils.AddSecretsWatch(c, secretName, truthNS); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, installNS); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
 	}

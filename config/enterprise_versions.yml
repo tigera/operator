@@ -16,8 +16,9 @@ components:
     image: tigera/cnx-queryserver
     version: master
   cnx-kube-controllers:
-    image: tigera/kube-controllers
-    version: master
+    registry: gcr.io/unique-caldron-775/
+    image: casey/kube-controllers
+    version: latest
   typha:
     image: tigera/typha
     version: master

@@ -256,9 +256,9 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version:  "master",
-		Image:    "tigera/kube-controllers",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/kube-controllers",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentTigeraNode = component{

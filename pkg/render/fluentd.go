@@ -171,6 +171,11 @@ type FluentdConfiguration struct {
 	TrustedBundle   certificatemanagement.TrustedBundle
 	ManagedCluster  bool
 
+	// In a management cluster, Linseed may be in one of two locations, depending on how the cluster is being run.
+	// For single-tenant clusters, it's always in tigera-elasticsearch.
+	// For multi-tenant management clusters, the management cluster writes to its own linseed instance in "tigera-tenant"
+	LinseedNamespace string
+
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 	// Whether to use User provided certificate or not.
@@ -618,7 +623,7 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace)},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, c.cfg.LinseedNamespace)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},

@@ -73,6 +73,14 @@ func (r *LinseedSubController) createESKubeControllers(
 		}
 	}
 
+	namespaces := []string{request.InstallNamespace()}
+	if r.multiTenant {
+		namespaces, err = utils.TenantNamespaces(ctx, r.client)
+		if err != nil {
+			return err
+		}
+	}
+
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
@@ -84,6 +92,7 @@ func (r *LinseedSubController) createESKubeControllers(
 		LogStorageExists:             true,
 		TrustedBundle:                certificateManager.CreateTrustedBundle(), // We don't care about the contents.
 		Namespace:                    request.InstallNamespace(),               // TODO: This will give tigera-elasticsearch in single-tenant systems. Is this OK?
+		BindingNamespaces:            namespaces,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 

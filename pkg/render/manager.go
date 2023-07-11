@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
@@ -95,34 +96,12 @@ var (
 
 // ManagerClusterScoped returns a component for rendering cluster-scoped manager resources.
 func ManagerClusterScoped(cfg *ManagerConfiguration, namespaces []string) (Component, error) {
-	return &managerClusterScopedComponent{
-		cfg:        cfg,
-		namespaces: namespaces,
-	}, nil
+	objs := []client.Object{managerClusterRoleBinding(namespaces)}
+	return NewPassthrough(objs...), nil
 }
 
-type managerClusterScopedComponent struct {
-	cfg        *ManagerConfiguration
-	namespaces []string
-}
-
-func (m *managerClusterScopedComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	return nil
-}
-
-func (m *managerClusterScopedComponent) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
-	objs := []client.Object{
-		managerClusterRoleBinding(m.namespaces),
-	}
-	return objs, nil
-}
-
-func (m *managerClusterScopedComponent) Ready() bool {
-	return true
-}
-
-func (m *managerClusterScopedComponent) SupportedOSType() rmeta.OSType {
-	return rmeta.OSTypeLinux
+func managerClusterRoleBinding(namespaces []string) client.Object {
+	return rcomponents.ClusterRoleBinding(ManagerClusterRoleBinding, ManagerClusterRole, ManagerServiceAccount, namespaces)
 }
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -826,29 +805,6 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool, kubernet
 	}
 
 	return cr
-}
-
-// managerClusterRoleBinding returns a clusterrolebinding that gives the tigera-manager serviceaccount
-// the permissions in the tigera-manager-role.
-func managerClusterRoleBinding(namespaces []string) *rbacv1.ClusterRoleBinding {
-	subjects := []rbacv1.Subject{}
-	for _, ns := range namespaces {
-		subjects = append(subjects, rbacv1.Subject{
-			Kind:      "ServiceAccount",
-			Name:      ManagerServiceAccount,
-			Namespace: ns,
-		})
-	}
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ManagerClusterRole,
-		},
-		Subjects: subjects,
-	}
 }
 
 // TODO: Can we get rid of this and instead just bind to default ones?

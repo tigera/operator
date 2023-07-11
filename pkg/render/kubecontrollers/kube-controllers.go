@@ -94,7 +94,11 @@ type KubeControllersConfiguration struct {
 	UsePSP           bool
 	MetricsServerTLS certificatemanagement.KeyPairInterface
 
+	// Namespace to be installed into.
 	Namespace string
+
+	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
+	BindingNamespaces []string
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -150,6 +154,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
 			},
+			// TODO: This should be provided via a separate namespaced role / role binding once we have a namespaced version of this.
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
@@ -234,8 +239,8 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 	objectsToCreate = append(objectsToCreate,
 		c.controllersServiceAccount(),
-		c.controllersRole(),
-		c.controllersRoleBinding(),
+		c.controllersClusterRole(),
+		c.controllersClusterRoleBinding(),
 		c.controllersDeployment(),
 	)
 
@@ -402,7 +407,7 @@ func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAc
 	}
 }
 
-func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
+func (c *kubeControllersComponent) controllersClusterRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -450,6 +455,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.kubeControllerName == EsKubeController {
+			// Tell kube-controllers which namespace it is running in so it can provision secrets in the correct location.
+			// TODO: Should this use the downward API?
+			env = append(env, corev1.EnvVar{Name: "NAMESPACE", Value: c.cfg.Namespace})
+
 			// What started as a workaround is now the default behaviour. This feature uses our backend in order to
 			// log into Kibana for users from external identity providers, rather than configuring an authn realm
 			// in the Elastic stack.
@@ -580,7 +589,15 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	return &d
 }
 
-func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{}
+	for _, ns := range c.cfg.BindingNamespaces {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      c.kubeControllerServiceAccountName,
+			Namespace: ns,
+		})
+	}
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -592,13 +609,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 			Kind:     "ClusterRole",
 			Name:     c.kubeControllerRoleName,
 		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      c.kubeControllerServiceAccountName,
-				Namespace: c.cfg.Namespace,
-			},
-		},
+		Subjects: subjects,
 	}
 }
 

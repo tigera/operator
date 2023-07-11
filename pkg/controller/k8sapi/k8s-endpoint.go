@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package k8sapi
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -32,15 +33,19 @@ func init() {
 	// We read whatever is in the variable. We would read "" if they were not set.
 	// We decide at the point of usage what to do with the values.
 	Endpoint = ServiceEndpoint{
-		Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
-		Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
+		Host:        os.Getenv("KUBERNETES_SERVICE_HOST"),
+		Port:        os.Getenv("KUBERNETES_SERVICE_PORT"),
+		ServiceCIDR: os.Getenv("KUBERNETES_SERVICE_CIDR"),
+		DNSServers:  os.Getenv("KUBERNETES_DNS_SERVERS"),
 	}
 }
 
 // ServiceEndpoint is the Host/Port of the K8s endpoint.
 type ServiceEndpoint struct {
-	Host string
-	Port string
+	Host        string
+	Port        string
+	ServiceCIDR string
+	DNSServers  string
 }
 
 // EnvVars returns a slice of v1.EnvVars KUBERNETES_SERVICE_HOST/PORT if the Host and Port
@@ -59,10 +64,19 @@ func (k8s ServiceEndpoint) EnvVars(hostNetworked bool, provider operator.Provide
 		return nil
 	}
 
-	return []v1.EnvVar{
+	envVars := []v1.EnvVar{
 		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
 		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
 	}
+
+	if k8s.ServiceCIDR != "" {
+		envVars = append(envVars, v1.EnvVar{Name: "KUBERNETES_SERVICE_CIDR", Value: k8s.ServiceCIDR})
+	}
+	if k8s.DNSServers != "" {
+		envVars = append(envVars, v1.EnvVar{Name: "KUBERNETES_DNS_SERVERS", Value: k8s.DNSServers})
+	}
+
+	return envVars
 }
 
 func (k8s ServiceEndpoint) CNIAPIRoot() string {
@@ -74,4 +88,12 @@ func (k8s ServiceEndpoint) CNIAPIRoot() string {
 		host = "[" + host + "]"
 	}
 	return fmt.Sprintf("https://%s:%s", host, k8s.Port)
+}
+
+func (k8s ServiceEndpoint) WindowsRequiredInfoPresent() error {
+	if k8s.Host != "" && k8s.Port != "" && k8s.ServiceCIDR != "" && k8s.DNSServers != "" {
+		return nil
+	}
+
+	return errors.New("missing required information for Windows on ServiceEndpoint configuration")
 }

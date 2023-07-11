@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,6 +32,8 @@ import (
 
 	opv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 
 	apps "k8s.io/api/apps/v1"
@@ -222,9 +224,83 @@ var _ = Describe("AddPeriodicReconcile", func() {
 	})
 })
 
+var _ = Describe("GetK8sServiceEndPoint", func() {
+	var (
+		c      client.Client
+		ctx    context.Context
+		scheme *runtime.Scheme
+	)
+
+	BeforeEach(func() {
+		// Create a Kubernetes client.
+		scheme = runtime.NewScheme()
+		err := apis.AddToScheme(scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		ctx = context.Background()
+	})
+
+	It("reads a ConfigMap with KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT.", func() {
+		cmName := render.K8sSvcEndpointConfigMapName
+		cm := &corev1.ConfigMap{}
+		cm.ObjectMeta.Name = cmName
+		cm.ObjectMeta.Namespace = common.OperatorNamespace()
+		cm.Data = map[string]string{}
+		cm.Data["KUBERNETES_SERVICE_HOST"] = "1.2.3.4"
+		cm.Data["KUBERNETES_SERVICE_PORT"] = "5678"
+
+		Expect(c.Create(ctx, cm)).ShouldNot(HaveOccurred())
+
+		err := GetK8sServiceEndPoint(c)
+
+		Expect(err).To(BeNil())
+
+		Expect(k8sapi.Endpoint.Host).To(Equal("1.2.3.4"))
+		Expect(k8sapi.Endpoint.Port).To(Equal("5678"))
+		Expect(k8sapi.Endpoint.ServiceCIDR).To(Equal(""))
+		Expect(k8sapi.Endpoint.DNSServers).To(Equal(""))
+	})
+
+	It("reads a ConfigMap with KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT, KUBERNETES_SERVICE_CIDR and KUBERNETES_DNS_SERVERS.", func() {
+		cmName := render.K8sSvcEndpointConfigMapName
+		cm := &corev1.ConfigMap{}
+		cm.ObjectMeta.Name = cmName
+		cm.ObjectMeta.Namespace = common.OperatorNamespace()
+		cm.Data = map[string]string{}
+		cm.Data["KUBERNETES_SERVICE_HOST"] = "1.2.3.4"
+		cm.Data["KUBERNETES_SERVICE_PORT"] = "5678"
+		cm.Data["KUBERNETES_SERVICE_CIDR"] = "1.2.3.0/24"
+		cm.Data["KUBERNETES_DNS_SERVERS"] = "9.10.11.12"
+
+		Expect(c.Create(ctx, cm)).ShouldNot(HaveOccurred())
+
+		err := GetK8sServiceEndPoint(c)
+
+		Expect(err).To(BeNil())
+
+		Expect(k8sapi.Endpoint.Host).To(Equal("1.2.3.4"))
+		Expect(k8sapi.Endpoint.Port).To(Equal("5678"))
+		Expect(k8sapi.Endpoint.ServiceCIDR).To(Equal("1.2.3.0/24"))
+		Expect(k8sapi.Endpoint.DNSServers).To(Equal("9.10.11.12"))
+	})
+
+	It("does not return error if ConfigMap is not found.", func() {
+		err := GetK8sServiceEndPoint(c)
+
+		Expect(err).To(BeNil())
+	})
+
+})
+
 type fakeClient struct {
 	discovery discovery.DiscoveryInterface
 	kubernetes.Interface
+	objects map[client.ObjectKey]client.Object
 }
 
 type fakeDiscovery struct {

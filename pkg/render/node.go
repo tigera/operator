@@ -405,7 +405,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Used for creating service account tokens to be used by the CNI plugin.
 				APIGroups:     []string{""},
 				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{"calico-cni-plugin"},
+				ResourceNames: []string{CalicoCNIPluginObjectName},
 				Verbs:         []string{"create"},
 			},
 			{

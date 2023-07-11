@@ -28,6 +28,11 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoCNIWindows = component{
+		Version: "master",
+		Image:   "calico/cni-windows",
+	}
+
 	ComponentCalicoCNIFIPS = component{
 		Version:  "master-fips",
 		Image:    "calico/cni",
@@ -56,6 +61,11 @@ var (
 		Version:  "master-fips",
 		Image:    "calico/node",
 		Registry: "",
+	}
+
+	ComponentCalicoNodeWindows = component{
+		Version: "master",
+		Image:   "calico/node-windows",
 	}
 
 	ComponentCalicoTypha = component{
@@ -119,6 +129,7 @@ var (
 	CalicoImages = []component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
+		ComponentCalicoCNIWindows,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,

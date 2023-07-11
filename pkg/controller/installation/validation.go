@@ -398,6 +398,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify the CalicoNodeWindowsDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoNodeWindowsDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeWindowsDaemonSetContainer, node.ValidateCalicoNodeWindowsDaemonSetInitContainer)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
+
+		}
+	}
+
 	// Verify the CalicoKubeControllersDeployment overrides, if specified, is valid.
 	if deploy := instance.Spec.CalicoKubeControllersDeployment; deploy != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)

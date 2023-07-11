@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,8 +25,9 @@ import (
 // VersionInfo contains information about the version of Kubernetes API the cluster is using
 // Major and Minor fields map to the v<Major>.<Minor>+ part of the version string
 type VersionInfo struct {
-	Major int
-	Minor int
+	Major      int
+	Minor      int
+	GitVersion string
 }
 
 func GetKubernetesVersion(clientset kubernetes.Interface) (*VersionInfo, error) {
@@ -47,8 +48,9 @@ func GetKubernetesVersion(clientset kubernetes.Interface) (*VersionInfo, error) 
 	}
 
 	return &VersionInfo{
-		Major: major,
-		Minor: minor,
+		Major:      major,
+		Minor:      minor,
+		GitVersion: v.GitVersion,
 	}, nil
 }
 

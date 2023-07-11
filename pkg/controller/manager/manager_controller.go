@@ -641,13 +641,6 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 			TruthNamespace:  request.TruthNamespace(),
 			ServiceAccounts: []string{render.ManagerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// We need to render the certificate manager CA cert again in case we're running in multi-tenant mode.
-				// For single-tenant, this cert is created once by the core controller. For multi-tenant, we
-				// provision a unique CA per-tenant, and so we need to make sure to create it here.
-				//
-				// TODO: We probably want a separate tenant controller managing the creation of of this instead, so
-				// that individual controllers don't need to do this.
-				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),

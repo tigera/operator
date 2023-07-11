@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/openshift/library-go/pkg/crypto"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -86,6 +87,11 @@ type CertificateManager interface {
 // Create creates a signer of new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
 // brings their own secrets, CertificateManager will preserve and return them.
 func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string) (CertificateManager, error) {
+	return CreateWithLogger(cli, installation, clusterDomain, ns, log)
+}
+
+func CreateWithLogger(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, log logr.Logger) (CertificateManager, error) {
+	log.V(2).Info("Creating CertificateManager in namespace", "ns", ns)
 	var (
 		cryptoCA                      *crypto.CA
 		csrImage                      string
@@ -152,7 +158,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	if err != nil {
 		return nil, err
 	}
-	return &certificateManager{
+	cm := &certificateManager{
 		CA:          cryptoCA,
 		Certificate: x509Cert,
 		keyPair: &certificatemanagement.KeyPair{
@@ -163,7 +169,9 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			ClusterDomain:         clusterDomain,
 			CertificateManagement: certificateManagement,
 		},
-	}, nil
+	}
+	log.V(2).Info("Created CertificateManager", "ns", ns, "authority", cm.AuthorityKeyId)
+	return cm, nil
 }
 
 func (cm *certificateManager) KeyPair() certificatemanagement.KeyPairInterface {

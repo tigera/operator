@@ -198,6 +198,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		usePSP:               opts.UsePSP,
 		tierWatchReady:       &utils.ReadyFlag{},
+		clientset:            cs,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -389,6 +390,7 @@ type ReconcileInstallation struct {
 	manageCRDs           bool
 	usePSP               bool
 	tierWatchReady       *utils.ReadyFlag
+	clientset            kubernetes.Interface
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -1337,6 +1339,38 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Node(&nodeCfg))
 
+	// Build a configuration for rendering calico-node-windows, but only if there are Windows nodes in the cluster
+	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "Unable to detect if there are Windows nodes present", err, reqLogger)
+	}
+	if hasWindowsNodes {
+		if err := k8sapi.Endpoint.WindowsRequiredInfoPresent(); err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for Windows configuration", render.K8sSvcEndpointConfigMapName), err, reqLogger)
+		}
+
+		kubernetesVersionInfo, err := common.GetKubernetesVersion(r.clientset)
+		if err != nil {
+			r.status.SetDegraded(operator.InternalServerError, "Unable to determine Kubernetes version, defaulting to v1.18.0", err, reqLogger)
+			kubernetesVersionInfo = &common.VersionInfo{Major: 1, Minor: 18, GitVersion: "v1.18.0-qwerty"}
+		}
+		kubernetesVersion := strings.Split(kubernetesVersionInfo.GitVersion, "-")[0]
+
+		windowsCfg := render.WindowsConfiguration{
+			K8sServiceEp:            k8sapi.Endpoint,
+			Installation:            &instance.Spec,
+			ClusterDomain:           r.clusterDomain,
+			TLS:                     typhaNodeTLS,
+			AmazonCloudIntegration:  aci,
+			PrometheusServerTLS:     nodePrometheusTLS,
+			NodeReporterMetricsPort: nodeReporterMetricsPort,
+			VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
+			Terminating:             nodeTerminating,
+			KubernetesVersion:       kubernetesVersion,
+		}
+		components = append(components, render.Windows(&windowsCfg))
+	}
+
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
 		Terminating:  terminating,
@@ -1359,12 +1393,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
-
-	windowsCfg := render.WindowsConfig{
-		Installation: &instance.Spec,
-		Terminating:  terminating,
-	}
-	components = append(components, render.Windows(&windowsCfg))
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
@@ -1404,6 +1432,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
+
+	if hasWindowsNodes {
+		r.status.AddDaemonsets([]types.NamespacedName{{Name: common.WindowsDaemonSetName, Namespace: common.CalicoNamespace}})
+	}
+
 	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)
 
@@ -1637,6 +1670,11 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	}
 	if fc.Spec.HealthPort == nil {
 		fc.Spec.HealthPort = &felixHealthPort
+		updated = true
+	}
+	vxlanVNI := 4096
+	if fc.Spec.VXLANVNI == nil {
+		fc.Spec.VXLANVNI = &vxlanVNI
 		updated = true
 	}
 

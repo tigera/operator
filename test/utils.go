@@ -33,7 +33,6 @@ import (
 	"github.com/openshift/library-go/pkg/crypto"
 
 	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -203,10 +202,7 @@ func CreateNode(c kubernetes.Interface, name string, labels map[string]string, a
 func CreateWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *v1.Node {
 	return CreateNode(cs, name,
 		map[string]string{"kubernetes.io/os": "windows"},
-		map[string]string{
-			common.CalicoVersionAnnotation: version,
-			common.CalicoVariantAnnotation: string(variant),
-		})
+		map[string]string{})
 }
 
 func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {

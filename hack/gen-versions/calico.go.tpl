@@ -35,6 +35,12 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "calico/cni-windows" }}
+	ComponentCalicoCNIWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
 		Version:  "{{ .Version }}",
@@ -61,6 +67,12 @@ var (
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components  "calico/node-windows" }}
+	ComponentCalicoNodeWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -133,11 +145,13 @@ var (
 
 	CalicoImages = []component{
 		ComponentCalicoCNI,
+		ComponentCalicoCNIWindows,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
 		ComponentCalicoNodeFIPS,
+        ComponentCalicoNodeWindows,
 		ComponentCalicoTypha,
 		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,

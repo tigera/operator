@@ -308,6 +308,12 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "cnx-node-windows" }}
+	ComponentTigeraNodeWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.typha }}
 	ComponentTigeraTypha = component{
 		Version:  "{{ .Version }}",
@@ -327,6 +333,12 @@ var (
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "tigera-cni-windows" }}
+	ComponentTigeraCNIWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "cloud-controllers" }}

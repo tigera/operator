@@ -121,7 +121,6 @@ func allCalicoComponents(
 		AmazonCloudIntegration:  aci,
 		NodeReporterMetricsPort: nodeReporterMetricsPort,
 		VXLANVNI:                4096,
-		KubernetesVersion:       "v1.18.0",
 	}
 
 	nodeCertComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -211,11 +210,11 @@ var _ = Describe("Rendering tests", func() {
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
 		// - 1 namespace
-		// - 6 Windows node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, kube-proxy DaemonSet)
+		// - 5 Windows node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
 		// - 3 Windows calico-cni-plugin resources (ServiceAccount, ClusterRole, ClusterRoleBinding)
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 3 + 4 + 1 + 7 + 6 + 1 + 6 + 3))
+		Expect(componentCount(c)).To(Equal(6 + 3 + 4 + 1 + 7 + 6 + 1 + 5 + 3))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -229,7 +228,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1 + 6 + 3) + 1 + 1 + 1))
+		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1 + 5 + 3) + 1 + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -293,7 +292,6 @@ var _ = Describe("Rendering tests", func() {
 			{render.WindowsNodeMetricsService, common.CalicoNamespace, "", "v1", "Service"},
 			{"cni-config-windows", common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{common.WindowsDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
-			{common.WindowsKubeProxyDaemonSetName, "kube-system", "apps", "v1", "DaemonSet"},
 
 			// Certificate Management objects
 			{"tigera-ca-bundle", common.CalicoNamespace, "", "v1", "ConfigMap"},

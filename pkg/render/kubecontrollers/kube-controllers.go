@@ -28,7 +28,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
@@ -94,6 +93,12 @@ type KubeControllersConfiguration struct {
 	// Whether the cluster supports pod security policies.
 	UsePSP           bool
 	MetricsServerTLS certificatemanagement.KeyPairInterface
+
+	// Namespace to be installed into.
+	Namespace string
+
+	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
+	BindingNamespaces []string
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -149,6 +154,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
 			},
+			// TODO: This should be provided via a separate namespaced role / role binding once we have a namespaced version of this.
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
@@ -233,8 +239,8 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 	objectsToCreate = append(objectsToCreate,
 		c.controllersServiceAccount(),
-		c.controllersRole(),
-		c.controllersRoleBinding(),
+		c.controllersClusterRole(),
+		c.controllersClusterRoleBinding(),
 		c.controllersDeployment(),
 	)
 
@@ -244,7 +250,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	objectsToDelete := []client.Object{}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
+			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
 
 	if c.cfg.UsePSP {
@@ -395,13 +401,13 @@ func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAc
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerServiceAccountName,
-			Namespace: common.CalicoNamespace,
+			Namespace: c.cfg.Namespace,
 			Labels:    map[string]string{},
 		},
 	}
 }
 
-func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
+func (c *kubeControllersComponent) controllersClusterRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -431,7 +437,7 @@ func (c *kubeControllersComponent) controllersOCPFederationRoleBinding() *rbacv1
 			{
 				Kind:      "ServiceAccount",
 				Name:      KubeController,
-				Namespace: common.CalicoNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -449,6 +455,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.kubeControllerName == EsKubeController {
+			// Tell kube-controllers which namespace it is running in so it can provision secrets in the correct location.
+			// TODO: Should this use the downward API?
+			env = append(env, corev1.EnvVar{Name: "NAMESPACE", Value: c.cfg.Namespace})
+
 			// What started as a workaround is now the default behaviour. This feature uses our backend in order to
 			// log into Kibana for users from external identity providers, rather than configuring an authn realm
 			// in the Elastic stack.
@@ -525,12 +535,18 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	if c.kubeControllerName == EsKubeController {
-		container = relasticsearch.ContainerDecorate(container, render.DefaultElasticsearchClusterName,
-			ElasticsearchKubeControllersUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
+		container = relasticsearch.DecorateEnvironment(
+			container,
+			c.cfg.Namespace,
+			render.DefaultElasticsearchClusterName,
+			ElasticsearchKubeControllersUserSecret,
+			c.cfg.ClusterDomain,
+			rmeta.OSTypeLinux,
+		)
 	}
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(common.CalicoNamespace))
+		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace))
 	}
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -548,7 +564,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerName,
-			Namespace: common.CalicoNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -558,7 +574,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        c.kubeControllerName,
-					Namespace:   common.CalicoNamespace,
+					Namespace:   c.cfg.Namespace,
 					Annotations: c.annotations(),
 				},
 				Spec: podSpec,
@@ -573,7 +589,15 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	return &d
 }
 
-func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{}
+	for _, ns := range c.cfg.BindingNamespaces {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      c.kubeControllerServiceAccountName,
+			Namespace: ns,
+		})
+	}
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -585,13 +609,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 			Kind:     "ClusterRole",
 			Name:     c.kubeControllerRoleName,
 		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      c.kubeControllerServiceAccountName,
-				Namespace: common.CalicoNamespace,
-			},
-		},
+		Subjects: subjects,
 	}
 }
 
@@ -602,7 +620,7 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerMetricsName,
-			Namespace: common.CalicoNamespace,
+			Namespace: c.cfg.Namespace,
 			Annotations: map[string]string{
 				"prometheus.io/scrape": "true",
 				"prometheus.io/port":   fmt.Sprintf("%d", c.cfg.MetricsPort),
@@ -725,7 +743,7 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KubeControllerNetworkPolicyName,
-			Namespace: common.CalicoNamespace,
+			Namespace: cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
@@ -756,7 +774,7 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.Helper(true, cfg.Namespace).ESGatewayEntityRule(), // TODO: multi-tenant
 		},
 		{
 			Action:      v3.Allow,
@@ -769,7 +787,7 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      EsKubeControllerNetworkPolicyName,
-			Namespace: common.CalicoNamespace,
+			Namespace: cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

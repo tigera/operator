@@ -62,7 +62,7 @@ const (
 func Linseed(c *Config) render.Component {
 	return &linseed{
 		cfg:       c,
-		namespace: render.ElasticsearchNamespace,
+		namespace: c.Namespace,
 	}
 }
 
@@ -103,6 +103,9 @@ type Config struct {
 
 	// Elastic cluster configuration
 	ESClusterConfig *relasticsearch.ClusterConfig
+
+	// Namespace to install into.
+	Namespace string
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -193,6 +196,7 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
+// TODO: This needs to be applied to all Linseed instances.
 func (l *linseed) linseedRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

@@ -1054,6 +1054,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// TODO: Manager certificate should be handled in its own controller, as should generation of the root CA.
 	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
@@ -1179,6 +1180,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		// The following certificate is mounted by the es-kube-controllers for accessing Elasticsearch (Gateway).
+		// TODO: This should probably be moved or disabled in multi-tenant. Why does typha node TLS need to trust esgw anyway?
 		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
@@ -1369,6 +1371,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
+		Namespace:                   common.CalicoNamespace,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

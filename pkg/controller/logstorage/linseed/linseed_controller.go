@@ -263,7 +263,7 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	}
 
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
-	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, request.TruthNamespace())
+	cm, err := certificatemanager.CreateWithLogger(r.client, install, r.clusterDomain, request.TruthNamespace(), reqLogger)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -272,16 +272,16 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed KeyPair", err, reqLogger)
 		return reconcile.Result{}, err
+	} else if linseedKeyPair == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", request.InstallNamespace(), render.TigeraLinseedSecret), err, reqLogger)
+		return reconcile.Result{}, nil
 	}
 	tokenKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedTokenSecret, request.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed token secret", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-
-	// Prior to rendering, make sure all the upstream dependencies we need are present. If we're missing anything, we'll wait until it's ready.
-	if linseedKeyPair == nil || tokenKeyPair == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for Linseed key pair(s) to exist", err, reqLogger)
+	} else if tokenKeyPair == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", request.InstallNamespace(), render.TigeraLinseedTokenSecret), err, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

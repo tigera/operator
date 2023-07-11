@@ -205,11 +205,12 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.OnCRNotFound()
 	}
 
-	// We found the LogStorage instance (and Manager instance if in multi-tenant mode).
+	// We found the LogStorage instance (and Tenant instance if in multi-tenant mode).
 	r.status.OnCRFound()
 
 	req := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.ElasticsearchNamespace)
 	args := ReconcileArgs{LogStorage: ls, Tenant: tenant}
+	reqLogger = reqLogger.WithValues("installNS", req.InstallNamespace(), "truthNS", req.TruthNamespace())
 	return r.reconcile(ctx, reqLogger, args, req)
 }
 

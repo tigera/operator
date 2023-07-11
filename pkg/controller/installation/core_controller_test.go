@@ -414,7 +414,6 @@ var _ = Describe("Testing core-controller installation", func() {
 						enterpriseCRDsExist:  true,
 						migrationChecked:     true,
 						tierWatchReady:       ready,
-						clientset:            cs, // Needed for GetKubernetesVersion()
 					}
 
 					r.typhaAutoscaler.start(ctx)
@@ -567,22 +566,6 @@ var _ = Describe("Testing core-controller installation", func() {
 							fmt.Sprintf("some.registry.org/%s:%s",
 								components.ComponentTigeraCNIWindows.Image,
 								components.ComponentTigeraCNIWindows.Version)))
-						dsKubeProxyWin := appsv1.DaemonSet{
-							TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      common.WindowsKubeProxyDaemonSetName,
-								Namespace: "kube-system",
-							},
-						}
-						Expect(test.GetResource(c, &dsKubeProxyWin)).To(BeNil())
-						Expect(dsKubeProxyWin.Spec.Template.Spec.Containers).To(HaveLen(1))
-						kubeProxyWin := test.GetContainer(dsKubeProxyWin.Spec.Template.Spec.Containers, "kube-proxy")
-						Expect(kubeProxyWin).ToNot(BeNil())
-
-						// When getting kubernetes version fails, it defaults to v1.18.0
-						kubernetesVersion := "v1.18.0"
-						Expect(kubeProxyWin.Image).To(Equal(
-							fmt.Sprintf("sigwindowstools/kube-proxy:%s-calico-hostprocess", kubernetesVersion)))
 					}
 				})
 				It("should use images from imageset", func() {

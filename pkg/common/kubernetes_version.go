@@ -25,9 +25,8 @@ import (
 // VersionInfo contains information about the version of Kubernetes API the cluster is using
 // Major and Minor fields map to the v<Major>.<Minor>+ part of the version string
 type VersionInfo struct {
-	Major      int
-	Minor      int
-	GitVersion string
+	Major int
+	Minor int
 }
 
 func GetKubernetesVersion(clientset kubernetes.Interface) (*VersionInfo, error) {
@@ -48,9 +47,8 @@ func GetKubernetesVersion(clientset kubernetes.Interface) (*VersionInfo, error) 
 	}
 
 	return &VersionInfo{
-		Major:      major,
-		Minor:      minor,
-		GitVersion: v.GitVersion,
+		Major: major,
+		Minor: minor,
 	}, nil
 }
 

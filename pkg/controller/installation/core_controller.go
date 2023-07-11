@@ -1349,13 +1349,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for Windows configuration", render.K8sSvcEndpointConfigMapName), err, reqLogger)
 		}
 
-		kubernetesVersionInfo, err := common.GetKubernetesVersion(r.clientset)
-		if err != nil {
-			r.status.SetDegraded(operator.InternalServerError, "Unable to determine Kubernetes version, defaulting to v1.18.0", err, reqLogger)
-			kubernetesVersionInfo = &common.VersionInfo{Major: 1, Minor: 18, GitVersion: "v1.18.0-qwerty"}
-		}
-		kubernetesVersion := strings.Split(kubernetesVersionInfo.GitVersion, "-")[0]
-
 		windowsCfg := render.WindowsConfiguration{
 			K8sServiceEp:            k8sapi.Endpoint,
 			Installation:            &instance.Spec,
@@ -1366,7 +1359,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			NodeReporterMetricsPort: nodeReporterMetricsPort,
 			VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
 			Terminating:             nodeTerminating,
-			KubernetesVersion:       kubernetesVersion,
 		}
 		components = append(components, render.Windows(&windowsCfg))
 	}

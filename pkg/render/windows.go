@@ -58,14 +58,12 @@ type WindowsConfiguration struct {
 	AmazonCloudIntegration  *operatorv1.AmazonCloudIntegration
 	VXLANVNI                int
 	Terminating             bool
-	KubernetesVersion       string
 }
 
 type windowsComponent struct {
-	cfg            *WindowsConfiguration
-	cniImage       string
-	nodeImage      string
-	kubeProxyImage string
+	cfg       *WindowsConfiguration
+	cniImage  string
+	nodeImage string
 }
 
 func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -87,8 +85,6 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIWindows, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeWindows, reg, path, prefix, is))
 	}
-
-	c.kubeProxyImage = fmt.Sprintf("sigwindowstools/kube-proxy:%s-calico-hostprocess", c.cfg.KubernetesVersion)
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
@@ -135,8 +131,6 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs, c.windowsDaemonset(cniConfig))
-
-	objs = append(objs, c.kubeProxyWindowsDaemonset())
 
 	if c.cfg.Terminating {
 		return objsToKeep, append(objs, objsToDelete...)
@@ -1234,75 +1228,4 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 	}
 	return &ds
-}
-
-// kubeProxyWindowsDaemonset creates the windows kube-proxy daemonset.
-// It uses the sigwindowstools/kube-proxy image and is based on
-// https://github.com/kubernetes-sigs/sig-windows-tools/blob/master/hostprocess/calico/kube-proxy/kube-proxy.yml
-func (c *windowsComponent) kubeProxyWindowsDaemonset() *appsv1.DaemonSet {
-	ds := appsv1.DaemonSet{
-		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.WindowsKubeProxyDaemonSetName,
-			Namespace: "kube-system",
-			Labels:    map[string]string{"k8s-app": "kube-proxy"},
-		},
-		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": common.WindowsKubeProxyDaemonSetName,
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"k8s-app": common.WindowsKubeProxyDaemonSetName},
-				},
-				Spec: corev1.PodSpec{
-					NodeSelector:       map[string]string{"kubernetes.io/os": "windows"},
-					Tolerations:        rmeta.TolerateAll,
-					ServiceAccountName: "kube-proxy",
-					HostNetwork:        true,
-					Containers: []corev1.Container{
-						c.kubeProxyContainer(),
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "kube-proxy",
-							VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: "kube-proxy"}}}}},
-				},
-			},
-			UpdateStrategy: c.cfg.Installation.NodeUpdateStrategy,
-		},
-	}
-
-	return &ds
-}
-
-// kubeProxyContainer creates the windows kube-proxy container.
-func (c *windowsComponent) kubeProxyContainer() corev1.Container {
-	return corev1.Container{
-		Name:            "kube-proxy",
-		Image:           c.kubeProxyImage,
-		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/kube-proxy/start.ps1"},
-		WorkingDir:      "$env:CONTAINER_SANDBOX_MOUNT_POINT/kube-proxy/",
-		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
-		Env: []corev1.EnvVar{
-			{
-				Name: "NODE_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-				},
-			},
-			{
-				Name: "POD_IP",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
-				},
-			},
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			{MountPath: "/var/lib/kube-proxy", Name: "kube-proxy"},
-		},
-	}
 }

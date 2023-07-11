@@ -622,7 +622,14 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
 		return reconcile.Result{}, err
 	}
-	clusterScopedComponent, err := render.ManagerClusterScoped(managerCfg, []string{request.InstallNamespace()}) // TODO: All namespaces.
+	namespaces := []string{request.InstallNamespace()}
+	if r.multiTenant {
+		namespaces, err = utils.TenantNamespaces(ctx, r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+	clusterScopedComponent, err := render.ManagerClusterScoped(managerCfg, namespaces)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
 		return reconcile.Result{}, err

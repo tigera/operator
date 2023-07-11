@@ -128,6 +128,13 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
+func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
+	return AddNamespacedWatch(c, &appsv1.Deployment{
+		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	})
+}
+
 func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
 	return c.Watch(
 		&source.Channel{Source: createPeriodicReconcileChannel(period)},
@@ -390,6 +397,20 @@ func GetTenant(ctx context.Context, cli client.Client, ns string) (*operatorv1.T
 		return nil, err
 	}
 	return instance, nil
+}
+
+// Get all namespaces that contain a tenant.
+func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) {
+	namespaces := []string{}
+	tenants := operatorv1.TenantList{}
+	err := cli.List(ctx, &tenants)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tenants.Items {
+		namespaces = append(namespaces, t.Namespace)
+	}
+	return namespaces, nil
 }
 
 // GetInstallationStatus returns the current installation status, for use by other controllers.

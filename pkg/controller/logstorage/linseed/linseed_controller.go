@@ -155,11 +155,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Check if something modifies resources this controller creates.
 	// TODO
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, installNS); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Service resource: %w", err)
 	}
 	if err := utils.AddServiceWatch(c, render.LinseedServiceName, installNS); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Service resource: %w", err)
+	}
+	if err := utils.AddDeploymentWatch(c, render.LinseedServiceName, installNS); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Deployment resource: %w", err)
+	}
+	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, installNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
+
 	return nil
 }
 

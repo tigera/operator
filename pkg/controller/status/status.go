@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -202,7 +202,6 @@ func (m *statusManager) updateStatus() {
 			m.clearDegraded()
 		}
 	}
-
 }
 
 func (m *statusManager) isExplicitlyDegraded() bool {
@@ -613,7 +612,7 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		var numFailed = 0
+		numFailed := 0
 		for _, jref := range cj.Status.Active {
 			j := &batchv1.Job{}
 			if err := m.client.Get(context.TODO(), types.NamespacedName{Namespace: jref.Namespace, Name: jref.Name}, j); err != nil {
@@ -750,7 +749,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	for _, condition := range conditions {
 		found := false
 
-		//set the CR's observedGeneration for tigerastatus condition
+		// set the CR's observedGeneration for tigerastatus condition
 		if m.observedGeneration != 0 {
 			condition.ObservedGeneration = m.observedGeneration
 		}

@@ -197,6 +197,7 @@ func (e *esGateway) esGatewayPodSecurityPolicy() *policyv1beta1.PodSecurityPolic
 
 func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
+		{Name: "NAMESPACE", Value: e.cfg.Namespace},
 		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
 		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
 		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},

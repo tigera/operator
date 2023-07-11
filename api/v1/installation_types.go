@@ -171,8 +171,8 @@ type InstallationSpec struct {
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
-	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
-	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
+	// CalicoNodeWindowsDaemonSet configures the calico-node-windows DaemonSet.
+	CalicoNodeWindowsDaemonSet *CalicoNodeWindowsDaemonSet `json:"calicoNodeWindowsDaemonSet,omitempty"`
 
 	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
 	// Default: Disabled

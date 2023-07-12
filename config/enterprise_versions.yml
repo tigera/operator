@@ -24,6 +24,9 @@ components:
   cnx-node:
     image: tigera/cnx-node
     version: master
+  cnx-node-windows:
+    image: tigera/cnx-node-windows
+    version: master
   fluentd:
     image: tigera/fluentd
     version: master
@@ -88,6 +91,9 @@ components:
   tigera-cni:
     image: tigera/cni
     version: master
+  tigera-cni-windows:
+    image: tigera/cni-windows
+    version: master
   cloud-controllers:
     image: tigera/cloud-controllers
     version: master
@@ -119,9 +125,6 @@ components:
     version: master
   deep-packet-inspection:
     image: tigera/deep-packet-inspection
-    version: master
-  windows-upgrade:
-    image: tigera/calico-windows-upgrade
     version: master
   flexvol:
     image: tigera/pod2daemon-flexvol

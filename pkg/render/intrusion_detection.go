@@ -519,6 +519,17 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				})
 		}
 
+		if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+			if c.syslogForwardingIsEnabled() || c.adAPIPersistentStorageEnabled() {
+				managementRule = append(managementRule, rbacv1.PolicyRule{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{PSSPrivileged},
+				})
+			}
+		}
+
 		rules = append(rules, managementRule...)
 	}
 	return &rbacv1.ClusterRole{

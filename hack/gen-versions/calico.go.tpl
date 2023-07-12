@@ -158,7 +158,6 @@ var (
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,
-		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,

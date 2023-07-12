@@ -300,7 +300,6 @@ var _ = Describe("GetK8sServiceEndPoint", func() {
 type fakeClient struct {
 	discovery discovery.DiscoveryInterface
 	kubernetes.Interface
-	objects map[client.ObjectKey]client.Object
 }
 
 type fakeDiscovery struct {

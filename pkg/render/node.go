@@ -547,7 +547,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"q"},
+			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{PSSPrivileged},
 		})

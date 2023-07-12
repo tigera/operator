@@ -24,13 +24,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
+	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ghodss/yaml"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -38,14 +40,11 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
-	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
@@ -56,6 +55,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -67,11 +67,10 @@ var (
 )
 
 func init() {
+	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(operatorv1.AddToScheme(scheme))
 	utilruntime.Must(operatorv1beta1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(apis.AddToScheme(scheme))
 }
 
@@ -94,6 +93,8 @@ func main() {
 	var printEnterpriseCRDs string
 	var sgSetup bool
 	var manageCRDs bool
+	var preDelete bool
+
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -111,6 +112,9 @@ func main() {
 		"Setup Security Groups in AWS (should only be used on OpenShift).")
 	flag.BoolVar(&manageCRDs, "manage-crds", false,
 		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
+	flag.BoolVar(&preDelete, "pre-delete", false,
+		"Run helm pre-deletion hook logic, then exit.")
+
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -172,7 +176,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	c, err := client.New(cfg, client.Options{})
+	c, err := client.New(cfg, client.Options{Scheme: scheme})
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
@@ -199,6 +203,15 @@ func main() {
 		err = awssgsetup.SetupAWSSecurityGroups(ctx, c)
 		if err != nil {
 			log.Error(err, "")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if preDelete {
+		// We've built a client - we can use it to clean up.
+		if err := executePreDeleteHook(ctx, c); err != nil {
+			log.Error(err, "Failed to complete pre-delete hook")
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -462,4 +475,39 @@ func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
 	}
 
 	return nil
+}
+
+func executePreDeleteHook(ctx context.Context, c client.Client) error {
+	defer log.Info("preDelete hook exiting")
+
+	// Clean up any custom-resources first - this will trigger teardown of pods deloyed
+	// by the operator, and give the operator a chance to clean up gracefully.
+	installation := &operatorv1.Installation{}
+	installation.Name = utils.DefaultInstanceKey.Name
+	apiserver := &operatorv1.APIServer{}
+	apiserver.Name = utils.DefaultInstanceKey.Name
+	for _, o := range []client.Object{installation, apiserver} {
+		if err := c.Delete(ctx, o); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	// Wait for the Installation to be deleted.
+	to := time.After(5 * time.Minute)
+	for {
+		select {
+		case <-to:
+			return fmt.Errorf("Timeout waiting for pre-delete hook")
+		default:
+			if err := c.Get(ctx, utils.DefaultInstanceKey, installation); errors.IsNotFound(err) {
+				// It's gone! We can return.
+				return nil
+			}
+		}
+		log.Info("Waiting for Installation to be fully deleted")
+		time.Sleep(5 * time.Second)
+	}
 }

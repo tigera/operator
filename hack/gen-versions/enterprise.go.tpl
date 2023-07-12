@@ -355,7 +355,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{pkg/components/calico.go{ with index .Components "flexvol" }}
+{{ with index .Components "flexvol" }}
 	ComponentFlexVolumePrivate = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",

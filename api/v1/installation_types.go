@@ -183,6 +183,10 @@ type InstallationSpec struct {
 	// Logging Configuration for Components
 	// +optional
 	Logging *Logging `json:"logging,omitempty"`
+
+	// Windows Configuration
+	// +optional
+	Windows *WindowsConfig `json:"windows,omitempty"`
 }
 
 type Logging struct {
@@ -759,4 +763,18 @@ func IsFIPSModeEnabled(mode *FIPSMode) bool {
 // IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
 func IsFIPSModeEnabledString(mode *FIPSMode) string {
 	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
+}
+
+type WindowsConfig struct {
+	// CNIBinDir is the path to the CNI binaries directory on Windows, it must match what is on ContainerD on the Windows nodes.
+	// +optional
+	CNIBinDir string `json:"cniBinDir,omitempty"`
+
+	// CNIConfDir is the path to the CNI configuration directory on Windows, it must match what is on ContainerD on the Windows nodes.
+	// +optional
+	CNIConfDir string `json:"cniConfDir,omitempty"`
+
+	// CNILogDir is the path to the Calico CNI logs directory on Windows.
+	// +optional
+	CNILogDir string `json:"cniLogDir,omitempty"`
 }

@@ -292,10 +292,20 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		esClusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, args.LogStorage.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 	}
 
+	// Determine the namespaces to which we must bind the linseed cluster role.
+	bindNamespaces := []string{request.InstallNamespace()}
+	if r.multiTenant {
+		bindNamespaces, err = utils.TenantNamespaces(ctx, r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	cfg := &linseed.Config{
 		Installation:      install,
 		PullSecrets:       pullSecrets,
 		Namespace:         request.InstallNamespace(),
+		BindNamespaces:    bindNamespaces,
 		TrustedBundle:     trustedBundle,
 		ClusterDomain:     r.clusterDomain,
 		KeyPair:           linseedKeyPair,

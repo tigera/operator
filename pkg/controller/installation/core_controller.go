@@ -1372,6 +1372,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
+		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

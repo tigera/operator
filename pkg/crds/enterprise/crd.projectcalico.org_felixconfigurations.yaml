@@ -45,6 +45,7 @@ spec:
               awsRequestTimeout:
                 description: 'AWSRequestTimeout is the timeout on AWS API requests.
                   [Default: 30s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               awsSecondaryIPRoutingRulePriority:
                 description: 'AWSSecondaryIPRoutingRulePriority controls the priority
@@ -62,6 +63,7 @@ spec:
                   pools to be provisioned for the host to claim IPs for the primary
                   IP of the secondary ENIs. Accepted value must be one of "Enabled",
                   "EnabledENIPerWorkload" or "Disabled". [Default: Disabled]'
+                pattern: ^(?i)(Enabled|EnabledENIPerWorkload|Disabled)?$
                 type: string
               awsSrcDstCheck:
                 description: 'Set source-destination-check on AWS EC2 instances. Accepted
@@ -111,6 +113,7 @@ spec:
                   with BPF programs regardless of what is the per-interfaces or global
                   setting. Possible values are Disabled, Strict or Loose. [Default:
                   Loose]'
+                pattern: ^(?i)(Disabled|Strict|Loose)?$
                 type: string
               bpfExtToServiceConnmark:
                 description: 'BPFExtToServiceConnmark in BPF mode, control a 32bit
@@ -128,6 +131,7 @@ spec:
                   is sent directly from the remote node.  In "DSR" mode, the remote
                   node appears to use the IP of the ingress node; this requires a
                   permissive L2 network.  [Default: Tunnel]'
+                pattern: ^(?i)(Tunnel|DSR)?$
                 type: string
               bpfHostConntrackBypass:
                 description: 'BPFHostConntrackBypass Controls whether to bypass Linux
@@ -149,6 +153,7 @@ spec:
                   minimum time between updates to the dataplane for Felix''s embedded
                   kube-proxy.  Lower values give reduced set-up latency.  Higher values
                   reduce Felix CPU usage by batching up more work.  [Default: 1s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               bpfL3IfacePattern:
                 description: BPFL3IfacePattern is a regular expression that allows
@@ -163,6 +168,7 @@ spec:
                   when in BPF dataplane mode.  One of "Off", "Info", or "Debug".  The
                   logs are emitted to the BPF trace pipe, accessible with the command
                   `tc exec bpf debug`. [Default: Off].'
+                pattern: ^(?i)(Off|Info|Debug)?$
                 type: string
               bpfMapSizeConntrack:
                 description: 'BPFMapSizeConntrack sets the size for the conntrack
@@ -247,6 +253,7 @@ spec:
                   to append mode, be sure that the other rules in the chains signal
                   acceptance by falling through to the Calico rules, otherwise the
                   Calico policy will be bypassed. [Default: insert]'
+                pattern: ^(?i)(insert|append)?$
                 type: string
               dataplaneDriver:
                 description: DataplaneDriver filename of the external dataplane driver
@@ -265,8 +272,10 @@ spec:
               debugMemoryProfilePath:
                 type: string
               debugSimulateCalcGraphHangAfter:
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               debugSimulateDataplaneHangAfter:
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               defaultEndpointToHostAction:
                 description: 'DefaultEndpointToHostAction controls what happens to
@@ -281,6 +290,7 @@ spec:
                   endpoint egress policy. Use ACCEPT to unconditionally accept packets
                   from workloads after processing workload endpoint egress policy.
                   [Default: Drop]'
+                pattern: ^(?i)(Drop|Accept|Return)?$
                 type: string
               deletedMetricsRetentionSecs:
                 type: integer
@@ -312,17 +322,22 @@ spec:
               dnsCacheSaveInterval:
                 description: 'The periodic interval at which Felix saves learnt DNS
                   information to the cache file. [Default: 60s].'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               dnsExtraTTL:
                 description: 'Extra time to keep IPs and alias names that are learnt
                   from DNS, in addition to each name or IP''s advertised TTL. [Default:
                   0s].'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               dnsLogsFileAggregationKind:
                 description: 'DNSLogsFileAggregationKind is used to choose the type
                   of aggregation for DNS log entries. [Default: 1 - client name prefix
                   aggregation]. Accepted values are 0 and 1. 0 - No aggregation. 1
                   - Aggregate over clients with the same name prefix.'
+                enum:
+                - 0
+                - 1
                 type: integer
               dnsLogsFileDirectory:
                 description: 'DNSLogsFileDirectory sets the directory where DNS log
@@ -355,6 +370,7 @@ spec:
               dnsLogsFlushInterval:
                 description: 'DNSLogsFlushInterval configures the interval at which
                   Felix exports DNS logs. [Default: 300s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               dnsLogsLatency:
                 description: 'DNSLogsLatency indicates to include measurements of
@@ -371,6 +387,7 @@ spec:
                   time to hold on to a DNS response while waiting for the the dataplane
                   to be programmed. Used when DNSPolicyMode is DelayDNSResponse. [Default:
                   3s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               dnsPacketsNfqueueSize:
                 description: 'DNSPacketsNfqueueSize is the size of the NFQUEUE for
@@ -431,6 +448,7 @@ spec:
                   optionally changing the behavior to Accept, and optionally adding
                   Log. Possible values are Drop, LogAndDrop, Accept, LogAndAccept.
                   [Default: Drop]'
+                pattern: ^(?i)(Drop|LogAndDrop|Accept|LogAndAccept)?$
                 type: string
               egressGatewayPollFailureCount:
                 description: EgressGatewayPollFailureCount is the minimum number of
@@ -443,6 +461,7 @@ spec:
                   Gateways with a named "health" port will be polled in this way.  Egress
                   Gateways that fail the health check will be taken our of use as
                   if they have been deleted.
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               egressIPRoutingRulePriority:
                 description: 'EgressIPRoutingRulePriority controls the priority value
@@ -456,6 +475,7 @@ spec:
                   egress annotations are ignored. - EnabledPerNamespaceOrPerPod: Egress
                   IP function is enabled and can be configured per-namespace or per-pod,                                with
                   per-pod egress annotations overriding namespace annotations.'
+                pattern: ^(?i)(Disabled|EnabledPerNamespace|EnabledPerNamespaceOrPerPod)?$
                 type: string
               egressIPVXLANPort:
                 description: 'EgressIPVXLANPort is the port number of vxlan tunnel
@@ -466,6 +486,7 @@ spec:
                   for egress traffic. [Default: 4097]'
                 type: integer
               endpointReportingDelay:
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               endpointReportingEnabled:
                 type: boolean
@@ -478,6 +499,7 @@ spec:
                   modes for external network function. [Default: Disabled] - Disabled:  External
                   network function is disabled. - Enabled:   External network function
                   is enabled.'
+                pattern: ^(?i)(Disabled|Enabled)?$
                 type: string
               externalNodesList:
                 description: ExternalNodesCIDRList is a list of CIDR's of external-non-calico-nodes
@@ -543,12 +565,14 @@ spec:
                   based on auto-detected platform capabilities.  Values are specified
                   in a comma separated list with no spaces, example; "SNATFullyRandom=true,MASQFullyRandom=false,RestoreSupportsLock=".  "true"
                   or "false" will force the feature, empty or omitted values are auto-detected.
+                pattern: ^([a-zA-Z0-9-_]+=(true|false|),)*([a-zA-Z0-9-_]+=(true|false|))?$
                 type: string
               featureGates:
                 description: FeatureGates is used to enable or disable tech-preview
                   Calico features. Values are specified in a comma separated list
                   with no spaces, example; "BPFConnectTimeLoadBalancingWorkaround=enabled,XyZ=false".
                   This is used to enable features that are not fully production ready.
+                pattern: ^([a-zA-Z0-9-_]+=([^=]+),)*([a-zA-Z0-9-_]+=([^=]+))?$
                 type: string
               floatingIPs:
                 description: FloatingIPs configures whether or not Felix will program
@@ -603,6 +627,10 @@ spec:
                   connections. [Default: 2 - pod prefix name based aggregation]. Accepted
                   values are 0, 1 and 2. 0 - No aggregation. 1 - Source port based
                   aggregation. 2 - Pod prefix name based aggreagation.'
+                enum:
+                - 0
+                - 1
+                - 2
                 type: integer
               flowLogsFileAggregationKindForDenied:
                 description: 'FlowLogsFileAggregationKindForDenied is used to choose
@@ -611,6 +639,11 @@ spec:
                   values are 0, 1 and 2. 0 - No aggregation. 1 - Source port based
                   aggregation. 2 - Pod prefix name based aggregation. 3 - No destination
                   ports based aggregation.'
+                enum:
+                - 0
+                - 1
+                - 2
+                - 3
                 type: integer
               flowLogsFileDirectory:
                 description: FlowLogsFileDirectory sets the directory where flow logs
@@ -678,6 +711,7 @@ spec:
               flowLogsFlushInterval:
                 description: FlowLogsFlushInterval configures the interval at which
                   Felix exports flow logs.
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               flowLogsMaxOriginalIPsIncluded:
                 description: FlowLogsMaxOriginalIPsIncluded specifies the number of
@@ -742,6 +776,7 @@ spec:
                 description: InterfaceRefreshInterval is the period at which Felix
                   rescans local interfaces to verify their state. The rescan can be
                   disabled by setting the interval to 0.
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               ipipEnabled:
                 description: 'IPIPEnabled overrides whether Felix should configure
@@ -770,6 +805,7 @@ spec:
                 description: 'IPSecLogLevel controls log level for IPSec components.
                   Set to None for no logging. A generic log level terminology is used
                   [None, Notice, Info, Debug, Verbose]. [Default: Info]'
+                pattern: ^(?i)(None|Notice|Info|Debug|Verbose)?$
                 type: string
               ipsecMode:
                 description: 'IPSecMode controls which mode IPSec is operating on.
@@ -779,24 +815,29 @@ spec:
                 description: 'IPSecPolicyRefreshInterval is the interval at which
                   Felix will check the kernel''s IPsec policy tables and repair any
                   inconsistencies. [Default: 600s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               ipsetsRefreshInterval:
                 description: 'IpsetsRefreshInterval is the period at which Felix re-checks
                   all iptables state to ensure that no other process has accidentally
                   broken Calico''s rules. Set to 0 to disable iptables refresh. [Default:
                   90s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               iptablesBackend:
                 description: IptablesBackend specifies which backend of iptables will
                   be used. The default is Auto.
+                pattern: ^(?i)(Auto|FelixConfiguration|FelixConfigurationList|Legacy|NFT)?$
                 type: string
               iptablesFilterAllowAction:
+                pattern: ^(?i)(Accept|Return)?$
                 type: string
               iptablesFilterDenyAction:
                 description: IptablesFilterDenyAction controls what happens to traffic
                   that is denied by network policy. By default Calico blocks traffic
                   with an iptables "DROP" action. If you want to use "REJECT" action
                   instead you can configure it in here.
+                pattern: ^(?i)(Drop|Reject)?$
                 type: string
               iptablesLockFilePath:
                 description: 'IptablesLockFilePath is the location of the iptables
@@ -809,6 +850,7 @@ spec:
                   wait between attempts to acquire the iptables lock if it is not
                   available. Lower values make Felix more responsive when the lock
                   is contended, but use more CPU. [Default: 50ms]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               iptablesLockTimeout:
                 description: 'IptablesLockTimeout is the time that Felix will wait
@@ -817,8 +859,10 @@ spec:
                   also take the lock. When running Felix inside a container, this
                   requires the /run directory of the host to be mounted into the calico/node
                   or calico/felix container. [Default: 0s disabled]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               iptablesMangleAllowAction:
+                pattern: ^(?i)(Accept|Return)?$
                 type: string
               iptablesMarkMask:
                 description: 'IptablesMarkMask is the mask that Felix selects its
@@ -835,6 +879,7 @@ spec:
                   back in order to check the write was not clobbered by another process.
                   This should only occur if another application on the system doesn''t
                   respect the iptables lock. [Default: 1s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               iptablesRefreshInterval:
                 description: 'IptablesRefreshInterval is the period at which Felix
@@ -845,6 +890,7 @@ spec:
                   was fixed in kernel version 4.11. If you are using v4.11 or greater
                   you may want to set this to, a higher value to reduce Felix CPU
                   usage. [Default: 10s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               ipv6Support:
                 description: IPv6Support controls whether Felix enables support for
@@ -877,6 +923,7 @@ spec:
                   IncludeL7DestinationInfo - Include destination metadata in the logs.
                   ExcludeL7DestinationInfo - Aggregate over all other fields ignoring
                   the destination aggregated name, namespace, and type.'
+                pattern: ^(?i)(IncludeL7DestinationInfo|ExcludeL7DestinationInfo)?$
                 type: string
               l7LogsFileAggregationHTTPHeaderInfo:
                 description: 'L7LogsFileAggregationHTTPHeaderInfo is used to choose
@@ -886,6 +933,7 @@ spec:
                   IncludeL7HTTPHeaderInfo - Include HTTP header data in the logs.
                   ExcludeL7HTTPHeaderInfo - Aggregate over all other fields ignoring
                   the user agent and log type.'
+                pattern: ^(?i)(IncludeL7HTTPHeaderInfo|ExcludeL7HTTPHeaderInfo)?$
                 type: string
               l7LogsFileAggregationHTTPMethod:
                 description: 'L7LogsFileAggregationHTTPMethod is used to choose the
@@ -894,6 +942,7 @@ spec:
                   values are IncludeL7HTTPMethod and ExcludeL7HTTPMethod. IncludeL7HTTPMethod
                   - Include HTTP method in the logs. ExcludeL7HTTPMethod - Aggregate
                   over all other fields ignoring the HTTP method.'
+                pattern: ^(?i)(IncludeL7HTTPMethod|ExcludeL7HTTPMethod)?$
                 type: string
               l7LogsFileAggregationNumURLPath:
                 description: 'L7LogsFileAggregationNumURLPath is used to choose the
@@ -909,6 +958,7 @@ spec:
                   values are IncludeL7ResponseCode and ExcludeL7ResponseCode. IncludeL7ResponseCode
                   - Include the response code in the logs. ExcludeL7ResponseCode -
                   Aggregate over all other fields ignoring the response code.'
+                pattern: ^(?i)(IncludeL7ResponseCode|ExcludeL7ResponseCode)?$
                 type: string
               l7LogsFileAggregationServiceInfo:
                 description: 'L7LogsFileAggregationServiceInfo is used to choose the
@@ -918,6 +968,7 @@ spec:
                   - Include service data in the logs. ExcludeL7ServiceInfo - Aggregate
                   over all other fields ignoring the service name, namespace, and
                   port.'
+                pattern: ^(?i)(IncludeL7ServiceInfo|ExcludeL7ServiceInfo)?$
                 type: string
               l7LogsFileAggregationSourceInfo:
                 description: 'L7LogsFileAggregationExcludeSourceInfo is used to choose
@@ -929,18 +980,19 @@ spec:
                   - Include source metadata in the logs excluding the source port.
                   ExcludeL7SourceInfo - Aggregate over all other fields ignoring the
                   source aggregated name, namespace, and type.'
+                pattern: ^(?i)(IncludeL7SourceInfo|IncludeL7SourceInfoNoPort|ExcludeL7SourceInfo)?$
                 type: string
               l7LogsFileAggregationTrimURL:
                 description: 'L7LogsFileAggregationTrimURL is used to choose the type
                   of aggregation for the url on L7 log entries. [Default: IncludeL7FullURL
                   - include the full URL up to however many path components are allowed
-                  by L7LogsFileAggregationNumURLPath]. Accepted values are 0 and 1.
-                  IncludeL7FullURL - Include the full URL up to however many path
-                  components are allowed by L7LogsFileAggregationNumURLPath. TrimURLQuery
-                  - Aggregate over all other fields ignoring the query parameters
-                  on the URL. TrimURLQueryAndPath - Aggregate over all other fields
-                  and the base URL only. ExcludeL7URL - Aggregate over all other fields
-                  ignoring the URL entirely.'
+                  by L7LogsFileAggregationNumURLPath]. Accepted values: IncludeL7FullURL
+                  - Include the full URL up to however many path components are allowed
+                  by L7LogsFileAggregationNumURLPath. TrimURLQuery - Aggregate over
+                  all other fields ignoring the query parameters on the URL. TrimURLQueryAndPath
+                  - Aggregate over all other fields and the base URL only. ExcludeL7URL
+                  - Aggregate over all other fields ignoring the URL entirely.'
+                pattern: ^(?i)(IncludeL7FullURL|TrimURLQuery|TrimURLQueryAndPath|ExcludeL7URL)?$
                 type: string
               l7LogsFileAggregationURLCharLimit:
                 description: 'Limit on the length of the URL collected in L7 logs.
@@ -973,6 +1025,7 @@ spec:
               l7LogsFlushInterval:
                 description: 'L7LogsFlushInterval configures the interval at which
                   Felix exports L7 logs. [Default: 300s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               logDebugFilenameRegex:
                 description: LogDebugFilenameRegex controls which source code files
@@ -994,16 +1047,16 @@ spec:
                 type: string
               logSeverityFile:
                 description: 'LogSeverityFile is the log severity above which logs
-                  are sent to the log file. [Default: Info]'
+                  are sent to the log file. [Default: Info] kubebuilder:validation:Pattern=`^(?i)(Debug|Info|Warning|Error|Fatal)?$`'
                 type: string
               logSeverityScreen:
                 description: 'LogSeverityScreen is the log severity above which logs
-                  are sent to the stdout. [Default: Info]'
+                  are sent to the stdout. [Default: Info] kubebuilder:validation:Pattern=`^(?i)(Debug|Info|Warning|Error|Fatal)?$`'
                 type: string
               logSeveritySys:
                 description: 'LogSeveritySys is the log severity above which logs
                   are sent to the syslog. Set to None for no logging to syslog. [Default:
-                  Info]'
+                  Info] kubebuilder:validation:Pattern=`^(?i)(Debug|Info|Warning|Error|Fatal)?$`'
                 type: string
               maxIpsetSize:
                 type: integer
@@ -1042,6 +1095,7 @@ spec:
                 pattern: ^.*
                 x-kubernetes-int-or-string: true
               netlinkTimeout:
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               nfNetlinkBufSize:
                 type: string
@@ -1116,21 +1170,25 @@ spec:
                 description: 'ReportingInterval is the interval at which Felix reports
                   its status into the datastore or 0 to disable. Must be non-zero
                   in OpenStack deployments. [Default: 30s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               reportingTTL:
                 description: 'ReportingTTL is the time-to-live setting for process-wide
                   status reports. [Default: 90s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               routeRefreshInterval:
                 description: 'RouteRefreshInterval is the period at which Felix re-checks
                   the routes in the dataplane to ensure that no other process has
                   accidentally broken Calico''s rules. Set to 0 to disable route refresh.
                   [Default: 90s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               routeSource:
                 description: 'RouteSource configures where Felix gets its routing
                   information. - WorkloadIPs: use workload endpoints to construct
                   routes. - CalicoIPAM: the default - use IPAM data to construct routes.'
+                pattern: ^(?i)(WorkloadIPs|CalicoIPAM)?$
                 type: string
               routeSyncDisabled:
                 description: RouteSyncDisabled will disable all operations performed
@@ -1170,6 +1228,7 @@ spec:
                   packets that do not get DNAT''d by kube-proxy. Unless set to "Disabled",
                   in which case such routing loops continue to be allowed. [Default:
                   Drop]'
+                pattern: ^(?i)(Drop|Reject|Disabled)?$
                 type: string
               sidecarAccelerationEnabled:
                 description: 'SidecarAccelerationEnabled enables experimental sidecar
@@ -1185,6 +1244,7 @@ spec:
                 description: 'TPROXYMode sets whether traffic is directed through
                   a transparent proxy for further processing or not and how is the
                   proxying done. [Default: Disabled]'
+                pattern: ^(?i)(Disabled|Enabled|EnabledAllServices)?$
                 type: string
               tproxyPort:
                 description: 'TPROXYPort sets to which port proxied traffic should
@@ -1206,10 +1266,12 @@ spec:
               usageReportingInitialDelay:
                 description: 'UsageReportingInitialDelay controls the minimum delay
                   before Felix makes a report. [Default: 300s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               usageReportingInterval:
                 description: 'UsageReportingInterval controls the interval at which
                   Felix makes reports. [Default: 86400s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               useInternalDataplaneDriver:
                 description: UseInternalDataplaneDriver, if true, Felix will use its
@@ -1242,6 +1304,7 @@ spec:
                   from DNS, in addition to each name or IP''s advertised TTL. The
                   default value is 120s which is same as the default value of ServicePointManager.DnsRefreshTimeout
                   on .net framework. [Default: 120s].'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               windowsFlowLogsFileDirectory:
                 description: 'WindowsFlowLogsFileDirectory sets the directory where
@@ -1288,6 +1351,7 @@ spec:
               wireguardKeepAlive:
                 description: 'WireguardKeepAlive controls Wireguard PersistentKeepalive
                   option. Set 0 to disable. [Default: 0]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               wireguardListeningPort:
                 description: 'WireguardListeningPort controls the listening port used
@@ -1314,6 +1378,7 @@ spec:
                   the allowedSourcePrefixes annotation to send traffic with a source
                   IP address that is not theirs. This is disabled by default. When
                   set to "Any", pods can request any prefix.
+                pattern: ^(?i)(Disabled|Any)?$
                 type: string
               xdpEnabled:
                 description: 'XDPEnabled enables XDP acceleration for suitable untracked
@@ -1324,6 +1389,7 @@ spec:
                   all XDP state to ensure that no other process has accidentally broken
                   Calico''s BPF maps or attached programs. Set to 0 to disable XDP
                   refresh. [Default: 90s]'
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
             type: object
         type: object

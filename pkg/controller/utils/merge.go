@@ -190,6 +190,13 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.Logging = override.Logging
 	}
 
+	switch compareFields(inst.Windows, override.Windows) {
+	case BOnlySet:
+		inst.Windows = override.Windows.DeepCopy()
+	case Different:
+		inst.Windows = mergeWindows(inst.Windows, override.Windows)
+	}
+
 	return inst
 }
 
@@ -731,6 +738,27 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 		out.Spec = override.Spec.DeepCopy()
 	case Different:
 		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
+
+	return out
+}
+
+func mergeWindows(cfg, override *operatorv1.WindowsConfig) *operatorv1.WindowsConfig {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.CNIBinDir, override.CNIBinDir) {
+	case BOnlySet, Different:
+		out.CNIBinDir = override.CNIBinDir
+	}
+
+	switch compareFields(out.CNIConfDir, override.CNIConfDir) {
+	case BOnlySet, Different:
+		out.CNIConfDir = override.CNIConfDir
+	}
+
+	switch compareFields(out.CNILogDir, override.CNILogDir) {
+	case BOnlySet, Different:
+		out.CNILogDir = override.CNILogDir
 	}
 
 	return out

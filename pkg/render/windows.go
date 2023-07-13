@@ -679,6 +679,19 @@ func (c *windowsComponent) cniDirectories() (string, string, string) {
 		cniNetDir = "/etc/cni/net.d"
 	}
 	cniLogDir = "/var/log/calico/cni"
+
+	// Use configuration values if present
+	if c.cfg.Installation.Windows != nil {
+		if c.cfg.Installation.Windows.CNIBinDir != "" {
+			cniBinDir = c.cfg.Installation.Windows.CNIBinDir
+		}
+		if c.cfg.Installation.Windows.CNIConfDir != "" {
+			cniNetDir = c.cfg.Installation.Windows.CNIConfDir
+		}
+		if c.cfg.Installation.Windows.CNILogDir != "" {
+			cniLogDir = c.cfg.Installation.Windows.CNILogDir
+		}
+	}
 	return cniNetDir, cniBinDir, cniLogDir
 }
 

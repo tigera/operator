@@ -17,6 +17,8 @@ package render_test
 import (
 	"fmt"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"

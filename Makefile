@@ -285,21 +285,22 @@ clean:
 ###############################################################################
 # Tests
 ###############################################################################
-WHAT?=.
+UT_DIR?=./pkg
+FV_DIR?=./test
 GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
 
 ut:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage "./test" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -r -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create run-fvs cluster-destroy
 run-fvs:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage "./pkg" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -r -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml

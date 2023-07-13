@@ -35,6 +35,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -107,6 +108,9 @@ type Config struct {
 	// Namespace to install into.
 	Namespace string
 
+	// Namespaces to which we must bind the linseed clusterrole.
+	BindNamespaces []string
+
 	// Tenant configuration, if running for a particular tenant.
 	Tenant *operatorv1.Tenant
 }
@@ -140,7 +144,7 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedAllowTigeraPolicy())
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
-	toCreate = append(toCreate, l.linseedRoleBinding())
+	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.UsePSP {
@@ -199,26 +203,8 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// TODO: This needs to be applied to all Linseed instances.
-func (l *linseed) linseedRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ClusterRoleName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind:     "ClusterRole",
-			Name:     ClusterRoleName,
-			APIGroup: "rbac.authorization.k8s.io",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ServiceAccountName,
-				Namespace: l.namespace,
-			},
-		},
-	}
+func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
+	return rcomponents.ClusterRoleBinding(ClusterRoleName, ClusterRoleName, ServiceAccountName, namespaces)
 }
 
 func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {

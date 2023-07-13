@@ -338,12 +338,14 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	}
 	trustedBundle := keyPairs.trustedBundle(appCM)
 
+	// TODO: Think more about this. It might actually make sense that the ES secrets for all tenants are owned by the LogStorage instance.
+	// that way, deleting / re-creating a tenant doesn't delete all of their secrets (thus invalidating all clients).
 	// If we're running in multi-tenant mode, these should be owned by the
 	// Tenant instance for that tenant. Otherwise, it's owned by the LogStorage instance.
-	if r.multiTenant {
-		// For multi-tenant mode, secrets are owned by the tenant instance.
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
-	}
+	// if r.multiTenant {
+	// 	// For multi-tenant mode, secrets are owned by the tenant instance.
+	// 	hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
+	// }
 
 	if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle, req), r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

@@ -20,18 +20,15 @@ import (
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -84,24 +81,31 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
+	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
+	// we should update all tenants whenever one changes. For single-tenatn clusters, we can just queue the object.
+	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
+	if opts.MultiTenant {
+		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+	}
+
 	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch LogStorage resource: %w", err)
 	}
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch ManagementCluster resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, "log-storage-access"); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, eventHandler); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -111,39 +115,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	installNS := render.ElasticsearchNamespace
 	truthNS := common.OperatorNamespace()
 	if opts.MultiTenant {
-		// For multi-tenant, the manager could be installed in any number of namespaces.
-		// So, we need to watch the resources we care about across all namespaces.
+		// For multi-tenant, we could be installed in any number of namespaces.
+		// So, watch the resources we care about across all namespaces.
 		installNS = ""
 		truthNS = ""
 	}
 
-	// Watch all the elasticsearch user secrets.
-	// TODO: In the future, we may want put this logic in the utils folder where the other watch logic is.
-	if err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == truthNS && hasLabel
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, hasLabel := e.ObjectNew.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.ObjectNew.GetNamespace() == truthNS && hasLabel
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == truthNS && hasLabel
-		},
-	}); err != nil {
-		return err
-	}
-
 	// Watch secrets this controller cares about.
-	for _, secretName := range []string{
+	secretsToWatch := []string{
 		render.TigeraElasticsearchGatewaySecret,
 		render.TigeraLinseedSecret,
+		render.LinseedTokenSecret,
 		monitor.PrometheusClientTLSSecretName,
-	} {
-		if err = utils.AddSecretsWatch(c, secretName, installNS); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+	for _, ns := range []string{truthNS, installNS} {
+		for _, name := range secretsToWatch {
+			if err := utils.AddSecretsWatch(c, name, ns); err != nil {
+				return fmt.Errorf("log-storage-controller failed to watch Secret: %w", err)
+			}
 		}
 	}
 
@@ -314,6 +303,7 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		UsePSP:            r.usePSP,
 		ESClusterConfig:   esClusterConfig,
 		ManagementCluster: managementCluster != nil,
+		Tenant:            args.Tenant,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 

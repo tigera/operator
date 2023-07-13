@@ -7478,6 +7478,24 @@ spec:
                 - Calico
                 - TigeraSecureEnterprise
                 type: string
+              windows:
+                description: Windows Configuration
+                properties:
+                  cniBinDir:
+                    description: CNIBinDir is the path to the CNI binaries directory
+                      on Windows, it must match what is on ContainerD on the Windows
+                      nodes.
+                    type: string
+                  cniConfDir:
+                    description: CNIConfDir is the path to the CNI configuration directory
+                      on Windows, it must match what is on ContainerD on the Windows
+                      nodes.
+                    type: string
+                  cniLogDir:
+                    description: CNILogDir is the path to the Calico CNI logs directory
+                      on Windows.
+                    type: string
+                type: object
             type: object
           status:
             description: Most recently observed state for the Calico or Calico Enterprise
@@ -15481,6 +15499,24 @@ spec:
                     - Calico
                     - TigeraSecureEnterprise
                     type: string
+                  windows:
+                    description: Windows Configuration
+                    properties:
+                      cniBinDir:
+                        description: CNIBinDir is the path to the CNI binaries directory
+                          on Windows, it must match what is on ContainerD on the Windows
+                          nodes.
+                        type: string
+                      cniConfDir:
+                        description: CNIConfDir is the path to the CNI configuration
+                          directory on Windows, it must match what is on ContainerD
+                          on the Windows nodes.
+                        type: string
+                      cniLogDir:
+                        description: CNILogDir is the path to the Calico CNI logs
+                          directory on Windows.
+                        type: string
+                    type: object
                 type: object
               conditions:
                 description: Conditions represents the latest observed set of conditions

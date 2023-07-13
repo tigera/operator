@@ -1017,11 +1017,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
-		if managementCluster != nil {
-			if err != nil {
-				r.status.SetDegraded(operator.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-				return reconcile.Result{}, err
-			}
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+			return reconcile.Result{}, err
 		}
 
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)

@@ -20,16 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TenantSpec defines the desired state of Tenant
 type TenantSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Tenant. Edit Tenant_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// ID is the unique identifier for this tenant.
+	ID string `json:"id,omitempty"`
 }
 
-// TenantStatus defines the observed state of Tenant
 type TenantStatus struct{}
 
 // +kubebuilder:object:root=true

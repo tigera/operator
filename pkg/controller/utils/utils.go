@@ -81,6 +81,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
+// TODO: Deprecate and delete this function.
 func AddNetworkWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }

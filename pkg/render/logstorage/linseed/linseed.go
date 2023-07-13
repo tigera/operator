@@ -106,6 +106,9 @@ type Config struct {
 
 	// Namespace to install into.
 	Namespace string
+
+	// Tenant configuration, if running for a particular tenant.
+	Tenant *operatorv1.Tenant
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -286,6 +289,11 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		)
 		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
 		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+	}
+
+	if l.cfg.Tenant != nil {
+		// If a tenant was provided, set the expected tenant ID.
+		envVars = append(envVars, corev1.EnvVar{Name: "EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 	}
 
 	var initContainers []corev1.Container

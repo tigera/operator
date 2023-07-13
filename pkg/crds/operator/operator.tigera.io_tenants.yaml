@@ -31,15 +31,12 @@ spec:
           metadata:
             type: object
           spec:
-            description: TenantSpec defines the desired state of Tenant
             properties:
-              foo:
-                description: Foo is an example field of Tenant. Edit Tenant_types.go
-                  to remove/update
+              id:
+                description: ID is the unique identifier for this tenant.
                 type: string
             type: object
           status:
-            description: TenantStatus defines the observed state of Tenant
             type: object
         type: object
     served: true

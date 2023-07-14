@@ -58,6 +58,7 @@ type certificateManager struct {
 	*x509.Certificate
 	*crypto.CA
 	keyPair *certificatemanagement.KeyPair
+	log     logr.Logger
 }
 
 // CertificateManager can sign new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
@@ -161,6 +162,7 @@ func CreateWithLogger(cli client.Client, installation *operatorv1.InstallationSp
 	cm := &certificateManager{
 		CA:          cryptoCA,
 		Certificate: x509Cert,
+		log:         log,
 		keyPair: &certificatemanagement.KeyPair{
 			Name:                  certificatemanagement.CASecretName,
 			PrivateKeyPEM:         privateKeyPEM,
@@ -200,11 +202,11 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 		if err == nil {
 			return keyPair, nil
 		} else if keyPair.BYO() {
-			log.V(3).Info("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
+			cm.log.V(3).Info("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
 			return keyPair, nil
 		}
 	} else if keyPair == nil {
-		log.V(1).Info("Keypair wasn't found, create a new one", "namespace", secretNamespace, "name", secretName)
+		cm.log.V(1).Info("Keypair wasn't found, create a new one", "namespace", secretNamespace, "name", secretName)
 	}
 
 	// If we reach here, it means we need to create a new KeyPair.
@@ -228,7 +230,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
 func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
-	log.V(2).Info("Querying secret for keypair", "namespace", secretNamespace, "name", secretName)
+	cm.log.V(2).Info("Querying secret for keypair", "namespace", secretNamespace, "name", secretName)
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      secretName,
@@ -236,7 +238,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}, secret)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			log.V(2).Info("KeyPair not found", "namespace", secretNamespace, "name", secretName)
+			cm.log.V(2).Info("KeyPair not found", "namespace", secretNamespace, "name", secretName)
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we expect that in most cases no secret will be present.
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
@@ -267,7 +269,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
 			}
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
-			log.V(2).Info("KeyPair is an expired legacy operator cert, make a new one", "name", secretName)
+			cm.log.V(2).Info("KeyPair is an expired legacy operator cert, make a new one", "name", secretName)
 			return nil, nil, nil
 		}
 		// We return an error for byo secrets.
@@ -283,7 +285,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		} else {
 			if !readCertOnly {
 				// We want to return nothing, so a new secret will be created to overwrite this one.
-				log.V(2).Info("KeyPair's authority key id doesn't match", "name", secretName)
+				cm.log.V(2).Info("KeyPair's authority key id doesn't match", "name", secretName)
 				return nil, nil, nil
 			}
 			// We treat the certificate as a BYO secret, because this may be a certificate created by a management cluster

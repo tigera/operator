@@ -105,7 +105,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, eventHandler); err != nil {
+		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -114,11 +114,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// For single-tenant, everything is installed in the tigera-manager namespace.
 	installNS := render.ElasticsearchNamespace
 	truthNS := common.OperatorNamespace()
+	namespaces := []string{installNS, truthNS}
 	if opts.MultiTenant {
 		// For multi-tenant, we could be installed in any number of namespaces.
 		// So, watch the resources we care about across all namespaces.
 		installNS = ""
 		truthNS = ""
+		namespaces = []string{""}
 	}
 
 	// Watch secrets this controller cares about.
@@ -128,7 +130,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.LinseedTokenSecret,
 		monitor.PrometheusClientTLSSecretName,
 	}
-	for _, ns := range []string{truthNS, installNS} {
+	for _, ns := range namespaces {
 		for _, name := range secretsToWatch {
 			if err := utils.AddSecretsWatch(c, name, ns); err != nil {
 				return fmt.Errorf("log-storage-controller failed to watch Secret: %w", err)
@@ -140,9 +142,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, installNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, installNS); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+	}
 
 	// Check if something modifies resources this controller creates.
-	// TODO
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, installNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Service resource: %w", err)
 	}

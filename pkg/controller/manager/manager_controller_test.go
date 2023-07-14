@@ -107,6 +107,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-secure-linseed-cert' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret internal-manager-tls in namespace tigera-operator to be available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
@@ -185,6 +186,9 @@ var _ = Describe("Manager controller tests", func() {
 			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			internalKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, internalKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -223,6 +227,9 @@ var _ = Describe("Manager controller tests", func() {
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+
+			internalSecret := &corev1.Secret{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerInternalTLSSecretName, Namespace: render.ManagerNamespace}, internalSecret)).ShouldNot(HaveOccurred())
 
 			// Verify that the existing cert didn't change
 			secret := &corev1.Secret{}
@@ -324,6 +331,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-secure-linseed-cert' to become available", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret internal-manager-tls in namespace tigera-operator to be available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -406,6 +414,9 @@ var _ = Describe("Manager controller tests", func() {
 			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			internalCertKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, internalCertKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 

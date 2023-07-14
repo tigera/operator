@@ -81,6 +81,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
+// TODO: Deprecate and delete this function.
 func AddNetworkWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
@@ -124,6 +125,13 @@ func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	})
+}
+
+func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
+	return AddNamespacedWatch(c, &appsv1.Deployment{
+		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	})
 }
@@ -381,6 +389,31 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	return authentication, nil
 }
 
+// Get the Tenant instance in the given namespace.
+func GetTenant(ctx context.Context, cli client.Client, ns string) (*operatorv1.Tenant, error) {
+	key := client.ObjectKey{Name: "default", Namespace: ns}
+	instance := &operatorv1.Tenant{}
+	err := cli.Get(ctx, key, instance)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
+// Get all namespaces that contain a tenant.
+func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) {
+	namespaces := []string{}
+	tenants := operatorv1.TenantList{}
+	err := cli.List(ctx, &tenants)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tenants.Items {
+		namespaces = append(namespaces, t.Namespace)
+	}
+	return namespaces, nil
+}
+
 // GetInstallationStatus returns the current installation status, for use by other controllers.
 func GetInstallationStatus(ctx context.Context, client client.Client) (*operatorv1.InstallationStatus, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
@@ -549,12 +582,17 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				// No name or namespace match was specified. Match everything.
 				return true
 			}
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match.
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Return a match if the namespaces match, or if no namespace match was given.
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -563,7 +601,7 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
 				return false
 			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
+			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -572,7 +610,7 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 	}
 }

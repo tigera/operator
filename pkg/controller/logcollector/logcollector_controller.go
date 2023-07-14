@@ -104,6 +104,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
+		multiTenant:     opts.MultiTenant,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -178,6 +179,7 @@ type ReconcileLogCollector struct {
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
+	multiTenant     bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -383,6 +385,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 	managedCluster := managementClusterConnection != nil
 
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
@@ -405,36 +413,37 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
+	// Determine whether or not this is a multi-tenant management cluster.
+	multiTenantManagement := r.multiTenant && managementCluster != nil
+	multiTenantManagement = true // CASEY: HACK for testing
 
-	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	// The name of the Linseed certificate varies based on if this is a managed cluster or not.
 	// For standalone and management clusters, we just use Linseed's actual certificate.
-	linseedCertLocation := render.TigeraLinseedSecret
+	linseedCertName := render.TigeraLinseedSecret
+	linseedCertNamespace := common.OperatorNamespace()
 	if managedCluster {
 		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
 		// management cluster into the managed cluster by kube-controllers.
-		linseedCertLocation = render.VoltronLinseedPublicCert
+		linseedCertName = render.VoltronLinseedPublicCert
+	} else if multiTenantManagement {
+		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace.
+		// Instead, look for a Tenant instance that represent's the management cluster's own tenant.
+		// TODO: Don't hard-code this.
+		linseedCertNamespace = "tigera-tenant"
 	}
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertName, linseedCertNamespace)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s/%s", linseedCertNamespace, linseedCertName), err, reqLogger)
 		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Linseed certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+	} else if linseedCertificate == nil {
+		msg := fmt.Sprintf("Linseed certificate (%s/%s) is not yet available", linseedCertNamespace, linseedCertName)
+		log.Info(msg)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, msg, nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate, linseedCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, linseedCertificate)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
@@ -542,6 +551,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
+	// namespace. For multi-tenant management clusters, this may vary.
+	linseedNS := render.ElasticsearchNamespace
+	if multiTenantManagement {
+		linseedNS = "tigera-tenant" // TODO: Hardcoding for testing.
+	}
+
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:         instance,
 		ESSecrets:            esSecrets,
@@ -559,6 +575,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
 		UseSyslogCertificate: useSyslogCertificate,
+		LinseedNamespace:     linseedNS,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)

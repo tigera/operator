@@ -91,7 +91,7 @@ type Config struct {
 	TokenKeyPair certificatemanagement.KeyPairInterface
 
 	// Trusted bundle to use when validating client certificates.
-	TrustedBundle certificatemanagement.TrustedBundle
+	TrustedBundle certificatemanagement.TrustedBundleRO
 
 	// ClusterDomain to use when building service URLs.
 	ClusterDomain string

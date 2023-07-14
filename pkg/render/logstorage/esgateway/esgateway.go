@@ -78,7 +78,7 @@ type Config struct {
 	PullSecrets                []*corev1.Secret
 	KubeControllersUserSecrets []*corev1.Secret
 	ESGatewayKeyPair           certificatemanagement.KeyPairInterface
-	TrustedBundle              certificatemanagement.TrustedBundle
+	TrustedBundle              certificatemanagement.TrustedBundleRO
 	ClusterDomain              string
 	EsAdminUserName            string
 	Namespace                  string

@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -83,6 +84,8 @@ type CertificateManager interface {
 	AddToStatusManager(manager status.StatusManager, namespace string)
 	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
 	KeyPair() certificatemanagement.KeyPairInterface
+	// Loads an existing trusted bundle to pass to render.
+	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 }
 
 // Create creates a signer of new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
@@ -380,4 +383,48 @@ func (cm *certificateManager) CreateTrustedBundle(certificates ...certificateman
 // - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
 	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+}
+
+type annotationPassthru struct {
+	annotations map[string]string
+	bundle      certificatemanagement.TrustedBundle
+}
+
+func newAnnotationPassthru(cm CertificateManager, system bool) *annotationPassthru {
+	if system {
+		bundle, _ := cm.CreateTrustedBundleWithSystemRootCertificates()
+		return &annotationPassthru{annotations: map[string]string{}, bundle: bundle}
+	}
+	return &annotationPassthru{annotations: map[string]string{}, bundle: cm.CreateTrustedBundle()}
+}
+
+func (a *annotationPassthru) MountPath() string {
+	return a.bundle.MountPath()
+}
+
+func (a *annotationPassthru) VolumeMounts(osType meta.OSType) []corev1.VolumeMount {
+	return a.bundle.VolumeMounts(osType)
+}
+
+func (a *annotationPassthru) Volume() corev1.Volume {
+	return a.bundle.Volume()
+}
+
+func (a *annotationPassthru) HashAnnotations() map[string]string {
+	return a.annotations
+}
+
+func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
+	obj := &corev1.ConfigMap{}
+	k := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: ns}
+	if err := client.Get(ctx, k, obj); err != nil {
+		return nil, err
+	}
+	a := newAnnotationPassthru(cm, len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0)
+	for key, val := range obj.Annotations {
+		if strings.HasPrefix(key, "hash.operator.tigera.io/") {
+			a.annotations[key] = val
+		}
+	}
+	return a, nil
 }

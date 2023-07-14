@@ -285,10 +285,12 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		return reconcile.Result{}, nil
 	}
 
-	// Create a trusted bundle to pass to the render pacakge. The actual contents of this bundle don't matter - the ConfigMap
-	// itself will be managed by the Secret controller. But, we need an interface to use as an argument to render in order
-	// to configure volume mounts properly.
-	trustedBundle := certificatemanagement.CreateTrustedBundle()
+	// Query the trusted bundle from the namespace.
+	trustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, request.InstallNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	var esClusterConfig *relasticsearch.ClusterConfig
 	if managementClusterConnection == nil {
@@ -349,6 +351,7 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		pullSecrets,
 		hdler,
 		reqLogger,
+		trustedBundle,
 		r.usePSP,
 	); err != nil {
 		return reconcile.Result{}, err

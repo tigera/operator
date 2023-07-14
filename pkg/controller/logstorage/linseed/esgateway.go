@@ -41,13 +41,9 @@ func (r *LinseedSubController) createESGateway(
 	pullSecrets []*corev1.Secret,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
+	trustedBundle certificatemanagement.TrustedBundleRO,
 	usePSP bool,
 ) error {
-	// Create a trusted bundle to pass to the render pacakge. The actual contents of this bundle don't matter - the ConfigMap
-	// itself will be managed by the Secret controller. But, we need an interface to use as an argument to render in order
-	// to configure volume mounts properly.
-	trustedBundle := certificatemanagement.CreateTrustedBundle()
-
 	// Get the ES admin user secret. This is provisioned by the ECK operator as part of installing Elasticsearch,
 	// and so may not be immediately available.
 	esAdminUserSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)

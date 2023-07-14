@@ -107,8 +107,8 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 		}
 	}
 
+	tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
 	if cfg.ManagementCluster != nil {
-		tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
 		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
 	}
 	return &managerComponent{
@@ -139,7 +139,7 @@ type ManagerConfiguration struct {
 	// KeyPair used for establishing mTLS tunnel with Guardian.
 	TunnelSecret certificatemanagement.KeyPairInterface
 
-	// TLS KeyPair used by Voltron within the cluster when operating as a management cluster.
+	// TLS KeyPair used by Voltron/EsProxy within the cluster when operating as a management cluster.
 	InternalTrafficSecret certificatemanagement.KeyPairInterface
 
 	// Certificate bundle used by the manager pod to verify certificates presented
@@ -311,10 +311,10 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	v := []corev1.Volume{
 		c.cfg.TLSKeyPair.Volume(),
 		c.cfg.TrustedCertBundle.Volume(),
+		c.cfg.InternalTrafficSecret.Volume(),
 	}
 	if c.cfg.ManagementCluster != nil {
 		v = append(v,
-			c.cfg.InternalTrafficSecret.Volume(),
 			c.cfg.TunnelSecret.Volume(),
 			c.cfg.VoltronLinseedKeyPair.Volume(),
 		)
@@ -516,9 +516,9 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	var keyPath, certPath string
-	if c.cfg.TLSKeyPair != nil {
+	if c.cfg.InternalTrafficSecret != nil {
 		// This should never be nil, but we check it anyway just to be safe.
-		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
+		keyPath, certPath = c.cfg.InternalTrafficSecret.VolumeMountKeyFilePath(), c.cfg.InternalTrafficSecret.VolumeMountCertificateFilePath()
 	}
 
 	env := []corev1.EnvVar{
@@ -531,7 +531,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	volumeMounts := append(
 		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
-		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+		c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()),
 	)
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/logstorage"
+	"github.com/tigera/operator/pkg/controller/logstorage/elastic"
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+	"github.com/tigera/operator/pkg/controller/logstorage/linseed"
+	"github.com/tigera/operator/pkg/controller/logstorage/secrets"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
@@ -36,18 +39,21 @@ type LogStorageReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages/status,verbs=get;update;patch
 
-//func (r *LogStorageReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-//	_ = context.Background()
-//	_ = r.Log.WithValues("logstorage", req.NamespacedName)
-//
-//	// your logic here
-//
-//	return ctrl.Result{}, nil
-//}
-
 func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return logstorage.Add(mgr, opts)
-	//return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.LogStorage{}).
-	//	Complete(r)
+	// Add all of the relevant log storage sub-controllers to the manager here.
+	// Each of these controllers reconciles independently, but they work together in order to implement log storage
+	// capabilities.
+	if err := initializer.Add(mgr, opts); err != nil {
+		return err
+	}
+	if err := secrets.Add(mgr, opts); err != nil {
+		return err
+	}
+	if err := linseed.Add(mgr, opts); err != nil {
+		return err
+	}
+	if err := elastic.Add(mgr, opts); err != nil {
+		return err
+	}
+	return nil
 }

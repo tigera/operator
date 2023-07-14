@@ -108,15 +108,15 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version:  "master",
-		Image:    "tigera/es-proxy",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/es-proxy",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentESGateway = component{
-		Version:  "master",
-		Image:    "tigera/es-gateway",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/es-gateway",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentLinseed = component{
@@ -256,9 +256,9 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version:  "master",
-		Image:    "tigera/kube-controllers",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/kube-controllers",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentTigeraNode = component{

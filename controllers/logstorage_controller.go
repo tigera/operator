@@ -40,6 +40,9 @@ type LogStorageReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages/status,verbs=get;update;patch
 
 func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	// Add all of the relevant log storage sub-controllers to the manager here.
+	// Each of these controllers reconciles independently, but they work together in order to implement log storage
+	// capabilities.
 	if err := initializer.Add(mgr, opts); err != nil {
 		return err
 	}

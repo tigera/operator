@@ -64,7 +64,7 @@ type Config struct {
 	ESMetricsCredsSecret *corev1.Secret
 	ClusterDomain        string
 	ServerTLS            certificatemanagement.KeyPairInterface
-	TrustedBundle        certificatemanagement.TrustedBundle
+	TrustedBundle        certificatemanagement.TrustedBundleRO
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool

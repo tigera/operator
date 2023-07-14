@@ -41,7 +41,7 @@ func (r *LinseedSubController) createESMetrics(
 	clusterConfig *relasticsearch.ClusterConfig,
 	ctx context.Context,
 	hdler utils.ComponentHandler,
-	trustedBundle certificatemanagement.TrustedBundle,
+	trustedBundle certificatemanagement.TrustedBundleRO,
 	usePSP bool,
 	cm certificatemanager.CertificateManager,
 ) error {

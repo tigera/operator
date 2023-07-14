@@ -141,8 +141,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(esProxy.VolumeMounts).To(HaveLen(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
-		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
-		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/internal-manager-tls"))
 
 		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())

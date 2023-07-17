@@ -47,3 +47,7 @@ func GatewayEndpoint(osType rmeta.OSType, clusterDomain, namespace string) strin
 func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
 	return GatewayEndpoint(osType, clusterDomain, "tigera-elasticsearch")
 }
+
+func ElasticEndpoint() string {
+	return "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+}

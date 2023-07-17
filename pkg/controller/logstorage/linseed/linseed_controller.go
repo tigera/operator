@@ -21,8 +21,10 @@ import (
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -298,6 +300,26 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		esClusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, args.LogStorage.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 	}
 
+	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
+	// These credentials are created by the main elasticsearch controller and given to ES via the ECK operator.
+	basicCreds := corev1.Secret{}
+	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: request.TruthNamespace()}
+	if err = r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if errors.IsNotFound(err) {
+		// Create a new secret.
+		// TODO: How does this work for single-tenant? Do we need to copy to both namespaces?
+		basicCreds = corev1.Secret{}
+		basicCreds.Name = render.ElasticsearchLinseedUserSecret
+		basicCreds.Namespace = request.TruthNamespace()
+		basicCreds.StringData = map[string]string{
+			"username": "tigera-linseed-test",
+			"password": "hack-password",
+		}
+	}
+	credentialComponent := render.NewPassthrough(&basicCreds)
+
 	// Determine the namespaces to which we must bind the linseed cluster role.
 	bindNamespaces := []string{request.InstallNamespace()}
 	if r.multiTenant {
@@ -335,43 +357,43 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, args.LogStorage)
 	}
-	for _, comp := range []render.Component{linseedComponent} {
+	for _, comp := range []render.Component{credentialComponent, linseedComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
 
-	// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
-	if err := r.createESGateway(
-		ctx,
-		request,
-		install,
-		variant,
-		pullSecrets,
-		hdler,
-		reqLogger,
-		trustedBundle,
-		r.usePSP,
-	); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// TODO: This is a temporary location for this. Ideally this goes in its own controller, as it likely
-	// needs to be multi-tenant!
-	if err := r.createESKubeControllers(
-		ctx,
-		request,
-		install,
-		hdler,
-		reqLogger,
-		managementCluster,
-	); err != nil {
-		return reconcile.Result{}, err
-	}
-
 	// TODO: Do we need either of these for multi-tenant systems?
 	if !r.multiTenant {
+		// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
+		if err := r.createESGateway(
+			ctx,
+			request,
+			install,
+			variant,
+			pullSecrets,
+			hdler,
+			reqLogger,
+			trustedBundle,
+			r.usePSP,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// TODO: This is a temporary location for this. Ideally this goes in its own controller, as it likely
+		// needs to be multi-tenant!
+		if err := r.createESKubeControllers(
+			ctx,
+			request,
+			install,
+			hdler,
+			reqLogger,
+			managementCluster,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
+
 		// TODO: For now, install this here. It probably should have its own controller.
 		if err := r.createESMetrics(
 			install,

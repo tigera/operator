@@ -45,6 +45,8 @@ yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
 
 # Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.
 yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].image ${OPERATOR_IMAGE_DIGEST}
+yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].name tigera-operator
+yq write -i ${CSV} spec.install.spec.deployments[0].spec.selector.matchLabels.name tigera-operator
 
 # Set the CSV name.
 yq write -i ${CSV} metadata.name tigera-operator.v${VERSION}
@@ -73,7 +75,7 @@ yq write -i ${CSV} spec.relatedImages[0].image ${OPERATOR_IMAGE_DIGEST}
 sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1=tigera-operator/' bundle.Dockerfile
 
 # Supported OpenShift versions. Specify min version.
-openshiftVersions=v4.6
+openshiftVersions=v4.10
 
 # Add in required labels
 cat <<EOF >> bundle.Dockerfile

@@ -54,7 +54,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -542,6 +541,9 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
+	// Query credentials to be installed into ES. These will be added to the Elasticsearch instance.
+	// These credentials are created in other controllers as needed.
+
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
 	// create the ComponentHandler from the managementClusterConnection.
 	var hdler utils.ComponentHandler
@@ -600,19 +602,22 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, nil
 		}
 
-		if !r.multiTenant {
-			// TODO: Need to handle this gracefully, since these will only succeed after ES is properly running.
-			// In multi-tenant mode, and probably single-tenant as well, this should be handled by someone other than the operator.
-			// Either out of band, or by Linseed.
-			result, _, err := r.applyILMPolicies(ls, reqLogger, ctx)
-			if err != nil {
-				return result, err
-			}
+		// TODO: Need to handle this gracefully, since these will only succeed after ES is properly running.
+		// In multi-tenant mode, and probably single-tenant as well, this should be handled by someone other than the operator.
+		// Either out of band, or by Linseed.
+		err := r.applyILMPolicies(ls, reqLogger, ctx)
+		if err != nil {
+			return reconcile.Result{}, err
 		}
 
-		result, _, err := r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
+		err = r.createLinseedLogin(ctx, ls, reqLogger)
 		if err != nil {
-			return result, err
+			return reconcile.Result{}, err
+		}
+
+		err = r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
+		if err != nil {
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -622,12 +627,12 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *ElasticSubController) validateLogStorage(curatorSecrets []*corev1.Secret, esLicenseType render.ElasticsearchLicenseType, reqLogger logr.Logger, ctx context.Context) (reconcile.Result, bool, error) {
+func (r *ElasticSubController) validateLogStorage(curatorSecrets []*corev1.Secret, esLicenseType render.ElasticsearchLicenseType, reqLogger logr.Logger, ctx context.Context) error {
 	var err error
 
 	if len(curatorSecrets) == 0 {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
-		return reconcile.Result{}, false, nil
+		return nil
 	}
 
 	// kube-controller creates the ConfigMap and Secret needed for SSO into Kibana.
@@ -636,10 +641,10 @@ func (r *ElasticSubController) validateLogStorage(curatorSecrets []*corev1.Secre
 	if esLicenseType == render.ElasticsearchLicenseTypeBasic {
 		if err = r.checkOIDCUsersEsResource(ctx); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
-			return reconcile.Result{}, false, err
+			return err
 		}
 	}
-	return reconcile.Result{}, true, nil
+	return nil
 }
 
 func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) error {
@@ -655,19 +660,38 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 
 // TODO: This shouldn't be done in the operator. Linseed should probably hanle this for single-tenant setups, and multi-tenant should
 // either be handled by Linseed or out-of-band.
-func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) (reconcile.Result, bool, error) {
+func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) error {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
-	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.HTTPSEndpoint(rmeta.OSTypeLinux, r.clusterDomain))
+	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	if err = esClient.SetILMPolicies(ctx, ls); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch lifecycle policies", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
-	return reconcile.Result{}, true, nil
+	return nil
+}
+
+func (r *ElasticSubController) createLinseedLogin(ctx context.Context, ls *operatorv1.LogStorage, reqLogger logr.Logger) error {
+	// ES should be in ready phase when execution reaches here, apply ILM polices
+	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ElasticEndpoint())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
+		return err
+	}
+
+	user := utils.User{
+		Username: "tigera-linseed-test",
+		Password: "hack-password",
+	}
+	if err = esClient.CreateUser(ctx, user); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
+		return err
+	}
+	return nil
 }
 
 func (r *ElasticSubController) getElasticsearchService(ctx context.Context) (*corev1.Service, error) {

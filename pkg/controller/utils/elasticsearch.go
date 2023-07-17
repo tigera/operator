@@ -106,6 +106,7 @@ type ElasticsearchClientCreator func(client client.Client, ctx context.Context, 
 
 type ElasticClient interface {
 	SetILMPolicies(context.Context, *operatorv1.LogStorage) error
+	CreateUser(context.Context, User) error
 }
 
 type esClient struct {
@@ -145,6 +146,85 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 	}
 
 	return &esClient{client: esCli}, err
+}
+
+// User represents an Elasticsearch user, which may or may not have roles attached to it
+type User struct {
+	Username string
+	Password string
+	Roles    []Role
+}
+
+// Role represents an Elasticsearch role that may be attached to a User
+type Role struct {
+	Name       string `json:"-"`
+	Definition *RoleDefinition
+}
+
+type RoleDefinition struct {
+	Cluster      []string      `json:"cluster"`
+	Indices      []RoleIndex   `json:"indices"`
+	Applications []Application `json:"applications,omitempty"`
+}
+
+type RoleIndex struct {
+	Names      []string `json:"names"`
+	Privileges []string `json:"privileges"`
+}
+
+type Application struct {
+	Application string   `json:"application"`
+	Privileges  []string `json:"privileges"`
+	Resources   []string `json:"resources"`
+}
+
+func (es *esClient) CreateUser(ctx context.Context, user User) error {
+	var rolesToCreate []Role
+	for _, role := range user.Roles {
+		if role.Definition != nil {
+			rolesToCreate = append(rolesToCreate, role)
+		}
+	}
+
+	if len(rolesToCreate) > 0 {
+		// TODO
+		// if err := cli.CreateRoles(rolesToCreate...); err != nil {
+		// 	return err
+		// }
+	}
+
+	body := map[string]interface{}{
+		"password": user.Password,
+		"roles":    []string{"tigera-ee-linseed-cluster"}, // TODO: user.RoleNames(),
+	}
+
+	_, err := es.client.XPackSecurityPutUser(user.Username).Body(body).Do(ctx)
+	if err != nil {
+		log.Error(err, "Error creating user")
+		return err
+	}
+
+	// req, err := http.NewRequest("POST", fmt.Sprintf("/_security/user/%s", user.Username), bytes.NewBuffer(j))
+	// if err != nil {
+	// 	return err
+	// }
+	// req.Header.Add("Content-Type", "application/json")
+	//
+	// response, err := cli.Perform(req)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer response.Body.Close()
+
+	// if response.StatusCode != 200 {
+	// 	body, err := io.ReadAll(response.Body)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	return fmt.Errorf(string(body))
+	// }
+
+	return nil
 }
 
 // SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
@@ -295,17 +375,22 @@ func calculateRolloverAge(retention int) string {
 
 func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: common.OperatorNamespace()}, esSecret); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, esSecret); err != nil {
 		return "", "", nil, err
 	}
 
 	esPublicCert := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}, esPublicCert); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchInternalCertSecret, Namespace: common.OperatorNamespace()}, esPublicCert); err != nil {
 		return "", "", nil, err
 	}
 
 	roots, err := getESRoots(esPublicCert)
-	return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
+	if err != nil {
+		return "", "", nil, err
+	}
+	// return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
+	pass := string(esSecret.Data["elastic"])
+	return "elastic", pass, roots, nil
 }
 
 func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {

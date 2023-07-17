@@ -17,7 +17,7 @@ mkdir -p ${BUNDLE_CRD_DIR} || true
 mkdir -p ${BUNDLE_DEPLOY_DIR} || true
 
 # Get the base path for the Calico docs site. This will be used to download manifests.
-CALICO_BASE_URL=https://docs.projectcalico.org
+CALICO_BASE_URL=https://raw.githubusercontent.com/projectcalico/calico
 
 if [ -f config/calico_versions.yml ]; then
     CALICO_VERSION=$(yq read config/calico_versions.yml components.typha.version)
@@ -26,14 +26,7 @@ else
     exit 1
 fi
 
-# If Calico version is something other than master, then strip the patch version
-# numbers for both Calico and Enterprise and update the base urls.
-if [ "${CALICO_VERSION}" == "master" ]; then
-    CALICO_BASE_URL=${CALICO_BASE_URL}/master
-else
-    CALICO_VERSION=$(sed -e 's/\.[0-9]\+$//' <<< $CALICO_VERSION)
-    CALICO_BASE_URL=${CALICO_BASE_URL}/archive/${CALICO_VERSION}
-fi
+CALICO_BASE_URL=${CALICO_BASE_URL}/${CALICO_VERSION}
 
 # Download operator manifests. For CSV generation we use a version of the
 # operator deployment manifest that doesn't include an init container and
@@ -71,6 +64,7 @@ function downloadCalicoCRDs() {
 bgpconfigurations
 bgppeers
 blockaffinities
+caliconodestatuses
 clusterinformations
 felixconfigurations
 globalnetworkpolicies
@@ -80,6 +74,7 @@ ipamblocks
 ipamconfigs
 ipamhandles
 ippools
+ipreservations
 kubecontrollersconfigurations
 networkpolicies
 networksets
@@ -87,7 +82,7 @@ networksets
 
     # Download the Calico CRDs into CRD dir.
     for resource in $CALICO_RESOURCES; do
-        curl ${CALICO_BASE_URL}/manifests/ocp/crds/calico/kdd/crd.projectcalico.org_${resource}.yaml --output ${BUNDLE_CRD_DIR}/crd.projectcalico.org_${resource}.yaml
+        curl ${CALICO_BASE_URL}/manifests/ocp/crd.projectcalico.org_${resource}.yaml --output ${BUNDLE_CRD_DIR}/crd.projectcalico.org_${resource}.yaml
     done
 }
 

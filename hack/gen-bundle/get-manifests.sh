@@ -32,13 +32,13 @@ CALICO_BASE_URL=${CALICO_BASE_URL}/${CALICO_VERSION}
 # operator deployment manifest that doesn't include an init container and
 # volumes for creating install-time resources.
 function downloadOperatorManifests() {
-    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-tigera-operator-no-resource-loading.yaml --output ${BUNDLE_DEPLOY_DIR}/operator.yaml
-    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-role-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/role.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/02-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/operator.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/02-role-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/role.yaml
     # The binding is required unlike in earlier bundle generation. The
     # 'operator-sdk generate bundle' command combines clusterroles bound to service
     # accounts. The resulting permissions is set to the CSV's
     # spec.install.clusterPermissions field.
-    curl ${CALICO_BASE_URL}/manifests/ocp/tigera-operator/02-rolebinding-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/rolebinding-tigera-operator.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/02-rolebinding-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/rolebinding-tigera-operator.yaml
 
     # Download the installation CR so that the alm-examples annotation is generated.
     curl ${CALICO_BASE_URL}/manifests/ocp/01-cr-installation.yaml --output ${BUNDLE_DEPLOY_DIR}/cr-installation.yaml

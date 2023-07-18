@@ -559,7 +559,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							fmt.Sprintf("some.registry.org/%s:%s",
 								components.ComponentTigeraNodeWindows.Image,
 								components.ComponentTigeraNodeWindows.Version)))
-						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 						cniWin := test.GetContainer(dsWin.Spec.Template.Spec.InitContainers, "install-cni")
 						Expect(cniWin).ToNot(BeNil())
 						Expect(cniWin.Image).To(Equal(
@@ -702,7 +702,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentTigeraNodeWindows.Image,
 								"sha256:tigeracnxnodewindowshash")))
-						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 						cniWin := test.GetContainer(dsWin.Spec.Template.Spec.InitContainers, "install-cni")
 						Expect(cniWin).ToNot(BeNil())
 						Expect(cniWin.Image).To(Equal(

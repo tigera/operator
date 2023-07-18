@@ -614,6 +614,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe
 				Port: port,
 			},
 		},
+		PeriodSeconds:  60,
 		TimeoutSeconds: 10,
 	}
 	rp := &corev1.Probe{
@@ -624,6 +625,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe
 				Port: port,
 			},
 		},
+		PeriodSeconds:  30,
 		TimeoutSeconds: 10,
 	}
 	return lp, rp

@@ -227,10 +227,10 @@ func (c *component) egwReadinessProbe() *corev1.Probe {
 				Port: intstr.FromInt(int(DefaultHealthPort)),
 			},
 		},
-		InitialDelaySeconds: 3,
-		TimeoutSeconds:      1,
+		InitialDelaySeconds: 10,
+		TimeoutSeconds:      5,
 		SuccessThreshold:    1,
-		PeriodSeconds:       3,
+		PeriodSeconds:       30,
 	}
 }
 

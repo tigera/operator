@@ -23,7 +23,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common/validation"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
-	windowsupgrade "github.com/tigera/operator/pkg/common/validation/calico-windows-upgrade"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"
@@ -399,6 +398,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify the CalicoNodeWindowsDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoNodeWindowsDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeWindowsDaemonSetContainer, node.ValidateCalicoNodeWindowsDaemonSetInitContainer)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
+
+		}
+	}
+
 	// Verify the CalicoKubeControllersDeployment overrides, if specified, is valid.
 	if deploy := instance.Spec.CalicoKubeControllersDeployment; deploy != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
@@ -413,14 +421,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
 		if err != nil {
 			return fmt.Errorf("Installation spec.TyphaDeployment is not valid: %w", err)
-		}
-	}
-
-	// Verify the CalicoWindowsUpgradeDaemonSet overrides, if specified, is valid.
-	if ds := instance.Spec.CalicoWindowsUpgradeDaemonSet; ds != nil {
-		err := validation.ValidateReplicatedPodResourceOverrides(ds, windowsupgrade.ValidateCalicoWindowsUpgradeDaemonSetContainer, validation.NoContainersDefined)
-		if err != nil {
-			return fmt.Errorf("Installation spec.CalicoWindowsUpgradeDaemonSet is not valid: %w", err)
 		}
 	}
 

@@ -610,11 +610,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, err
 		}
 
-		err = r.createLinseedLogin(ctx, ls, reqLogger)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
 		err = r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
 		if err != nil {
 			return reconcile.Result{}, err
@@ -658,7 +653,7 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 	return nil
 }
 
-// TODO: This shouldn't be done in the operator. Linseed should probably hanle this for single-tenant setups, and multi-tenant should
+// TODO: This shouldn't be done in the operator. Linseed should probably handle this for single-tenant setups, and multi-tenant should
 // either be handled by Linseed or out-of-band.
 func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) error {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
@@ -670,25 +665,6 @@ func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLo
 
 	if err = esClient.SetILMPolicies(ctx, ls); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch lifecycle policies", err, reqLogger)
-		return err
-	}
-	return nil
-}
-
-func (r *ElasticSubController) createLinseedLogin(ctx context.Context, ls *operatorv1.LogStorage, reqLogger logr.Logger) error {
-	// ES should be in ready phase when execution reaches here, apply ILM polices
-	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ElasticEndpoint())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
-		return err
-	}
-
-	user := utils.User{
-		Username: "tigera-linseed-test",
-		Password: "hack-password",
-	}
-	if err = esClient.CreateUser(ctx, user); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
 		return err
 	}
 	return nil

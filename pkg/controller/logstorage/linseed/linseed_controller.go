@@ -308,15 +308,6 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
-		// Create a new secret.
-		// TODO: How does this work for single-tenant? Do we need to copy to both namespaces?
-		basicCreds = corev1.Secret{}
-		basicCreds.Name = render.ElasticsearchLinseedUserSecret
-		basicCreds.Namespace = request.TruthNamespace()
-		basicCreds.StringData = map[string]string{
-			"username": "tigera-linseed-test",
-			"password": "hack-password",
-		}
 	}
 	credentialComponent := render.NewPassthrough(&basicCreds)
 

@@ -148,11 +148,66 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 	return &esClient{client: esCli}, err
 }
 
+// TODO: Incorporate CC version
+func formatName(name string, clusterName string, management bool) string {
+	var formattedName string
+	if management {
+		formattedName = string(name)
+	} else {
+		formattedName = fmt.Sprintf("%s-%s", string(name), clusterName)
+	}
+
+	// Add the secure suffix before returning.
+	formattedName = fmt.Sprintf("%s-secure", formattedName)
+	return formattedName
+}
+
+// TODO: Incorporate CC version
+func indexPattern(prefix, cluster, suffix string) string {
+	return fmt.Sprintf("%s.%s%s", prefix, cluster, suffix)
+}
+
+var (
+	// Name for the linseed user in ES.
+	ElasticsearchUserNameLinseed = "tigera-ee-linseed"
+
+	LinseedUser = User{
+		Username: formatName(ElasticsearchUserNameLinseed, "cluster", true),
+		Roles: []Role{
+			{
+				Name: formatName(ElasticsearchUserNameLinseed, "cluster", true),
+				Definition: &RoleDefinition{
+					Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
+					Indices: []RoleIndex{
+						{
+							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*")},
+							Privileges: []string{"create_index", "write", "manage", "read"},
+						},
+					},
+				},
+			},
+		},
+	}
+)
+
 // User represents an Elasticsearch user, which may or may not have roles attached to it
 type User struct {
 	Username string
 	Password string
 	Roles    []Role
+}
+
+// RoleNames is a convenience function for getting the names of all the roles defined for this Elasticsearch user
+func (u User) RoleNames() []string {
+	// The Elasticsearch users API expects a string array in the "roles" field and will fail if it detects a null value
+	// instead. Initialising the slice in this manner ensures that even in the case that there are no roles we still
+	// send an empty array of strings rather than null.
+	names := []string{}
+	for _, role := range u.Roles {
+		names = append(names, role.Name)
+	}
+
+	return names
 }
 
 // Role represents an Elasticsearch role that may be attached to a User
@@ -178,6 +233,31 @@ type Application struct {
 	Resources   []string `json:"resources"`
 }
 
+// CreateRoles wraps createRoles to make creating multiple rows slightly more convenient
+func (es *esClient) CreateRoles(roles ...Role) error {
+	for _, role := range roles {
+		if err := es.createRole(role); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// createRole attempts to create (or updated) the given Elasticsearch role.
+func (es *esClient) createRole(role Role) error {
+	if role.Name == "" {
+		return fmt.Errorf("can't create a role with an empty name")
+	}
+
+	_, err := es.client.XPackSecurityPutRole(role.Name).Body(role.Definition).Do(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (es *esClient) CreateUser(ctx context.Context, user User) error {
 	var rolesToCreate []Role
 	for _, role := range user.Roles {
@@ -187,15 +267,14 @@ func (es *esClient) CreateUser(ctx context.Context, user User) error {
 	}
 
 	if len(rolesToCreate) > 0 {
-		// TODO
-		// if err := cli.CreateRoles(rolesToCreate...); err != nil {
-		// 	return err
-		// }
+		if err := es.CreateRoles(rolesToCreate...); err != nil {
+			return err
+		}
 	}
 
 	body := map[string]interface{}{
 		"password": user.Password,
-		"roles":    []string{"tigera-ee-linseed-cluster"}, // TODO: user.RoleNames(),
+		"roles":    user.RoleNames(),
 	}
 
 	_, err := es.client.XPackSecurityPutUser(user.Username).Body(body).Do(ctx)
@@ -203,26 +282,6 @@ func (es *esClient) CreateUser(ctx context.Context, user User) error {
 		log.Error(err, "Error creating user")
 		return err
 	}
-
-	// req, err := http.NewRequest("POST", fmt.Sprintf("/_security/user/%s", user.Username), bytes.NewBuffer(j))
-	// if err != nil {
-	// 	return err
-	// }
-	// req.Header.Add("Content-Type", "application/json")
-	//
-	// response, err := cli.Perform(req)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer response.Body.Close()
-
-	// if response.StatusCode != 200 {
-	// 	body, err := io.ReadAll(response.Body)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	return fmt.Errorf(string(body))
-	// }
 
 	return nil
 }

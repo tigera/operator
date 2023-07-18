@@ -56,6 +56,15 @@ if [[ "${PREV_VERSION}" != "0.0.0" ]]; then
     yq write -i ${CSV} spec.replaces tigera-operator.v${PREV_VERSION}
 fi
 
+# Add labels for each supported architecture in the CSV file, in the
+# metadata.labels section:
+# e.g. operatorframework.io/arch.arm64: supported
+# At least amd64 is needed so that we can use the SHA256 of the manifest image rather
+# than the specific SHA of the amd64 image.
+yq write -i ${CSV} 'metadata.labels."operatorframework.io/arch.amd64"' supported
+yq write -i ${CSV} 'metadata.labels."operatorframework.io/arch.ppc64le"' supported
+yq write -i ${CSV} 'metadata.labels."operatorframework.io/arch.arm64"' supported
+
 # Set the CSV to ignore previous versions when updating. Use brackets to preserve the
 # dot in the key "olm.skipRange".
 yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERSION}

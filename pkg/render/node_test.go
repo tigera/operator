@@ -3542,9 +3542,9 @@ var _ = Describe("Node rendering tests", func() {
 func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bool) {
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
+		PeriodSeconds:  30,
 		ProbeHandler:   corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
 		TimeoutSeconds: 5,
-		PeriodSeconds:  10,
 	}
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
@@ -3554,6 +3554,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 				Port: intstr.FromInt(9099),
 			},
 		},
+		PeriodSeconds:  60,
 		TimeoutSeconds: 10,
 	}
 

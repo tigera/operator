@@ -90,6 +90,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
 	})
 
+	if opts.MultiTenant {
+		if err = controller.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	return add(mgr, controller)
 }
 
@@ -135,7 +141,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
+		render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
@@ -362,16 +368,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
 	// as well as validation with respect to Syslog.logTypes.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
@@ -560,7 +556,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:         instance,
-		ESSecrets:            esSecrets,
 		ESClusterConfig:      esClusterConfig,
 		S3Credential:         s3Credential,
 		SplkCredential:       splunkCredential,
@@ -612,7 +607,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
 			LogCollector:         instance,
-			ESSecrets:            esSecrets,
 			ESClusterConfig:      esClusterConfig,
 			S3Credential:         s3Credential,
 			SplkCredential:       splunkCredential,

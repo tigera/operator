@@ -106,7 +106,7 @@ type ElasticsearchClientCreator func(client client.Client, ctx context.Context, 
 
 type ElasticClient interface {
 	SetILMPolicies(context.Context, *operatorv1.LogStorage) error
-	CreateUser(context.Context, User) error
+	CreateUser(context.Context, *User) error
 }
 
 type esClient struct {
@@ -162,16 +162,18 @@ func formatName(name string, clusterName string, management bool) string {
 	return formattedName
 }
 
-// TODO: Incorporate CC version
-func indexPattern(prefix, cluster, suffix string) string {
+func indexPattern(prefix, cluster, suffix, tenant string) string {
+	if tenant != "" {
+		return fmt.Sprintf("%s.%s.%s%s", prefix, tenant, cluster, suffix)
+	}
 	return fmt.Sprintf("%s.%s%s", prefix, cluster, suffix)
 }
 
-var (
-	// Name for the linseed user in ES.
-	ElasticsearchUserNameLinseed = "tigera-ee-linseed"
+// Name for the linseed user in ES.
+var ElasticsearchUserNameLinseed = "tigera-ee-linseed"
 
-	LinseedUser = User{
+func LinseedUser(tenant string) *User {
+	return &User{
 		Username: formatName(ElasticsearchUserNameLinseed, "cluster", true),
 		Roles: []Role{
 			{
@@ -180,7 +182,7 @@ var (
 					Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
 					Indices: []RoleIndex{
 						{
-							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*")},
+							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant)},
 							Privileges: []string{"create_index", "write", "manage", "read"},
 						},
 					},
@@ -188,7 +190,7 @@ var (
 			},
 		},
 	}
-)
+}
 
 // User represents an Elasticsearch user, which may or may not have roles attached to it
 type User struct {
@@ -258,7 +260,7 @@ func (es *esClient) createRole(role Role) error {
 	return nil
 }
 
-func (es *esClient) CreateUser(ctx context.Context, user User) error {
+func (es *esClient) CreateUser(ctx context.Context, user *User) error {
 	var rolesToCreate []Role
 	for _, role := range user.Roles {
 		if role.Definition != nil {

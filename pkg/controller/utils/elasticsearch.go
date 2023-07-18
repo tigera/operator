@@ -148,9 +148,13 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 	return &esClient{client: esCli}, err
 }
 
-// TODO: Incorporate CC version
-func formatName(name string, clusterName string, management bool) string {
+func formatName(name string, clusterName, tenantID string, management bool) string {
+	if tenantID != "" {
+		return fmt.Sprintf("%s_%s", name, tenantID)
+	}
+
 	var formattedName string
+
 	if management {
 		formattedName = string(name)
 	} else {
@@ -173,11 +177,12 @@ func indexPattern(prefix, cluster, suffix, tenant string) string {
 var ElasticsearchUserNameLinseed = "tigera-ee-linseed"
 
 func LinseedUser(tenant string) *User {
+	username := formatName(ElasticsearchUserNameLinseed, "cluster", tenant, true)
 	return &User{
-		Username: formatName(ElasticsearchUserNameLinseed, "cluster", true),
+		Username: username,
 		Roles: []Role{
 			{
-				Name: formatName(ElasticsearchUserNameLinseed, "cluster", true),
+				Name: username,
 				Definition: &RoleDefinition{
 					Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
 					Indices: []RoleIndex{

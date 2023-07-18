@@ -32,7 +32,7 @@ CALICO_BASE_URL=${CALICO_BASE_URL}/${CALICO_VERSION}
 # operator deployment manifest that doesn't include an init container and
 # volumes for creating install-time resources.
 function downloadOperatorManifests() {
-    curl ${CALICO_BASE_URL}/manifests/ocp/02-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/operator.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp-tigera-operator-no-resource-loading.yaml --output ${BUNDLE_DEPLOY_DIR}/operator.yaml
     curl ${CALICO_BASE_URL}/manifests/ocp/02-role-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/role.yaml
     # The binding is required unlike in earlier bundle generation. The
     # 'operator-sdk generate bundle' command combines clusterroles bound to service

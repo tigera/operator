@@ -316,7 +316,8 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 30,
-		PeriodSeconds:       10,
+		PeriodSeconds:       60,
+		TimeoutSeconds:      5,
 	}
 }
 

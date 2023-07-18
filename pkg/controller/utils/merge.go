@@ -159,6 +159,13 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CSINodeDriverDaemonSet = mergeCSINodeDriverDaemonset(inst.CSINodeDriverDaemonSet, override.CSINodeDriverDaemonSet)
 	}
 
+	switch compareFields(inst.CalicoNodeWindowsDaemonSet, override.CalicoNodeWindowsDaemonSet) {
+	case BOnlySet:
+		inst.CalicoNodeWindowsDaemonSet = override.CalicoNodeWindowsDaemonSet.DeepCopy()
+	case Different:
+		inst.CalicoNodeWindowsDaemonSet = mergeCalicoNodeWindowsDaemonSet(inst.CalicoNodeWindowsDaemonSet, override.CalicoNodeWindowsDaemonSet)
+	}
+
 	switch compareFields(inst.CalicoKubeControllersDeployment, override.CalicoKubeControllersDeployment) {
 	case BOnlySet:
 		inst.CalicoKubeControllersDeployment = override.CalicoKubeControllersDeployment.DeepCopy()
@@ -173,13 +180,6 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.TyphaDeployment = mergeTyphaDeployment(inst.TyphaDeployment, override.TyphaDeployment)
 	}
 
-	switch compareFields(inst.CalicoWindowsUpgradeDaemonSet, override.CalicoWindowsUpgradeDaemonSet) {
-	case BOnlySet:
-		inst.CalicoWindowsUpgradeDaemonSet = override.CalicoWindowsUpgradeDaemonSet.DeepCopy()
-	case Different:
-		inst.CalicoWindowsUpgradeDaemonSet = mergeCalicoWindowsUpgradeDaemonSet(inst.CalicoWindowsUpgradeDaemonSet, override.CalicoWindowsUpgradeDaemonSet)
-	}
-
 	switch compareFields(inst.FIPSMode, override.FIPSMode) {
 	case BOnlySet, Different:
 		inst.FIPSMode = override.FIPSMode
@@ -188,6 +188,13 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	switch compareFields(inst.Logging, override.Logging) {
 	case BOnlySet, Different:
 		inst.Logging = override.Logging
+	}
+
+	switch compareFields(inst.Windows, override.Windows) {
+	case BOnlySet:
+		inst.Windows = override.Windows.DeepCopy()
+	case Different:
+		inst.Windows = mergeWindows(inst.Windows, override.Windows)
 	}
 
 	return inst
@@ -390,6 +397,94 @@ func mergeCalicoNodeDaemonSet(cfg, override *operatorv1.CalicoNodeDaemonSet) *op
 	return out
 }
 
+func mergeCalicoNodeWindowsDaemonSet(cfg, override *operatorv1.CalicoNodeWindowsDaemonSet) *operatorv1.CalicoNodeWindowsDaemonSet {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Metadata, override.Metadata) {
+	case BOnlySet:
+		out.Metadata = override.Metadata.DeepCopy()
+	case Different:
+		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	}
+
+	mergePodSpec := func(cfg, override *operatorv1.CalicoNodeWindowsDaemonSetPodSpec) *operatorv1.CalicoNodeWindowsDaemonSetPodSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.InitContainers, override.InitContainers) {
+		case BOnlySet, Different:
+			out.InitContainers = make([]operatorv1.CalicoNodeWindowsDaemonSetInitContainer, len(override.InitContainers))
+			copy(out.InitContainers, override.InitContainers)
+		}
+
+		switch compareFields(out.Containers, override.Containers) {
+		case BOnlySet, Different:
+			out.Containers = make([]operatorv1.CalicoNodeWindowsDaemonSetContainer, len(override.Containers))
+			copy(out.Containers, override.Containers)
+		}
+
+		switch compareFields(out.Affinity, override.Affinity) {
+		case BOnlySet, Different:
+			out.Affinity = override.Affinity
+		}
+
+		switch compareFields(out.NodeSelector, override.NodeSelector) {
+		case BOnlySet, Different:
+			out.NodeSelector = override.NodeSelector
+		}
+
+		switch compareFields(out.Tolerations, override.Tolerations) {
+		case BOnlySet, Different:
+			out.Tolerations = override.Tolerations
+		}
+		return out
+	}
+	mergeTemplateSpec := func(cfg, override *operatorv1.CalicoNodeWindowsDaemonSetPodTemplateSpec) *operatorv1.CalicoNodeWindowsDaemonSetPodTemplateSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Metadata, override.Metadata) {
+		case BOnlySet:
+			out.Metadata = override.Metadata.DeepCopy()
+		case Different:
+			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+		}
+
+		switch compareFields(out.Spec, override.Spec) {
+		case BOnlySet:
+			out.Spec = override.Spec.DeepCopy()
+		case Different:
+			out.Spec = mergePodSpec(out.Spec, override.Spec)
+		}
+
+		return out
+	}
+	mergeSpec := func(cfg, override *operatorv1.CalicoNodeWindowsDaemonSetSpec) *operatorv1.CalicoNodeWindowsDaemonSetSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {
+		case BOnlySet, Different:
+			out.MinReadySeconds = override.MinReadySeconds
+		}
+
+		switch compareFields(out.Template, override.Template) {
+		case BOnlySet:
+			out.Template = override.Template.DeepCopy()
+		case Different:
+			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+
+		return out
+	}
+
+	switch compareFields(out.Spec, override.Spec) {
+	case BOnlySet:
+		out.Spec = override.Spec.DeepCopy()
+	case Different:
+		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
+
+	return out
+}
+
 func mergeCSINodeDriverDaemonset(cfg, override *operatorv1.CSINodeDriverDaemonSet) *operatorv1.CSINodeDriverDaemonSet {
 	out := cfg.DeepCopy()
 
@@ -465,7 +560,6 @@ func mergeCSINodeDriverDaemonset(cfg, override *operatorv1.CSINodeDriverDaemonSe
 	}
 
 	return out
-
 }
 
 func mergeCalicoKubeControllersDeployment(cfg, override *operatorv1.CalicoKubeControllersDeployment) *operatorv1.CalicoKubeControllersDeployment {
@@ -649,84 +743,22 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 	return out
 }
 
-func mergeCalicoWindowsUpgradeDaemonSet(cfg, override *operatorv1.CalicoWindowsUpgradeDaemonSet) *operatorv1.CalicoWindowsUpgradeDaemonSet {
+func mergeWindows(cfg, override *operatorv1.WindowsConfig) *operatorv1.WindowsConfig {
 	out := cfg.DeepCopy()
 
-	switch compareFields(out.Metadata, override.Metadata) {
-	case BOnlySet:
-		out.Metadata = override.Metadata.DeepCopy()
-	case Different:
-		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	switch compareFields(out.CNIBinDir, override.CNIBinDir) {
+	case BOnlySet, Different:
+		out.CNIBinDir = override.CNIBinDir
 	}
 
-	mergePodSpec := func(cfg, override *operatorv1.CalicoWindowsUpgradeDaemonSetPodSpec) *operatorv1.CalicoWindowsUpgradeDaemonSetPodSpec {
-		out := cfg.DeepCopy()
-
-		// CalicoWindowsUpgradeDaemonSet doesn't have init containers.
-		switch compareFields(out.Containers, override.Containers) {
-		case BOnlySet, Different:
-			out.Containers = make([]operatorv1.CalicoWindowsUpgradeDaemonSetContainer, len(override.Containers))
-			copy(out.Containers, override.Containers)
-		}
-
-		switch compareFields(out.Affinity, override.Affinity) {
-		case BOnlySet, Different:
-			out.Affinity = override.Affinity
-		}
-
-		switch compareFields(out.NodeSelector, override.NodeSelector) {
-		case BOnlySet, Different:
-			out.NodeSelector = override.NodeSelector
-		}
-
-		switch compareFields(out.Tolerations, override.Tolerations) {
-		case BOnlySet, Different:
-			out.Tolerations = override.Tolerations
-		}
-		return out
-	}
-	mergeTemplateSpec := func(cfg, override *operatorv1.CalicoWindowsUpgradeDaemonSetPodTemplateSpec) *operatorv1.CalicoWindowsUpgradeDaemonSetPodTemplateSpec {
-		out := cfg.DeepCopy()
-
-		switch compareFields(out.Metadata, override.Metadata) {
-		case BOnlySet:
-			out.Metadata = override.Metadata.DeepCopy()
-		case Different:
-			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
-		}
-
-		switch compareFields(out.Spec, override.Spec) {
-		case BOnlySet:
-			out.Spec = override.Spec.DeepCopy()
-		case Different:
-			out.Spec = mergePodSpec(out.Spec, override.Spec)
-		}
-
-		return out
-	}
-	mergeSpec := func(cfg, override *operatorv1.CalicoWindowsUpgradeDaemonSetSpec) *operatorv1.CalicoWindowsUpgradeDaemonSetSpec {
-		out := cfg.DeepCopy()
-
-		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {
-		case BOnlySet, Different:
-			out.MinReadySeconds = override.MinReadySeconds
-		}
-
-		switch compareFields(out.Template, override.Template) {
-		case BOnlySet:
-			out.Template = override.Template.DeepCopy()
-		case Different:
-			out.Template = mergeTemplateSpec(out.Template, override.Template)
-		}
-
-		return out
+	switch compareFields(out.CNIConfDir, override.CNIConfDir) {
+	case BOnlySet, Different:
+		out.CNIConfDir = override.CNIConfDir
 	}
 
-	switch compareFields(out.Spec, override.Spec) {
-	case BOnlySet:
-		out.Spec = override.Spec.DeepCopy()
-	case Different:
-		out.Spec = mergeSpec(out.Spec, override.Spec)
+	switch compareFields(out.CNILogDir, override.CNILogDir) {
+	case BOnlySet, Different:
+		out.CNILogDir = override.CNILogDir
 	}
 
 	return out

@@ -667,11 +667,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 					Command: []string{"/usr/bin/readiness-probe"},
 				},
 			},
-			// 30s (init) + 10 * 20s (timeout) + 9 * 5s (period) which is approximately 4 minutes
 			// to account for a slow elasticsearch start.
 			FailureThreshold:    10,
 			InitialDelaySeconds: 30,
-			PeriodSeconds:       5,
+			PeriodSeconds:       30,
 			SuccessThreshold:    1,
 			TimeoutSeconds:      20,
 		},
@@ -1491,6 +1490,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 									Scheme: corev1.URISchemeHTTPS,
 								},
 							},
+							PeriodSeconds:  30,
+							TimeoutSeconds: 5,
 						},
 						SecurityContext: securitycontext.NewNonRootContext(),
 						VolumeMounts:    volumeMounts,
@@ -1521,6 +1522,8 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 				},
 			},
 		},
+		PeriodSeconds:  60,
+		TimeoutSeconds: 5,
 	}
 
 	const schedule = "@hourly"

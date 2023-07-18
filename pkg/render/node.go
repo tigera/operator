@@ -1733,14 +1733,15 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 				Port: livenessPort,
 			},
 		},
+		PeriodSeconds:  60,
 		TimeoutSeconds: 10,
 	}
 	rp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
 		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
 		// This timeout should be less than the PeriodSeconds.
+		PeriodSeconds:  30,
 		TimeoutSeconds: 5,
-		PeriodSeconds:  10,
 	}
 	return lp, rp
 }

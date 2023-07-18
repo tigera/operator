@@ -637,12 +637,13 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 		return []corev1.EnvVar{}
 	}
 
-	// Determine directories to use for CNI artifacts based on the provider.
-	cniNetDir, _, _ := c.cniDirectories()
+	// Determine directories to use for CNI artifacts based on the provider or installation configuration.
+	cniNetDir, cniBinDir, _ := c.cniDirectories()
 
 	envVars := []corev1.EnvVar{
-		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
+		{Name: "CNI_BIN_DIR", Value: cniBinDir},
+		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
 		{
@@ -734,6 +735,40 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 	}
 
 	return volumes
+}
+
+// uninstallEnvVars creates the uninstall-calico initContainer's envvars.
+func (c *windowsComponent) uninstallEnvVars() []corev1.EnvVar {
+	// Determine directories to use for CNI artifacts based on the provider or installation configuration.
+	cniNetDir, cniBinDir, _ := c.cniDirectories()
+
+	envVars := []corev1.EnvVar{
+		{Name: "SLEEP", Value: "false"},
+		{Name: "CNI_BIN_DIR", Value: cniBinDir},
+		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
+		{Name: "CNI_NET_DIR", Value: cniNetDir},
+	}
+
+	return envVars
+}
+
+// uninstallContainer creates the node's init container that uninstalls non-HPC Calico from the host.
+func (c *windowsComponent) uninstallContainer() corev1.Container {
+	// Determine environment to pass to the uninstall-calico init container.
+	uninstallEnv := c.uninstallEnvVars()
+	uninstallVolumeMounts := []corev1.VolumeMount{
+		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+	}
+
+	return corev1.Container{
+		Name:            "uninstall-calico",
+		Image:           c.nodeImage,
+		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/uninstall-calico.ps1"},
+		Env:             uninstallEnv,
+		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
+		VolumeMounts:    uninstallVolumeMounts,
+	}
 }
 
 // cniContainer creates the node's init container that installs CNI.
@@ -1150,7 +1185,9 @@ func (c *windowsComponent) windowsResources() corev1.ResourceRequirements {
 // windowsDaemonset creates the windows node daemonset.
 func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = nodeTerminationGracePeriodSeconds
-	var initContainers []corev1.Container
+
+	// The uninstall-calico initContainer must be the first initContainer
+	initContainers := []corev1.Container{c.uninstallContainer()}
 
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	if c.cfg.PrometheusServerTLS != nil {
@@ -1217,7 +1254,8 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 					ServiceAccountName:            WindowsNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					InitContainers:                initContainers, Containers: []corev1.Container{
+					InitContainers:                initContainers,
+					Containers: []corev1.Container{
 						c.felixContainer(),
 						c.nodeContainer(),
 					},
@@ -1233,6 +1271,7 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 		ds.Spec.Template.Spec.Containers = append(ds.Spec.Template.Spec.Containers, c.confdContainer())
 	}
 
+	// Only add the CNI initContainer if using Calico CNI
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}

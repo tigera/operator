@@ -173,6 +173,17 @@ func (r *UserController) reconcile(ctx context.Context, reqLogger logr.Logger, a
 		return reconcile.Result{}, nil
 	}
 
+	tenantID := ""
+	if args.Tenant != nil {
+		tenantID = args.Tenant.Spec.ID
+		if tenantID == "" {
+			// TODO: Move validation to a common location.
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Tenant resource does not specify an ID", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+	}
+	linseedUser := utils.LinseedUser(tenantID)
+
 	// Query any existing username and password we've created for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
 	basicCreds := corev1.Secret{}
@@ -187,8 +198,8 @@ func (r *UserController) reconcile(ctx context.Context, reqLogger logr.Logger, a
 		basicCreds.Name = render.ElasticsearchLinseedUserSecret
 		basicCreds.Namespace = request.TruthNamespace()
 		basicCreds.StringData = map[string]string{
-			"username": utils.LinseedUser.Username,
-			"password": "temp-hacky-password", // TODO: Generate unique passwords per-tenant.
+			"username": linseedUser.Username,
+			"password": "temp-hacky-password", // TODO: Generate unique users and passwords per-tenant, per management cluster.
 		}
 	}
 	credentialComponent := render.NewPassthrough(&basicCreds)
@@ -206,7 +217,7 @@ func (r *UserController) reconcile(ctx context.Context, reqLogger logr.Logger, a
 	}
 
 	// Now that the secret has been created, also provision the user in ES.
-	if err := r.createLinseedLogin(ctx, &basicCreds, reqLogger); err != nil {
+	if err := r.createLinseedLogin(ctx, tenantID, &basicCreds, reqLogger); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create Linseed user in ES", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -216,7 +227,7 @@ func (r *UserController) reconcile(ctx context.Context, reqLogger logr.Logger, a
 	return reconcile.Result{}, nil
 }
 
-func (r *UserController) createLinseedLogin(ctx context.Context, secret *corev1.Secret, reqLogger logr.Logger) error {
+func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
 	esClient, err := utils.NewElasticClient(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
@@ -234,7 +245,7 @@ func (r *UserController) createLinseedLogin(ctx context.Context, secret *corev1.
 	}
 
 	// TODO - make this multi-tenant. Separate roles, as well as separate user names.
-	user := utils.LinseedUser
+	user := utils.LinseedUser(tenantID)
 	user.Password = password
 
 	if err = esClient.CreateUser(ctx, user); err != nil {

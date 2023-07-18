@@ -62,7 +62,6 @@ const (
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
 	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
 	fluentdDefaultFlush                      = "5s"
-	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
 	ElasticsearchEksLogForwarderUserSecret   = "tigera-eks-log-forwarder-elasticsearch-access"
 	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
 	EksLogForwarderAwsId                     = "aws-id"
@@ -157,7 +156,6 @@ type EksCloudwatchLogConfig struct {
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
 	LogCollector    *operatorv1.LogCollector
-	ESSecrets       []*corev1.Secret
 	ESClusterConfig *relasticsearch.ClusterConfig
 	S3Credential    *S3Credential
 	SplkCredential  *SplunkCredential
@@ -313,7 +311,6 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.fluentdPodSecurityPolicy())
 	}
 
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
@@ -480,7 +477,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		initContainers = append(initContainers, c.cfg.FluentdKeyPair.InitContainer(LogCollectorNamespace))
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annots,
 		},
@@ -494,7 +491,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			Volumes:                       c.volumes(),
 			ServiceAccountName:            c.fluentdNodeName(),
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -575,7 +572,7 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	return relasticsearch.ContainerDecorate(corev1.Container{
+	return corev1.Container{
 		Name:            "fluentd",
 		Image:           c.image,
 		ImagePullPolicy: ImagePullPolicy(),
@@ -590,7 +587,7 @@ func (c *fluentdComponent) container() corev1.Container {
 			Name:          "metrics-port",
 			ContainerPort: FluentdMetricsPort,
 		}},
-	}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)
+	}
 }
 
 func (c *fluentdComponent) metricsService() *corev1.Service {

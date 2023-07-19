@@ -189,6 +189,9 @@ var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 	},
 }
 
+// Helper creates a helper for building network policies. It takes two arguments:
+// - mt: True if running in multi-tenant mode, false otherwise.
+// - ns: The tenant's namespce.
 func Helper(mt bool, ns string) *NetworkPolicyHelper {
 	return &NetworkPolicyHelper{
 		multiTenant: mt,
@@ -221,11 +224,25 @@ func (h *NetworkPolicyHelper) ESGatewayServiceSelectorEntityRule() v3.EntityRule
 	return CreateServiceSelectorEntityRule(h.namespace("tigera-elasticsearch"), "tigera-secure-es-gateway-http")
 }
 
-var (
-	LinseedEntityRule                = CreateEntityRule("tigera-elasticsearch", "tigera-linseed", 8444)
-	LinseedSourceEntityRule          = CreateSourceEntityRule("tigera-elasticsearch", "tigera-linseed")
-	LinseedServiceSelectorEntityRule = CreateServiceSelectorEntityRule("tigera-elasticsearch", "tigera-linseed")
-)
+func (h *NetworkPolicyHelper) LinseedEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed", 8444)
+}
+
+func (h *NetworkPolicyHelper) LinseedSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed")
+}
+
+func (h *NetworkPolicyHelper) LinseedServiceSelectorEntityRule() v3.EntityRule {
+	return CreateServiceSelectorEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed")
+}
+
+func (h *NetworkPolicyHelper) ManagerEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-manager"), "tigera-manager", 9443)
+}
+
+func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-manager"), "tigera-manager")
+}
 
 const PrometheusSelector = "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')"
 

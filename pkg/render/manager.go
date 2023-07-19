@@ -87,13 +87,6 @@ const (
 	defaultTunnelVoltronPort = "9449"
 )
 
-var (
-	// TODO: NetworkPolicy rules will need to be generated dynamically for each namespace.
-	// Each tenant will need its own policies to ensure only its own components within its namespace can talk.
-	ManagerEntityRule       = networkpolicy.CreateEntityRule("tigera-manager", ManagerDeploymentName, managerPort)
-	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule("tigera-manager", ManagerDeploymentName)
-)
-
 // ManagerClusterScoped returns a component for rendering cluster-scoped manager resources.
 func ManagerClusterScoped(cfg *ManagerConfiguration, namespaces []string) (Component, error) {
 	objs := []client.Object{managerClusterRoleBinding(namespaces)}
@@ -172,7 +165,7 @@ type ManagerConfiguration struct {
 	Namespace string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
-	MultiTenant bool
+	Tenant *operatorv1.Tenant
 }
 
 type managerComponent struct {
@@ -279,7 +272,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	// Containers for the manager pod.
 	managerContainer := c.managerContainer()
 	esProxyContainer := c.managerEsProxyContainer()
-	if !c.cfg.MultiTenant {
+	if c.cfg.Tenant == nil {
 		// If we're running in multi-tenant mode, we don't need ES credentials as these are used for Kibana login. Otherwise, add them.
 		managerContainer = relasticsearch.ContainerDecorate(managerContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
 		esProxyContainer = relasticsearch.ContainerDecorate(esProxyContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
@@ -398,7 +391,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 
 func (c *managerComponent) kibanaEnabled() bool {
 	enableKibana := !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode)
-	if c.cfg.MultiTenant {
+	if c.cfg.Tenant != nil {
 		enableKibana = false
 	}
 	return enableKibana
@@ -408,7 +401,7 @@ func (c *managerComponent) kibanaEnabled() bool {
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	// Prepare conditional env vars up-front.
 	queryURL := "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"
-	if c.cfg.MultiTenant {
+	if c.cfg.Tenant != nil {
 		queryURL = ""
 	}
 
@@ -496,7 +489,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		linseedKeyPath, linseedCertPath = c.cfg.VoltronLinseedKeyPair.VolumeMountKeyFilePath(), c.cfg.VoltronLinseedKeyPair.VolumeMountCertificateFilePath()
 	}
 	defaultForwardServer := "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"
-	if c.cfg.MultiTenant {
+	if c.cfg.Tenant != nil {
 		// Use the local namespace instead of tigera-elasticsearch.
 		defaultForwardServer = fmt.Sprintf("tigera-secure-es-gateway-http.%s.svc:9200", c.cfg.Namespace)
 	}
@@ -573,6 +566,13 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!c.kibanaEnabled())},
+	}
+
+	// Determine the Linseed location. Use code default unless in multi-tenant mode,
+	// in which case use the Linseed in the current namespace.
+	if c.cfg.Tenant != nil {
+		env = append(env, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Namespace)})
+		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 
 	volumeMounts := append(
@@ -850,7 +850,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.Helper(true, c.cfg.Namespace).LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

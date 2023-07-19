@@ -17,6 +17,7 @@ package secrets
 import (
 	"context"
 	"fmt"
+	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -157,6 +158,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
+	// TODO: Some of these should queue updates for all tenants.
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, truthNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
@@ -266,7 +268,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	var clusterCM, appCM certificatemanager.CertificateManager
 
 	// Cluster-scoped certificate manager, used for managing Elasticsearch secrets.
-	clusterCM, err = certificatemanager.CreateWithLogger(r.client, install, r.clusterDomain, common.OperatorNamespace(), reqLogger)
+	clusterCM, err = certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -283,7 +285,11 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	appCM = clusterCM
 	if r.multiTenant {
 		// Override with a tenant-scoped certificate manager which uses the CA in the tenant's namespace.
-		appCM, err = certificatemanager.CreateWithLogger(r.client, install, r.clusterDomain, req.InstallNamespace(), reqLogger)
+		opts := []certificatemanager.Option{
+			certificatemanager.WithLogger(reqLogger),
+			certificatemanager.WithTenant(tenant),
+		}
+		appCM, err = certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, req.InstallNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create CA", err, reqLogger)
 			return reconcile.Result{}, err
@@ -358,7 +364,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
 // generateClusterSecrets generates secrets that are cluster-scoped in a multi-tenant environment

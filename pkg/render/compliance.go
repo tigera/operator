@@ -1629,7 +1629,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
 		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{
@@ -1671,7 +1671,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
 		},
 	}
 
@@ -1687,7 +1687,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ManagerEntityRule,
+			Destination: networkpolicy.Helper(false, "").ManagerEntityRule(),
 		},
 	}...)
 
@@ -1695,7 +1695,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   ManagerSourceEntityRule,
+			Source:   networkpolicy.Helper(false, "").ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(complianceServerPort),
 			},

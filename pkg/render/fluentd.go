@@ -630,6 +630,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
+		{Name: "TENANT_ID", Value: "tigera"}, // TODO
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {

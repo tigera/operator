@@ -279,7 +279,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	if l.cfg.Tenant != nil {
 		// If a tenant was provided, set the expected tenant ID.
-		envVars = append(envVars, corev1.EnvVar{Name: "EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 	}
 
 	var initContainers []corev1.Container
@@ -420,7 +420,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.ManagerEntityRule,
+			Destination: networkpolicy.Helper(true, l.cfg.Namespace).ManagerEntityRule(),
 		})
 	}
 
@@ -467,7 +467,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ManagerSourceEntityRule,
+					Source:      networkpolicy.Helper(true, l.cfg.Namespace).ManagerSourceEntityRule(),
 					Destination: linseedIngressDestinationEntityRule,
 				},
 				{

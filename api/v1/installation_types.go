@@ -777,4 +777,8 @@ type WindowsConfig struct {
 	// CNILogDir is the path to the Calico CNI logs directory on Windows.
 	// +optional
 	CNILogDir string `json:"cniLogDir,omitempty"`
+
+	// CNIConfFilename is the filename of the CNI configuration file on Windows.
+	// +optional
+	CNIConfFilename string `json:"cniConfFilename,omitempty"`
 }

@@ -234,10 +234,10 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 					Port: intstr.FromInt(int(egressgateway.DefaultHealthPort)),
 				},
 			},
-			InitialDelaySeconds: 3,
-			TimeoutSeconds:      1,
+			InitialDelaySeconds: 10,
+			TimeoutSeconds:      5,
 			SuccessThreshold:    1,
-			PeriodSeconds:       3,
+			PeriodSeconds:       30,
 		}
 		Expect(egwContainer.ReadinessProbe).To(Equal(expectedRP))
 

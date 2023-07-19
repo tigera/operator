@@ -116,7 +116,7 @@ var _ = Describe("LogStorage controller", func() {
 		ctx = context.Background()
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = certificatemanager.Create(cli, nil, "")
+		certificateManager, err = certificatemanager.Create(cli, nil, "", common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})

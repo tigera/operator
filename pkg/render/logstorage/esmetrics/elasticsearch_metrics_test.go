@@ -58,7 +58,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-			certificateManager, err := certificatemanager.Create(cli, nil, "")
+			certificateManager, err := certificatemanager.Create(cli, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			bundle := certificateManager.CreateTrustedBundle()
 			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})

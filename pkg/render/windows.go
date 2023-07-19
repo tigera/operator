@@ -638,12 +638,12 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 	}
 
 	// Determine directories to use for CNI artifacts based on the provider or installation configuration.
-	cniNetDir, cniBinDir, _ := c.cniDirectories()
+	cniNetDir, cniBinDir, _, cniConfFilename := c.cniConfigInfo()
 
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_BIN_DIR", Value: cniBinDir},
-		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
+		{Name: "CNI_CONF_NAME", Value: cniConfFilename},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
 		{
@@ -670,16 +670,17 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 	return envVars
 }
 
-// cniDirectories returns the binary, network config and log directories for the configured platform.
-func (c *windowsComponent) cniDirectories() (string, string, string) {
-	var cniBinDir, cniNetDir, cniLogDir string
+// cniConfigInfo returns the CNI binary, network config and log directories and the CNI conf filename for the configured platform.
+func (c *windowsComponent) cniConfigInfo() (string, string, string, string) {
+	var cniBinDir, cniNetDir, cniLogDir, cniConfFilename string
 	switch c.cfg.Installation.KubernetesProvider {
 	default:
 		// Default locations to match vanilla Kubernetes.
 		cniBinDir = "/opt/cni/bin"
 		cniNetDir = "/etc/cni/net.d"
+		cniLogDir = "/var/log/calico/cni"
+		cniConfFilename = "10-calico.conflist"
 	}
-	cniLogDir = "/var/log/calico/cni"
 
 	// Use configuration values if present
 	if c.cfg.Installation.Windows != nil {
@@ -692,8 +693,12 @@ func (c *windowsComponent) cniDirectories() (string, string, string) {
 		if c.cfg.Installation.Windows.CNILogDir != "" {
 			cniLogDir = c.cfg.Installation.Windows.CNILogDir
 		}
+		if c.cfg.Installation.Windows.CNIConfFilename != "" {
+			cniConfFilename = c.cfg.Installation.Windows.CNIConfFilename
+		}
+
 	}
-	return cniNetDir, cniBinDir, cniLogDir
+	return cniNetDir, cniBinDir, cniLogDir, cniConfFilename
 }
 
 // windowsVolumes creates the node's volumes.
@@ -714,7 +719,7 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 	// If needed for this configuration, then include the CNI volumes.
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
-		cniNetDir, cniBinDir, cniLogDir := c.cniDirectories()
+		cniNetDir, cniBinDir, cniLogDir, _ := c.cniConfigInfo()
 		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniNetDir}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir}}})
@@ -740,12 +745,12 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 // uninstallEnvVars creates the uninstall-calico initContainer's envvars.
 func (c *windowsComponent) uninstallEnvVars() []corev1.EnvVar {
 	// Determine directories to use for CNI artifacts based on the provider or installation configuration.
-	cniNetDir, cniBinDir, _ := c.cniDirectories()
+	cniNetDir, cniBinDir, _, cniConfFilename := c.cniConfigInfo()
 
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_BIN_DIR", Value: cniBinDir},
-		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
+		{Name: "CNI_CONF_NAME", Value: cniConfFilename},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
 	}
 

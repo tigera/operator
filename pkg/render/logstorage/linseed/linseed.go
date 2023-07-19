@@ -322,7 +322,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 							},
 						},
 						InitialDelaySeconds: 10,
-						PeriodSeconds:       5,
+						PeriodSeconds:       30,
+						TimeoutSeconds:      10,
 					},
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -331,7 +332,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 							},
 						},
 						InitialDelaySeconds: 10,
-						PeriodSeconds:       5,
+						PeriodSeconds:       60,
+						TimeoutSeconds:      10,
 					},
 				},
 			},

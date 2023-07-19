@@ -134,7 +134,7 @@ func (t *trustedBundle) VolumeMounts(osType rmeta.OSType) []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 	}
-	if len(t.systemCertificates) > 0 {
+	if len(t.systemCertificates) > 0 && osType != rmeta.OSTypeWindows {
 		// apps linking libssl need this file (SSL_CERT_FILE)
 		mounts = append(mounts,
 			corev1.VolumeMount{

@@ -1929,7 +1929,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
 		})
 
 	}
@@ -2066,7 +2066,7 @@ func (c *intrusionDetectionComponent) adDetectorAllowTigeraPolicy() *v3.NetworkP
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

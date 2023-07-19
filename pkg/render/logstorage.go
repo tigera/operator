@@ -1838,7 +1838,7 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
@@ -1877,7 +1877,7 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.LinseedSourceEntityRule,
+					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).LinseedSourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{

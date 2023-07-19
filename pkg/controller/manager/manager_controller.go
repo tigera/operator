@@ -257,9 +257,26 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// In single-tenant mode, the manager is always global scoped. However, for multi-tenant mode
 	// the manager instance will belong to a particualr namespace.
-	ns := ""
+	var ns string
+	var tenant *operatorv1.Tenant
+	var err error
 	if r.multiTenant {
+		if request.Namespace == "" {
+			// In multi-tenant mode, we only handle namespaced reconcile triggers.
+			return reconcile.Result{}, nil
+		}
 		ns = request.Namespace
+
+		// Check if there is a manager in this namespace.
+		tenant, err = utils.GetTenant(ctx, r.client, request.Namespace)
+		if errors.IsNotFound(err) {
+			// No tenant in this namespace. Ignore the update.
+			logc.Info("No Tenant in this Namespace, skip")
+			return reconcile.Result{}, nil
+		} else if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, logc)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Fetch the Manager instance that corresponds with this reconcile trigger.
@@ -351,6 +368,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Variant:      variant,
 		Installation: installation,
 		License:      license,
+		Tenant:       tenant,
 	}
 	return r.reconcileInstance(ctx, logc, args, common)
 }
@@ -360,6 +378,7 @@ type ReconcileArgs struct {
 	Installation *operatorv1.InstallationSpec
 	Manager      *operatorv1.Manager
 	License      v3.LicenseKey
+	Tenant       *operatorv1.Tenant
 }
 
 func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logger, args ReconcileArgs, request octrl.Request) (reconcile.Result, error) {
@@ -613,7 +632,7 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 		ComplianceLicenseActive: complianceLicenseFeatureActive,
 		UsePSP:                  r.usePSP,
 		Namespace:               request.InstallNamespace(),
-		MultiTenant:             r.multiTenant,
+		Tenant:                  args.Tenant,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

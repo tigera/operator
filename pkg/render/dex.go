@@ -427,7 +427,7 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      ManagerSourceEntityRule,
+					Source:      networkpolicy.Helper(false, "").ManagerSourceEntityRule(),
 					Destination: dexIngressPortDestination,
 				},
 				{

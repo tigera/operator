@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/linseed_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../../report/ut/linseed_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/logstorage/linseed Suite", []Reporter{junitReporter})
 }

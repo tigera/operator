@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/esmetrics_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../../report/ut/esmetrics_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/logstorage/esmetrics Suite", []Reporter{junitReporter})
 }

@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/kube-controllers_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/kube-controllers_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/kubecontrollers Suite", []Reporter{junitReporter})
 }

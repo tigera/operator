@@ -27,6 +27,6 @@ import (
 func TestRender(t *testing.T) {
 	glog.SetOutput(GinkgoWriter)
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../report/certificatemanagement_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../report/ut/certificatemanagement_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/certificatemanagement Suite", []Reporter{junitReporter})
 }

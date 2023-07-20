@@ -27,6 +27,6 @@ import (
 func TestRender(t *testing.T) {
 	glog.SetOutput(GinkgoWriter)
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../report/render_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../report/ut/render_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render Suite", []Reporter{junitReporter})
 }

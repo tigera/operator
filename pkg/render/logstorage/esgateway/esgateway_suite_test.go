@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/esgateway_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../../report/ut/esgateway_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/logstorage/esgateway Suite", []Reporter{junitReporter})
 }

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	kerror "k8s.io/apimachinery/pkg/api/errors"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -78,8 +80,39 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c)
+		instance, err = GetManager(ctx, c, "")
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	// This test uses a mock client, so ultimately we're just testing that a namespaced `GetManager` call
+	// functions correctly
+	It("should create and query multiple tenant manager instances", func() {
+		tenantANamespace := "tenant-a"
+		instanceA := &operatorv1.Manager{
+			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantANamespace},
+		}
+		err := c.Create(ctx, instanceA)
+		Expect(err).NotTo(HaveOccurred())
+		instance, err = GetManager(ctx, c, tenantANamespace)
+		Expect(err).NotTo(HaveOccurred())
+
+		tenantBNamespace := "tenant-b"
+		instanceB := &operatorv1.Manager{
+			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantBNamespace},
+		}
+		err = c.Create(ctx, instanceB)
+		Expect(err).NotTo(HaveOccurred())
+		instance, err = GetManager(ctx, c, tenantBNamespace)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should return expected error when querying namespace that does not contain a manager instance", func() {
+		nsWithoutManager := "non-manager-ns"
+		instance, err := GetManager(ctx, c, nsWithoutManager)
+		Expect(kerror.IsNotFound(err)).To(BeTrue())
+		Expect(instance).To(BeNil())
 	})
 
 	Context("cert tests", func() {
@@ -165,12 +198,12 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
 			// Provision certificates that the controller will query as part of the test.
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -386,12 +419,12 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			// Provision certificates that the controller will query as part of the test.
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -620,7 +653,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -644,7 +677,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -688,7 +721,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -748,7 +781,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -770,6 +803,79 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 				Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 				Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+			})
+		})
+
+		Context("Multi-tenant/namespaced reconciliation", func() {
+			tenantANamespace := "tenant-a"
+			tenantBNamespace := "tenant-b"
+			BeforeEach(func() {
+				r.multiTenant = true
+			})
+			It("should reconcile both with and without namespace provided while namespaced managers exist", func() {
+				err := c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: tenantANamespace,
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				err = c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: tenantBNamespace,
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				tenantADeployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: tenantANamespace,
+					},
+				}
+
+				tenantBDeployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: tenantBNamespace,
+					},
+				}
+
+				// We called Reconcile without specifying a namespace, so neither of these namespaced deployments should
+				// exist yet
+				err = test.GetResource(c, &tenantADeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
+
+				err = test.GetResource(c, &tenantBDeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
+
+				// Now reconcile only tenant A's namespace and check that its deployment exists, but tenant B's deployment
+				// still hasn't been reconciled so it should still not exist
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = test.GetResource(c, &tenantADeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				err = test.GetResource(c, &tenantBDeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
+
+				// Now reconcile tenant B's namespace and check that its deployment exists now alongside tenant A's
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = test.GetResource(c, &tenantADeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				err = test.GetResource(c, &tenantBDeployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 			})
 		})
 	})

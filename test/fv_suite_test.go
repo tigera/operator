@@ -25,9 +25,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func TestComponent(t *testing.T) {
+func TestFeatureVerification(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter)))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../report/component_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../report/fv/fv_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "FV test Suite", []Reporter{junitReporter})
 }

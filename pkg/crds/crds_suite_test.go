@@ -25,6 +25,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../report/crds_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../report/ut/crds_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/crds Suite", []Reporter{junitReporter})
 }

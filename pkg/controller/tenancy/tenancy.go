@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package egressgateway
+package tenancy
 
 import (
-	"testing"
-
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/reporters"
-	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/common"
 )
 
-func TestRender(t *testing.T) {
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/ut/egressgateway_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/egressgateway/egressgateway Suite", []Reporter{junitReporter})
+func GetWatchNamespaces(multiTenant bool, defaultNS string) (installNS, truthNS string, watchNamespaces []string) {
+	if multiTenant {
+		// For multi-tenant, the manager could be installed in any number of namespaces.
+		// So, we need to watch the resources we care about across all namespaces.
+		watchNamespaces = []string{""}
+	} else {
+		installNS = defaultNS
+		truthNS = common.OperatorNamespace()
+		watchNamespaces = []string{installNS, truthNS}
+	}
+	return installNS, truthNS, watchNamespaces
 }

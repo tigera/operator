@@ -21,8 +21,9 @@ import (
 	"strings"
 	"time"
 
-	v1 "k8s.io/api/rbac/v1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
 	kmeta "k8s.io/apimachinery/pkg/api/meta"
@@ -64,6 +65,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var operatorDone chan struct{}
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable)
+		cleanupResources(c)
 		verifyCRDsExist(c)
 		ns := &corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
@@ -74,19 +76,6 @@ var _ = Describe("Mainline component function tests", func() {
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
-		//
-		Eventually(func() error {
-			defaultInstallation := &operator.Installation{
-				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			}
-			err := GetResource(c, defaultInstallation)
-			if err != nil && kerror.IsNotFound(err) {
-				return nil
-			} else {
-				return err
-			}
-		}, 20*time.Second).ShouldNot(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -99,11 +88,10 @@ var _ = Describe("Mainline component function tests", func() {
 				default:
 					return fmt.Errorf("operator did not shutdown")
 				}
-			}, 60*time.Second).Should(BeNil())
+			}, 60*time.Second).ShouldNot(HaveOccurred())
 		}()
-		removeInstallResourceCR(c, "default", context.Background())
 
-		waitForProductTeardown(c)
+		cleanupResources(c)
 
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
@@ -183,7 +171,21 @@ var _ = Describe("Mainline component function tests", func() {
 			By("Deleting CR after its tigera status becomes available")
 			err := c.Delete(context.Background(), instance)
 			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() error {
+				u := &unstructured.Unstructured{}
+				u.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "operator.tigera.io",
+					Version: "v1",
+					Kind:    "Installation",
+				})
 
+				k := client.ObjectKey{Name: "default"}
+				err = c.Get(context.Background(), k, u)
+				if kerror.IsNotFound(err) || kerror.IsGone(err) {
+					return nil
+				}
+				return fmt.Errorf("Default installation still exists")
+			}, 240*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
 			By("Verifying the tigera status is removed for deleted CR")
 			Eventually(func() error {
 				_, err := getTigeraStatus(c, "calico")
@@ -348,6 +350,25 @@ func removeInstallResourceCR(c client.Client, name string, ctx context.Context) 
 	Expect(err).NotTo(HaveOccurred())
 	err = c.Delete(ctx, instance)
 	Expect(err).NotTo(HaveOccurred())
+	// Need to wait here for Installation resource to be fully deleted prior to cancelling the context
+	// which will in turn terminate the operator. Race conditions can occur otherwise that will leave the
+	// Installation resource intact while the operator is no longer running which will result in test failures
+	// that try to create an Installation resource of their own
+	Eventually(func() error {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "operator.tigera.io",
+			Version: "v1",
+			Kind:    "Installation",
+		})
+
+		k := client.ObjectKey{Name: name}
+		err = c.Get(context.Background(), k, u)
+		if kerror.IsNotFound(err) || kerror.IsGone(err) {
+			return nil
+		}
+		return fmt.Errorf("Default installation still exists")
+	}, 20*time.Second).ShouldNot(HaveOccurred())
 }
 
 func verifyCalicoHasDeployed(c client.Client) {
@@ -402,11 +423,15 @@ func verifyCRDsExist(c client.Client) {
 	// Eventually all the Enterprise CRDs should be available
 	Eventually(func() error {
 		for _, n := range crdNames {
-			crd := &apiextensions.CustomResourceDefinition{
-				TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: n},
-			}
-			err := GetResource(c, crd)
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "apiextensions.k8s.io",
+				Version: "v1",
+				Kind:    "CustomResourceDefinition",
+			})
+
+			k := client.ObjectKey{Name: n}
+			err := c.Get(context.Background(), k, u)
 			// If getting any of the CRDs is an error then the CRDs do not exist
 			if err != nil {
 				return err
@@ -418,33 +443,43 @@ func verifyCRDsExist(c client.Client) {
 
 func waitForProductTeardown(c client.Client) {
 	Eventually(func() error {
-		ns := &corev1.Namespace{
-			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
-		}
-		err := GetResource(c, ns)
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "",
+			Version: "v1",
+			Kind:    "Namespace",
+		})
+
+		k := client.ObjectKey{Name: "calico-system"}
+		err := c.Get(context.Background(), k, u)
 		if err == nil {
 			return fmt.Errorf("Calico namespace still exists")
 		}
 		if !kerror.IsNotFound(err) {
 			return err
 		}
-		crb := &v1.ClusterRoleBinding{
-			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "calico-node"},
-		}
-		err = GetResource(c, crb)
+		u = &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "rbac.authorization.k8s.io",
+			Version: "v1",
+			Kind:    "ClusterRoleBinding",
+		})
+		k = client.ObjectKey{Name: "calico-node"}
+		err = c.Get(context.Background(), k, u)
 		if err == nil {
 			return fmt.Errorf("Node CRB still exists")
 		}
 		if !kerror.IsNotFound(err) {
 			return err
 		}
-		defaultInstallation := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-		}
-		err = GetResource(c, defaultInstallation)
+		u = &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "operator.tigera.io",
+			Version: "v1",
+			Kind:    "Installation",
+		})
+		k = client.ObjectKey{Name: "default"}
+		err = c.Get(context.Background(), k, u)
 		if err == nil {
 			return fmt.Errorf("default Installation still exists")
 		}
@@ -453,4 +488,9 @@ func waitForProductTeardown(c client.Client) {
 		}
 		return nil
 	}, 240*time.Second).Should(BeNil())
+}
+
+func cleanupResources(c client.Client) {
+	removeInstallResourceCR(c, "default", context.Background())
+	waitForProductTeardown(c)
 }

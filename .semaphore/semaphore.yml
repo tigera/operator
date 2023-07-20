@@ -146,6 +146,13 @@ blocks:
             - make dirty-check
             - '[[ -f ./report/fv/fv_suite.xml ]] && test-results publish ./report/fv/fv_suite.xml'
 
+after_pipeline:
+  task:
+    jobs:
+      - name: Publish Results
+        commands:
+          - test-results gen-pipeline-report
+
 promotions:
   - name: Push Images
     pipeline_file: push_images.yml

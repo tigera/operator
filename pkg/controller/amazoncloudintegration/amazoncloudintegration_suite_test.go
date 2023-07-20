@@ -25,6 +25,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/amazoncloudintegration_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/amazoncloudintegration_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/amazoncloudintegration Suite", []Reporter{junitReporter})
 }

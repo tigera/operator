@@ -25,6 +25,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/utils_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/utils_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/utils Suite", []Reporter{junitReporter})
 }

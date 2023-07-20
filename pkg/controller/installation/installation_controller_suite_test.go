@@ -29,6 +29,6 @@ import (
 func TestInstallation(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/installation_controller_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/installation_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/installation Suite", []Reporter{junitReporter})
 }

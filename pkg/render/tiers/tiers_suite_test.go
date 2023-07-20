@@ -24,6 +24,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/monitor_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/monitor_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/tiers Suite", []Reporter{junitReporter})
 }

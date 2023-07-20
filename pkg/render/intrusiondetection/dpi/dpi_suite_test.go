@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/dpi_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../../report/ut/dpi_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/intusiondetection/dpi Suite", []Reporter{junitReporter})
 }

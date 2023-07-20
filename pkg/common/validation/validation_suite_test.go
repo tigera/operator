@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../report/common_validation_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../report/ut/common_validation_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/common/validation Suite", []Reporter{junitReporter})
 }

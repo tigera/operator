@@ -29,6 +29,6 @@ import (
 func TestWindowsUpgrade(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/windows_upgrade_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../../ut/report/windows_upgrade_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/installation/windows Suite", []Reporter{junitReporter})
 }

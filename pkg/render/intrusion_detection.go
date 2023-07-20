@@ -788,6 +788,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 				},
 			},
 			InitialDelaySeconds: 5,
+			TimeoutSeconds:      10,
 		},
 		SecurityContext: sc,
 		VolumeMounts:    volumeMounts,

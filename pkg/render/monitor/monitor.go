@@ -495,8 +495,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 									Scheme: "HTTPS",
 								},
 							},
-							PeriodSeconds:  30,
-							TimeoutSeconds: 5,
 						},
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
@@ -506,8 +504,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 									Scheme: "HTTPS",
 								},
 							},
-							PeriodSeconds:  60,
-							TimeoutSeconds: 5,
 						},
 					},
 				},

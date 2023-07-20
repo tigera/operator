@@ -466,8 +466,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 								Port: intstr.FromInt(9099),
 							},
 						},
-						PeriodSeconds:  60,
-						TimeoutSeconds: 5,
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    volumeMounts,
@@ -859,8 +857,6 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						},
 						FailureThreshold:    5,
 						InitialDelaySeconds: 5,
-						PeriodSeconds:       60,
-						TimeoutSeconds:      5,
 					},
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -872,8 +868,6 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						},
 						FailureThreshold:    5,
 						InitialDelaySeconds: 5,
-						PeriodSeconds:       30,
-						TimeoutSeconds:      5,
 					},
 					Args: []string{
 						fmt.Sprintf("-certpath=%s", c.cfg.ServerKeyPair.VolumeMountCertificateFilePath()),
@@ -1062,8 +1056,6 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 								Port: intstr.FromInt(9099),
 							},
 						},
-						PeriodSeconds:  60,
-						TimeoutSeconds: 5,
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    volumeMounts,

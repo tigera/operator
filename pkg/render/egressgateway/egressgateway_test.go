@@ -235,9 +235,6 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 				},
 			},
 			InitialDelaySeconds: 10,
-			TimeoutSeconds:      5,
-			SuccessThreshold:    1,
-			PeriodSeconds:       30,
 		}
 		Expect(egwContainer.ReadinessProbe).To(Equal(expectedRP))
 

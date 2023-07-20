@@ -797,7 +797,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 				},
 			},
 			InitialDelaySeconds: 5,
-			PeriodSeconds:       60,
 			TimeoutSeconds:      10,
 		},
 		SecurityContext: sc,
@@ -1636,8 +1635,6 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 										Scheme: corev1.URISchemeHTTPS,
 									},
 								},
-								PeriodSeconds:  60,
-								TimeoutSeconds: 5,
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
@@ -1647,8 +1644,6 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 										Scheme: corev1.URISchemeHTTPS,
 									},
 								},
-								PeriodSeconds:  30,
-								TimeoutSeconds: 5,
 							},
 							VolumeMounts: append(
 								c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),

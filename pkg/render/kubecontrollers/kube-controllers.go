@@ -503,12 +503,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 					},
 				},
 			},
-			PeriodSeconds:  30,
 			TimeoutSeconds: 10,
 		},
 		LivenessProbe: &corev1.Probe{
-			InitialDelaySeconds: 10,
-			FailureThreshold:    6,
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -517,8 +514,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 					},
 				},
 			},
-			PeriodSeconds:  60,
-			TimeoutSeconds: 10,
+			FailureThreshold:    6,
+			InitialDelaySeconds: 10,
+			TimeoutSeconds:      10,
 		},
 		SecurityContext: sc,
 		VolumeMounts:    c.kubeControllersVolumeMounts(),

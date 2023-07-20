@@ -18,37 +18,36 @@ import (
 	"context"
 	"fmt"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/common"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+
+	ocsv1 "github.com/openshift/api/security/v1"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-	ocsv1 "github.com/openshift/api/security/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	restMeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
 )
 
 const (
@@ -77,7 +76,7 @@ var _ = Describe("Component handler tests", func() {
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
@@ -102,7 +101,7 @@ var _ = Describe("Component handler tests", func() {
 					Namespace: "default",
 				},
 				Spec: apps.DaemonSetSpec{
-					Template: v1.PodTemplateSpec{
+					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
 								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
@@ -143,7 +142,7 @@ var _ = Describe("Component handler tests", func() {
 					Namespace: "default",
 				},
 				Spec: apps.DaemonSetSpec{
-					Template: v1.PodTemplateSpec{
+					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
 								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
@@ -193,7 +192,7 @@ var _ = Describe("Component handler tests", func() {
 					Namespace: "default",
 				},
 				Spec: apps.DaemonSetSpec{
-					Template: v1.PodTemplateSpec{
+					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
 								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
@@ -222,7 +221,7 @@ var _ = Describe("Component handler tests", func() {
 	It("merges annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Annotations: map[string]string{
@@ -242,7 +241,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey := client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns := &v1.Namespace{}
+		ns := &corev1.Namespace{}
 		_ = c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
@@ -260,7 +259,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -269,7 +268,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Annotations: map[string]string{
@@ -288,7 +287,7 @@ var _ = Describe("Component handler tests", func() {
 			ocsv1.UIDRangeAnnotation:   "1-65535",
 			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -312,7 +311,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -321,7 +320,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Annotations: map[string]string{
@@ -341,7 +340,7 @@ var _ = Describe("Component handler tests", func() {
 			ocsv1.UIDRangeAnnotation:   "1-65535",
 			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -402,7 +401,7 @@ var _ = Describe("Component handler tests", func() {
 	It("merges labels and reconciles only operator added labels", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Labels: map[string]string{
@@ -422,7 +421,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey := client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns := &v1.Namespace{}
+		ns := &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -441,7 +440,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -450,7 +449,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Labels: map[string]string{
@@ -469,7 +468,7 @@ var _ = Describe("Component handler tests", func() {
 			"extra":               "extra-value",
 			fakeComponentLabelKey: fakeComponentLabelValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -493,7 +492,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -502,7 +501,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Labels: map[string]string{
@@ -522,7 +521,7 @@ var _ = Describe("Component handler tests", func() {
 			"extra":               "extra-value",
 			fakeComponentLabelKey: fakeComponentLabelValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -534,11 +533,11 @@ var _ = Describe("Component handler tests", func() {
 		switch o := obj.(type) {
 		case *apps.Deployment:
 			for _, c := range o.Spec.Template.Spec.Containers {
-				Expect(c.ImagePullPolicy).To(Equal(v1.PullIfNotPresent))
+				Expect(c.ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
 			}
 		case *apps.DaemonSet:
 			for _, c := range o.Spec.Template.Spec.Containers {
-				Expect(c.ImagePullPolicy).To(Equal(v1.PullIfNotPresent))
+				Expect(c.ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
 			}
 		default:
 			Expect(true).To(Equal(false), "Unexpected kind in test")
@@ -551,10 +550,10 @@ var _ = Describe("Component handler tests", func() {
 				&apps.DaemonSet{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
 					Spec: apps.DaemonSetSpec{
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
-								Containers: []v1.Container{
+								Containers: []corev1.Container{
 									{Image: "foo"},
 									{Image: "bar"},
 								},
@@ -570,10 +569,10 @@ var _ = Describe("Component handler tests", func() {
 				&apps.Deployment{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
 					Spec: apps.DeploymentSpec{
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
-								Containers: []v1.Container{
+								Containers: []corev1.Container{
 									{Image: "foo"},
 									{Image: "bar"},
 								},
@@ -591,7 +590,7 @@ var _ = Describe("Component handler tests", func() {
 
 		var nodeSelectors map[string]string
 		switch x := obj.(type) {
-		case *v1.PodTemplate:
+		case *corev1.PodTemplate:
 			nodeSelectors = x.Template.Spec.NodeSelector
 		case *apps.Deployment:
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
@@ -627,15 +626,15 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&v1.PodTemplate{
+					objs: []client.Object{&corev1.PodTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-podtemplate"}, &v1.PodTemplate{},
+				}, client.ObjectKey{Name: "test-podtemplate"}, &corev1.PodTemplate{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -646,15 +645,15 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&v1.PodTemplate{
+					objs: []client.Object{&corev1.PodTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-podtemplate"}, &v1.PodTemplate{},
+				}, client.ObjectKey{Name: "test-podtemplate"}, &corev1.PodTemplate{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -668,8 +667,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -689,8 +688,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -710,8 +709,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -731,8 +730,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -752,8 +751,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -773,8 +772,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -796,8 +795,8 @@ var _ = Describe("Component handler tests", func() {
 						Spec: batchv1.CronJobSpec{
 							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
-									Template: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									Template: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: map[string]string{},
 										},
 									},
@@ -821,8 +820,8 @@ var _ = Describe("Component handler tests", func() {
 						Spec: batchv1.CronJobSpec{
 							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
-									Template: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									Template: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: map[string]string{},
 										},
 									},
@@ -844,8 +843,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -866,8 +865,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -888,8 +887,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
 						Spec: kbv1.KibanaSpec{
-							PodTemplate: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							PodTemplate: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -912,15 +911,15 @@ var _ = Describe("Component handler tests", func() {
 						Spec: esv1.ElasticsearchSpec{
 							NodeSets: []esv1.NodeSet{
 								{
-									PodTemplate: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									PodTemplate: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: map[string]string{},
 										},
 									},
 								},
 								{
-									PodTemplate: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									PodTemplate: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: nil,
 										},
 									},
@@ -943,8 +942,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{
 										"kubernetes.io/foo": "bar",
 									},
@@ -967,8 +966,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{
 										"kubernetes.io/foo": "bar",
 									},
@@ -1300,7 +1299,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Namespace: "default",
 			},
 			Spec: apps.DaemonSetSpec{
-				Template: v1.PodTemplateSpec{
+				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
 							fakeComponentAnnotationKey: fakeComponentAnnotationValue,

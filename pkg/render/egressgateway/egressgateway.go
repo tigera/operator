@@ -228,9 +228,6 @@ func (c *component) egwReadinessProbe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 10,
-		TimeoutSeconds:      5,
-		SuccessThreshold:    1,
-		PeriodSeconds:       30,
 	}
 }
 

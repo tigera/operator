@@ -305,8 +305,6 @@ func (c *dexComponent) probe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 90,
-		PeriodSeconds:       60,
-		TimeoutSeconds:      5,
 	}
 }
 

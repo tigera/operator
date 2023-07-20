@@ -654,7 +654,8 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 									Port: intstr.FromInt(9099),
 								},
 							},
-							PeriodSeconds: 300,
+							PeriodSeconds:  300,
+							TimeoutSeconds: 10,
 						},
 
 						// On OpenShift reporter needs privileged access to write compliance reports to host path volume
@@ -854,9 +855,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
-						InitialDelaySeconds: 5,
-						PeriodSeconds:       10,
 						FailureThreshold:    5,
+						InitialDelaySeconds: 5,
 					},
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -866,9 +866,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
-						InitialDelaySeconds: 5,
-						PeriodSeconds:       10,
 						FailureThreshold:    5,
+						InitialDelaySeconds: 5,
 					},
 					Args: []string{
 						fmt.Sprintf("-certpath=%s", c.cfg.ServerKeyPair.VolumeMountCertificateFilePath()),
@@ -1256,7 +1255,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 								Port: intstr.FromInt(9099),
 							},
 						},
-						PeriodSeconds: 300,
+						PeriodSeconds:  300,
+						TimeoutSeconds: 10,
 					},
 				},
 			},

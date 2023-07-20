@@ -667,12 +667,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 					Command: []string{"/usr/bin/readiness-probe"},
 				},
 			},
-			// 30s (init) + 10 * 20s (timeout) + 9 * 5s (period) which is approximately 4 minutes
+			// 30s (init) + 10 * 30s (period set in controller/utils/component.go) which is 5+ minutes
 			// to account for a slow elasticsearch start.
 			FailureThreshold:    10,
 			InitialDelaySeconds: 30,
-			PeriodSeconds:       5,
-			SuccessThreshold:    1,
 			TimeoutSeconds:      20,
 		},
 		Resources:       es.resourceRequirements(),

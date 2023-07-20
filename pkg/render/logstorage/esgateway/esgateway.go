@@ -262,8 +262,6 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 							},
 						},
 						InitialDelaySeconds: 10,
-						TimeoutSeconds:      5,
-						PeriodSeconds:       30,
 					},
 					SecurityContext: securitycontext.NewNonRootContext(),
 				},

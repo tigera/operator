@@ -817,8 +817,9 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout,
-		PeriodSeconds:    c.probePeriod,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
+		// tolerate more failures for the startup probe
 		FailureThreshold: 10,
 	}
 }

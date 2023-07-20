@@ -224,8 +224,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 						},
 					},
 					InitialDelaySeconds: 30,
-					PeriodSeconds:       60,
-					TimeoutSeconds:      5,
 				},
 				LivenessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -236,8 +234,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 						},
 					},
 					InitialDelaySeconds: 30,
-					PeriodSeconds:       60,
-					TimeoutSeconds:      5,
 				},
 				Env:          envVars,
 				VolumeMounts: volumeMounts,

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/dpi_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../../report/ut/dpi_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/intusiondetection/dpi Suite", []Reporter{junitReporter})
 }

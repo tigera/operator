@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,6 @@ import (
 func TestStatus(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter)))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/clusterconnection_controller_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/clusterconnection_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/Management Cluster Connection Suite", []Reporter{junitReporter})
 }

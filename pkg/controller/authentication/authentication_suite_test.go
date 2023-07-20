@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/authentication_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/authentication_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/authentication Suite", []Reporter{junitReporter})
 }

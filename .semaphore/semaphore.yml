@@ -128,6 +128,7 @@ blocks:
           commands:
             - make ut
             - make dirty-check
+            - '[[ -d ./report/ut ]] && test-results publish ./report/ut'
 
   - name: 'FV'
     dependencies: [ "Build amd64" ]
@@ -143,6 +144,7 @@ blocks:
           commands:
             - make fv
             - make dirty-check
+            - '[[ -f ./report/fv/fv_suite.xml ]] && test-results publish ./report/fv/fv_suite.xml'
 
 promotions:
   - name: Push Images

@@ -781,4 +781,10 @@ type WindowsConfig struct {
 	// CNIConfFilename is the filename of the CNI configuration file on Windows.
 	// +optional
 	CNIConfFilename string `json:"cniConfFilename,omitempty"`
+
+	// DisableWindowsDaemonset specifies whether the calico-node-windows should be disabled
+	// Default: false
+	// +optional
+	// +kubebuilder:default:=false
+	DisableWindowsDaemonset *bool `json:"disableWindowsDaemonset,omitempty"`
 }

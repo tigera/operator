@@ -7491,10 +7491,19 @@ spec:
                       on Windows, it must match what is on ContainerD on the Windows
                       nodes.
                     type: string
+                  cniConfFilename:
+                    description: CNIConfFilename is the filename of the CNI configuration
+                      file on Windows.
+                    type: string
                   cniLogDir:
                     description: CNILogDir is the path to the Calico CNI logs directory
                       on Windows.
                     type: string
+                  disableWindowsDaemonset:
+                    default: false
+                    description: 'DisableWindowsDaemonset specifies whether the calico-node-windows
+                      should be disabled Default: false'
+                    type: boolean
                 type: object
             type: object
           status:
@@ -15512,10 +15521,19 @@ spec:
                           directory on Windows, it must match what is on ContainerD
                           on the Windows nodes.
                         type: string
+                      cniConfFilename:
+                        description: CNIConfFilename is the filename of the CNI configuration
+                          file on Windows.
+                        type: string
                       cniLogDir:
                         description: CNILogDir is the path to the Calico CNI logs
                           directory on Windows.
                         type: string
+                      disableWindowsDaemonset:
+                        default: false
+                        description: 'DisableWindowsDaemonset specifies whether the
+                          calico-node-windows should be disabled Default: false'
+                        type: boolean
                     type: object
                 type: object
               conditions:

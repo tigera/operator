@@ -36,6 +36,8 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
+require github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
+
 require (
 	cloud.google.com/go/compute v1.7.0 // indirect
 	github.com/BurntSushi/toml v1.0.0 // indirect

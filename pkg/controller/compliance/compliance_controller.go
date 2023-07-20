@@ -136,6 +136,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
 			relasticsearch.PublicCertSecret,
 			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
+			render.VoltronLinseedPublicCert,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)

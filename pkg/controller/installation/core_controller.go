@@ -1339,28 +1339,34 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Node(&nodeCfg))
 
-	// Build a configuration for rendering calico-node-windows, but only if there are Windows nodes in the cluster
-	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
-	if err != nil {
-		r.status.SetDegraded(operator.ResourceReadError, "Unable to detect if there are Windows nodes present", err, reqLogger)
-	}
-	if hasWindowsNodes {
-		if err := k8sapi.Endpoint.WindowsRequiredInfoPresent(); err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for Windows configuration", render.K8sSvcEndpointConfigMapName), err, reqLogger)
+	var hasWindowsNodesAndHPCSupport bool
+	// Don't render calico-node-windows if it's explicitly disabled in the installation
+	if instance.Spec.Windows != nil && instance.Spec.Windows.DisableWindowsDaemonset != nil && *instance.Spec.Windows.DisableWindowsDaemonset == true {
+		reqLogger.Info("Calico Windows daemonset is disabled in the operator installation")
+	} else {
+		// Build a configuration for rendering calico-node-windows, but only if there are Windows nodes in the cluster
+		hasWindowsNodesAndHPCSupport, err = common.HasWindowsNodesAndHPCSupport(r.client)
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to detect if there are Windows nodes with HPC support present", err, reqLogger)
 		}
+		if hasWindowsNodesAndHPCSupport {
+			if err := k8sapi.Endpoint.WindowsRequiredInfoPresent(); err != nil {
+				r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for the Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName), err, reqLogger)
+			}
 
-		windowsCfg := render.WindowsConfiguration{
-			K8sServiceEp:            k8sapi.Endpoint,
-			Installation:            &instance.Spec,
-			ClusterDomain:           r.clusterDomain,
-			TLS:                     typhaNodeTLS,
-			AmazonCloudIntegration:  aci,
-			PrometheusServerTLS:     nodePrometheusTLS,
-			NodeReporterMetricsPort: nodeReporterMetricsPort,
-			VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
-			Terminating:             nodeTerminating,
+			windowsCfg := render.WindowsConfiguration{
+				K8sServiceEp:            k8sapi.Endpoint,
+				Installation:            &instance.Spec,
+				ClusterDomain:           r.clusterDomain,
+				TLS:                     typhaNodeTLS,
+				AmazonCloudIntegration:  aci,
+				PrometheusServerTLS:     nodePrometheusTLS,
+				NodeReporterMetricsPort: nodeReporterMetricsPort,
+				VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
+				Terminating:             nodeTerminating,
+			}
+			components = append(components, render.Windows(&windowsCfg))
 		}
-		components = append(components, render.Windows(&windowsCfg))
 	}
 
 	csiCfg := render.CSIConfiguration{
@@ -1425,7 +1431,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// we can have the CreateOrUpdate logic handle this for us.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
 
-	if hasWindowsNodes {
+	if hasWindowsNodesAndHPCSupport {
 		r.status.AddDaemonsets([]types.NamespacedName{{Name: common.WindowsDaemonSetName, Namespace: common.CalicoNamespace}})
 	}
 

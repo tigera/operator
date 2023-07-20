@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/tenancy"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -72,7 +74,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
-	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	managerController, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return fmt.Errorf("failed to create manager-controller: %w", err)
 	}
@@ -83,43 +85,32 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the tigera-manager namespace.
-	installNS := render.ManagerNamespace
-	truthNS := common.OperatorNamespace()
-	watchNamespaces := []string{installNS, truthNS}
-	if opts.MultiTenant {
-		// For multi-tenant, the manager could be installed in any number of namespaces.
-		// So, we need to watch the resources we care about across all namespaces.
-		installNS = ""
-		truthNS = ""
-		watchNamespaces = []string{""}
-	}
+	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.ManagerNamespace)
 
-	err = utils.AddSecretsWatch(controller, render.VoltronLinseedTLS, installNS)
+	err = utils.AddSecretsWatch(managerController, render.VoltronLinseedTLS, installNS)
 	if err != nil {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+	go utils.WaitToAddLicenseKeyWatch(managerController, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, managerController, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(managerController, k8sClient, log, []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: installNS},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
 	})
 
 	// Watch for changes to primary resource Manager
-	err = controller.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
+	err = managerController.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
-	err = utils.AddAPIServerWatch(controller)
+	err = utils.AddAPIServerWatch(managerController)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
 
-	err = utils.AddComplianceWatch(controller)
+	err = utils.AddComplianceWatch(managerController)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch compliance resource: %w", err)
 	}
@@ -131,56 +122,56 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusTLSSecretName, certificatemanagement.CASecretName,
 		} {
-			if err = utils.AddSecretsWatch(controller, secretName, namespace); err != nil {
+			if err = utils.AddSecretsWatch(managerController, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
 		}
 	}
 
 	// This may or may not exist, it depends on what the OIDC type is in the Authentication CR.
-	if err = utils.AddConfigMapWatch(controller, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(managerController, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
 	}
 
-	if err = utils.AddConfigMapWatch(controller, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(managerController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
-	if err = utils.AddNetworkWatch(controller); err != nil {
+	if err = utils.AddNetworkWatch(managerController); err != nil {
 		return fmt.Errorf("manager-controller failed to watch Network resource: %w", err)
 	}
 
-	if err = imageset.AddImageSetWatch(controller); err != nil {
+	if err = imageset.AddImageSetWatch(managerController); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddNamespaceWatch(controller, common.TigeraPrometheusNamespace); err != nil {
+	if err = utils.AddNamespaceWatch(managerController, common.TigeraPrometheusNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
-	err = controller.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
-	err = controller.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
-	err = controller.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	err = managerController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(controller, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+	if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
 	// Watch for changes to TigeraStatus.
-	if err = utils.AddTigeraStatusWatch(controller, ResourceName); err != nil {
+	if err = utils.AddTigeraStatusWatch(managerController, ResourceName); err != nil {
 		return fmt.Errorf("manager-controller failed to watch manager Tigerastatus: %w", err)
 	}
 
@@ -345,14 +336,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Package up the request parameters needed to reconcile
-	common := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.ManagerNamespace)
+	req := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.ManagerNamespace)
 	args := ReconcileArgs{
 		Manager:      instance,
 		Variant:      variant,
 		Installation: installation,
 		License:      license,
 	}
-	return r.reconcileInstance(ctx, logc, args, common)
+	return r.reconcileInstance(ctx, logc, args, req)
 }
 
 type ReconcileArgs struct {
@@ -583,11 +574,11 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, args.Manager)
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, args.Manager)
 
 	// Set replicas to 1 for management or managed clusters.
 	// TODO Remove after MCM tigera-manager HA deployment is supported.
-	var replicas *int32 = args.Installation.ControlPlaneReplicas
+	var replicas = args.Installation.ControlPlaneReplicas
 	if managementCluster != nil || managementClusterConnection != nil {
 		var mcmReplicas int32 = 1
 		replicas = &mcmReplicas
@@ -657,7 +648,7 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 		}),
 	}
 	for _, component := range components {
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		if err := componentHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 			return reconcile.Result{}, err
 		}

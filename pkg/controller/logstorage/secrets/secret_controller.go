@@ -166,17 +166,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
-	// TODO: Some of these should queue updates for all tenants.
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, truthNS); err != nil {
+	if err = utils.AddSecretsWatchWithHandler(c, relasticsearch.PublicCertSecret, truthNS, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
+	if err = utils.AddSecretsWatchWithHandler(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
-	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, truthNS); err != nil {
+	if err = utils.AddSecretsWatchWithHandler(c, monitor.PrometheusClientTLSSecretName, truthNS, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
-	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
+	if err := utils.AddServiceWatchWithHandler(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, installNS); err != nil {

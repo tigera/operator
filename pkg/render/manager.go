@@ -844,13 +844,13 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(true, ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant. Not needed in multi-tenant.
+			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ESGatewaySourceEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(true, c.cfg.Namespace).LinseedEntityRule(),
+			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

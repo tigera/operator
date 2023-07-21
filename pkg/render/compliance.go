@@ -1624,12 +1624,12 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		})
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{
@@ -1666,12 +1666,12 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		},
 	}
 
@@ -1687,7 +1687,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, "").ManagerEntityRule(),
+			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
 		},
 	}...)
 
@@ -1695,7 +1695,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   networkpolicy.Helper(false, "").ManagerSourceEntityRule(),
+			Source:   networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(complianceServerPort),
 			},

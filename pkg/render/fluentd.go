@@ -169,10 +169,9 @@ type FluentdConfiguration struct {
 	TrustedBundle   certificatemanagement.TrustedBundle
 	ManagedCluster  bool
 
-	// In a management cluster, Linseed may be in one of two locations, depending on how the cluster is being run.
-	// For single-tenant clusters, it's always in tigera-elasticsearch.
-	// For multi-tenant management clusters, the management cluster writes to its own linseed instance in "tigera-tenant"
-	LinseedNamespace string
+	// Set if running as a multi-tenant management cluster. Configures the management cluster's
+	// own fluentd daemonset.
+	Tenant *operatorv1.Tenant
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -618,9 +617,16 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
+	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
+	// namespace. For multi-tenant management clusters, this may vary.
+	linseedNS := ElasticsearchNamespace
+	if c.cfg.Tenant != nil {
+		linseedNS = c.cfg.Tenant.Namespace
+	}
+
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, c.cfg.LinseedNamespace)},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, linseedNS)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},
@@ -630,7 +636,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
-		{Name: "TENANT_ID", Value: "tigera"}, // TODO
+	}
+
+	if c.cfg.Tenant != nil {
+		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {

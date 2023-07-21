@@ -63,9 +63,10 @@ func (r *LinseedSubController) createESKubeControllers(
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		// Add the internal traffic secret of the manager pod to the trusted bundle. We need this so we can talk to Voltron.
+		// This certificate is provisioned by the manager controller, and so we need to load it lazily once it appears.
 		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error querying for internal manager TLS certificate (%s)", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return err
 		}
 	}

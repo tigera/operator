@@ -40,8 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// SecretsController provisions all the necessary key pairs, secrets, and trusted CA bundles needed by
-// the Calico installation.
 type ClusterCAController struct {
 	client        client.Client
 	scheme        *runtime.Scheme

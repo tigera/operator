@@ -114,7 +114,7 @@ var (
 	}
 
 	ComponentESGateway = component{
-		Version:  "latest",
+		Version:  "master",
 		Image:    "tigera/es-gateway",
 		Registry: "",
 	}
@@ -126,8 +126,8 @@ var (
 	}
 
 	ComponentFluentd = component{
-		Version:  "latest",
-		Image:    "tigera/fluentd-docker",
+		Version:  "master",
+		Image:    "tigera/fluentd",
 		Registry: "",
 	}
 
@@ -256,7 +256,7 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version:  "latest",
+		Version:  "master",
 		Image:    "tigera/kube-controllers",
 		Registry: "",
 	}

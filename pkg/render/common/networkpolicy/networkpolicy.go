@@ -189,13 +189,23 @@ var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 	},
 }
 
-// Helper creates a helper for building network policies. It takes two arguments:
-// - mt: True if running in multi-tenant mode, false otherwise.
+// Helper creates a helper for building network policies for multi-tenant capable components.
+// It takes two arguments:
+// - mt: true if running in multi-tenant mode, false otherwise.
 // - ns: The tenant's namespce.
 func Helper(mt bool, ns string) *NetworkPolicyHelper {
 	return &NetworkPolicyHelper{
 		multiTenant: mt,
 		ns:          ns,
+	}
+}
+
+// DefaultHelper returns a NetworkPolicyHelper configured for services that
+// only run in single-tenant clusters.
+func DefaultHelper() *NetworkPolicyHelper {
+	return &NetworkPolicyHelper{
+		multiTenant: false,
+		ns:          "",
 	}
 }
 

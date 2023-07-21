@@ -107,11 +107,15 @@ func AddNamespaceWatch(c controller.Controller, name string) error {
 type MetaMatch func(metav1.ObjectMeta) bool
 
 func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
+	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+}
+
+func AddSecretsWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, s, &handler.EnqueueRequestForObject{}, metaMatches...)
+	return AddNamespacedWatch(c, s, h, metaMatches...)
 }
 
 func AddConfigMapWatch(c controller.Controller, name, namespace string, h handler.EventHandler) error {
@@ -123,10 +127,14 @@ func AddConfigMapWatch(c controller.Controller, name, namespace string, h handle
 }
 
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
+	return AddServiceWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
+}
+
+func AddServiceWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler) error {
 	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-	}, &handler.EnqueueRequestForObject{})
+	}, h)
 }
 
 func AddDeploymentWatch(c controller.Controller, name, namespace string) error {

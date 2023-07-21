@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	TenantCASecretName                = "tigera-ca-private-tenant"
 	CASecretName                      = "tigera-ca-private"
 	TrustedCertConfigMapName          = "tigera-ca-bundle"
 	TrustedCertConfigMapKeyName       = "tigera-ca-bundle.crt"

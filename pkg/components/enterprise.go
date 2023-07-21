@@ -115,8 +115,8 @@ var (
 
 	ComponentESGateway = component{
 		Version:  "latest",
-		Image:    "casey/es-gateway",
-		Registry: "gcr.io/unique-caldron-775/",
+		Image:    "tigera/es-gateway",
+		Registry: "",
 	}
 
 	ComponentLinseed = component{
@@ -126,8 +126,8 @@ var (
 	}
 
 	ComponentFluentd = component{
-		Version:  "master",
-		Image:    "tigera/fluentd",
+		Version:  "latest",
+		Image:    "tigera/fluentd-docker",
 		Registry: "",
 	}
 
@@ -257,8 +257,8 @@ var (
 
 	ComponentTigeraKubeControllers = component{
 		Version:  "latest",
-		Image:    "casey/kube-controllers",
-		Registry: "gcr.io/unique-caldron-775/",
+		Image:    "tigera/kube-controllers",
+		Registry: "",
 	}
 
 	ComponentTigeraNode = component{

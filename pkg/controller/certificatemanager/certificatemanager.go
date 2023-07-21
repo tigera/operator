@@ -61,6 +61,11 @@ type certificateManager struct {
 	keyPair *certificatemanagement.KeyPair
 	log     logr.Logger
 	tenant  *operatorv1.Tenant
+
+	// Controls whether this instance of the certificate manager is allowed to
+	// create new CAs. Most instances should simply read the existing CA and use it to sign
+	// certificates.
+	allowCACreation bool
 }
 
 // CertificateManager can sign new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
@@ -98,6 +103,13 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 
 type Option func(cm *certificateManager) error
 
+func AllowCACreation() Option {
+	return func(cm *certificateManager) error {
+		cm.allowCACreation = true
+		return nil
+	}
+}
+
 func WithLogger(log logr.Logger) Option {
 	return func(cm *certificateManager) error {
 		cm.log = log
@@ -113,7 +125,6 @@ func WithTenant(t *operatorv1.Tenant) Option {
 }
 
 func CreateWithOptions(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
-	log.V(2).Info("Creating CertificateManager in namespace", "ns", ns)
 	var (
 		cryptoCA                      *crypto.CA
 		csrImage                      string
@@ -124,18 +135,19 @@ func CreateWithOptions(cli client.Client, installation *operatorv1.InstallationS
 
 	// Create a certificatemanager instance and apply any user-provided options to
 	// initialize it.
-	cm := &certificateManager{}
+	cm := &certificateManager{log: log}
 	for _, opt := range opts {
 		if err := opt(cm); err != nil {
 			return nil, err
 		}
 	}
+	cm.log.V(2).Info("Creating CertificateManager in namespace", "ns", ns)
 
 	// Determine the name of the CA secret to use. Default to the tigera CA name. For
 	// per-tenant CA secrets, we use a different name for differentiation.
 	caSecretName := certificatemanagement.CASecretName
 	if cm.tenant != nil {
-		caSecretName = certificatemanagement.CASecretName + "-tenant"
+		caSecretName = certificatemanagement.TenantCASecretName
 	}
 
 	if installation != nil && installation.CertificateManagement != nil {
@@ -159,17 +171,24 @@ func CreateWithOptions(cli client.Client, installation *operatorv1.InstallationS
 		certificatePEM = certificateManagement.CACert
 	} else {
 		// Using operator-managed certificates. Check to see if we have already provisioned one.
+		cm.log.V(2).Info("Looking for an existing CA", "secret", fmt.Sprintf("%s/%s", ns, caSecretName))
 		caSecret := &corev1.Secret{}
 		k := types.NamespacedName{Name: caSecretName, Namespace: ns}
 		if err = cli.Get(context.Background(), k, caSecret); err != nil && !kerrors.IsNotFound(err) {
 			return nil, err
+		} else if kerrors.IsNotFound(err) {
+			cm.log.V(2).Info("No existing CA secret")
 		}
 
 		if len(caSecret.Data) == 0 ||
 			len(caSecret.Data[corev1.TLSPrivateKeyKey]) == 0 ||
 			len(caSecret.Data[corev1.TLSCertKey]) == 0 {
+
+			if !cm.allowCACreation {
+				return nil, fmt.Errorf("CA secret %s/%s does not exist yet", ns, caSecretName)
+			}
 			// No existing CA data - we need to generate a new one.
-			log.Info("Generating a new CA", "namespace", ns)
+			cm.log.Info("Generating a new CA", "namespace", ns)
 			cryptoCA, err = tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 			if err != nil {
 				return nil, err
@@ -181,7 +200,7 @@ func CreateWithOptions(cli client.Client, installation *operatorv1.InstallationS
 			privateKeyPEM, certificatePEM = keyContent.Bytes(), crtContent.Bytes()
 		} else {
 			// Found an existing CA - use that.
-			log.V(2).Info("Found an existing CA secret")
+			cm.log.V(2).Info("Found an existing CA secret")
 			privateKeyPEM, certificatePEM = caSecret.Data[corev1.TLSPrivateKeyKey], caSecret.Data[corev1.TLSCertKey]
 			cryptoCA, err = crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
 			if err != nil {
@@ -209,7 +228,7 @@ func CreateWithOptions(cli client.Client, installation *operatorv1.InstallationS
 		CertificateManagement: certificateManagement,
 	}
 
-	log.V(2).Info("Created CertificateManager", "ns", ns, "authority", cm.AuthorityKeyId)
+	cm.log.V(2).Info("Created CertificateManager", "ns", ns, "authority", cm.AuthorityKeyId)
 	return cm, nil
 }
 

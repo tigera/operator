@@ -39,7 +39,8 @@ type LogCollectorSpec struct {
 
 	// If running as a multi-tenant management cluster, the namespace in which
 	// the management cluster's tenant services are running.
-	MultiTenantManagementClusterNamespace string
+	// +optional
+	MultiTenantManagementClusterNamespace string `json:"multiTenantManagementClusterNamespace,omitempty"`
 }
 
 type CollectProcessPathOption string

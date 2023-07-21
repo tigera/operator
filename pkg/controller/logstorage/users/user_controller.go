@@ -16,6 +16,8 @@ package users
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -40,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 var log = logf.Log.WithName("controller_logstorage_users")
@@ -96,19 +99,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			return fmt.Errorf("log-storage-controller failed to watch Tenant resource: %w", err)
 		}
 	}
-
-	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the tigera-manager namespace.
-	// installNS := render.ElasticsearchNamespace
-	// truthNS := common.OperatorNamespace()
-	// namespaces := []string{installNS, truthNS}
-	// if opts.MultiTenant {
-	// 	// For multi-tenant, we could be installed in any number of namespaces.
-	// 	// So, watch the resources we care about across all namespaces.
-	// 	installNS = ""
-	// 	truthNS = ""
-	// 	namespaces = []string{""}
-	// }
 
 	return nil
 }
@@ -177,32 +167,40 @@ func (r *UserController) reconcile(ctx context.Context, reqLogger logr.Logger, a
 	if args.Tenant != nil {
 		tenantID = args.Tenant.Spec.ID
 		if tenantID == "" {
-			// TODO: Move validation to a common location.
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Tenant resource does not specify an ID", nil, reqLogger)
 			return reconcile.Result{}, nil
 		}
 	}
 	linseedUser := utils.LinseedUser(tenantID)
 
-	// Query any existing username and password we've created for this Linseed instance. If one already exists, we'll simply
+	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
 	basicCreds := corev1.Secret{}
+	credentialSecrets := []client.Object{}
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: request.TruthNamespace()}
 	if err := r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
 		// Create the secret to provision into the cluster.
-		// TODO: How does this work for single-tenant? Who copies this from tigera-operator to tigera-elasticsearch?
+		pw, err := randomPassword(16)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error generating Linseed password", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 		basicCreds = corev1.Secret{}
 		basicCreds.Name = render.ElasticsearchLinseedUserSecret
 		basicCreds.Namespace = request.TruthNamespace()
-		basicCreds.StringData = map[string]string{
-			"username": linseedUser.Username,
-			"password": "temp-hacky-password", // TODO: Generate unique users and passwords per-tenant, per management cluster.
-		}
+		basicCreds.StringData = map[string]string{"username": linseedUser.Username, "password": pw}
+
+		// Make sure we install the generated credentials into the truth namespace.
+		credentialSecrets = append(credentialSecrets, &basicCreds)
 	}
-	credentialComponent := render.NewPassthrough(&basicCreds)
+	if request.TruthNamespace() != request.InstallNamespace() {
+		// Copy the credentials into the install namespace.
+		credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(request.InstallNamespace(), &basicCreds)[0])
+	}
+	credentialComponent := render.NewPassthrough(credentialSecrets...)
 
 	// In standard installs, the LogStorage owns the secret. For multi-tenant, it's owned by the Manager instance.
 	var hdler utils.ComponentHandler
@@ -244,14 +242,20 @@ func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string
 		return fmt.Errorf("Unable to find password in secret")
 	}
 
-	// TODO - make this multi-tenant. Separate roles, as well as separate user names.
+	// Create the user in ES.
 	user := utils.LinseedUser(tenantID)
 	user.Password = password
-
 	if err = esClient.CreateUser(ctx, user); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
 		return err
 	}
 
 	return nil
+}
+
+func randomPassword(length int) (string, error) {
+	byts := make([]byte, length)
+	_, err := rand.Read(byts)
+
+	return base64.URLEncoding.EncodeToString(byts), err
 }

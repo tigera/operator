@@ -335,7 +335,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, "").ManagerEntityRule(),
+			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
 		},
 	}
 
@@ -343,7 +343,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).LinseedEntityRule(),
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		})
 	}
 

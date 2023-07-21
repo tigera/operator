@@ -17,6 +17,7 @@ package linseed
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -265,9 +266,9 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	}
 
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
-	opts := []certificatemanager.Option{certificatemanager.WithLogger(reqLogger)}
-	if args.Tenant != nil {
-		opts = append(opts, certificatemanager.WithTenant(args.Tenant))
+	opts := []certificatemanager.Option{
+		certificatemanager.WithLogger(reqLogger),
+		certificatemanager.WithTenant(args.Tenant),
 	}
 	cm, err := certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, request.TruthNamespace(), opts...)
 	if err != nil {
@@ -305,15 +306,15 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	}
 
 	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
-	// These credentials are created by the main elasticsearch controller and given to ES via the ECK operator.
-	basicCreds := corev1.Secret{}
+	// These credentials are created by the elasticsearch users controller. Delay installing Linseed until available.
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: request.TruthNamespace()}
-	if err = r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
+	if err = r.client.Get(ctx, key, &corev1.Secret{}); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed credential Secret %s", key), err, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
-	credentialComponent := render.NewPassthrough(&basicCreds)
 
 	// Determine the namespaces to which we must bind the linseed cluster role.
 	bindNamespaces := []string{request.InstallNamespace()}
@@ -352,14 +353,11 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, args.LogStorage)
 	}
-	for _, comp := range []render.Component{credentialComponent, linseedComponent} {
-		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	if err := hdler.CreateOrUpdateOrDelete(ctx, linseedComponent, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
-	// TODO: Do we need either of these for multi-tenant systems?
 	if !r.multiTenant {
 		// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
 		if err := r.createESGateway(
@@ -376,8 +374,9 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 			return reconcile.Result{}, err
 		}
 
-		// TODO: This is a temporary location for this. Ideally this goes in its own controller, as it likely
-		// needs to be multi-tenant!
+		// TODO: Figure out what to do with this. Right now it's not installed for multi-tenant, but it does serve one
+		// crucial purpose - copying public certs into managed clusters. Would be nice to do away with that and remove the need
+		// for it altogether.
 		if err := r.createESKubeControllers(
 			ctx,
 			request,
@@ -390,6 +389,7 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 		}
 
 		// TODO: For now, install this here. It probably should have its own controller.
+		// I am not very familiar with this component - need to investigate and propose multi-tenant resolution.
 		if err := r.createESMetrics(
 			install,
 			variant,

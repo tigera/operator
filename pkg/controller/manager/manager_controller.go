@@ -266,10 +266,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 		ns = request.Namespace
 
-		// Check if there is a manager in this namespace.
+		// Check if there is a Tenant in this namespace.
 		tenant, err = utils.GetTenant(ctx, r.client, request.Namespace)
 		if errors.IsNotFound(err) {
-			// No tenant in this namespace. Ignore the update.
 			logc.Info("No Tenant in this Namespace, skip")
 			return reconcile.Result{}, nil
 		} else if err != nil {

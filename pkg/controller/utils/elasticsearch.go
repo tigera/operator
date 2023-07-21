@@ -439,6 +439,8 @@ func calculateRolloverAge(retention int) string {
 	return age
 }
 
+// getClientCredentials gets the client credentials used by the operator to talk to Elasticsearch. The operator
+// uses the ES admin credentials in order to provision users and ILM policies.
 func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, esSecret); err != nil {
@@ -454,7 +456,6 @@ func getClientCredentials(client client.Client, ctx context.Context) (string, st
 	if err != nil {
 		return "", "", nil, err
 	}
-	// return string(esSecret.Data["username"]), string(esSecret.Data["password"]), roots, err
 	pass := string(esSecret.Data["elastic"])
 	return "elastic", pass, roots, nil
 }

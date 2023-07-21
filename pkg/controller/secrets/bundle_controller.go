@@ -16,32 +16,25 @@ package secrets
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
-	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// SecretsController provisions all the necessary key pairs, secrets, and trusted CA bundles needed by
-// the Calico installation.
+// BundleController is responsible for provisioning trusted bundles into each Tigera namespace.
 type BundleController struct {
 	client        client.Client
 	scheme        *runtime.Scheme
 	status        status.StatusManager
 	clusterDomain string
-	multiTenant   bool
 	log           logr.Logger
 }
 
@@ -55,24 +48,10 @@ func AddBundleController(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:        mgr.GetScheme(),
 		clusterDomain: opts.ClusterDomain,
 		status:        status.New(mgr.GetClient(), "secrets", opts.KubernetesVersion),
-		log:           logf.Log.WithName("controller_tenant_secrets"),
+		log:           logf.Log.WithName("controller_ca_bundle"),
 	}
 	r.status.Run(opts.ShutdownContext)
 
-	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("tenant-secrets-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("tenant-secrets-controller failed to watch Tenant resource: %w", err)
-	}
-
-	// TODO Watch all the secrets created by this controller so we can regenerate any that are deleted
-
-	// Catch if something modifies the resources that this controller consumes.
-	// TODO: Some of these should queue updates for all tenants.
 	return nil
 }
 

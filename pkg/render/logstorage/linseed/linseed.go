@@ -420,7 +420,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(true, l.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerEntityRule(),
 		})
 	}
 
@@ -467,7 +467,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.Helper(true, l.cfg.Namespace).ManagerSourceEntityRule(),
+					Source:      networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerSourceEntityRule(),
 					Destination: linseedIngressDestinationEntityRule,
 				},
 				{

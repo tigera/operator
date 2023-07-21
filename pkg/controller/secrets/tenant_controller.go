@@ -43,8 +43,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// SecretsController provisions all the necessary key pairs, secrets, and trusted CA bundles needed by
-// the Calico installation.
+// TenantControllers runs in multi-tenant mode and provisions a CA per-tenant, as well as generating
+// per-tenant keypairs and a trusted bundle.
 type TenantController struct {
 	client        client.Client
 	scheme        *runtime.Scheme
@@ -80,8 +80,6 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 
 	// TODO Watch all the secrets created by this controller so we can regenerate any that are deleted
 
-	// Catch if something modifies the resources that this controller consumes.
-	// TODO: Some of these should queue updates for all tenants.
 	return nil
 }
 

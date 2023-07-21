@@ -411,12 +411,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	// Determine whether or not this is a multi-tenant management cluster.
 	multiTenantManagement := r.multiTenant && managementCluster != nil
-	multiTenantManagement = true // CASEY: HACK for testing
 
 	// The name of the Linseed certificate varies based on if this is a managed cluster or not.
 	// For standalone and management clusters, we just use Linseed's actual certificate.
 	linseedCertName := render.TigeraLinseedSecret
 	linseedCertNamespace := common.OperatorNamespace()
+	var tenant *operatorv1.Tenant
 	if managedCluster {
 		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
 		// management cluster into the managed cluster by kube-controllers.
@@ -424,8 +424,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	} else if multiTenantManagement {
 		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace.
 		// Instead, look for a Tenant instance that represent's the management cluster's own tenant.
-		// TODO: Don't hard-code this.
-		linseedCertNamespace = "tigera-tenant"
+		tenant, err = utils.GetTenant(ctx, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		linseedCertNamespace = tenant.Namespace
 	}
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertName, linseedCertNamespace)
 	if err != nil {
@@ -547,13 +550,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
-	// namespace. For multi-tenant management clusters, this may vary.
-	linseedNS := render.ElasticsearchNamespace
-	if multiTenantManagement {
-		linseedNS = "tigera-tenant" // TODO: Hardcoding for testing.
-	}
-
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:         instance,
 		ESClusterConfig:      esClusterConfig,
@@ -570,7 +566,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
 		UseSyslogCertificate: useSyslogCertificate,
-		LinseedNamespace:     linseedNS,
+		Tenant:               tenant,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)

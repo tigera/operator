@@ -1058,13 +1058,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// TODO: Creation of the manager keypair should be handled in the manager controller.
+	// The manager internal TLS certificate is needed by kube-controllers in order to establish mTLS with Voltron
+	// in management clusters. kube-controllers copies the es-gateway and linseed certificates to managed clusters.
+	// TODO: We should ideally move the copying of these secrets elsehwere, since kube-controllers isn't installed in multi-tenant
+	// clusters right now. Without something doing this, fluentd in managed clusters won't be able to verify Voltron.
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
-		if err != nil {
-			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
+		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Error querying internal manager TLS secret (%s)", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1278,7 +1280,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 			},

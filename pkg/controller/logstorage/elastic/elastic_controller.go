@@ -541,9 +541,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	// Query credentials to be installed into ES. These will be added to the Elasticsearch instance.
-	// These credentials are created in other controllers as needed.
-
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
 	// create the ComponentHandler from the managementClusterConnection.
 	var hdler utils.ComponentHandler
@@ -602,11 +599,12 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, nil
 		}
 
-		// TODO: Need to handle this gracefully, since these will only succeed after ES is properly running.
+		// TODO:
 		// In multi-tenant mode, and probably single-tenant as well, this should be handled by someone other than the operator.
 		// Either out of band, or by Linseed.
 		err := r.applyILMPolicies(ls, reqLogger, ctx)
 		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
 			return reconcile.Result{}, err
 		}
 

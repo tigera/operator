@@ -244,12 +244,12 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 	}
 
 	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName, render.TyphaCAConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, active.ActiveConfigMapName, common.CalicoNamespace); err != nil {
+	if err = utils.AddConfigMapWatch(c, active.ActiveConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
@@ -1052,12 +1052,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// TODO: Manager certificate should be handled in its own controller, as should generation of the root CA.
-	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.CreateWithOptions(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// TODO: Creation of the manager keypair should be handled in the manager controller.
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
@@ -1275,8 +1276,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			Namespace:       common.CalicoNamespace,
 			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName, kubecontrollers.KubeControllerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// this controller is responsible for rendering the tigera-ca-private secret.
-				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
 				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
@@ -1285,6 +1284,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
+
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
 		K8sServiceEp:           k8sapi.Endpoint,

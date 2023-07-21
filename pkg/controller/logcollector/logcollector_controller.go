@@ -152,7 +152,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}

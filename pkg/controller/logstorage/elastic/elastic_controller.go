@@ -173,7 +173,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -182,7 +182,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.OIDCUsersEsSecreteName,
 		render.ElasticsearchAdminUserSecret,
 	} {
-		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace); err != nil {
+		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 		}
 	}
@@ -239,7 +239,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 

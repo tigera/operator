@@ -144,7 +144,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, installNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, installNS); err != nil {
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, installNS, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -265,7 +265,11 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	}
 
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
-	cm, err := certificatemanager.CreateWithLogger(r.client, install, r.clusterDomain, request.TruthNamespace(), reqLogger)
+	opts := []certificatemanager.Option{certificatemanager.WithLogger(reqLogger)}
+	if args.Tenant != nil {
+		opts = append(opts, certificatemanager.WithTenant(args.Tenant))
+	}
+	cm, err := certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, request.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err

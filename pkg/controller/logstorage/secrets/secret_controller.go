@@ -157,6 +157,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
+	// Watch trusted bundle configmaps.
+	if err = utils.AddConfigMapWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace(), eventHandler); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
+	}
+	if err = utils.AddConfigMapWatch(c, certificatemanagement.TenantCASecretName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
+	}
+
 	// Catch if something modifies the resources that this controller consumes.
 	// TODO: Some of these should queue updates for all tenants.
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, truthNS); err != nil {
@@ -424,17 +432,17 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, req oct
 			return nil, err
 		}
 		collection.keypairs = append(collection.keypairs, metricsServerKeyPair)
-	}
 
-	// ES gateway keypair.
-	gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, req.InstallNamespace(), r.clusterDomain)
-	gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, req.InstallNamespace(), r.clusterDomain)...)
-	gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, req.TruthNamespace(), gatewayDNSNames)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
-		return nil, err
+		// ES gateway keypair.
+		gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, req.InstallNamespace(), r.clusterDomain)
+		gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, req.InstallNamespace(), r.clusterDomain)...)
+		gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, req.TruthNamespace(), gatewayDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+			return nil, err
+		}
+		collection.keypairs = append(collection.keypairs, gatewayKeyPair)
 	}
-	collection.keypairs = append(collection.keypairs, gatewayKeyPair)
 
 	// Create a server key pair for Linseed to present to clients.
 	//
@@ -506,6 +514,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, req octrl.Re
 		// TODO: Why is this needed in addition to the elasticsearch internal cert above?
 		certificatemanagement.CASecretName: common.OperatorNamespace(),
 	}
+
 	for certName, certNamespace := range certs {
 		cert, err := cm.GetCertificate(r.client, certName, certNamespace)
 		if err != nil {
@@ -519,11 +528,6 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, req octrl.Re
 			collection.upstreamCerts = append(collection.upstreamCerts, cert)
 		}
 	}
-
-	// Add the certificate manager's keypair. This ensures that the secret used to sign certificates and keys
-	// in this tenant's namespace is saved for other controllers to use.
-	// TODO: This might not be the right place for this.
-	collection.keypairs = append(collection.keypairs, cm.KeyPair())
 
 	return &collection, nil
 }

@@ -152,7 +152,7 @@ type ManagerConfiguration struct {
 
 	// Certificate bundle used by the manager pod to verify certificates presented
 	// by clients as part of mTLS authentication.
-	TrustedCertBundle certificatemanagement.TrustedBundle
+	TrustedCertBundle certificatemanagement.TrustedBundleRO
 
 	ClusterDomain           string
 	ESLicenseType           ElasticsearchLicenseType

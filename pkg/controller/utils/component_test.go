@@ -1124,6 +1124,253 @@ var _ = Describe("Component handler tests", func() {
 		Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
 	})
 
+	Context("liveness and readiness probes", func() {
+		It("updates liveness and readiness probe default values", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-deployment",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name:           "test-deployment-container",
+											LivenessProbe:  &corev1.Probe{},
+											ReadinessProbe: &corev1.Probe{},
+										},
+									},
+								},
+							},
+						},
+					},
+					&apps.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-daemonset",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DaemonSetSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name:           "test-daemonset-container",
+											LivenessProbe:  &corev1.Probe{},
+											ReadinessProbe: &corev1.Probe{},
+										},
+									},
+								},
+							},
+						},
+					},
+					&esv1.Elasticsearch{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-elasticsearch",
+							Namespace: "test-namespace",
+						},
+						Spec: esv1.ElasticsearchSpec{
+							NodeSets: []esv1.NodeSet{
+								{
+									PodTemplate: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
+											Containers: []corev1.Container{
+												{
+													Name:           "test-elasticsearch-container",
+													LivenessProbe:  &corev1.Probe{},
+													ReadinessProbe: &corev1.Probe{},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					&kbv1.Kibana{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-kibana",
+							Namespace: "test-namespace",
+						},
+						Spec: kbv1.KibanaSpec{
+							PodTemplate: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name:           "test-kibana-container",
+											LivenessProbe:  &corev1.Probe{},
+											ReadinessProbe: &corev1.Probe{},
+										},
+									},
+								},
+							},
+						},
+					},
+					&monitoringv1.Prometheus{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-prometheus",
+							Namespace: "test-namespace",
+						},
+						Spec: monitoringv1.PrometheusSpec{
+							CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+								Containers: []corev1.Container{
+									{
+										Name:           "test-prometheus-container",
+										LivenessProbe:  &corev1.Probe{},
+										ReadinessProbe: &corev1.Probe{},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("checking that liveness and readiness probe default values are set")
+			var containers []corev1.Container
+
+			var deploy apps.Deployment
+			err = c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, &deploy)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, deploy.Spec.Template.Spec.Containers...)
+
+			var ds apps.DaemonSet
+			err = c.Get(ctx, client.ObjectKey{Name: "test-daemonset", Namespace: "test-namespace"}, &ds)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, ds.Spec.Template.Spec.Containers...)
+
+			var es esv1.Elasticsearch
+			err = c.Get(ctx, client.ObjectKey{Name: "test-elasticsearch", Namespace: "test-namespace"}, &es)
+			Expect(err).NotTo(HaveOccurred())
+			for _, nodeset := range es.Spec.NodeSets {
+				containers = append(containers, nodeset.PodTemplate.Spec.Containers...)
+			}
+
+			var kb kbv1.Kibana
+			err = c.Get(ctx, client.ObjectKey{Name: "test-kibana", Namespace: "test-namespace"}, &kb)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, kb.Spec.PodTemplate.Spec.Containers...)
+
+			var prom monitoringv1.Prometheus
+			err = c.Get(ctx, client.ObjectKey{Name: "test-prometheus", Namespace: "test-namespace"}, &prom)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, prom.Spec.Containers...)
+
+			Expect(containers).To(HaveLen(5))
+			for _, c := range containers {
+				Expect(c.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+				Expect(c.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(60))
+				Expect(c.LivenessProbe.SuccessThreshold).To(BeEquivalentTo(1))
+				Expect(c.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+
+				Expect(c.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+				Expect(c.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(30))
+				Expect(c.ReadinessProbe.SuccessThreshold).To(BeEquivalentTo(1))
+				Expect(c.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+			}
+		})
+
+		It("should not modify liveness and readiness probes when values are set", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-deployment",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name: "test-deployment-container",
+											LivenessProbe: &corev1.Probe{
+												FailureThreshold: 2,
+												PeriodSeconds:    3,
+												SuccessThreshold: 5,
+												TimeoutSeconds:   7,
+											},
+											ReadinessProbe: &corev1.Probe{
+												FailureThreshold: 11,
+												PeriodSeconds:    13,
+												SuccessThreshold: 17,
+												TimeoutSeconds:   19,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("checking that liveness and readiness probe values are not changed")
+			var deploy apps.Deployment
+			err = c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, &deploy)
+			Expect(err).NotTo(HaveOccurred())
+			containers := deploy.Spec.Template.Spec.Containers
+
+			Expect(containers).To(HaveLen(1))
+			Expect(containers[0].LivenessProbe.FailureThreshold).To(BeEquivalentTo(2))
+			Expect(containers[0].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(3))
+			Expect(containers[0].LivenessProbe.SuccessThreshold).To(BeEquivalentTo(5))
+			Expect(containers[0].LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(7))
+			Expect(containers[0].ReadinessProbe.FailureThreshold).To(BeEquivalentTo(11))
+			Expect(containers[0].ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(13))
+			Expect(containers[0].ReadinessProbe.SuccessThreshold).To(BeEquivalentTo(17))
+			Expect(containers[0].ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(19))
+		})
+
+		It("should not modify liveness and readiness probes when nil", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-deployment",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name: "test-deployment-container",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("checking that liveness and readiness probes are still nil")
+			var deploy apps.Deployment
+			err = c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, &deploy)
+			Expect(err).NotTo(HaveOccurred())
+			containers := deploy.Spec.Template.Spec.Containers
+
+			Expect(containers).To(HaveLen(1))
+			Expect(containers[0].LivenessProbe).To(BeNil())
+			Expect(containers[0].ReadinessProbe).To(BeNil())
+		})
+	})
+
 	Context("common labels and labelselector", func() {
 		It("updates daemonsets", func() {
 			fc := &fakeComponent{

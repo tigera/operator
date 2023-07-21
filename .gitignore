@@ -93,3 +93,4 @@ cscope.*
 .idea/
 # Test reports
 pkg/report
+ut/

@@ -22,11 +22,8 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-
 	"github.com/go-logr/logr"
-
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -41,7 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
-
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
@@ -102,8 +98,8 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	// Make sure any objects with images also have an image pull policy.
 	modifyPodSpec(obj, setImagePullPolicy)
 
-	// Modify Liveness and Readiness probe default values if they are set for this object.
-	maybeModifyProbes(obj)
+	// Modify Liveness and Readiness probe default values if they are not set for this object.
+	setProbeTimeouts(obj)
 
 	// Make sure we have our standard selector and pod labels
 	setStandardSelectorAndLabels(obj)
@@ -575,7 +571,7 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 	modifyPodSpec(obj, f)
 }
 
-// maybeModifyProbes modifies liveness and readiness probe default values if they are set in the object.
+// setProbeTimeouts modifies liveness and readiness probe default values if they are not set in the object.
 // Default values from k8s are sometimes too small, e.g., 1s for timeout, and Calico components might
 // be restarted prematurely. This function updates some threshold and seconds to a larger value when
 // they are not set in probes.
@@ -584,7 +580,7 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 // after around 3 minutes (3 default failure threshold).
 // For readiness probe: timeout defaults to 5s and period to 30s so that one component will be removed
 // from service after 1.5 minute (3 default failure threshold).
-func maybeModifyProbes(obj client.Object) {
+func setProbeTimeouts(obj client.Object) {
 	const (
 		failureThreshold            = 3
 		livenessProbePeriodSeconds  = 60

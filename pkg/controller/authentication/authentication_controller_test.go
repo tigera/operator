@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -163,7 +163,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -188,7 +188,7 @@ var _ = Describe("authentication controller tests", func() {
 
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -229,7 +229,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -289,7 +289,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -334,7 +334,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -492,7 +492,7 @@ var _ = Describe("authentication controller tests", func() {
 		}
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())

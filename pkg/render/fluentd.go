@@ -87,15 +87,6 @@ const (
 	LinseedVolumeMountPath = "/var/run/secrets/tigera.io/linseed/"
 	LinseedTokenPath       = "/var/run/secrets/tigera.io/linseed/token"
 
-	probeTimeoutSeconds        int32 = 5
-	probePeriodSeconds         int32 = 5
-	probeWindowsTimeoutSeconds int32 = 10
-	probeWindowsPeriodSeconds  int32 = 10
-
-	// Default failure threshold for probes is 3. For the startupProbe tolerate more failures.
-	probeFailureThreshold        int32 = 3
-	startupProbeFailureThreshold int32 = 10
-
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
 
@@ -131,17 +122,10 @@ type SplunkCredential struct {
 }
 
 func Fluentd(cfg *FluentdConfiguration) Component {
-	timeout := probeTimeoutSeconds
-	period := probePeriodSeconds
-	if cfg.OSType == rmeta.OSTypeWindows {
-		timeout = probeWindowsTimeoutSeconds
-		period = probeWindowsPeriodSeconds
-	}
-
 	return &fluentdComponent{
 		cfg:          cfg,
-		probeTimeout: timeout,
-		probePeriod:  period,
+		probeTimeout: 10,
+		probePeriod:  60,
 	}
 }
 
@@ -833,9 +817,10 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout * 2,
-		PeriodSeconds:    c.probePeriod * 2,
-		FailureThreshold: startupProbeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
+		// tolerate more failures for the startup probe
+		FailureThreshold: 10,
 	}
 }
 
@@ -846,9 +831,8 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout,
-		PeriodSeconds:    c.probePeriod,
-		FailureThreshold: probeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
 	}
 }
 
@@ -859,9 +843,8 @@ func (c *fluentdComponent) readiness() *corev1.Probe {
 				Command: c.readinessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout,
-		PeriodSeconds:    c.probePeriod,
-		FailureThreshold: probeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
 	}
 }
 

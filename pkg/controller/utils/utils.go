@@ -81,6 +81,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
+// TODO: Deprecate and delete these functions.
 func AddNetworkWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
@@ -106,26 +107,41 @@ func AddNamespaceWatch(c controller.Controller, name string) error {
 type MetaMatch func(metav1.ObjectMeta) bool
 
 func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
+	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+}
+
+func AddSecretsWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, s, metaMatches...)
+	return AddNamespacedWatch(c, s, h, metaMatches...)
 }
 
-func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
+func AddConfigMapWatch(c controller.Controller, name, namespace string, h handler.EventHandler) error {
 	cm := &corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, cm)
+	return AddNamespacedWatch(c, cm, h)
 }
 
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
+	return AddServiceWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
+}
+
+func AddServiceWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler) error {
 	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-	})
+	}, h)
+}
+
+func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
+	return AddNamespacedWatch(c, &appsv1.Deployment{
+		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
@@ -184,10 +200,10 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated.
-func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches ...MetaMatch) error {
+func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)
-	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
+	return c.Watch(&source.Kind{Type: obj}, h, pred)
 }
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
@@ -381,6 +397,31 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	return authentication, nil
 }
 
+// Get the Tenant instance in the given namespace.
+func GetTenant(ctx context.Context, cli client.Client, ns string) (*operatorv1.Tenant, error) {
+	key := client.ObjectKey{Name: "default", Namespace: ns}
+	instance := &operatorv1.Tenant{}
+	err := cli.Get(ctx, key, instance)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
+// Get all namespaces that contain a tenant.
+func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) {
+	namespaces := []string{}
+	tenants := operatorv1.TenantList{}
+	err := cli.List(ctx, &tenants)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tenants.Items {
+		namespaces = append(namespaces, t.Namespace)
+	}
+	return namespaces, nil
+}
+
 // GetInstallationStatus returns the current installation status, for use by other controllers.
 func GetInstallationStatus(ctx context.Context, client client.Client) (*operatorv1.InstallationStatus, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
@@ -549,12 +590,17 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				// No name or namespace match was specified. Match everything.
 				return true
 			}
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match.
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Return a match if the namespaces match, or if no namespace match was given.
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -563,7 +609,7 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
 				return false
 			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
+			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -572,7 +618,7 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 	}
 }

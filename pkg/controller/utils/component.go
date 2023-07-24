@@ -126,6 +126,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 		}
 		err = c.client.Create(ctx, obj)
 		if err != nil {
+			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
 			return err
 		}
 		return nil
@@ -151,6 +152,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 			// Do the Create() with the merged object so that we preserve external labels/annotations.
 			resetMetadataForCreate(mobj)
 			if err := c.client.Create(ctx, mobj); err != nil {
+				logCtx.WithValues("key", key).Error(err, "Failed to create Job.")
 				return err
 			}
 			return nil
@@ -169,6 +171,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
 				if err := c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to create Secret.")
 					return err
 				}
 				return nil

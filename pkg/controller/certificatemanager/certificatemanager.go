@@ -22,11 +22,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/openshift/library-go/pkg/crypto"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -57,6 +59,13 @@ type certificateManager struct {
 	*x509.Certificate
 	*crypto.CA
 	keyPair *certificatemanagement.KeyPair
+	log     logr.Logger
+	tenant  *operatorv1.Tenant
+
+	// Controls whether this instance of the certificate manager is allowed to
+	// create new CAs. Most instances should simply read the existing CA and use it to sign
+	// certificates.
+	allowCACreation bool
 }
 
 // CertificateManager can sign new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
@@ -81,11 +90,41 @@ type CertificateManager interface {
 	AddToStatusManager(manager status.StatusManager, namespace string)
 	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
 	KeyPair() certificatemanagement.KeyPairInterface
+	// Loads an existing trusted bundle to pass to render.
+	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 }
 
 // Create creates a signer of new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
 // brings their own secrets, CertificateManager will preserve and return them.
 func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string) (CertificateManager, error) {
+	opts := []Option{WithLogger(log)}
+	return CreateWithOptions(cli, installation, clusterDomain, ns, opts...)
+}
+
+type Option func(cm *certificateManager) error
+
+func AllowCACreation() Option {
+	return func(cm *certificateManager) error {
+		cm.allowCACreation = true
+		return nil
+	}
+}
+
+func WithLogger(log logr.Logger) Option {
+	return func(cm *certificateManager) error {
+		cm.log = log
+		return nil
+	}
+}
+
+func WithTenant(t *operatorv1.Tenant) Option {
+	return func(cm *certificateManager) error {
+		cm.tenant = t
+		return nil
+	}
+}
+
+func CreateWithOptions(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
 	var (
 		cryptoCA                      *crypto.CA
 		csrImage                      string
@@ -93,6 +132,23 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		certificateManagement         *operatorv1.CertificateManagement
 		err                           error
 	)
+
+	// Create a certificatemanager instance and apply any user-provided options to
+	// initialize it.
+	cm := &certificateManager{log: log}
+	for _, opt := range opts {
+		if err := opt(cm); err != nil {
+			return nil, err
+		}
+	}
+	cm.log.V(2).Info("Creating CertificateManager in namespace", "ns", ns)
+
+	// Determine the name of the CA secret to use. Default to the tigera CA name. For
+	// per-tenant CA secrets, we use a different name for differentiation.
+	caSecretName := certificatemanagement.CASecretName
+	if cm.tenant != nil {
+		caSecretName = certificatemanagement.TenantCASecretName
+	}
 
 	if installation != nil && installation.CertificateManagement != nil {
 		// Configured to use certificate management. Get the CACert from
@@ -115,16 +171,24 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		certificatePEM = certificateManagement.CACert
 	} else {
 		// Using operator-managed certificates. Check to see if we have already provisioned one.
+		cm.log.V(2).Info("Looking for an existing CA", "secret", fmt.Sprintf("%s/%s", ns, caSecretName))
 		caSecret := &corev1.Secret{}
-		k := types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: ns}
+		k := types.NamespacedName{Name: caSecretName, Namespace: ns}
 		if err = cli.Get(context.Background(), k, caSecret); err != nil && !kerrors.IsNotFound(err) {
 			return nil, err
+		} else if kerrors.IsNotFound(err) {
+			cm.log.V(2).Info("No existing CA secret")
 		}
 
 		if len(caSecret.Data) == 0 ||
 			len(caSecret.Data[corev1.TLSPrivateKeyKey]) == 0 ||
 			len(caSecret.Data[corev1.TLSCertKey]) == 0 {
+
+			if !cm.allowCACreation {
+				return nil, fmt.Errorf("CA secret %s/%s does not exist yet", ns, caSecretName)
+			}
 			// No existing CA data - we need to generate a new one.
+			cm.log.Info("Generating a new CA", "namespace", ns)
 			cryptoCA, err = tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 			if err != nil {
 				return nil, err
@@ -136,6 +200,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			privateKeyPEM, certificatePEM = keyContent.Bytes(), crtContent.Bytes()
 		} else {
 			// Found an existing CA - use that.
+			cm.log.V(2).Info("Found an existing CA secret")
 			privateKeyPEM, certificatePEM = caSecret.Data[corev1.TLSPrivateKeyKey], caSecret.Data[corev1.TLSCertKey]
 			cryptoCA, err = crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
 			if err != nil {
@@ -150,18 +215,21 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	if err != nil {
 		return nil, err
 	}
-	return &certificateManager{
-		CA:          cryptoCA,
-		Certificate: x509Cert,
-		keyPair: &certificatemanagement.KeyPair{
-			Name:                  certificatemanagement.CASecretName,
-			PrivateKeyPEM:         privateKeyPEM,
-			CertificatePEM:        certificatePEM,
-			CSRImage:              csrImage,
-			ClusterDomain:         clusterDomain,
-			CertificateManagement: certificateManagement,
-		},
-	}, nil
+
+	// Fill in remaining fields.
+	cm.CA = cryptoCA
+	cm.Certificate = x509Cert
+	cm.keyPair = &certificatemanagement.KeyPair{
+		Name:                  caSecretName,
+		PrivateKeyPEM:         privateKeyPEM,
+		CertificatePEM:        certificatePEM,
+		CSRImage:              csrImage,
+		ClusterDomain:         clusterDomain,
+		CertificateManagement: certificateManagement,
+	}
+
+	cm.log.V(2).Info("Created CertificateManager", "ns", ns, "authority", cm.AuthorityKeyId)
+	return cm, nil
 }
 
 func (cm *certificateManager) KeyPair() certificatemanagement.KeyPairInterface {
@@ -190,11 +258,11 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 		if err == nil {
 			return keyPair, nil
 		} else if keyPair.BYO() {
-			log.V(3).Info("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
+			cm.log.V(3).Info("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
 			return keyPair, nil
 		}
 	} else if keyPair == nil {
-		log.V(1).Info("Keypair wasn't found, create a new one", "namespace", secretNamespace, "name", secretName)
+		cm.log.V(1).Info("Keypair wasn't found, create a new one", "namespace", secretNamespace, "name", secretName)
 	}
 
 	// If we reach here, it means we need to create a new KeyPair.
@@ -218,6 +286,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
 func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
+	cm.log.V(2).Info("Querying secret for keypair", "namespace", secretNamespace, "name", secretName)
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      secretName,
@@ -225,6 +294,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}, secret)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
+			cm.log.V(2).Info("KeyPair not found", "namespace", secretNamespace, "name", secretName)
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we expect that in most cases no secret will be present.
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
@@ -255,6 +325,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
 			}
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
+			cm.log.V(2).Info("KeyPair is an expired legacy operator cert, make a new one", "name", secretName)
 			return nil, nil, nil
 		}
 		// We return an error for byo secrets.
@@ -270,6 +341,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		} else {
 			if !readCertOnly {
 				// We want to return nothing, so a new secret will be created to overwrite this one.
+				cm.log.V(2).Info("KeyPair's authority key id doesn't match", "name", secretName)
 				return nil, nil, nil
 			}
 			// We treat the certificate as a BYO secret, because this may be a certificate created by a management cluster
@@ -364,4 +436,48 @@ func (cm *certificateManager) CreateTrustedBundle(certificates ...certificateman
 // - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
 	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+}
+
+type annotationPassthru struct {
+	annotations map[string]string
+	bundle      certificatemanagement.TrustedBundle
+}
+
+func newAnnotationPassthru(cm CertificateManager, system bool) *annotationPassthru {
+	if system {
+		bundle, _ := cm.CreateTrustedBundleWithSystemRootCertificates()
+		return &annotationPassthru{annotations: map[string]string{}, bundle: bundle}
+	}
+	return &annotationPassthru{annotations: map[string]string{}, bundle: cm.CreateTrustedBundle()}
+}
+
+func (a *annotationPassthru) MountPath() string {
+	return a.bundle.MountPath()
+}
+
+func (a *annotationPassthru) VolumeMounts(osType meta.OSType) []corev1.VolumeMount {
+	return a.bundle.VolumeMounts(osType)
+}
+
+func (a *annotationPassthru) Volume() corev1.Volume {
+	return a.bundle.Volume()
+}
+
+func (a *annotationPassthru) HashAnnotations() map[string]string {
+	return a.annotations
+}
+
+func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
+	obj := &corev1.ConfigMap{}
+	k := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: ns}
+	if err := client.Get(ctx, k, obj); err != nil {
+		return nil, err
+	}
+	a := newAnnotationPassthru(cm, len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0)
+	for key, val := range obj.Annotations {
+		if strings.HasPrefix(key, "hash.operator.tigera.io/") {
+			a.annotations[key] = val
+		}
+	}
+	return a, nil
 }

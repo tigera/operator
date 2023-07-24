@@ -170,6 +170,10 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TrustedCertConfigMapName,
 			Namespace: namespace,
+
+			// Include the hash annotations on the configmap, so that downstrream controllers
+			// can easily acquire them without loading all of the certificates.
+			Annotations: t.HashAnnotations(),
 		},
 		Data: map[string]string{
 			RHELRootCertificateBundleName: string(t.systemCertificates),

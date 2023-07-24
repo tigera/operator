@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logstorage
+package linseed
 
 import (
 	"context"
@@ -20,46 +20,62 @@ import (
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
+	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
-func (r *ReconcileLogStorage) createESKubeControllers(
+// TODO: Move this out of this controller.
+func (r *LinseedSubController) createESKubeControllers(
+	ctx context.Context,
+	request octrl.Request,
 	install *operatorv1.InstallationSpec,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	managementCluster *operatorv1.ManagementCluster,
-	authentication *operatorv1.Authentication,
-	esLicenseType render.ElasticsearchLicenseType,
-	ctx context.Context,
-) (reconcile.Result, bool, error) {
-	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
-		return reconcile.Result{}, false, err
+) error {
+	// Get the Authentication resource.
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
+		return err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
+	// Get secrets needed for kube-controllers to talk to elastic.
+	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, request.TruthNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
+		return err
+	}
+
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, request.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
-		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, svcDNSNames)
+		// Add the internal traffic secret of the manager pod to the trusted bundle. We need this so we can talk to Voltron.
+		// This certificate is provisioned by the manager controller, and so we need to load it lazily once it appears.
+		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error querying for internal manager TLS certificate (%s)", render.ManagerInternalTLSSecretName), err, reqLogger)
+			return err
+		}
+	}
+
+	namespaces := []string{request.InstallNamespace()}
+	if r.multiTenant {
+		namespaces, err = utils.TenantNamespaces(ctx, r.client)
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
-			return reconcile.Result{}, false, err
+			return err
 		}
 	}
 
@@ -72,30 +88,32 @@ func (r *ReconcileLogStorage) createESKubeControllers(
 		Authentication:               authentication,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,
-		TrustedBundle:                certificateManager.CreateTrustedBundle(),
+		TrustedBundle:                certificateManager.CreateTrustedBundle(), // We don't care about the contents.
+		Namespace:                    request.InstallNamespace(),               // TODO: This will give tigera-elasticsearch in single-tenant systems. Is this OK?
+		BindingNamespaces:            namespaces,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, install.Variant)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting ImageSet", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	if err = imageset.ValidateImageSet(imageSet); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	if err = imageset.ResolveImages(imageSet, esKubeControllerComponents); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for elasticsearch kube-controllers components", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, esKubeControllerComponents, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
-	return reconcile.Result{}, true, nil
+	return nil
 }

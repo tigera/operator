@@ -15,6 +15,7 @@
 package render
 
 import (
+	"crypto/x509"
 	"fmt"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -88,6 +90,7 @@ const (
 
 var adAPIReplicas int32 = 1
 
+// Register secret/certs that need Server and Client Key usage
 var (
 	intrusionDetectionNamespaceSelector = fmt.Sprintf("projectcalico.org/name == '%s'", IntrusionDetectionNamespace)
 	IntrusionDetectionSourceEntityRule  = v3.EntityRule{
@@ -99,6 +102,12 @@ var (
 var IntrusionDetectionInstallerSourceEntityRule = v3.EntityRule{
 	NamespaceSelector: intrusionDetectionNamespaceSelector,
 	Selector:          fmt.Sprintf("job-name == '%s'", IntrusionDetectionInstallerJobName),
+}
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(AnomalyDetectorTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	certkeyusage.SetCertKeyUsage(DPITLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 }
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {

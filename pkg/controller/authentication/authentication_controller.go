@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -101,6 +101,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady 
 		status:         status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
+		usePSP:         opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -156,6 +157,7 @@ type ReconcileAuthentication struct {
 	status         status.StatusManager
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
+	usePSP         bool
 }
 
 // Reconcile the cluster state with the Authentication object that is found in the cluster.
@@ -330,6 +332,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		DeleteDex:     disableDex,
 		TLSKeyPair:    tlsKeyPair,
 		TrustedBundle: trustedBundle,
+		UsePSP:        r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

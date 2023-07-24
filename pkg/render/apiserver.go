@@ -591,44 +591,55 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 		nameToDelete = enterpriseName
 	}
 
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{
+				"",
+			},
+			Resources: []string{
+				"configmaps",
+			},
+			Verbs: []string{
+				"list",
+				"watch",
+			},
+			ResourceNames: []string{
+				"extension-apiserver-authentication",
+			},
+		},
+		{
+			APIGroups: []string{
+				"rbac.authorization.k8s.io",
+			},
+			Resources: []string{
+				"clusterroles",
+				"clusterrolebindings",
+				"roles",
+				"rolebindings",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		},
+	}
+
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{
-						"",
-					},
-					Resources: []string{
-						"configmaps",
-					},
-					Verbs: []string{
-						"list",
-						"watch",
-					},
-					ResourceNames: []string{
-						"extension-apiserver-authentication",
-					},
-				},
-				{
-					APIGroups: []string{
-						"rbac.authorization.k8s.io",
-					},
-					Resources: []string{
-						"clusterroles",
-						"clusterrolebindings",
-						"roles",
-						"rolebindings",
-					},
-					Verbs: []string{
-						"get",
-						"list",
-						"watch",
-					},
-				},
-			},
+			Rules: rules,
 		}, &rbacv1.ClusterRole{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{

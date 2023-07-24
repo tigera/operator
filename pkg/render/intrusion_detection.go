@@ -530,6 +530,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 
 		rules = append(rules, managementRule...)
 	}
+
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		if c.syslogForwardingIsEnabled() || c.adAPIPersistentStorageEnabled() {
+			rules = append(rules, rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{PSSPrivileged},
+			})
+		}
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

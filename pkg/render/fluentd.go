@@ -895,7 +895,7 @@ func (c *fluentdComponent) fluentdClusterRoleBinding() *rbacv1.ClusterRoleBindin
 }
 
 func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
+	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: c.fluentdName(),
@@ -911,6 +911,16 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
+
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
+	return role
 }
 
 func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {

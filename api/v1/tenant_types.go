@@ -22,6 +22,7 @@ import (
 
 type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
+	// +required
 	ID string `json:"id,omitempty"`
 }
 

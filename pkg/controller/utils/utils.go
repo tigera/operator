@@ -81,7 +81,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
-// TODO: Deprecate and delete this function.
+// TODO: Deprecate and delete these functions.
 func AddNetworkWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
@@ -107,33 +107,41 @@ func AddNamespaceWatch(c controller.Controller, name string) error {
 type MetaMatch func(metav1.ObjectMeta) bool
 
 func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
+	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+}
+
+func AddSecretsWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, s, metaMatches...)
+	return AddNamespacedWatch(c, s, h, metaMatches...)
 }
 
-func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
+func AddConfigMapWatch(c controller.Controller, name, namespace string, h handler.EventHandler) error {
 	cm := &corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, cm)
+	return AddNamespacedWatch(c, cm, h)
 }
 
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
+	return AddServiceWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
+}
+
+func AddServiceWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler) error {
 	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-	})
+	}, h)
 }
 
 func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
 	return AddNamespacedWatch(c, &appsv1.Deployment{
 		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
@@ -192,10 +200,10 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated.
-func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches ...MetaMatch) error {
+func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)
-	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
+	return c.Watch(&source.Kind{Type: obj}, h, pred)
 }
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {

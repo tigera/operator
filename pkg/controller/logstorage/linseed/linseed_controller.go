@@ -17,12 +17,15 @@ package linseed
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -142,7 +145,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, installNS); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, installNS); err != nil {
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, installNS, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -263,7 +266,11 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	}
 
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
-	cm, err := certificatemanager.CreateWithLogger(r.client, install, r.clusterDomain, request.TruthNamespace(), reqLogger)
+	opts := []certificatemanager.Option{
+		certificatemanager.WithLogger(reqLogger),
+		certificatemanager.WithTenant(args.Tenant),
+	}
+	cm, err := certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, request.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -296,6 +303,17 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	if managementClusterConnection == nil {
 		flowShards := logstoragecommon.CalculateFlowShards(args.LogStorage.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
 		esClusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, args.LogStorage.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
+	}
+
+	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
+	// These credentials are created by the elasticsearch users controller. Delay installing Linseed until available.
+	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: request.TruthNamespace()}
+	if err = r.client.Get(ctx, key, &corev1.Secret{}); err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed credential Secret %s", key), err, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Determine the namespaces to which we must bind the linseed cluster role.
@@ -335,44 +353,43 @@ func (r *LinseedSubController) reconcile(ctx context.Context, reqLogger logr.Log
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, args.LogStorage)
 	}
-	for _, comp := range []render.Component{linseedComponent} {
-		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
+	if err := hdler.CreateOrUpdateOrDelete(ctx, linseedComponent, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if !r.multiTenant {
+		// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
+		if err := r.createESGateway(
+			ctx,
+			request,
+			install,
+			variant,
+			pullSecrets,
+			hdler,
+			reqLogger,
+			trustedBundle,
+			r.usePSP,
+		); err != nil {
 			return reconcile.Result{}, err
 		}
-	}
 
-	// TODO: For now, just do ESGW here since it serves a similar purpose to Linseed.
-	if err := r.createESGateway(
-		ctx,
-		request,
-		install,
-		variant,
-		pullSecrets,
-		hdler,
-		reqLogger,
-		trustedBundle,
-		r.usePSP,
-	); err != nil {
-		return reconcile.Result{}, err
-	}
+		// TODO: Figure out what to do with this. Right now it's not installed for multi-tenant, but it does serve one
+		// crucial purpose - copying public certs into managed clusters. Would be nice to do away with that and remove the need
+		// for it altogether.
+		if err := r.createESKubeControllers(
+			ctx,
+			request,
+			install,
+			hdler,
+			reqLogger,
+			managementCluster,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 
-	// TODO: This is a temporary location for this. Ideally this goes in its own controller, as it likely
-	// needs to be multi-tenant!
-	if err := r.createESKubeControllers(
-		ctx,
-		request,
-		install,
-		hdler,
-		reqLogger,
-		managementCluster,
-	); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// TODO: Do we need either of these for multi-tenant systems?
-	if !r.multiTenant {
 		// TODO: For now, install this here. It probably should have its own controller.
+		// I am not very familiar with this component - need to investigate and propose multi-tenant resolution.
 		if err := r.createESMetrics(
 			install,
 			variant,

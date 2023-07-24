@@ -20,13 +20,11 @@ import (
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -64,11 +62,11 @@ func (r *LinseedSubController) createESKubeControllers(
 
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
-		// TODO: This should be moved out of this controller - we shouldn't be creating secrets here, just querying pre-created ones.
-		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, svcDNSNames)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
+		// Add the internal traffic secret of the manager pod to the trusted bundle. We need this so we can talk to Voltron.
+		// This certificate is provisioned by the manager controller, and so we need to load it lazily once it appears.
+		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error querying for internal manager TLS certificate (%s)", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return err
 		}
 	}

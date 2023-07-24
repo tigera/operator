@@ -90,6 +90,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
 	})
 
+	if opts.MultiTenant {
+		if err = controller.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	return add(mgr, controller)
 }
 
@@ -135,7 +141,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
+		render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
@@ -146,7 +152,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}
@@ -362,16 +368,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
 	// as well as validation with respect to Syslog.logTypes.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
@@ -415,12 +411,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	// Determine whether or not this is a multi-tenant management cluster.
 	multiTenantManagement := r.multiTenant && managementCluster != nil
-	multiTenantManagement = true // CASEY: HACK for testing
 
 	// The name of the Linseed certificate varies based on if this is a managed cluster or not.
 	// For standalone and management clusters, we just use Linseed's actual certificate.
 	linseedCertName := render.TigeraLinseedSecret
 	linseedCertNamespace := common.OperatorNamespace()
+	var tenant *operatorv1.Tenant
 	if managedCluster {
 		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
 		// management cluster into the managed cluster by kube-controllers.
@@ -428,8 +424,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	} else if multiTenantManagement {
 		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace.
 		// Instead, look for a Tenant instance that represent's the management cluster's own tenant.
-		// TODO: Don't hard-code this.
-		linseedCertNamespace = "tigera-tenant"
+		tenant, err = utils.GetTenant(ctx, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		linseedCertNamespace = tenant.Namespace
 	}
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertName, linseedCertNamespace)
 	if err != nil {
@@ -551,16 +550,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
-	// namespace. For multi-tenant management clusters, this may vary.
-	linseedNS := render.ElasticsearchNamespace
-	if multiTenantManagement {
-		linseedNS = "tigera-tenant" // TODO: Hardcoding for testing.
-	}
-
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:         instance,
-		ESSecrets:            esSecrets,
 		ESClusterConfig:      esClusterConfig,
 		S3Credential:         s3Credential,
 		SplkCredential:       splunkCredential,
@@ -575,7 +566,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
 		UseSyslogCertificate: useSyslogCertificate,
-		LinseedNamespace:     linseedNS,
+		Tenant:               tenant,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -612,7 +603,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
 			LogCollector:         instance,
-			ESSecrets:            esSecrets,
 			ESClusterConfig:      esClusterConfig,
 			S3Credential:         s3Credential,
 			SplkCredential:       splunkCredential,

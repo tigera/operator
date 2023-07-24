@@ -22,16 +22,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/logstorage/elastic"
-	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
-	"github.com/tigera/operator/pkg/controller/logstorage/linseed"
-	"github.com/tigera/operator/pkg/controller/logstorage/secrets"
-	"github.com/tigera/operator/pkg/controller/logstorage/users"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/secrets"
 )
 
 // LogStorageReconciler reconciles a LogStorage object
-type LogStorageReconciler struct {
+type SecretsReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
@@ -40,23 +36,14 @@ type LogStorageReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logstorages/status,verbs=get;update;patch
 
-func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	// Add all of the relevant log storage sub-controllers to the manager here.
-	// Each of these controllers reconciles independently, but they work together in order to implement log storage
-	// capabilities.
-	if err := initializer.Add(mgr, opts); err != nil {
+func (r *SecretsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	if err := secrets.AddClusterCAController(mgr, opts); err != nil {
 		return err
 	}
-	if err := secrets.Add(mgr, opts); err != nil {
+	if err := secrets.AddTenantController(mgr, opts); err != nil {
 		return err
 	}
-	if err := linseed.Add(mgr, opts); err != nil {
-		return err
-	}
-	if err := elastic.Add(mgr, opts); err != nil {
-		return err
-	}
-	if err := users.Add(mgr, opts); err != nil {
+	if err := secrets.AddBundleController(mgr, opts); err != nil {
 		return err
 	}
 	return nil

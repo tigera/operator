@@ -544,6 +544,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			ResourceNames: []string{common.NodeDaemonSetName},
 		})
 	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
 	return role
 }
 
@@ -590,7 +598,6 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-
 	return role
 }
 

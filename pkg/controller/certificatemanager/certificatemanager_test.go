@@ -50,7 +50,6 @@ import (
 )
 
 var _ = Describe("Test CertificateManagement suite", func() {
-
 	const (
 		appSecretName       = "my-app-tls"
 		appSecretName2      = "my-app-tls-2"
@@ -155,7 +154,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		})
 
 		It("should create a KeyPair if it does not exist yet or reconstruct it from secret", func() {
-
 			By("creating a key pair and storing the secret")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
@@ -169,7 +167,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		})
 
 		It("should replace a KeyPair if it was created by an older ca", func() {
-
 			By("creating a key pair and storing the secret")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
@@ -217,6 +214,37 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			certificate, err := certificateManager.GetCertificate(cli, appSecretName, appNs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificate).NotTo(BeNil())
+		})
+
+		Describe("check ExtKeyUsage", func() {
+			It("should update certificates that are only valid for server use", func() {
+				x509Cert, err := certificatemanager.X509FromSecret(legacySecret)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Should not be considered valid.
+				valid := certificatemanager.ValidForClientAndServer(x509Cert)
+				Expect(valid).NotTo(BeTrue())
+
+				// Should create a new secret.
+				secret := legacySecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
+			})
+
+			It("should consider a client+server certificate valid", func() {
+				// GetOrCreateKeyPair creates a keypair that is configured to act as both a client and server certificate.
+				kp, err := certificateManager.GetOrCreateKeyPair(cli, "secret", "default", []string{"localhost"})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Get the x509 cert and make sure it is recognized as valid.
+				certPEM := kp.GetCertificatePEM()
+				x509Cert, err := certificatemanagement.ParseCertificate(certPEM)
+				Expect(err).NotTo(HaveOccurred())
+				valid := certificatemanager.ValidForClientAndServer(x509Cert)
+				Expect(valid).To(BeTrue())
+			})
 		})
 
 		Describe("test certificate expiry", func() {
@@ -276,7 +304,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			secret1.Name = "test"
 			secret2 := keyPair.Secret("test")
 			Expect(secret2.Name).NotTo(Equal(secret1.Name))
-
 		})
 
 		It("render the right spec for certificateManager issued key pairs", func() {
@@ -428,7 +455,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 	})
 
 	Describe("test TrustedBundle interface", func() {
-
 		It("should add a pem block for each certificate", func() {
 			By("creating four secrets in the datastore")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)

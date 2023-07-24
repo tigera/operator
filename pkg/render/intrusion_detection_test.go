@@ -482,7 +482,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
 		cfg.Openshift = openshift
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.ManagedCluster = false
+		cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName = "storage"
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
@@ -492,6 +494,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments/finalizers"},
 			Verbs:     []string{"update"},
+		}))
+
+		Expect(idsControllerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
 		}))
 	})
 

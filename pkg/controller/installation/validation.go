@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/common/validation"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	windowsupgrade "github.com/tigera/operator/pkg/common/validation/calico-windows-upgrade"
+	csinodedriver "github.com/tigera/operator/pkg/common/validation/csi-node-driver"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"
@@ -426,7 +427,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify the CSINodeDriverDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CSINodeDriverDaemonSet; ds != nil {
-		err := validation.ValidateReplicatedPodResourceOverrides(ds, validation.NoContainersDefined, validation.NoContainersDefined)
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, csinodedriver.ValidateCSINodeDriverDaemonSetContainer, validation.NoContainersDefined)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CSINodeDriverDaemonSet is not valid: %w", err)
 		}

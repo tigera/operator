@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -215,6 +216,10 @@ var _ = Describe("CSI rendering tests", func() {
 				Value:    "bar",
 			}
 
+			resourceRequirements := corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{"cpu": resource.MustParse("1")},
+			}
+
 			defaultInstance.CSINodeDriverDaemonSet = &operatorv1.CSINodeDriverDaemonSet{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
@@ -232,6 +237,10 @@ var _ = Describe("CSI rendering tests", func() {
 							},
 							Affinity:    affinity,
 							Tolerations: []corev1.Toleration{toleration},
+							Containers: []operatorv1.CSINodeDriverDaemonSetContainer{
+								{Name: render.CSIContainerName, Resources: &resourceRequirements},
+								{Name: render.CSIRegistrarContainerName, Resources: &resourceRequirements},
+							},
 						},
 					},
 				},
@@ -262,6 +271,10 @@ var _ = Describe("CSI rendering tests", func() {
 
 			Expect(ds.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(ds.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(2))
+			Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(resourceRequirements))
+			Expect(ds.Spec.Template.Spec.Containers[1].Resources).To(Equal(resourceRequirements))
 		})
 	})
 

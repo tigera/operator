@@ -43,10 +43,17 @@ func CreateTLSSecret(
 			return nil, fmt.Errorf("unable to create signed cert pair: %s", err)
 		}
 	}
+
 	// localhost is the default hostname for the generated certificate if none are provided.
 	hostnamesSet := sets.NewString("localhost")
 	if len(hostnames) > 0 {
 		hostnamesSet = sets.NewString(hostnames...)
+	}
+
+	// Default extensions if not provided such that the certificate is valid
+	// for both a server and client certificate.
+	if len(cef) == 0 {
+		cef = []crypto.CertificateExtensionFunc{tls.SetClientAuth, tls.SetServerAuth}
 	}
 
 	cert, err := ca.MakeServerCertForDuration(hostnamesSet, dur, cef...)

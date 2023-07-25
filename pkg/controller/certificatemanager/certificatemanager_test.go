@@ -60,20 +60,21 @@ var _ = Describe("Test CertificateManagement suite", func() {
 	)
 
 	var (
-		cli                 client.Client
-		scheme              *k8sruntime.Scheme
-		installation        *operatorv1.InstallationSpec
-		cm                  *operatorv1.CertificateManagement
-		clusterDomain       = "cluster.local"
-		appDNSNames         = []string{appSecretName}
-		ctx                 = context.TODO()
-		certificateManager  certificatemanager.CertificateManager
-		expiredSecret       *corev1.Secret
-		legacySecret        *corev1.Secret
-		expiredLegacySecret *corev1.Secret
-		byoSecret           *corev1.Secret
-		expiredBYOSecret    *corev1.Secret
-		legacyBYOSecret     *corev1.Secret
+		cli                      client.Client
+		scheme                   *k8sruntime.Scheme
+		installation             *operatorv1.InstallationSpec
+		cm                       *operatorv1.CertificateManagement
+		clusterDomain            = "cluster.local"
+		appDNSNames              = []string{appSecretName}
+		ctx                      = context.TODO()
+		certificateManager       certificatemanager.CertificateManager
+		expiredSecret            *corev1.Secret
+		legacySecret             *corev1.Secret
+		expiredLegacySecret      *corev1.Secret
+		byoSecret                *corev1.Secret
+		expiredBYOSecret         *corev1.Secret
+		legacyBYOSecret          *corev1.Secret
+		legacyWithClientKeyUsage *corev1.Secret
 	)
 	BeforeEach(func() {
 		// Create a Kubernetes client.
@@ -100,6 +101,10 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 		// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name, and no CA.
 		legacySecret, err = secret.CreateTLSSecret(nil, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, legacyOpts, appSecretName)
+		Expect(err).NotTo(HaveOccurred())
+
+		// This is a special case, which may or may not exist in the wild. It's a legacy-style certificate signed by tigera-operator but also with client usage.
+		legacyWithClientKeyUsage, err = secret.CreateTLSSecret(nil, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, modernOpts, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Create a byo secret with non-standardized legacy key and cert name (like our docs for felix/typha).
@@ -472,7 +477,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 	Describe("test TrustedBundle interface", func() {
 		It("should add a pem block for each certificate", func() {
-			By("creating four secrets in the datastore")
+			By("creating five secrets in the datastore")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.Create(ctx, keyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -486,13 +491,18 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			legacySecret.Name, legacySecret.Namespace = "legacy-secret", common.OperatorNamespace()
 			Expect(cli.Create(ctx, legacySecret)).NotTo(HaveOccurred())
 			Expect(err).NotTo(HaveOccurred())
+			legacyWithClientKeyUsage.Name, legacyWithClientKeyUsage.Namespace = "legacy-secret-wcku", common.OperatorNamespace()
+			Expect(cli.Create(ctx, legacyWithClientKeyUsage)).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 
-			By("creating and validating the four certificates")
+			By("creating and validating the five certificates")
 			cert, err := certificateManager.GetCertificate(cli, appSecretName, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			cert2, err := certificateManager.GetCertificate(cli, appSecretName2, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			byo, err := certificateManager.GetCertificate(cli, byoSecret.Name, common.OperatorNamespace())
+			Expect(err).NotTo(HaveOccurred())
+			lwcku, err := certificateManager.GetCertificate(cli, legacyWithClientKeyUsage.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
 			// This will fail, because the secret doesn't have ExtKeyUsageClient. However, once we recreate it,
@@ -510,12 +520,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(cert.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 			Expect(cert2.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 			Expect(byo.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
+			Expect(lwcku.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
 
 			// The legacy certificate will have been reissued, and so will match the operator CA.
 			Expect(legacy.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 
 			By("creating and validating a trusted certificate bundle")
-			trustedBundle := certificateManager.CreateTrustedBundle(cert, cert2, byo, legacy)
+			trustedBundle := certificateManager.CreateTrustedBundle(cert, cert2, byo, legacy, lwcku)
 			Expect(trustedBundle.Volume()).To(Equal(corev1.Volume{
 				Name: "tigera-ca-bundle",
 				VolumeSource: corev1.VolumeSource{
@@ -538,12 +549,14 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("counting the number of pem blocks in the configmap")
 			bundle := configMap.Data[certificatemanagement.TrustedCertConfigMapKeyName]
 			numBlocks := strings.Count(bundle, "certificate name:")
-			// While we have the ca + 4 certs, we expect just 2 cert blocks (+ 2):
+			// While we have the ca + 4 certs, we expect 3 cert blocks (+ 2):
 			// - the certificateManager: this covers for all certs signed by the tigera root ca
 			// - the byo block (+ its ca block)
-			Expect(numBlocks).To(Equal(2))
+			// - the legacy cert that already has ExtKeyUsageClient configured.
+			Expect(numBlocks).To(Equal(3))
 			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
 			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/byo-secret"))
+			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/legacy-secret-wcku"))
 		})
 
 		It("should load the system certificates into the bundle", func() {

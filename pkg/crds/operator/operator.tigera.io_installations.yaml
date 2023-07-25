@@ -6834,7 +6834,8 @@ spec:
                                         the csi-node-driver DaemonSet container by
                                         name.
                                       enum:
-                                      - csi-node-driver
+                                      - calico-csi
+                                      - csi-node-driver-registrar
                                       type: string
                                     resources:
                                       description: Resources allows customization
@@ -16356,7 +16357,8 @@ spec:
                                             the csi-node-driver DaemonSet container
                                             by name.
                                           enum:
-                                          - csi-node-driver
+                                          - calico-csi
+                                          - csi-node-driver-registrar
                                           type: string
                                         resources:
                                           description: Resources allows customization

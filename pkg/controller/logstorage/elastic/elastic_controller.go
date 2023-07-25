@@ -281,19 +281,21 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
+		// TODO: This controller should be responsible for installing an ES cluster and nothing more.
+		// Any extra bits should be moved to companion controllers to reduce code complexity.
 		if !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		ls = nil
 		r.status.OnCRNotFound()
+	} else {
+		// We found the LogStorage instance.
+		r.status.OnCRFound()
 	}
 
-	// We found the LogStorage instance.
-	r.status.OnCRFound()
-
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
-	if ls.Status.State != operatorv1.TigeraStatusReady {
+	if ls == nil || ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}

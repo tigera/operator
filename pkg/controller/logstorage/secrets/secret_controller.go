@@ -196,14 +196,13 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	key := utils.DefaultTSEEInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if err != nil {
-		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
-		// there are still "LogStorage" related items that need to be set up
-		if !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
-			return reconcile.Result{}, err
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for LogStorage to exist", err, reqLogger)
+			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
 		}
-		ls = nil
-		r.status.OnCRNotFound()
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// We found the LogStorage instance.

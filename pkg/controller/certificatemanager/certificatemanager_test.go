@@ -507,14 +507,14 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 			// This will fail, because the secret doesn't have ExtKeyUsageClient. However, once we recreate it,
 			// it will succeed.
-			legacy, err := certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
+			_, err = certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
 			Expect(err).To(HaveOccurred())
 
 			// Calling GetOrCreate should trigger a re-issuing of the secret.
 			kp, err := certificateManager.GetOrCreateKeyPair(cli, legacySecret.Name, common.OperatorNamespace(), []string{appSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.Update(ctx, kp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			legacy, err = certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
+			legacy, err := certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(cert.GetIssuer()).To(Equal(certificateManager.KeyPair()))

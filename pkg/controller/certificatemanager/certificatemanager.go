@@ -39,16 +39,16 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	log = logf.Log.WithName("tls")
-)
+var log = logf.Log.WithName("tls")
 
 func ErrInvalidCertDNSNames(secretName, secretNamespace string) error {
 	return fmt.Errorf("certificate %s/%s has the wrong DNS names", secretNamespace, secretName)
 }
+
 func errNoPrivateKeyPEM(secretName, secretNamespace string) error {
 	return fmt.Errorf("key pair %s/%s is missing a private key", secretNamespace, secretName)
 }
+
 func errNoCertificatePEM(secretName, secretNamespace string) error {
 	return fmt.Errorf("certificate PEM is missing for %s/%s ", secretNamespace, secretName)
 }
@@ -223,7 +223,10 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		}
 		return nil, nil, err
 	}
-	keyPEM, certPEM := getKeyCertPEM(secret)
+
+	// Parse the certificate data from the secret into an x509.Certificate object so we can verify
+	// it is still valid, and re-issue it if needed.
+	keyPEM, certPEM := GetKeyCertPEM(secret)
 	if !readCertOnly {
 		if len(keyPEM) == 0 {
 			return nil, nil, errNoPrivateKeyPEM(secretName, secretNamespace)
@@ -237,6 +240,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		return nil, nil, err
 	}
 
+	// First, check that the certificate is within its validity period.
 	if x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now()) {
 		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			if cm.keyPair.CertificateManagement != nil {
@@ -244,10 +248,13 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 				// the old secret will be deleted automatically.
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
 			}
+
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
 			return nil, nil, nil
 		}
-		// We return an error for byo secrets.
+
+		// The certificate was not issued by tigera-operator, or the caller indicated that certs shouldn't be modified.
+		// Consider this a BYO certificate, and error out rather than generate a new certificate.
 		return nil, nil, fmt.Errorf("secret %s is not valid at this date", secretName)
 	}
 	var issuer certificatemanagement.KeyPairInterface
@@ -255,18 +262,37 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		if cm.keyPair.CertificateManagement != nil {
 			return certificateManagementKeyPair(cm, secretName, nil), nil, nil
 		}
+
+		// This certificate wasn't issued using external certificate management.
+		if !ValidForClientAndServer(x509Cert) {
+			// The certificate isn't valid as both a client and server cert. Older versions of the operator
+			// generated certificates that were only valid for use as a server certificate. However, some components now
+			// use these as client certificates in mTLS connections as well. So, regenerate any that need this capability.
+			return nil, nil, nil
+		}
+
 		if string(x509Cert.AuthorityKeyId) == string(cm.AuthorityKeyId) {
+			// The certificate's authority matches the current CA.
 			issuer = cm.keyPair
 		} else {
+			// The certificate's authority doesn't match the current CA.
 			if !readCertOnly {
-				// We want to return nothing, so a new secret will be created to overwrite this one.
+				// The caller indicated we're allowed to generate new certs - return nothing, so
+				// that a new secret will be created to overwrite this one.
 				return nil, nil, nil
 			}
+
 			// We treat the certificate as a BYO secret, because this may be a certificate created by a management cluster
 			// and used inside a managed cluster. If it is not, it should get updated automatically when readCertOnly=false.
 			issuer = nil
 		}
+	} else if !ValidForClientAndServer(x509Cert) {
+		// This was signed by someone else, and isn't valid for use as a client and server certificate. We need to
+		// notify the user that their certificates aren't sufficient.
+		name := fmt.Sprintf("%s/%s", secretNamespace, secretName)
+		return nil, nil, fmt.Errorf("User-provided certificate %s key usage must be valid as both a Server and Client.", name)
 	}
+
 	return &certificatemanagement.KeyPair{
 		Issuer:         issuer,
 		Name:           secretName,
@@ -274,7 +300,20 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		CertificatePEM: certPEM,
 		OriginalSecret: secret,
 	}, x509Cert, nil
+}
 
+// ValidForClientAndServer returns true if the given certificate is valid
+// for use as both a server certificate, as well as a client certificate for mTLS connections.
+func ValidForClientAndServer(cert *x509.Certificate) bool {
+	var server, client bool
+	for _, ku := range cert.ExtKeyUsage {
+		if ku == x509.ExtKeyUsageClientAuth {
+			client = true
+		} else if ku == x509.ExtKeyUsageServerAuth {
+			server = true
+		}
+	}
+	return client && server
 }
 
 // GetCertificate returns a Certificate. If the certificate is not found or outdated, a k8s.io NotFound error is returned.
@@ -294,7 +333,7 @@ func (cm *certificateManager) CertificateManagement() *operatorv1.CertificateMan
 	return cm.keyPair.CertificateManagement
 }
 
-func getKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
+func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 	const (
 		legacySecretCertName  = "cert" // Formerly known as certificatemanagement.ManagerSecretCertName
 		legacySecretKeyName   = "key"  // Formerly known as certificatemanagement.ManagerSecretKeyName

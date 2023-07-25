@@ -494,14 +494,25 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(err).NotTo(HaveOccurred())
 			byo, err := certificateManager.GetCertificate(cli, byoSecret.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
+
+			// This will fail, because the secret doesn't have ExtKeyUsageClient. However, once we recreate it,
+			// it will succeed.
 			legacy, err := certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
+			Expect(err).To(HaveOccurred())
+
+			// Calling GetOrCreate should trigger a re-issuing of the secret.
+			kp, err := certificateManager.GetOrCreateKeyPair(cli, legacySecret.Name, common.OperatorNamespace(), []string{appSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.Update(ctx, kp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			legacy, err = certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(cert.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 			Expect(cert2.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 			Expect(byo.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
-			Expect(legacy).NotTo(BeNil())
-			Expect(legacy.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
+
+			// The legacy certificate will have been reissued, and so will match the operator CA.
+			Expect(legacy.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 
 			By("creating and validating a trusted certificate bundle")
 			trustedBundle := certificateManager.CreateTrustedBundle(cert, cert2, byo, legacy)
@@ -527,15 +538,14 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("counting the number of pem blocks in the configmap")
 			bundle := configMap.Data[certificatemanagement.TrustedCertConfigMapKeyName]
 			numBlocks := strings.Count(bundle, "certificate name:")
-			// While we have the ca + 4 certs, we expect 3 cert blocks (+ 2):
+			// While we have the ca + 4 certs, we expect just 2 cert blocks (+ 2):
 			// - the certificateManager: this covers for all certs signed by the tigera root ca
 			// - the byo block (+ its ca block)
-			// - the legacy block (+ its ca block)
-			Expect(numBlocks).To(Equal(3))
+			Expect(numBlocks).To(Equal(2))
 			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
 			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/byo-secret"))
-			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/legacy-secret"))
 		})
+
 		It("should load the system certificates into the bundle", func() {
 			if runtime.GOOS != "linux" {
 				Skip("Skip for users that run this test outside of a container on incompatible systems.")

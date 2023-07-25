@@ -19,6 +19,7 @@ package certificatemanager_test
 
 import (
 	"context"
+	"crypto/x509"
 	"runtime"
 	"strings"
 	"time"
@@ -218,7 +219,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 		Describe("check ExtKeyUsage", func() {
 			It("should update certificates that are only valid for server use", func() {
-				x509Cert, err := certificatemanager.X509FromSecret(legacySecret)
+				x509Cert, err := x509FromSecret(legacySecret)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Should not be considered valid.
@@ -535,3 +536,12 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		})
 	})
 })
+
+func x509FromSecret(secret *corev1.Secret) (*x509.Certificate, error) {
+	_, certPEM := certificatemanager.GetKeyCertPEM(secret)
+	x509Cert, err := certificatemanagement.ParseCertificate(certPEM)
+	if err != nil {
+		return nil, err
+	}
+	return x509Cert, nil
+}

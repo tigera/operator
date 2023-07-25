@@ -226,7 +226,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 
 	// Parse the certificate data from the secret into an x509.Certificate object so we can verify
 	// it is still valid, and re-issue it if needed.
-	keyPEM, certPEM := getKeyCertPEM(secret)
+	keyPEM, certPEM := GetKeyCertPEM(secret)
 	if !readCertOnly {
 		if len(keyPEM) == 0 {
 			return nil, nil, errNoPrivateKeyPEM(secretName, secretNamespace)
@@ -240,7 +240,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		return nil, nil, err
 	}
 
-	// First, check that it's not expired.
+	// First, check that the certificate is within its validity period.
 	if x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now()) {
 		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			if cm.keyPair.CertificateManagement != nil {
@@ -272,7 +272,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		}
 
 		if string(x509Cert.AuthorityKeyId) == string(cm.AuthorityKeyId) {
-			// The certifiate's authority matches the current CA.
+			// The certificate's authority matches the current CA.
 			issuer = cm.keyPair
 		} else {
 			// The certificate's authority doesn't match the current CA.
@@ -286,6 +286,11 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 			// and used inside a managed cluster. If it is not, it should get updated automatically when readCertOnly=false.
 			issuer = nil
 		}
+	} else if !ValidForClientAndServer(x509Cert) {
+		// This was signed by someone else, and isn't valid for use as a client and server certificate. We need to
+		// notify the user that their certificates aren't sufficient.
+		name := fmt.Sprintf("%s/%s", secretNamespace, secretName)
+		return nil, nil, fmt.Errorf("User-provided certificate %s key usage must be valid as both a Server and Client.", name)
 	}
 
 	return &certificatemanagement.KeyPair{
@@ -295,15 +300,6 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		CertificatePEM: certPEM,
 		OriginalSecret: secret,
 	}, x509Cert, nil
-}
-
-func X509FromSecret(secret *corev1.Secret) (*x509.Certificate, error) {
-	_, certPEM := getKeyCertPEM(secret)
-	x509Cert, err := certificatemanagement.ParseCertificate(certPEM)
-	if err != nil {
-		return nil, err
-	}
-	return x509Cert, nil
 }
 
 // ValidForClientAndServer returns true if the given certificate is valid
@@ -337,7 +333,7 @@ func (cm *certificateManager) CertificateManagement() *operatorv1.CertificateMan
 	return cm.keyPair.CertificateManagement
 }
 
-func getKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
+func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 	const (
 		legacySecretCertName  = "cert" // Formerly known as certificatemanagement.ManagerSecretCertName
 		legacySecretKeyName   = "key"  // Formerly known as certificatemanagement.ManagerSecretKeyName

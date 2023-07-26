@@ -144,7 +144,7 @@ blocks:
           commands:
             - make fv
             - make dirty-check
-            - '[[ -f ./report/fv/fv_suite.xml ]] && test-results publish ./report/fv/fv_suite.xml'
+            - '[[ -d ./report/fv ]] && test-results publish ./report/fv'
 
 after_pipeline:
   task:

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,16 +39,16 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	log = logf.Log.WithName("tls")
-)
+var log = logf.Log.WithName("tls")
 
 func ErrInvalidCertDNSNames(secretName, secretNamespace string) error {
 	return fmt.Errorf("certificate %s/%s has the wrong DNS names", secretNamespace, secretName)
 }
+
 func errNoPrivateKeyPEM(secretName, secretNamespace string) error {
 	return fmt.Errorf("key pair %s/%s is missing a private key", secretNamespace, secretName)
 }
+
 func errNoCertificatePEM(secretName, secretNamespace string) error {
 	return fmt.Errorf("certificate PEM is missing for %s/%s ", secretNamespace, secretName)
 }
@@ -63,7 +63,7 @@ type certificateManager struct {
 // brings their own secrets, CertificateManager will preserve and return them.
 type CertificateManager interface {
 	// GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
-	GetKeyPair(cli client.Client, secretName, secretNamespace string) (certificatemanagement.KeyPairInterface, error)
+	GetKeyPair(cli client.Client, secretName, secretNamespace string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
@@ -207,7 +207,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 }
 
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
-func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
+func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      secretName,
@@ -223,7 +223,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		}
 		return nil, nil, err
 	}
-	keyPEM, certPEM := getKeyCertPEM(secret)
+	keyPEM, certPEM := GetKeyCertPEM(secret)
 	if !readCertOnly {
 		if len(keyPEM) == 0 {
 			return nil, nil, errNoPrivateKeyPEM(secretName, secretNamespace)
@@ -237,18 +237,24 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		return nil, nil, err
 	}
 
-	if x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now()) {
+	timeInvalid := x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now())
+	if timeInvalid || !HasRequiredKeyUsage(x509Cert, requiredKeyUsages) {
 		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we can simply return a certificate management key pair;
 				// the old secret will be deleted automatically.
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
 			}
+
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
 			return nil, nil, nil
 		}
+
 		// We return an error for byo secrets.
-		return nil, nil, fmt.Errorf("secret %s is not valid at this date", secretName)
+		if timeInvalid {
+			return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
+		}
+		return nil, nil, fmt.Errorf("secret %s/%s must specify ExtKeyusageClientAuth", secretNamespace, secretName)
 	}
 	var issuer certificatemanagement.KeyPairInterface
 	if x509Cert.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix {
@@ -274,7 +280,25 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		CertificatePEM: certPEM,
 		OriginalSecret: secret,
 	}, x509Cert, nil
+}
 
+// HasRequiredKeyUsage returns true if the given certificate is valid
+// for use as both a server certificate, as well as a client certificate for mTLS connections.
+func HasRequiredKeyUsage(cert *x509.Certificate, required []x509.ExtKeyUsage) bool {
+	for _, ku := range required {
+		found := false
+		for _, certKU := range cert.ExtKeyUsage {
+			if certKU == ku {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // GetCertificate returns a Certificate. If the certificate is not found or outdated, a k8s.io NotFound error is returned.
@@ -284,8 +308,12 @@ func (cm *certificateManager) GetCertificate(cli client.Client, secretName, secr
 }
 
 // GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
-func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
+func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error) {
+	if requiredKeyUsages == nil {
+		// Default if nil. If empty, we won't require any.
+		requiredKeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+	}
+	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false, requiredKeyUsages...)
 	return keyPair, err
 }
 
@@ -294,7 +322,7 @@ func (cm *certificateManager) CertificateManagement() *operatorv1.CertificateMan
 	return cm.keyPair.CertificateManagement
 }
 
-func getKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
+func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 	const (
 		legacySecretCertName  = "cert" // Formerly known as certificatemanagement.ManagerSecretCertName
 		legacySecretKeyName   = "key"  // Formerly known as certificatemanagement.ManagerSecretKeyName

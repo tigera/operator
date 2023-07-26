@@ -16,6 +16,7 @@ package apiserver
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"time"
 
@@ -305,7 +306,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		if managementCluster != nil {
-			tunnelCASecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
+			tunnelCASecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace(), x509.ExtKeyUsageCodeSigning)
 			if tunnelCASecret == nil {
 				tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 				if err == nil {

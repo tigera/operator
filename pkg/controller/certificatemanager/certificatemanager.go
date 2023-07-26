@@ -63,7 +63,7 @@ type certificateManager struct {
 // brings their own secrets, CertificateManager will preserve and return them.
 type CertificateManager interface {
 	// GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
-	GetKeyPair(cli client.Client, secretName, secretNamespace string) (certificatemanagement.KeyPairInterface, error)
+	GetKeyPair(cli client.Client, secretName, secretNamespace string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
@@ -207,7 +207,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 }
 
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
-func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
+func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      secretName,
@@ -238,7 +238,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}
 
 	timeInvalid := x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now())
-	if timeInvalid || !ValidForClientAndServer(x509Cert) {
+	if timeInvalid || !HasRequiredKeyUsage(x509Cert, requiredKeyUsages) {
 		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we can simply return a certificate management key pair;
@@ -282,18 +282,23 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}, x509Cert, nil
 }
 
-// ValidForClientAndServer returns true if the given certificate is valid
+// HasRequiredKeyUsage returns true if the given certificate is valid
 // for use as both a server certificate, as well as a client certificate for mTLS connections.
-func ValidForClientAndServer(cert *x509.Certificate) bool {
-	var server, client bool
-	for _, ku := range cert.ExtKeyUsage {
-		if ku == x509.ExtKeyUsageClientAuth {
-			client = true
-		} else if ku == x509.ExtKeyUsageServerAuth {
-			server = true
+func HasRequiredKeyUsage(cert *x509.Certificate, required []x509.ExtKeyUsage) bool {
+	for _, ku := range required {
+		found := false
+		for _, certKU := range cert.ExtKeyUsage {
+			if certKU == ku {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return false
 		}
 	}
-	return client && server
+	return true
 }
 
 // GetCertificate returns a Certificate. If the certificate is not found or outdated, a k8s.io NotFound error is returned.
@@ -303,8 +308,12 @@ func (cm *certificateManager) GetCertificate(cli client.Client, secretName, secr
 }
 
 // GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
-func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
+func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error) {
+	if requiredKeyUsages == nil {
+		// Default if nil. If empty, we won't require any.
+		requiredKeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+	}
+	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false, requiredKeyUsages...)
 	return keyPair, err
 }
 

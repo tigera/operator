@@ -361,8 +361,11 @@ func removeInstallResourceCR(c client.Client, name string, ctx context.Context) 
 		err = GetResource(c, installation)
 		if kerror.IsNotFound(err) || kerror.IsGone(err) {
 			return nil
+		} else if err != nil {
+			return err
+		} else {
+			return fmt.Errorf("\"%s\" installation still exists", name)
 		}
-		return fmt.Errorf("\"%s\" installation still exists", name)
 	}, 20*time.Second).ShouldNot(HaveOccurred())
 }
 

@@ -260,7 +260,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		if timeInvalid {
 			return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
 		}
-		return nil, nil, fmt.Errorf("secret %s/%s must specify ExtKeyusageClientAuth", secretNamespace, secretName)
+		return nil, nil, fmt.Errorf("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
 	}
 	var issuer certificatemanagement.KeyPairInterface
 	if x509Cert.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix {

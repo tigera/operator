@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,6 @@ import (
 func TestConverter(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/converter_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/converter_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/migration/convert/convert Suite", []Reporter{junitReporter})
 }

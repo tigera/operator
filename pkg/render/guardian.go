@@ -129,7 +129,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(ManagerNamespace),
-		managerClusterRole(false, true, c.cfg.UsePSP),
+		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
 		managerClusterRoleBinding([]string{ManagerNamespace}),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),

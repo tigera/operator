@@ -85,6 +85,22 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 	})
 
+	It("should render security context constrains properly when provider is openshift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := render.Fluentd(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		//tigera-fluentd clusterRole should have openshift securitycontextconstraints PolicyRule
+		fluentdRole := rtest.GetResource(resources, "tigera-fluentd", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(fluentdRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
+	})
+
 	It("should render with a default configuration", func() {
 		expectedResources := []struct {
 			name    string

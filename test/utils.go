@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,12 +52,18 @@ func ExpectResourceCreated(c client.Client, obj client.Object) {
 }
 
 // ExpectResourceDestroyed asserts that the given object no longer exists.
-func ExpectResourceDestroyed(c client.Client, obj client.Object) {
+func ExpectResourceDestroyed(c client.Client, obj client.Object, timeout time.Duration) {
 	var err error
 	EventuallyWithOffset(1, func() error {
 		err = GetResource(c, obj)
-		return err
-	}, 10*time.Second).ShouldNot(BeNil(), fmt.Sprintf("GetResource %s should return error", obj.GetName()))
+		if errors.IsNotFound(err) || errors.IsGone(err) {
+			return nil
+		} else if err != nil {
+			return err
+		} else {
+			return fmt.Errorf("Resource \"%s\" should no longer exist", obj.GetName())
+		}
+	}, timeout).ShouldNot(HaveOccurred())
 
 	serr, ok := err.(*errors.StatusError)
 	ExpectWithOffset(1, ok).To(BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))

@@ -236,7 +236,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// Should not be considered valid.
-				valid := certificatemanager.ValidForClientAndServer(x509Cert)
+				valid := certificatemanager.HasRequiredKeyUsage(x509Cert, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 				Expect(valid).NotTo(BeTrue())
 
 				// Should create a new secret.
@@ -256,7 +256,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				certPEM := kp.GetCertificatePEM()
 				x509Cert, err := certificatemanagement.ParseCertificate(certPEM)
 				Expect(err).NotTo(HaveOccurred())
-				valid := certificatemanager.ValidForClientAndServer(x509Cert)
+				valid := certificatemanager.HasRequiredKeyUsage(x509Cert, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 				Expect(valid).To(BeTrue())
 			})
 		})

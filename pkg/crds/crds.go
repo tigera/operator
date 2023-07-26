@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,10 +22,9 @@ import (
 	"strings"
 	"sync"
 
-	// gopkg.in/yaml.v2 didn't parse all the fields but the ghodss package did
-	"github.com/ghodss/yaml"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 
 	opv1 "github.com/tigera/operator/api/v1"
 )

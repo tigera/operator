@@ -142,9 +142,9 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 		}
 	}
 
+	tlsAnnotations[cfg.InternalTLSKeyPair.HashAnnotationKey()] = cfg.InternalTLSKeyPair.HashAnnotationValue()
 	if cfg.ManagementCluster != nil {
-		tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
-		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
+		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.TunnelSecret.HashAnnotationValue()
 	}
 
 	return &managerComponent{
@@ -175,8 +175,9 @@ type ManagerConfiguration struct {
 	// KeyPair used for establishing mTLS tunnel with Guardian.
 	TunnelSecret certificatemanagement.KeyPairInterface
 
-	// TLS KeyPair used by Voltron within the cluster when operating as a management cluster.
-	InternalTrafficSecret certificatemanagement.KeyPairInterface
+	// TLS KeyPair used by both Voltron and es-proxy, presented by each as part of the mTLS handshake with
+	// other services within the cluster. This is used in both management and standalone clusters.
+	InternalTLSKeyPair certificatemanagement.KeyPairInterface
 
 	// Certificate bundle used by the manager pod to verify certificates presented
 	// by clients as part of mTLS authentication.
@@ -248,7 +249,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs,
 		managerServiceAccount(c.cfg.Namespace),
-		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP),
+		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
+		managerClusterRoleBinding([]string{c.cfg.Namespae}),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
 		managerClusterWideTigeraLayer(),
@@ -357,10 +359,10 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	v := []corev1.Volume{
 		c.cfg.TLSKeyPair.Volume(),
 		c.cfg.TrustedCertBundle.Volume(),
+		c.cfg.InternalTLSKeyPair.Volume(),
 	}
 	if c.cfg.ManagementCluster != nil {
 		v = append(v,
-			c.cfg.InternalTrafficSecret.Volume(),
 			c.cfg.TunnelSecret.Volume(),
 			c.cfg.VoltronLinseedKeyPair.Volume(),
 		)
@@ -507,8 +509,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		// This should never be nil, but we check it anyway just to be safe.
 		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
 	}
-	if c.cfg.InternalTrafficSecret != nil {
-		intKeyPath, intCertPath = c.cfg.InternalTrafficSecret.VolumeMountKeyFilePath(), c.cfg.InternalTrafficSecret.VolumeMountCertificateFilePath()
+	if c.cfg.InternalTLSKeyPair != nil {
+		intKeyPath, intCertPath = c.cfg.InternalTLSKeyPair.VolumeMountKeyFilePath(), c.cfg.InternalTLSKeyPair.VolumeMountCertificateFilePath()
 	}
 	if c.cfg.TunnelSecret != nil {
 		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
@@ -563,7 +565,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	mounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
 	if c.cfg.ManagementCluster != nil {
-		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()))
+		mounts = append(mounts, c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()))
 		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount(c.SupportedOSType()))
 		mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
 	}
@@ -582,9 +584,9 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	var keyPath, certPath string
-	if c.cfg.TLSKeyPair != nil {
+	if c.cfg.InternalTLSKeyPair != nil {
 		// This should never be nil, but we check it anyway just to be safe.
-		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
+		keyPath, certPath = c.cfg.InternalTLSKeyPair.VolumeMountKeyFilePath(), c.cfg.InternalTLSKeyPair.VolumeMountCertificateFilePath()
 	}
 
 	env := []corev1.EnvVar{
@@ -598,7 +600,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	volumeMounts := append(
 		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
-		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+		c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()),
 	)
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
@@ -657,7 +659,7 @@ func managerServiceAccount(ns string) *corev1.ServiceAccount {
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 // TODO: This is global. It should be moved to the cluster scoped manager component.
-func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.ClusterRole {
+func managerClusterRole(managementCluster, managedCluster, usePSP bool, kubernetesProvider operatorv1.Provider) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -808,6 +810,17 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool) *rbacv1.
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
 				ResourceNames: []string{"tigera-manager"},
+			},
+		)
+	}
+
+	if kubernetesProvider == operatorv1.ProviderOpenShift {
+		cr.Rules = append(cr.Rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{PSSPrivileged},
 			},
 		)
 	}

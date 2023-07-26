@@ -514,9 +514,23 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 		return reconcile.Result{}, err
 	}
 
-	var tunnelSecret certificatemanagement.KeyPairInterface
-	var internalTrafficSecret certificatemanagement.KeyPairInterface
+	// We expect that the secret that holds the certificates for internal communication within the management
+	// cluster is already created by kube-controllers.
+	internalTrafficSecret, err := certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
+	if internalTrafficSecret == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, request.TruthNamespace()), nil, logc)
+		return reconcile.Result{}, err
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, request.TruthNamespace()), err, logc)
+		return reconcile.Result{}, nil
+	}
+
+	// Es-proxy needs to trust Voltron for cross-cluster requests.
+	trustedBundle.AddCertificates(internalTrafficSecret)
+
 	var linseedVoltronSecret certificatemanagement.KeyPairInterface
+	var tunnelSecret certificatemanagement.KeyPairInterface
+
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
 		fillDefaults(managementCluster)
@@ -552,20 +566,6 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronTunnelSecretName, request.TruthNamespace()), err, logc)
 			return reconcile.Result{}, nil
 		}
-
-		// We expect that the secret that holds the certificates for internal communication within the management
-		// cluster is already created by kube-controllers.
-		internalTrafficSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
-		if internalTrafficSecret == nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, request.TruthNamespace()), nil, logc)
-			return reconcile.Result{}, err
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, request.TruthNamespace()), err, logc)
-			return reconcile.Result{}, nil
-		}
-
-		// Es-proxy needs to trust Voltron for cross-cluster requests.
-		trustedBundle.AddCertificates(internalTrafficSecret)
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
@@ -605,7 +605,7 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 		Installation:            args.Installation,
 		ManagementCluster:       managementCluster,
 		TunnelSecret:            tunnelSecret,
-		InternalTrafficSecret:   internalTrafficSecret,
+		InternalTLSKeyPair:      internalTrafficSecret,
 		ClusterDomain:           r.clusterDomain,
 		ESLicenseType:           elasticLicenseType,
 		Replicas:                replicas,

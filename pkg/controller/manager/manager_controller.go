@@ -16,6 +16,7 @@ package manager
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"time"
 
@@ -486,7 +487,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
-		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
+		// We don't require any ExtKeyusage on this cert, so pass an empty slice.
+		usage := []x509.ExtKeyUsage{}
+		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace(), usage...)
 		if tunnelSecret == nil {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.VoltronTunnelSecretName, common.OperatorNamespace()), nil, reqLogger)
 			return reconcile.Result{}, err

@@ -65,7 +65,7 @@ type CertificateManager interface {
 	// GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
 	GetKeyPair(cli client.Client, secretName, secretNamespace string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
-	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
+	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error)
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
 	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
@@ -170,8 +170,8 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 }
 
 // GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
-func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
+func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error) {
+	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false, requiredKeyUsages...)
 	if keyPair != nil && keyPair.UseCertificateManagement() {
 		return certificateManagementKeyPair(cm, secretName, dnsNames), nil
 	}
@@ -208,6 +208,12 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
 func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
+	if requiredKeyUsages == nil {
+		// Default the required ExtKeyUages if nil. Note the distinction between an empty slice and a nil slice.
+		// An empty slice will not hit this branch, and will thus result in no ExtKeyUsage requirement.
+		requiredKeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+	}
+
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      secretName,
@@ -309,11 +315,6 @@ func (cm *certificateManager) GetCertificate(cli client.Client, secretName, secr
 
 // GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
 func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error) {
-	if requiredKeyUsages == nil {
-		// Default the required ExtKeyUages if nil. Note the distinction between an empty slice and a nil slice.
-		// An empty slice will not hit this branch, and will thus result in no ExtKeyUsage requirement.
-		requiredKeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
-	}
 	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false, requiredKeyUsages...)
 	return keyPair, err
 }

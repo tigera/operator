@@ -7,7 +7,6 @@ require (
 	github.com/cloudflare/cfssl v1.6.3
 	github.com/containernetworking/cni v1.0.1
 	github.com/elastic/cloud-on-k8s/v2 v2.0.0-20221014162453-642f9ecd3e2e
-	github.com/ghodss/yaml v1.0.0
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v1.2.3
 	github.com/hashicorp/go-version v1.2.1
@@ -34,6 +33,7 @@ require (
 	k8s.io/utils v0.0.0-20230209194617-a36077c30491
 	sigs.k8s.io/controller-runtime v0.13.1
 	sigs.k8s.io/kind v0.17.0 // Do not remove, not used by code but used by build
+	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -120,7 +120,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20230123231816-1cb3ae25d79a // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
-	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
 replace (

@@ -435,11 +435,11 @@ func (r *ReconcileLogStorage) generateSecrets(
 		// Get certificate for TLS on Prometheus metrics endpoints. This is created in the monitor controller.
 		monitor.PrometheusClientTLSSecretName,
 
-		// Get certificate for es-proxy, which Linseed and es-gateway need to trust.
+		// Get certificate for es-proxy, which es-gateway needs to trust.
 		render.ManagerTLSSecretName,
 
 		// Linseed needs the manager internal cert in order to verify the cert presented by Voltron when provisioning
-		// tokens into managed clusters.
+		// tokens into managed clusters or when communicating with ES proxy
 		render.ManagerInternalTLSSecretName,
 
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.

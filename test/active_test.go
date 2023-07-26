@@ -72,7 +72,7 @@ var _ = Describe("pkg/active with apiserver", func() {
 		}
 		err := c.Delete(context.Background(), ns)
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(GetResource(c, ns), 240*time.Second).Should(HaveOccurred())
+		ExpectResourceDestroyed(c, ns, 10*time.Second)
 		active.OsExitOverride = os.Exit
 		active.TickerRateOverride = originalTickRate
 	})

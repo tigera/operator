@@ -171,17 +171,7 @@ var _ = Describe("Mainline component function tests", func() {
 			By("Deleting CR after its tigera status becomes available")
 			err := c.Delete(context.Background(), instance)
 			Expect(err).NotTo(HaveOccurred())
-			Eventually(func() error {
-				defaultInstallation := &operator.Installation{
-					TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				}
-				err = GetResource(c, defaultInstallation)
-				if kerror.IsNotFound(err) || kerror.IsGone(err) {
-					return nil
-				}
-				return fmt.Errorf("Default installation still exists")
-			}, 20*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+			ExpectResourceDestroyed(c, instance, 20*time.Second)
 
 			By("Verifying the tigera status is removed for deleted CR")
 			Eventually(func() error {
@@ -231,9 +221,9 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 
 		By("Verifying resources were not created")
 		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, ds)
+		ExpectResourceDestroyed(c, ds, 10*time.Second)
 		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, kc)
+		ExpectResourceDestroyed(c, kc, 10*time.Second)
 	})
 })
 
@@ -353,20 +343,7 @@ func removeInstallResourceCR(c client.Client, name string, ctx context.Context) 
 	// which will in turn terminate the operator. Race conditions can occur otherwise that will leave the
 	// Installation resource intact while the operator is no longer running which will result in test failures
 	// that try to create an Installation resource of their own
-	Eventually(func() error {
-		installation := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: name},
-		}
-		err = GetResource(c, installation)
-		if kerror.IsNotFound(err) || kerror.IsGone(err) {
-			return nil
-		} else if err != nil {
-			return err
-		} else {
-			return fmt.Errorf("\"%s\" installation still exists", name)
-		}
-	}, 20*time.Second).ShouldNot(HaveOccurred())
+	ExpectResourceDestroyed(c, instance, 20*time.Second)
 }
 
 func verifyCalicoHasDeployed(c client.Client) {

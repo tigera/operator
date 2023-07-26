@@ -120,20 +120,22 @@ var _ = Describe("CRD management tests", func() {
 
 		err := c.Delete(context.Background(), npCRD)
 		Expect(err).NotTo(HaveOccurred())
+		// The "MustPassRepeatedly" here is important because there is some jitter that isn't fully understood that can
+		// cause flakes without it
 		Eventually(func() error {
 			err := GetResource(c, npCRD)
 			if kerror.IsNotFound(err) || kerror.IsGone(err) {
 				return nil
+			} else if err != nil {
+				return err
+			} else {
+				return fmt.Errorf("NetworkPolicy CRD still exists")
 			}
-			return fmt.Errorf("NetworkPolicy CRD still exists")
 		}, 20*time.Second).MustPassRepeatedly(50).ShouldNot(HaveOccurred())
 		npCRD.SetResourceVersion("")
 		err = c.Create(context.Background(), npCRD)
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(func() error {
-			err := GetResource(c, npCRD)
-			return err
-		}, 20*time.Second).ShouldNot(HaveOccurred())
+		ExpectResourceCreated(c, npCRD)
 	})
 
 	Describe("Installing CRD", func() {
@@ -141,7 +143,7 @@ var _ = Describe("CRD management tests", func() {
 			// Delete the networkpolicies so we can tell that it gets created.
 			err := c.Delete(context.Background(), npCRD)
 			Expect(err).NotTo(HaveOccurred())
-			ExpectResourceDestroyed(c, npCRD)
+			ExpectResourceDestroyed(c, npCRD, 10*time.Second)
 		})
 
 		It("Should create CRD if it doesn't exist", func() {

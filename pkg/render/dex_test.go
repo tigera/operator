@@ -179,6 +179,7 @@ var _ = Describe("dex rendering tests", func() {
 				ClusterDomain: clusterName,
 				TLSKeyPair:    tlsKeyPair,
 				TrustedBundle: trustedCaBundle,
+				UsePSP:        true,
 			}
 		})
 
@@ -207,6 +208,7 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
+				{"tigera-dex", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			for i, expectedRes := range expectedResources {
@@ -294,12 +296,25 @@ var _ = Describe("dex rendering tests", func() {
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{"tigera-dex:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+				{"tigera-dex", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			for i, expectedRes := range expectedResources {
 				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
+		})
+
+		It("should render properly when PSP is not supported by the cluster", func() {
+			cfg.UsePSP = false
+			component := render.Dex(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			// Should not contain any PodSecurityPolicies
+			for _, r := range resources {
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+			}
 		})
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {

@@ -782,6 +782,10 @@ type WindowsConfig struct {
 	// +optional
 	CNIConfFilename string `json:"cniConfFilename,omitempty"`
 
+	// VXLANMACPrefix is the prefix of the VXLAN interface MAC address
+	// +optional
+	VXLANMACPrefix string `json:"vxlanMACPrefix,omitempty"`
+
 	// DisableWindowsDaemonset specifies whether the calico-node-windows should be disabled
 	// Default: false
 	// +optional

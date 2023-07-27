@@ -3561,8 +3561,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
 		ProbeHandler:   corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
-		TimeoutSeconds: 5,
-		PeriodSeconds:  10,
+		TimeoutSeconds: 10,
 	}
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{

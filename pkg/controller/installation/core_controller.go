@@ -1341,7 +1341,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var hasWindowsNodesAndHPCSupport bool
 	// Don't render calico-node-windows if it's explicitly disabled in the installation
-	if instance.Spec.Windows != nil && instance.Spec.Windows.DisableWindowsDaemonset != nil && *instance.Spec.Windows.DisableWindowsDaemonset == true {
+	if instance.Spec.Windows != nil && instance.Spec.Windows.DisableWindowsDaemonset != nil && *instance.Spec.Windows.DisableWindowsDaemonset {
 		reqLogger.Info("Calico Windows daemonset is disabled in the operator installation")
 	} else {
 		// Build a configuration for rendering calico-node-windows, but only if there are Windows nodes in the cluster

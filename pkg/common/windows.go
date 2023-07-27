@@ -50,7 +50,10 @@ func HasWindowsNodesAndHPCSupport(c client.Client) (bool, error) {
 		// ContainerRuntimeVersion will have the format "containerd://1.6.8" or "docker://2.3.4"
 		splits := strings.Split(node.Status.NodeInfo.ContainerRuntimeVersion, "://")
 		runtime := splits[0]
-		ver := strings.TrimPrefix(splits[1], "v")
+		ver := ""
+		if len(splits) > 1 {
+			ver = strings.TrimPrefix(splits[1], "v")
+		}
 		if runtime == "containerd" && goversion.CompareNormalized(ver, "1.7.0", ">=") {
 			return true, nil
 		}

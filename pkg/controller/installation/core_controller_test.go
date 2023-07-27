@@ -316,14 +316,17 @@ var _ = Describe("Testing core-controller installation", func() {
 
 	Context("image reconciliation tests", func() {
 		type testConf struct {
-			enableWindows bool
+			EnableWindows           bool
+			EnableWindowsHPCSupport bool
 		}
 		for _, testConfig := range []testConf{
-			{false},
-			{true},
+			{false, false},
+			{true, false},
+			{true, true},
 		} {
-			enableWindows := testConfig.enableWindows
-			Describe(fmt.Sprintf("enableWindows: %v", enableWindows), func() {
+			enableWindows := testConfig.EnableWindows
+			enableWindowsHPCSupport := testConfig.EnableWindowsHPCSupport
+			Describe(fmt.Sprintf("enableWindows: %v enableWindowsHPCSupport: %v", enableWindows, enableWindowsHPCSupport), func() {
 				var c client.Client
 				var cs *kfake.Clientset
 				var ctx context.Context
@@ -367,14 +370,24 @@ var _ = Describe("Testing core-controller installation", func() {
 
 					if enableWindows {
 						// Create a Windows node so that the calico-node-windows daemonset is rendered
-						Expect(c.Create(ctx, &corev1.Node{
+						node := &corev1.Node{
 							ObjectMeta: metav1.ObjectMeta{
 								Name: "nodewin1",
 								Labels: map[string]string{
 									"kubernetes.io/os": "windows",
 								},
 							},
-						})).ToNot(HaveOccurred())
+						}
+
+						if enableWindowsHPCSupport {
+							node.Status = corev1.NodeStatus{
+								NodeInfo: corev1.NodeSystemInfo{
+									ContainerRuntimeVersion: "containerd://1.7.1",
+								},
+							}
+						}
+
+						Expect(c.Create(ctx, node)).ToNot(HaveOccurred())
 					}
 
 					// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -531,7 +544,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						fmt.Sprintf("some.registry.org/%s:%s",
 							components.ComponentCSRInitContainer.Image,
 							components.ComponentCSRInitContainer.Version)))
-					if enableWindows {
+					if enableWindows && enableWindowsHPCSupport {
 						dsWin := appsv1.DaemonSet{
 							TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 							ObjectMeta: metav1.ObjectMeta{
@@ -584,7 +597,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							},
 						},
 					}
-					if enableWindows {
+					if enableWindows && enableWindowsHPCSupport {
 						imageSet.Spec.Images = append(imageSet.Spec.Images, []operator.Image{
 							{Image: "tigera/cnx-node-windows", Digest: "sha256:tigeracnxnodewindowshash"},
 							{Image: "tigera/cni-windows", Digest: "sha256:tigeracniwindowshash"},
@@ -674,7 +687,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentCSRInitContainer.Image,
 							"sha256:calicocsrinithash")))
-					if enableWindows {
+					if enableWindows && enableWindowsHPCSupport {
 						dsWin := appsv1.DaemonSet{
 							TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 							ObjectMeta: metav1.ObjectMeta{

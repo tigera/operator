@@ -237,7 +237,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Get Installation resource.
@@ -281,8 +281,11 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	}
 	clusterCM.AddToStatusManager(r.status, render.ElasticsearchNamespace)
 
+	// Determine if Kibana should be enabled for this cluster.
+	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
+
 	// Generate Elasticsearch / Kibana secrets as needed.
-	elasticKeys, err := r.generateClusterSecrets(reqLogger, false, clusterCM)
+	elasticKeys, err := r.generateClusterSecrets(reqLogger, kibanaEnabled, clusterCM)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -305,8 +308,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 
 	// Provision secrets and the trusted bundle into the cluster.
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-
-	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
 
 	// Before we can create secrets, we need to ensure the tigera-elasticsearch namespace exists.
 	esNamespace := render.CreateNamespace(render.ElasticsearchNamespace, install.KubernetesProvider, render.PSSPrivileged)

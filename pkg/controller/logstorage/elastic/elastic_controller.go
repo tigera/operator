@@ -170,6 +170,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %w", err)
 	}
+	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
@@ -297,7 +300,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if ls == nil || ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Get Installation resource.

@@ -7504,6 +7504,10 @@ spec:
                     description: 'DisableWindowsDaemonset specifies whether the calico-node-windows
                       should be disabled Default: false'
                     type: boolean
+                  vxlanMACPrefix:
+                    description: VXLANMACPrefix is the prefix of the VXLAN interface
+                      MAC address
+                    type: string
                 type: object
             type: object
           status:
@@ -15534,6 +15538,10 @@ spec:
                         description: 'DisableWindowsDaemonset specifies whether the
                           calico-node-windows should be disabled Default: false'
                         type: boolean
+                      vxlanMACPrefix:
+                        description: VXLANMACPrefix is the prefix of the VXLAN interface
+                          MAC address
+                        type: string
                     type: object
                 type: object
               conditions:

@@ -15,6 +15,7 @@
 package render
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -543,80 +544,16 @@ func (c *windowsComponent) windowsCNIConfigMap() *corev1.ConfigMap {
 		return nil
 	}
 
-	// Determine MTU to use for veth interfaces.
-	// Zero means to use auto-detection.
-	var mtu int32 = 0
-	if m := getMTU(c.cfg.Installation); m != nil {
-		mtu = *m
-	}
+	plugins := make([]interface{}, 0)
+	plugins = append(plugins, c.createCalicoPluginConfig())
 
-	var k8sAPIRoot string
-	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
-	if apiRoot != "" {
-		k8sAPIRoot = fmt.Sprintf("\n          \"k8s_api_root\":\"%s\",", apiRoot)
-	}
+	pluginsArray, _ := json.Marshal(plugins)
 
 	config := fmt.Sprintf(`{
-  "name": "k8s-pod-network",
-  "cniVersion": "0.3.1",
-  "plugins": [
-    {
-      "type": "calico",
-      "name": "Calico",
-      "windows_use_single_network": true,
-      "mode": "__MODE__",
-      "vxlan_mac_prefix":  "__MAC_PREFIX__",
-      "vxlan_vni": %d,
-      "mtu": %d,
-      "policy": {
-        "type": "k8s"
-      },
-      "log_level": "__LOG_LEVEL__",
-      "log_file_path": "__LOG_FILE_PATH__",
-      "windows_loopback_DSR": __DSR_SUPPORT__,
-      "capabilities": {"dns": true},
-      "DNS":  {
-        "Nameservers":  [__KUBERNETES_DNS_SERVERS__],
-        "Search":  [
-          "svc.cluster.local"
-        ]
-      },
-      "nodename": "__KUBERNETES_NODE_NAME__",
-      "nodename_file": "__NODENAME_FILE__",
-      "nodename_file_optional": true,
-      "datastore_type": "__DATASTORE_TYPE__",
-
-      "kubernetes": {%s
-        "kubeconfig": "__KUBECONFIG_FILEPATH__"
-      },
-      "ipam": {
-        "type": "__IPAM_TYPE__",
-        "subnet": "usePodCidr"
-      },
-
-      "policies":  [
-        {
-          "Name":  "EndpointPolicy",
-          "Value":  {
-            "Type":  "OutBoundNAT",
-            "ExceptionList":  [
-              "__KUBERNETES_SERVICE_CIDR__"
-            ]
-          }
-        },
-        {
-          "Name":  "EndpointPolicy",
-          "Value":  {
-            "Type":  "__ROUTE_TYPE__",
-            "DestinationPrefix":  "__KUBERNETES_SERVICE_CIDR__",
-            "NeedEncap":  true
-          }
-        }
-      ]
-    }
-  ]
-}
-	`, c.cfg.VXLANVNI, mtu, k8sAPIRoot)
+			  "name": "k8s-pod-network",
+			  "cniVersion": "0.3.1",
+			  "plugins": %s
+			}`, string(pluginsArray))
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -647,6 +584,12 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
 		{
+			Name: "KUBERNETES_NODE_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+		{
 			Name: "CNI_NETWORK_CONFIG",
 			ValueFrom: &corev1.EnvVarSource{
 				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -668,6 +611,132 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 	}
 
 	return envVars
+}
+
+func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
+	// Determine MTU to use for veth interfaces.
+	// Zero means to use auto-detection.
+	var mtu int32 = 0
+	if m := getMTU(c.cfg.Installation); m != nil {
+		mtu = *m
+	}
+
+	ipam := map[string]interface{}{
+		"type":   "calico-ipam",
+		"subnet": "usePodCidr",
+	}
+	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
+		ipam["type"] = "host-local"
+	}
+
+	// Determine the networking backend
+	backend := "none"
+	// If BGP is enabled, use BGP
+	if bgpEnabled(c.cfg.Installation) {
+		backend = "windows-bgp"
+	} else {
+		// If BGP is not enabled, use VXLAN if using Calico networking and not host-local IPAM
+		if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico && c.cfg.Installation.CNI.IPAM.Type != operatorv1.IPAMPluginHostLocal {
+			backend = "vxlan"
+		}
+	}
+
+	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
+
+	vxlanMACPrefix := "0E-2A"
+	if c.cfg.Installation.Windows != nil && c.cfg.Installation.Windows.VXLANMACPrefix != "" {
+		vxlanMACPrefix = c.cfg.Installation.Windows.VXLANMACPrefix
+	}
+
+	capabilities := map[string]interface{}{
+		"dns": true,
+	}
+
+	// calico plugin
+	calicoPluginConfig := map[string]interface{}{
+		"type":                       "calico",
+		"name":                       "Calico",
+		"windows_use_single_network": true,
+		"mode":                       backend,
+		"vxlan_mac_prefix":           vxlanMACPrefix,
+		"vxlan_vni":                  c.cfg.VXLANVNI,
+		"mtu":                        mtu,
+		"policy": map[string]interface{}{
+			"type": "k8s",
+		},
+		"log_file_path":          "/var/log/calico/cni/cni.log",
+		"windows_loopback_DSR":   "__DSR_SUPPORT__",
+		"capabilities":           capabilities,
+		"nodename":               "__KUBERNETES_NODE_NAME__",
+		"nodename_file":          "__NODENAME_FILE__",
+		"nodename_file_optional": true,
+		"datastore_type":         "kubernetes",
+		"ipam":                   ipam,
+	}
+
+	// Determine logging configuration
+	if c.cfg.Installation.Logging != nil && c.cfg.Installation.Logging.CNI != nil {
+
+		if c.cfg.Installation.Logging.CNI.LogSeverity != nil {
+			logSeverity := string(*c.cfg.Installation.Logging.CNI.LogSeverity)
+			calicoPluginConfig["log_level"] = logSeverity
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxSize != nil {
+			logFileMaxSize := c.cfg.Installation.Logging.CNI.LogFileMaxSize.Value() / (1024 * 1024)
+			calicoPluginConfig["log_file_max_size"] = logFileMaxSize
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxCount != nil {
+			logFileMaxCount := *c.cfg.Installation.Logging.CNI.LogFileMaxCount
+			calicoPluginConfig["log_file_max_count"] = logFileMaxCount
+		}
+
+		if c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays != nil {
+			logFileMaxAgeDays := *c.cfg.Installation.Logging.CNI.LogFileMaxAgeDays
+			calicoPluginConfig["log_file_max_age"] = logFileMaxAgeDays
+		}
+	}
+
+	cniNetDir, _, _, _ := c.cniConfigInfo()
+	kubernetes := map[string]interface{}{
+		"kubeconfig": "c:/" + cniNetDir + "/calico-kubeconfig",
+	}
+	if apiRoot != "" {
+		kubernetes["k8s_api_root"] = apiRoot
+	}
+	calicoPluginConfig["kubernetes"] = kubernetes
+
+	dns := map[string]interface{}{
+		"Nameservers": strings.Split(c.cfg.K8sServiceEp.DNSServers, ","),
+		"Search": []string{
+			"svc.cluster.local",
+		},
+	}
+	calicoPluginConfig["DNS"] = dns
+
+	policies := []map[string]interface{}{
+		{
+			"Name": "EndpointPolicy",
+			"Value": map[string]interface{}{
+				"Type": "OutBoundNAT",
+				"ExceptionList": []string{
+					c.cfg.K8sServiceEp.ServiceCIDR,
+				},
+			},
+		},
+		{
+			"Name": "EndpointPolicy",
+			"Value": map[string]interface{}{
+				"Type":              "SDNROUTE",
+				"DestinationPrefix": c.cfg.K8sServiceEp.ServiceCIDR,
+				"NeedEncap":         true,
+			},
+		},
+	}
+	calicoPluginConfig["policies"] = policies
+
+	return calicoPluginConfig
 }
 
 // cniConfigInfo returns the CNI binary, network config and log directories and the CNI conf filename for the configured platform.
@@ -825,6 +894,7 @@ func (c *windowsComponent) felixContainer() corev1.Container {
 		VolumeMounts:    c.windowsVolumeMounts(),
 		LivenessProbe:   lp,
 		ReadinessProbe:  rp,
+		Lifecycle:       c.windowsLifecycle(),
 	}
 }
 
@@ -910,6 +980,16 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginAmazonVPC {
 		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
 	}
+
+	// Set the KUBE_NETWORK env var based on the Provider
+	kubeNetwork := "Calico.*"
+	switch c.cfg.Installation.KubernetesProvider {
+	case operatorv1.ProviderAKS:
+		kubeNetwork = "azure.*"
+	case operatorv1.ProviderEKS:
+		kubeNetwork = "vpc.*"
+	}
+	windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "KUBE_NETWORK", Value: kubeNetwork})
 
 	// If there are no IP pools specified, then configure no default IP pools.
 	if c.cfg.Installation.CalicoNetwork == nil || len(c.cfg.Installation.CalicoNetwork.IPPools) == 0 {
@@ -1180,6 +1260,15 @@ func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *cor
 		PeriodSeconds:  10,
 	}
 	return lp, rp
+}
+
+// windowsLifecycle creates the node's postStart and preStop hooks.
+func (c *windowsComponent) windowsLifecycle() *corev1.Lifecycle {
+	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
+	lc := &corev1.Lifecycle{
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: preStopCmd}},
+	}
+	return lc
 }
 
 // windowsResources creates the node's resource requirements.

@@ -622,7 +622,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		ipForward = (*c.cfg.Installation.CalicoNetwork.ContainerIPForwarding == operatorv1.ContainerIPForwardingEnabled)
 	}
 
-	ipam := c.getCalicoIPAM()
+	ipam := getCalicoIPAM(c.cfg.Installation.CalicoNetwork)
 	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
 		ipam = buildHostLocalIPAM(c.cfg.Installation.CalicoNetwork)
 	}
@@ -750,16 +750,16 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
+func getCalicoIPAM(cns *operatorv1.CalicoNetworkSpec) map[string]interface{} {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
+	if v4pool := GetIPv4Pool(cns.IPPools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
 		assign_ipv4 = "false"
 	}
-	if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
+	if v6pool := GetIPv6Pool(cns.IPPools); v6pool != nil {
 		assign_ipv6 = "true"
 	} else {
 		assign_ipv6 = "false"

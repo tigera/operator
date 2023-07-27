@@ -28,7 +28,9 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
@@ -65,7 +67,7 @@ type CertificateManager interface {
 	// GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
 	GetKeyPair(cli client.Client, secretName, secretNamespace string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
-	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error)
+	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
 	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
@@ -170,8 +172,8 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 }
 
 // GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
-func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false, requiredKeyUsages...)
+func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
+	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
 	if keyPair != nil && keyPair.UseCertificateManagement() {
 		return certificateManagementKeyPair(cm, secretName, dnsNames), nil
 	}
@@ -206,13 +208,40 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}, nil
 }
 
+func getKeyUsage(secret string) []x509.ExtKeyUsage {
+	serverClientUsage := []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+	switch secret {
+	case monitor.PrometheusClientTLSSecretName:
+		return serverClientUsage
+	case render.ManagerTLSSecretName:
+		return serverClientUsage
+	case render.ManagerInternalTLSSecretName:
+		return serverClientUsage
+	case render.FluentdPrometheusTLSSecretName:
+		return serverClientUsage
+	case render.IntrusionDetectionTLSSecretName:
+		return serverClientUsage
+	case render.AnomalyDetectorTLSSecretName:
+		return serverClientUsage
+	case render.DPITLSSecretName:
+		return serverClientUsage
+	case render.ComplianceServerCertSecret:
+		return serverClientUsage
+	case render.ComplianceSnapshotterSecret:
+		return serverClientUsage
+	case render.ComplianceBenchmarkerSecret:
+		return serverClientUsage
+	case render.ComplianceReporterSecret:
+		return serverClientUsage
+	case render.PolicyRecommendationTLSSecretName:
+		return serverClientUsage
+	}
+	return []x509.ExtKeyUsage{}
+}
+
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
 func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool, requiredKeyUsages ...x509.ExtKeyUsage) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
-	if requiredKeyUsages == nil {
-		// Default the required ExtKeyUages if nil. Note the distinction between an empty slice and a nil slice.
-		// An empty slice will not hit this branch, and will thus result in no ExtKeyUsage requirement.
-		requiredKeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
-	}
+	requiredKeyUsages = getKeyUsage(secretName)
 
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
@@ -244,7 +273,8 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}
 
 	timeInvalid := x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now())
-	if timeInvalid {
+	invalidKeyUsage := !hasRequiredKeyUsage(x509Cert, requiredKeyUsages)
+	if timeInvalid || invalidKeyUsage {
 		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we can simply return a certificate management key pair;
@@ -252,24 +282,17 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
 			}
 
+			if invalidKeyUsage {
+				log.Info("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
+			}
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
 			return nil, nil, nil
 		}
 
-		return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
-	}
-
-	// We need to recreate any operator managed certificates that do not have the correct key usages
-	hasRequiredUsage := HasRequiredKeyUsage(x509Cert, requiredKeyUsages)
-	isOperatorCreated := strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix)
-	if !hasRequiredUsage && isOperatorCreated {
-		if cm.keyPair.CertificateManagement != nil {
-			// When certificate management is enabled, we can simply return a certificate management key pair;
-			// the old secret will be deleted automatically.
-			return certificateManagementKeyPair(cm, secretName, nil), nil, nil
+		if timeInvalid {
+			return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
 		}
-		log.Info("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
-		return nil, nil, nil
+		return nil, nil, fmt.Errorf("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
 	}
 
 	var issuer certificatemanagement.KeyPairInterface
@@ -298,9 +321,9 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}, x509Cert, nil
 }
 
-// HasRequiredKeyUsage returns true if the given certificate is valid
+// hasRequiredKeyUsage returns true if the given certificate is valid
 // for use as both a server certificate, as well as a client certificate for mTLS connections.
-func HasRequiredKeyUsage(cert *x509.Certificate, required []x509.ExtKeyUsage) bool {
+func hasRequiredKeyUsage(cert *x509.Certificate, required []x509.ExtKeyUsage) bool {
 	for _, ku := range required {
 		found := false
 		for _, certKU := range cert.ExtKeyUsage {

@@ -244,7 +244,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}
 
 	timeInvalid := x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now())
-	if timeInvalid || !HasRequiredKeyUsage(x509Cert, requiredKeyUsages) {
+	if timeInvalid {
 		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we can simply return a certificate management key pair;
@@ -256,12 +256,22 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 			return nil, nil, nil
 		}
 
-		// We return an error for byo secrets.
-		if timeInvalid {
-			return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
-		}
-		return nil, nil, fmt.Errorf("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
+		return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
 	}
+
+	// We need to recreate any operator managed certificates that do not have the correct key usages
+	hasRequiredUsage := HasRequiredKeyUsage(x509Cert, requiredKeyUsages)
+	isOperatorCreated := strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix)
+	if !hasRequiredUsage && isOperatorCreated {
+		if cm.keyPair.CertificateManagement != nil {
+			// When certificate management is enabled, we can simply return a certificate management key pair;
+			// the old secret will be deleted automatically.
+			return certificateManagementKeyPair(cm, secretName, nil), nil, nil
+		}
+		log.Info("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
+		return nil, nil, nil
+	}
+
 	var issuer certificatemanagement.KeyPairInterface
 	if x509Cert.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix {
 		if cm.keyPair.CertificateManagement != nil {

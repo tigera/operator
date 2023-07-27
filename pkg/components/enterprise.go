@@ -18,40 +18,40 @@
 package components
 
 var (
-	EnterpriseRelease string = "v3.17.0"
+	EnterpriseRelease string = "v3.17.1-calient-0.dev-86-g7a9b849d2fe6"
 
 	ComponentAPIServer = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/cnx-apiserver",
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/compliance-benchmarker",
 	}
 
 	ComponentComplianceController = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/compliance-controller",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/compliance-reporter",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/compliance-server",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/compliance-snapshotter",
 	}
 
 	ComponentDeepPacketInspection = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/deep-packet-inspection",
 	}
 
@@ -64,17 +64,17 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
 	ComponentElasticsearch = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-9-g032a5799d313",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentElasticsearchFIPS = component{
-		Version: "v3.17.0-fips",
+		Version: "v3.17.1-calient-0.dev-9-g032a5799d313-fips",
 		Image:   "tigera/elasticsearch",
 	}
 
@@ -83,107 +83,107 @@ var (
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-2-g2ca82c57e143",
 		Image:   "tigera/eck-operator",
 	}
 
 	ComponentEsCurator = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-4-g53403f7dbc65",
 		Image:   "tigera/es-curator",
 	}
 
 	ComponentEsProxy = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/es-proxy",
 	}
 
 	ComponentESGateway = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/es-gateway",
 	}
 
 	ComponentLinseed = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/linseed",
 	}
 
 	ComponentFluentd = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-5-gd7d7257973c0",
 		Image:   "tigera/fluentd",
 	}
 
 	ComponentFluentdWindows = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-5-gd7d7257973c0",
 		Image:   "tigera/fluentd-windows",
 	}
 
 	ComponentGuardian = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/guardian",
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
 	ComponentAnomalyDetectionJobs = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-2-gc0b4edd57fc4",
 		Image:   "tigera/anomaly_detection_jobs",
 	}
 
 	ComponentAnomalyDetectionAPI = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/anomaly-detection-api",
 	}
 
 	ComponentKibana = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-4-gfbae8e511e99",
 		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-1.dev-49-gf1b411fbf3a0",
 		Image:   "tigera/cnx-manager",
 	}
 
 	ComponentDex = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-2-ga84da0dead39",
 		Image:   "tigera/dex",
 	}
 
 	ComponentManagerProxy = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/voltron",
 	}
 
 	ComponentPacketCapture = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/packetcapture",
 	}
 
 	ComponentPolicyRecommendation = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/policy-recommendation",
 	}
 
 	ComponentEgressGateway = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/egress-gateway",
 	}
 
 	ComponentL7Collector = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/l7-collector",
 	}
 
 	ComponentEnvoyProxy = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-0-g9562ff162944",
 		Image:   "tigera/envoy",
 	}
 
 	ComponentDikastes = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/dikastes",
 	}
 
@@ -192,12 +192,12 @@ var (
 	}
 
 	ComponentPrometheus = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-3-g457b84180d50",
 		Image:   "tigera/prometheus",
 	}
 
 	ComponentTigeraPrometheusService = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/prometheus-service",
 	}
 
@@ -206,67 +206,67 @@ var (
 	}
 
 	ComponentPrometheusAlertmanager = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-2-g9ece9bc42894",
 		Image:   "tigera/alertmanager",
 	}
 
 	ComponentQueryServer = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/cnx-queryserver",
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/kube-controllers",
 	}
 
 	ComponentTigeraNode = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/cnx-node",
 	}
 
 	ComponentTigeraTypha = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/typha",
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/cni",
 	}
 
 	ComponentTigeraCNIFIPS = component{
-		Version: "v3.17.0-fips",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6-fips",
 		Image:   "tigera/cni",
 	}
 
 	ComponentCloudControllers = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-2-g526515e3d067",
 		Image:   "tigera/cloud-controllers",
 	}
 
 	ComponentElasticsearchMetrics = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-2-g468a64393bd5",
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
 	ComponentTigeraWindowsUpgrade = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/calico-windows-upgrade",
 	}
 
 	ComponentFlexVolumePrivate = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/pod2daemon-flexvol",
 	}
 
 	ComponentCSIPrivate = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/csi",
 	}
 
 	ComponentCSINodeDriverRegistrarPrivate = component{
-		Version: "v3.17.0",
+		Version: "v3.17.1-calient-0.dev-86-g7a9b849d2fe6",
 		Image:   "tigera/node-driver-registrar",
 	}
 	// Only components that correspond directly to images should be included in this list,

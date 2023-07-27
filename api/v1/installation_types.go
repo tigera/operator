@@ -171,8 +171,8 @@ type InstallationSpec struct {
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
-	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
-	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
+	// CalicoNodeWindowsDaemonSet configures the calico-node-windows DaemonSet.
+	CalicoNodeWindowsDaemonSet *CalicoNodeWindowsDaemonSet `json:"calicoNodeWindowsDaemonSet,omitempty"`
 
 	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
 	// Default: Disabled
@@ -183,6 +183,10 @@ type InstallationSpec struct {
 	// Logging Configuration for Components
 	// +optional
 	Logging *Logging `json:"logging,omitempty"`
+
+	// Windows Configuration
+	// +optional
+	Windows *WindowsConfig `json:"windows,omitempty"`
 }
 
 type Logging struct {
@@ -759,4 +763,32 @@ func IsFIPSModeEnabled(mode *FIPSMode) bool {
 // IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
 func IsFIPSModeEnabledString(mode *FIPSMode) string {
 	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
+}
+
+type WindowsConfig struct {
+	// CNIBinDir is the path to the CNI binaries directory on Windows, it must match what is on ContainerD on the Windows nodes.
+	// +optional
+	CNIBinDir string `json:"cniBinDir,omitempty"`
+
+	// CNIConfDir is the path to the CNI configuration directory on Windows, it must match what is on ContainerD on the Windows nodes.
+	// +optional
+	CNIConfDir string `json:"cniConfDir,omitempty"`
+
+	// CNILogDir is the path to the Calico CNI logs directory on Windows.
+	// +optional
+	CNILogDir string `json:"cniLogDir,omitempty"`
+
+	// CNIConfFilename is the filename of the CNI configuration file on Windows.
+	// +optional
+	CNIConfFilename string `json:"cniConfFilename,omitempty"`
+
+	// VXLANMACPrefix is the prefix of the VXLAN interface MAC address
+	// +optional
+	VXLANMACPrefix string `json:"vxlanMACPrefix,omitempty"`
+
+	// DisableWindowsDaemonset specifies whether the calico-node-windows should be disabled
+	// Default: false
+	// +optional
+	// +kubebuilder:default:=false
+	DisableWindowsDaemonset *bool `json:"disableWindowsDaemonset,omitempty"`
 }

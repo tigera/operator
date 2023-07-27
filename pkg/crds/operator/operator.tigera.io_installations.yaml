@@ -2757,13 +2757,13 @@ spec:
                         type: object
                     type: object
                 type: object
-              calicoWindowsUpgradeDaemonSet:
-                description: CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
+              calicoNodeWindowsDaemonSet:
+                description: CalicoNodeWindowsDaemonSet configures the calico-node-windows
                   DaemonSet.
                 properties:
                   metadata:
                     description: Metadata is a subset of a Kubernetes object's metadata
-                      that is added to the Deployment.
+                      that is added to the DaemonSet.
                     properties:
                       annotations:
                         additionalProperties:
@@ -2783,24 +2783,24 @@ spec:
                         type: object
                     type: object
                   spec:
-                    description: Spec is the specification of the calico-windows-upgrade
+                    description: Spec is the specification of the calico-node-windows
                       DaemonSet.
                     properties:
                       minReadySeconds:
                         description: MinReadySeconds is the minimum number of seconds
-                          for which a newly created Deployment pod should be ready
+                          for which a newly created DaemonSet pod should be ready
                           without any of its container crashing, for it to be considered
                           available. If specified, this overrides any minReadySeconds
-                          value that may be set on the calico-windows-upgrade DaemonSet.
-                          If omitted, the calico-windows-upgrade DaemonSet will use
-                          its default value for minReadySeconds.
+                          value that may be set on the calico-node-windows DaemonSet.
+                          If omitted, the calico-node-windows DaemonSet will use its
+                          default value for minReadySeconds.
                         format: int32
                         maximum: 2147483647
                         minimum: 0
                         type: integer
                       template:
-                        description: Template describes the calico-windows-upgrade
-                          DaemonSet pod that will be created.
+                        description: Template describes the calico-node-windows DaemonSet
+                          pod that will be created.
                         properties:
                           metadata:
                             description: Metadata is a subset of a Kubernetes object's
@@ -2825,18 +2825,17 @@ spec:
                                 type: object
                             type: object
                           spec:
-                            description: Spec is the calico-windows-upgrade DaemonSet's
+                            description: Spec is the calico-node-windows DaemonSet's
                               PodSpec.
                             properties:
                               affinity:
                                 description: 'Affinity is a group of affinity scheduling
-                                  rules for the calico-windows-upgrade pods. If specified,
+                                  rules for the calico-node-windows pods. If specified,
                                   this overrides any affinity that may be set on the
-                                  calico-windows-upgrade DaemonSet. If omitted, the
-                                  calico-windows-upgrade DaemonSet will use its default
-                                  value for affinity. WARNING: Please note that this
-                                  field will override the default calico-windows-upgrade
-                                  DaemonSet affinity.'
+                                  calico-node-windows DaemonSet. If omitted, the calico-node-windows
+                                  DaemonSet will use its default value for affinity.
+                                  WARNING: Please note that this field will override
+                                  the default calico-node-windows DaemonSet affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -3871,31 +3870,96 @@ spec:
                                     type: object
                                 type: object
                               containers:
-                                description: Containers is a list of calico-windows-upgrade
+                                description: Containers is a list of calico-node-windows
                                   containers. If specified, this overrides the specified
-                                  calico-windows-upgrade DaemonSet containers. If
-                                  omitted, the calico-windows-upgrade DaemonSet will
-                                  use its default values for its containers.
+                                  calico-node-windows DaemonSet containers. If omitted,
+                                  the calico-node-windows DaemonSet will use its default
+                                  values for its containers.
                                 items:
-                                  description: CalicoWindowsUpgradeDaemonSetContainer
-                                    is a calico-windows-upgrade DaemonSet container.
+                                  description: CalicoNodeWindowsDaemonSetContainer
+                                    is a calico-node-windows DaemonSet container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the calico-windows-upgrade DaemonSet container
+                                        the calico-node-windows DaemonSet container
                                         by name.
                                       enum:
-                                      - calico-windows-upgrade
+                                      - calico-node-windows
                                       type: string
                                     resources:
                                       description: Resources allows customization
                                         of limits and requests for compute resources
                                         such as cpu and memory. If specified, this
-                                        overrides the named calico-windows-upgrade
-                                        DaemonSet container's resources. If omitted,
-                                        the calico-windows-upgrade DaemonSet will
-                                        use its default value for this container's
-                                        resources.
+                                        overrides the named calico-node-windows DaemonSet
+                                        container's resources. If omitted, the calico-node-windows
+                                        DaemonSet will use its default value for this
+                                        container's resources. If used in conjunction
+                                        with the deprecated ComponentResources, then
+                                        this value takes precedence.
+                                      properties:
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                              initContainers:
+                                description: InitContainers is a list of calico-node-windows
+                                  init containers. If specified, this overrides the
+                                  specified calico-node-windows DaemonSet init containers.
+                                  If omitted, the calico-node-windows DaemonSet will
+                                  use its default values for its init containers.
+                                items:
+                                  description: CalicoNodeWindowsDaemonSetInitContainer
+                                    is a calico-node-windows DaemonSet init container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the calico-node-windows DaemonSet init container
+                                        by name.
+                                      enum:
+                                      - install-cni
+                                      - hostpath-init
+                                      - flexvol-driver
+                                      - mount-bpffs
+                                      - node-certs-key-cert-provisioner
+                                      - calico-node-windows-prometheus-server-tls-key-cert-provisioner
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named calico-node-windows DaemonSet
+                                        init container's resources. If omitted, the
+                                        calico-node-windows DaemonSet will use its
+                                        default value for this container's resources.
+                                        If used in conjunction with the deprecated
+                                        ComponentResources, then this value takes
+                                        precedence.
                                       properties:
                                         limits:
                                           additionalProperties:
@@ -3930,24 +3994,24 @@ spec:
                               nodeSelector:
                                 additionalProperties:
                                   type: string
-                                description: 'NodeSelector is the calico-windows-upgrade
+                                description: 'NodeSelector is the calico-node-windows
                                   pod''s scheduling constraints. If specified, each
-                                  of the key/value pairs are added to the calico-windows-upgrade
+                                  of the key/value pairs are added to the calico-node-windows
                                   DaemonSet nodeSelector provided the key does not
                                   already exist in the object''s nodeSelector. If
-                                  omitted, the calico-windows-upgrade DaemonSet will
+                                  omitted, the calico-node-windows DaemonSet will
                                   use its default value for nodeSelector. WARNING:
                                   Please note that this field will modify the default
-                                  calico-windows-upgrade DaemonSet nodeSelector.'
+                                  calico-node-windows DaemonSet nodeSelector.'
                                 type: object
                               tolerations:
-                                description: 'Tolerations is the calico-windows-upgrade
+                                description: 'Tolerations is the calico-node-windows
                                   pod''s tolerations. If specified, this overrides
-                                  any tolerations that may be set on the calico-windows-upgrade
-                                  DaemonSet. If omitted, the calico-windows-upgrade
-                                  DaemonSet will use its default value for tolerations.
-                                  WARNING: Please note that this field will override
-                                  the default calico-windows-upgrade DaemonSet tolerations.'
+                                  any tolerations that may be set on the calico-node-windows
+                                  DaemonSet. If omitted, the calico-node-windows DaemonSet
+                                  will use its default value for tolerations. WARNING:
+                                  Please note that this field will override the default
+                                  calico-node-windows DaemonSet tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -7414,6 +7478,37 @@ spec:
                 - Calico
                 - TigeraSecureEnterprise
                 type: string
+              windows:
+                description: Windows Configuration
+                properties:
+                  cniBinDir:
+                    description: CNIBinDir is the path to the CNI binaries directory
+                      on Windows, it must match what is on ContainerD on the Windows
+                      nodes.
+                    type: string
+                  cniConfDir:
+                    description: CNIConfDir is the path to the CNI configuration directory
+                      on Windows, it must match what is on ContainerD on the Windows
+                      nodes.
+                    type: string
+                  cniConfFilename:
+                    description: CNIConfFilename is the filename of the CNI configuration
+                      file on Windows.
+                    type: string
+                  cniLogDir:
+                    description: CNILogDir is the path to the Calico CNI logs directory
+                      on Windows.
+                    type: string
+                  disableWindowsDaemonset:
+                    default: false
+                    description: 'DisableWindowsDaemonset specifies whether the calico-node-windows
+                      should be disabled Default: false'
+                    type: boolean
+                  vxlanMACPrefix:
+                    description: VXLANMACPrefix is the prefix of the VXLAN interface
+                      MAC address
+                    type: string
+                type: object
             type: object
           status:
             description: Most recently observed state for the Calico or Calico Enterprise
@@ -10355,13 +10450,13 @@ spec:
                             type: object
                         type: object
                     type: object
-                  calicoWindowsUpgradeDaemonSet:
-                    description: CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
+                  calicoNodeWindowsDaemonSet:
+                    description: CalicoNodeWindowsDaemonSet configures the calico-node-windows
                       DaemonSet.
                     properties:
                       metadata:
                         description: Metadata is a subset of a Kubernetes object's
-                          metadata that is added to the Deployment.
+                          metadata that is added to the DaemonSet.
                         properties:
                           annotations:
                             additionalProperties:
@@ -10382,23 +10477,23 @@ spec:
                             type: object
                         type: object
                       spec:
-                        description: Spec is the specification of the calico-windows-upgrade
+                        description: Spec is the specification of the calico-node-windows
                           DaemonSet.
                         properties:
                           minReadySeconds:
                             description: MinReadySeconds is the minimum number of
-                              seconds for which a newly created Deployment pod should
+                              seconds for which a newly created DaemonSet pod should
                               be ready without any of its container crashing, for
                               it to be considered available. If specified, this overrides
-                              any minReadySeconds value that may be set on the calico-windows-upgrade
-                              DaemonSet. If omitted, the calico-windows-upgrade DaemonSet
+                              any minReadySeconds value that may be set on the calico-node-windows
+                              DaemonSet. If omitted, the calico-node-windows DaemonSet
                               will use its default value for minReadySeconds.
                             format: int32
                             maximum: 2147483647
                             minimum: 0
                             type: integer
                           template:
-                            description: Template describes the calico-windows-upgrade
+                            description: Template describes the calico-node-windows
                               DaemonSet pod that will be created.
                             properties:
                               metadata:
@@ -10425,19 +10520,18 @@ spec:
                                     type: object
                                 type: object
                               spec:
-                                description: Spec is the calico-windows-upgrade DaemonSet's
+                                description: Spec is the calico-node-windows DaemonSet's
                                   PodSpec.
                                 properties:
                                   affinity:
                                     description: 'Affinity is a group of affinity
-                                      scheduling rules for the calico-windows-upgrade
+                                      scheduling rules for the calico-node-windows
                                       pods. If specified, this overrides any affinity
-                                      that may be set on the calico-windows-upgrade
-                                      DaemonSet. If omitted, the calico-windows-upgrade
-                                      DaemonSet will use its default value for affinity.
-                                      WARNING: Please note that this field will override
-                                      the default calico-windows-upgrade DaemonSet
-                                      affinity.'
+                                      that may be set on the calico-node-windows DaemonSet.
+                                      If omitted, the calico-node-windows DaemonSet
+                                      will use its default value for affinity. WARNING:
+                                      Please note that this field will override the
+                                      default calico-node-windows DaemonSet affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -11562,31 +11656,99 @@ spec:
                                         type: object
                                     type: object
                                   containers:
-                                    description: Containers is a list of calico-windows-upgrade
+                                    description: Containers is a list of calico-node-windows
                                       containers. If specified, this overrides the
-                                      specified calico-windows-upgrade DaemonSet containers.
-                                      If omitted, the calico-windows-upgrade DaemonSet
+                                      specified calico-node-windows DaemonSet containers.
+                                      If omitted, the calico-node-windows DaemonSet
                                       will use its default values for its containers.
                                     items:
-                                      description: CalicoWindowsUpgradeDaemonSetContainer
-                                        is a calico-windows-upgrade DaemonSet container.
+                                      description: CalicoNodeWindowsDaemonSetContainer
+                                        is a calico-node-windows DaemonSet container.
                                       properties:
                                         name:
                                           description: Name is an enum which identifies
-                                            the calico-windows-upgrade DaemonSet container
+                                            the calico-node-windows DaemonSet container
                                             by name.
                                           enum:
-                                          - calico-windows-upgrade
+                                          - calico-node-windows
                                           type: string
                                         resources:
                                           description: Resources allows customization
                                             of limits and requests for compute resources
                                             such as cpu and memory. If specified,
-                                            this overrides the named calico-windows-upgrade
+                                            this overrides the named calico-node-windows
                                             DaemonSet container's resources. If omitted,
-                                            the calico-windows-upgrade DaemonSet will
+                                            the calico-node-windows DaemonSet will
                                             use its default value for this container's
-                                            resources.
+                                            resources. If used in conjunction with
+                                            the deprecated ComponentResources, then
+                                            this value takes precedence.
+                                          properties:
+                                            limits:
+                                              additionalProperties:
+                                                anyOf:
+                                                - type: integer
+                                                - type: string
+                                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                x-kubernetes-int-or-string: true
+                                              description: 'Limits describes the maximum
+                                                amount of compute resources allowed.
+                                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                              type: object
+                                            requests:
+                                              additionalProperties:
+                                                anyOf:
+                                                - type: integer
+                                                - type: string
+                                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                x-kubernetes-int-or-string: true
+                                              description: 'Requests describes the
+                                                minimum amount of compute resources
+                                                required. If Requests is omitted for
+                                                a container, it defaults to Limits
+                                                if that is explicitly specified, otherwise
+                                                to an implementation-defined value.
+                                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                              type: object
+                                          type: object
+                                      required:
+                                      - name
+                                      type: object
+                                    type: array
+                                  initContainers:
+                                    description: InitContainers is a list of calico-node-windows
+                                      init containers. If specified, this overrides
+                                      the specified calico-node-windows DaemonSet
+                                      init containers. If omitted, the calico-node-windows
+                                      DaemonSet will use its default values for its
+                                      init containers.
+                                    items:
+                                      description: CalicoNodeWindowsDaemonSetInitContainer
+                                        is a calico-node-windows DaemonSet init container.
+                                      properties:
+                                        name:
+                                          description: Name is an enum which identifies
+                                            the calico-node-windows DaemonSet init
+                                            container by name.
+                                          enum:
+                                          - install-cni
+                                          - hostpath-init
+                                          - flexvol-driver
+                                          - mount-bpffs
+                                          - node-certs-key-cert-provisioner
+                                          - calico-node-windows-prometheus-server-tls-key-cert-provisioner
+                                          type: string
+                                        resources:
+                                          description: Resources allows customization
+                                            of limits and requests for compute resources
+                                            such as cpu and memory. If specified,
+                                            this overrides the named calico-node-windows
+                                            DaemonSet init container's resources.
+                                            If omitted, the calico-node-windows DaemonSet
+                                            will use its default value for this container's
+                                            resources. If used in conjunction with
+                                            the deprecated ComponentResources, then
+                                            this value takes precedence.
                                           properties:
                                             limits:
                                               additionalProperties:
@@ -11622,26 +11784,24 @@ spec:
                                   nodeSelector:
                                     additionalProperties:
                                       type: string
-                                    description: 'NodeSelector is the calico-windows-upgrade
+                                    description: 'NodeSelector is the calico-node-windows
                                       pod''s scheduling constraints. If specified,
                                       each of the key/value pairs are added to the
-                                      calico-windows-upgrade DaemonSet nodeSelector
-                                      provided the key does not already exist in the
-                                      object''s nodeSelector. If omitted, the calico-windows-upgrade
+                                      calico-node-windows DaemonSet nodeSelector provided
+                                      the key does not already exist in the object''s
+                                      nodeSelector. If omitted, the calico-node-windows
                                       DaemonSet will use its default value for nodeSelector.
                                       WARNING: Please note that this field will modify
-                                      the default calico-windows-upgrade DaemonSet
-                                      nodeSelector.'
+                                      the default calico-node-windows DaemonSet nodeSelector.'
                                     type: object
                                   tolerations:
-                                    description: 'Tolerations is the calico-windows-upgrade
+                                    description: 'Tolerations is the calico-node-windows
                                       pod''s tolerations. If specified, this overrides
-                                      any tolerations that may be set on the calico-windows-upgrade
-                                      DaemonSet. If omitted, the calico-windows-upgrade
+                                      any tolerations that may be set on the calico-node-windows
+                                      DaemonSet. If omitted, the calico-node-windows
                                       DaemonSet will use its default value for tolerations.
                                       WARNING: Please note that this field will override
-                                      the default calico-windows-upgrade DaemonSet
-                                      tolerations.'
+                                      the default calico-node-windows DaemonSet tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple
@@ -15352,6 +15512,37 @@ spec:
                     - Calico
                     - TigeraSecureEnterprise
                     type: string
+                  windows:
+                    description: Windows Configuration
+                    properties:
+                      cniBinDir:
+                        description: CNIBinDir is the path to the CNI binaries directory
+                          on Windows, it must match what is on ContainerD on the Windows
+                          nodes.
+                        type: string
+                      cniConfDir:
+                        description: CNIConfDir is the path to the CNI configuration
+                          directory on Windows, it must match what is on ContainerD
+                          on the Windows nodes.
+                        type: string
+                      cniConfFilename:
+                        description: CNIConfFilename is the filename of the CNI configuration
+                          file on Windows.
+                        type: string
+                      cniLogDir:
+                        description: CNILogDir is the path to the Calico CNI logs
+                          directory on Windows.
+                        type: string
+                      disableWindowsDaemonset:
+                        default: false
+                        description: 'DisableWindowsDaemonset specifies whether the
+                          calico-node-windows should be disabled Default: false'
+                        type: boolean
+                      vxlanMACPrefix:
+                        description: VXLANMACPrefix is the prefix of the VXLAN interface
+                          MAC address
+                        type: string
+                    type: object
                 type: object
               conditions:
                 description: Conditions represents the latest observed set of conditions

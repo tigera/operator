@@ -21,9 +21,8 @@ import (
 
 func NewRequest(r types.NamespacedName, mt bool, defaultNS string) Request {
 	return Request{
-		NamespacedName:        r,
-		multiTenant:           mt,
-		singleTenantNamespace: defaultNS,
+		NamespaceHelper: NewNamespaceHelper(mt, defaultNS, r.Namespace),
+		NamespacedName:  r,
 	}
 }
 
@@ -33,29 +32,45 @@ type Request struct {
 	// The name and namespace of the object that triggered this request.
 	types.NamespacedName
 
-	// Whether the operator is running in multi-tenant or single-tenant mode.
-	multiTenant bool
+	// Helper for determining which namespace to use.
+	NamespaceHelper
+}
 
-	// The namespace to use for single-tenant installations of this component.
+func NewNamespaceHelper(mt bool, singleTenantNS, multiTenantNS string) NamespaceHelper {
+	return &namespacer{
+		multiTenant:           mt,
+		singleTenantNamespace: singleTenantNS,
+		multiTenantNamespace:  multiTenantNS,
+	}
+}
+
+type NamespaceHelper interface {
+	TruthNamespace() string
+	InstallNamespace() string
+}
+
+type namespacer struct {
+	multiTenant           bool
 	singleTenantNamespace string
+	multiTenantNamespace  string
 }
 
 // InstallNamespace returns the namespace that components will be installed into.
 // for single-tenant clusters, this is tigera-manager. For multi-tenancy, this
 // will be the tenant's namespace.
-func (r *Request) InstallNamespace() string {
+func (r *namespacer) InstallNamespace() string {
 	if !r.multiTenant {
 		return r.singleTenantNamespace
 	}
-	return r.NamespacedName.Namespace
+	return r.multiTenantNamespace
 }
 
 // TruthNamespace returns the namespace to use as the source of truth for storing data.
 // For single-tenant installs, this is the tigera-operator namespace.
 // For multi-tenant installs, this is tenant's namespace.
-func (r *Request) TruthNamespace() string {
+func (r *namespacer) TruthNamespace() string {
 	if !r.multiTenant {
 		return common.OperatorNamespace()
 	}
-	return r.NamespacedName.Namespace
+	return r.multiTenantNamespace
 }

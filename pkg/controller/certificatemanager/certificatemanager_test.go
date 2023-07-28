@@ -87,7 +87,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		installation = &operatorv1.InstallationSpec{}
-		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain)
+		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, "temp", appNs, appDNSNames)
 		Expect(err).NotTo(HaveOccurred())
@@ -128,7 +128,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(keyPair.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 
 			By("reconstructing certificateManager2 from the secret that was stored")
-			certificateManager2, err := certificatemanager.Create(cli, installation, clusterDomain)
+			certificateManager2, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificateManager2).NotTo(BeNil())
 			Expect(keyPair.GetIssuer()).To(Equal(certificateManager2.KeyPair())) // Proves that certificateManager & certificateManager2 are identical
@@ -137,14 +137,14 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(cli.Delete(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			By("constructing a brand new CA and storing it")
-			certificateManager3, err := certificatemanager.Create(cli, installation, clusterDomain)
+			certificateManager3, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificateManager3).NotTo(BeNil())
 			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager3.KeyPair())) // Proves that certificateManager & certificateManager3 are different
 
 			By("Constructing a certificateManager with Certificate management enabled and verifying differences")
 			installation.CertificateManagement = cm
-			certificateManager4, err := certificatemanager.Create(cli, installation, clusterDomain)
+			certificateManager4, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager4.KeyPair()))
 			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
@@ -176,7 +176,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(cli.Create(ctx, keyPair.Secret(appNs))).NotTo(HaveOccurred())
 
 			By("fetching the key pair again with a newer ca")
-			certificateManager2, err := certificatemanager.Create(cli, installation, clusterDomain)
+			certificateManager2, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificateManager2).NotTo(BeNil())
 			keyPair2, err := certificateManager2.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
@@ -247,7 +247,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				secret := expiredSecret
 				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
 				installation.CertificateManagement = cm
-				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain)
+				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 				Expect(err).NotTo(HaveOccurred())
 				_, err = certificateManagerCM.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).NotTo(HaveOccurred())
@@ -257,7 +257,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				secret := expiredByoSecret
 				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
 				installation.CertificateManagement = cm
-				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain)
+				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 				Expect(err).NotTo(HaveOccurred())
 				_, err = certificateManagerCM.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).To(HaveOccurred())
@@ -306,7 +306,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		It("renders the right spec for certificate management", func() {
 			By("creating a key pair w/ certificate management")
 			installation.CertificateManagement = cm
-			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain)
+			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())

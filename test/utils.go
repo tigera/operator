@@ -61,7 +61,7 @@ func ExpectResourceDestroyed(c client.Client, obj client.Object, timeout time.Du
 		} else if err != nil {
 			return err
 		} else {
-			return fmt.Errorf("Resource \"%s\" should no longer exist", obj.GetName())
+			return fmt.Errorf("Resource '%s' should no longer exist", obj.GetName())
 		}
 	}, timeout).ShouldNot(HaveOccurred())
 

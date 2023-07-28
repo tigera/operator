@@ -105,9 +105,9 @@ var _ = Describe("CRD management tests", func() {
 
 		mgr = nil
 
-		//Need to make sure the operator is shut down prior to deleting and recreating the networkpolicies CRD otherwise
-		//the controller initialized within the tests can recreate the CRD between the deletion confirmation and recreation
-		//attempt, creating a timing window where failures can occur.
+		// Need to make sure the operator is shut down prior to deleting and recreating the networkpolicies CRD otherwise
+		// the controller initialized within the tests can recreate the CRD between the deletion confirmation and recreation
+		// attempt, creating a timing window where failures can occur.
 		cancel()
 		Eventually(func() error {
 			select {

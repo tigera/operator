@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 	"github.com/tigera/operator/test"
 
 	apps "k8s.io/api/apps/v1"
@@ -54,6 +55,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 	const (
 		appSecretName       = "my-app-tls"
 		appSecretName2      = "my-app-tls-2"
+		legacySecretName    = "legacy-secret"
 		appNs               = "my-app"
 		legacyKeyFieldName  = "key"
 		legacyCertFieldName = "cert"
@@ -99,8 +101,10 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		legacyOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth}
 		modernOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth}
 
+		certkeyusage.SetCertKeyUsage(legacySecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 		// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name, and no CA.
-		legacySecret, err = secret.CreateTLSSecret(nil, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, legacyOpts, appSecretName)
+		// Use a secret
+		legacySecret, err = secret.CreateTLSSecret(nil, legacySecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, legacyOpts, legacySecretName)
 		Expect(err).NotTo(HaveOccurred())
 
 		// This is a special case, which may or may not exist in the wild. It's a legacy-style certificate signed by tigera-operator but also with client usage.
@@ -112,7 +116,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		Expect(err).NotTo(HaveOccurred())
 		byoSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", time.Hour, modernOpts, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
-		legacyBYOSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", time.Hour, legacyOpts, appSecretName)
+		legacyBYOSecret, err = secret.CreateTLSSecret(cryptoCA, legacySecretName, appNs, "key.key", "cert.crt", time.Hour, legacyOpts, legacySecretName)
 		Expect(err).NotTo(HaveOccurred())
 		expiredBYOSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", -time.Hour, modernOpts, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
@@ -242,6 +246,9 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				// Should create a new secret.
 				secret := legacySecret
 				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+
+				_, err = certificateManager.GetCertificate(cli, secret.Name, secret.Namespace)
+				Expect(err).To(HaveOccurred())
 				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
@@ -505,12 +512,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			lwcku, err := certificateManager.GetCertificate(cli, legacyWithClientKeyUsage.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
-			// This will fail, because the secret doesn't have ExtKeyUsageClient. However, once we recreate it,
-			// it will succeed.
-			_, err = certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
-			Expect(err).To(HaveOccurred())
-
-			// Calling GetOrCreate should trigger a re-issuing of the secret.
 			kp, err := certificateManager.GetOrCreateKeyPair(cli, legacySecret.Name, common.OperatorNamespace(), []string{appSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.Update(ctx, kp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())

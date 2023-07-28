@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package linseed
+package kubecontrollers
 
 import (
 	"context"
@@ -33,7 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-func (r *LinseedSubController) createESGateway(
+func (r *ESKubeControllersController) createESGateway(
 	ctx context.Context,
 	helper octrl.NamespaceHelper,
 	install *operatorv1.InstallationSpec,

@@ -215,10 +215,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// Generate keys for Tigera components if we're running in multi-tenant mode and this is a reconcile
-	// for a particular tenant, or if not in multi-tenant mode.
-	reconcileTigeraSecrets := !r.multiTenant || r.multiTenant && tenant != nil
-
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
@@ -319,7 +315,9 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	// Check if we need to reconcile Tigera secrets for this trigger.
+	// Generate keys for Tigera components if we're running in multi-tenant mode and this is a reconcile
+	// for a particular tenant, or if not in multi-tenant mode.
+	reconcileTigeraSecrets := !r.multiTenant || r.multiTenant && tenant != nil
 	if !reconcileTigeraSecrets {
 		reqLogger.Info("Skipping render of secrets for Tigera ES components")
 		return reconcile.Result{}, nil
@@ -338,15 +336,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 	trustedBundle := keyPairs.trustedBundle(appCM)
-
-	// TODO: Think more about this. It might actually make sense that the ES secrets for all tenants are owned by the LogStorage instance.
-	// that way, deleting / re-creating a tenant doesn't delete all of their secrets (thus invalidating all clients).
-	// If we're running in multi-tenant mode, these should be owned by the
-	// Tenant instance for that tenant. Otherwise, it's owned by the LogStorage instance.
-	// if r.multiTenant {
-	// 	// For multi-tenant mode, secrets are owned by the tenant instance.
-	// 	hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
-	// }
 
 	if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle, helper), r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

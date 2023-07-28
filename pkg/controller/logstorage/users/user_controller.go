@@ -58,6 +58,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
+	if !opts.MultiTenant {
+		// TODO: For now, the operator only creates users in multi-tenant mode.
+		return nil
+	}
 
 	// Create the reconciler
 	r := &UserController{

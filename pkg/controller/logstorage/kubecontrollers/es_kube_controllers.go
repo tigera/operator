@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package linseed
+package kubecontrollers
 
 import (
 	"context"
@@ -22,10 +22,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -37,22 +35,21 @@ import (
 
 	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
-	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-var log = logf.Log.WithName("controller_logstorage_linseed")
+var log = logf.Log.WithName("controller_logstorage_kube-controllers")
 
-type LinseedSubController struct {
+type ESKubeControllersController struct {
 	client         client.Client
 	scheme         *runtime.Scheme
 	status         status.StatusManager
@@ -66,19 +63,22 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
+	if opts.MultiTenant {
+		return nil
+	}
 
 	// Create the reconciler
-	r := &LinseedSubController{
+	r := &ESKubeControllersController{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		clusterDomain: opts.ClusterDomain,
 		multiTenant:   opts.MultiTenant,
-		status:        status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
+		status:        status.New(mgr.GetClient(), "log-storage-kubecontrollers", opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-access-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("log-storage-kubecontrollers-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -92,23 +92,23 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch LogStorage resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch LogStorage resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch Network resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementCluster resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch ManagementCluster resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementClusterConnection resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, "log-storage-access"); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, "log-storage-kubecontrollers"); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
 		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch Tenant resource: %w", err)
+			return fmt.Errorf("log-storage-kubecontrollers failed to watch Tenant resource: %w", err)
 		}
 	}
 
@@ -120,57 +120,46 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
 		render.TigeraElasticsearchGatewaySecret,
-		render.TigeraLinseedSecret,
-		render.LinseedTokenSecret,
 		monitor.PrometheusClientTLSSecretName,
-		render.ElasticsearchLinseedUserSecret,
 	}
 	for _, ns := range helper.BothNamespaces() {
 		for _, name := range secretsToWatch {
 			if err := utils.AddSecretsWatch(c, name, ns); err != nil {
-				return fmt.Errorf("log-storage-controller failed to watch Secret: %w", err)
+				return fmt.Errorf("log-storage-kubecontrollers failed to watch Secret: %w", err)
 			}
 		}
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
 
 	// Check if something modifies resources this controller creates.
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Service resource: %w", err)
-	}
-	if err := utils.AddServiceWatch(c, render.LinseedServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Service resource: %w", err)
-	}
-	if err := utils.AddDeploymentWatch(c, render.LinseedServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Deployment resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch Service resource: %w", err)
 	}
 	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
 
 	return nil
 }
 
-func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ESKubeControllersController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
-	reqLogger.Info("Reconciling LogStorage - Linseed")
+	reqLogger.Info("Reconciling LogStorage - ESKubeControllers")
 
 	// We skip requests without a namespace specified in multi-tenant setups.
 	if r.multiTenant && request.Namespace == "" {
 		return reconcile.Result{}, nil
 	}
 
-	// When running in multi-tenant mode, we need to install Linseed in tenant Namespaces. However, the LogStorage
-	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
-	// which tenant namespaces require a Linseed instance. We use the tenant API to determine the set of namespaces that should have a Linseed.
+	// Get the tenant.
 	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
@@ -220,22 +209,14 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 	if managementClusterConnection != nil {
-		// Linseed is only relevant for management and standalone clusters. If this is a managed cluster, we can
-		// simply return early.
 		// TODO: Handle switch from standalone -> managed
-		reqLogger.V(1).Info("Not installing Linseed on managed cluster")
+		reqLogger.V(1).Info("Not installing es-kube-controllers on managed cluster")
 		return reconcile.Result{}, nil
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -250,7 +231,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
+	// Collect the certificates we need to provision es-kube-controllers. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
 		certificatemanager.WithTenant(tenant),
@@ -260,22 +241,6 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	linseedKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedSecret, helper.InstallNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed KeyPair", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if linseedKeyPair == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.InstallNamespace(), render.TigeraLinseedSecret), err, reqLogger)
-		return reconcile.Result{}, nil
-	}
-	tokenKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed token secret", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if tokenKeyPair == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.InstallNamespace(), render.TigeraLinseedTokenSecret), err, reqLogger)
-		return reconcile.Result{}, nil
-	}
 
 	// Query the trusted bundle from the namespace.
 	trustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
@@ -284,86 +249,109 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	var esClusterConfig *relasticsearch.ClusterConfig
-	if managementClusterConnection == nil {
-		flowShards := logstoragecommon.CalculateFlowShards(logStorage.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
-		esClusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, logStorage.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
-	}
-
-	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
-	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
-	// For single-tenant system, these are created by es-kube-controllers.
-	// Delay installing Linseed until available.
-	// TODO: Switch single-tenant to using operator-provisioned users.
-	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.InstallNamespace()}
-	if err = r.client.Get(ctx, key, &corev1.Secret{}); err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed credential Secret %s", key), err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	// Determine the namespaces to which we must bind the linseed cluster role.
-	bindNamespaces := []string{helper.InstallNamespace()}
-	if r.multiTenant {
-		bindNamespaces, err = utils.TenantNamespaces(ctx, r.client)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
-	cfg := &linseed.Config{
-		Installation:      install,
-		PullSecrets:       pullSecrets,
-		Namespace:         helper.InstallNamespace(),
-		BindNamespaces:    bindNamespaces,
-		TrustedBundle:     trustedBundle,
-		ClusterDomain:     r.clusterDomain,
-		KeyPair:           linseedKeyPair,
-		TokenKeyPair:      tokenKeyPair,
-		UsePSP:            r.usePSP,
-		ESClusterConfig:   esClusterConfig,
-		ManagementCluster: managementCluster != nil,
-		Tenant:            tenant,
-	}
-	linseedComponent := linseed.Linseed(cfg)
-
-	if err := imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// In standard installs, the LogStorage owns Linseed. For multi-tenant, it's owned by the Tenant instance.
+	// In standard installs, the LogStorage owns es-kube-controllers. For multi-tenant, it's owned by the Tenant instance.
 	var hdler utils.ComponentHandler
 	if r.multiTenant {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 	}
-	if err := hdler.CreateOrUpdateOrDelete(ctx, linseedComponent, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
+
+	// Get the Authentication resource.
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if !r.multiTenant {
-		// TODO: For now, install this here. It probably should have its own controller.
-		// I am not very familiar with this component - need to investigate and propose multi-tenant resolution.
-		if err := r.createESMetrics(
-			install,
-			variant,
-			managementClusterConnection,
-			pullSecrets,
-			reqLogger,
-			esClusterConfig,
-			ctx,
-			hdler,
-			trustedBundle,
-			r.usePSP,
-			cm,
-		); err != nil {
+	// Get secrets needed for kube-controllers to talk to elastic.
+	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
+	if managementCluster != nil {
+		// Add the internal traffic secret of the manager pod to the trusted bundle. We need this so we can talk to Voltron.
+		// This certificate is provisioned by the manager controller, and so we need to load it lazily once it appears.
+		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error querying for internal manager TLS certificate (%s)", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// ESGateway is required in order for kube-controllers to operator successfully, since es-kube-controllers talks to ES
+	// via this gateway.
+	if err := r.createESGateway(
+		ctx,
+		helper,
+		install,
+		variant,
+		pullSecrets,
+		hdler,
+		reqLogger,
+		trustedBundle,
+		r.usePSP,
+	); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	namespaces := []string{helper.InstallNamespace()}
+	if r.multiTenant {
+		namespaces, err = utils.TenantNamespaces(ctx, r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
+		K8sServiceEp:                 k8sapi.Endpoint,
+		Installation:                 install,
+		ManagementCluster:            managementCluster,
+		ClusterDomain:                r.clusterDomain,
+		ManagerInternalSecret:        managerInternalTLSSecret,
+		Authentication:               authentication,
+		KubeControllersGatewaySecret: kubeControllersUserSecret,
+		LogStorageExists:             logStorage != nil,
+		TrustedBundle:                trustedBundle,
+		Namespace:                    helper.InstallNamespace(),
+		BindingNamespaces:            namespaces,
+	}
+	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
+
+	imageSet, err := imageset.GetImageSet(ctx, r.client, variant)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ValidateImageSet(imageSet); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ResolveImages(imageSet, esKubeControllerComponents); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for elasticsearch kube-controllers components", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err := hdler.CreateOrUpdateOrDelete(ctx, esKubeControllerComponents, nil); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	r.status.ReadyToMonitor()

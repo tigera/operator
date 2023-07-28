@@ -18,6 +18,13 @@ import (
 	"github.com/tigera/operator/pkg/common"
 )
 
+func NewSingleTenantNamespaceHelper(ns string) NamespaceHelper {
+	return &namespacer{
+		multiTenant:           false,
+		singleTenantNamespace: ns,
+	}
+}
+
 func NewNamespaceHelper(mt bool, singleTenantNS, multiTenantNS string) NamespaceHelper {
 	return &namespacer{
 		multiTenant:           mt,
@@ -27,8 +34,17 @@ func NewNamespaceHelper(mt bool, singleTenantNS, multiTenantNS string) Namespace
 }
 
 type NamespaceHelper interface {
-	TruthNamespace() string
+	// InstallNamespace returns the namespace that components will be installed into.
+	// for single-tenant clusters, this is tigera-manager. For multi-tenancy, this
+	// will be the tenant's namespace.
 	InstallNamespace() string
+
+	// TruthNamespace returns the namespace to use as the source of truth for storing data.
+	// For single-tenant installs, this is the tigera-operator namespace.
+	// For multi-tenant installs, this is tenant's namespace.
+	TruthNamespace() string
+
+	// BothNamespaces returns both the truth namespace and the install namespace.
 	BothNamespaces() []string
 }
 
@@ -38,9 +54,6 @@ type namespacer struct {
 	multiTenantNamespace  string
 }
 
-// InstallNamespace returns the namespace that components will be installed into.
-// for single-tenant clusters, this is tigera-manager. For multi-tenancy, this
-// will be the tenant's namespace.
 func (r *namespacer) InstallNamespace() string {
 	if !r.multiTenant {
 		return r.singleTenantNamespace
@@ -48,9 +61,6 @@ func (r *namespacer) InstallNamespace() string {
 	return r.multiTenantNamespace
 }
 
-// TruthNamespace returns the namespace to use as the source of truth for storing data.
-// For single-tenant installs, this is the tigera-operator namespace.
-// For multi-tenant installs, this is tenant's namespace.
 func (r *namespacer) TruthNamespace() string {
 	if !r.multiTenant {
 		return common.OperatorNamespace()

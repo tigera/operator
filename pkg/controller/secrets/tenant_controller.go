@@ -26,7 +26,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
@@ -44,7 +43,7 @@ import (
 )
 
 // TenantControllers runs in multi-tenant mode and provisions a CA per-tenant, as well as generating
-// per-tenant keypairs and a trusted bundle.
+// a trusted bundle to place in each tenant's namespace.
 type TenantController struct {
 	client        client.Client
 	scheme        *runtime.Scheme
@@ -127,29 +126,9 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	cm.AddToStatusManager(r.status, tenant.Namespace)
 
-	// Create a server key pair for Linseed to present to clients.
-	//
-	// This fetches the existing key pair from the truth namespace if it exists, or generates a new one in-memory otherwise.
-	// It will be provisioned into the cluster in the render stage later on.
-	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, tenant.Namespace, r.clusterDomain)
-	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, tenant.Namespace, linseedDNSNames)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, logc)
-		return reconcile.Result{}, err
-	}
-
-	// Create a key pair for Linseed to use for tokens.
-	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, tenant.Namespace, []string{"localhost"})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, logc)
-		return reconcile.Result{}, err
-	}
-
-	// Collect key pairs that need to be rendered into the Tenant's namespace.
+	// Create the CA in the tenant's namespace.
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(cm.KeyPair(), true, true),
-		rcertificatemanagement.NewKeyPairOption(linseedKeyPair, true, true),
-		rcertificatemanagement.NewKeyPairOption(linseedTokenKP, true, true),
 	}
 
 	// Get the cluster-scoped CA certificate.
@@ -165,6 +144,8 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	// - Certificates signed by the cluster-scoped Tigera CA
 	trustedBundle := cm.CreateTrustedBundle()
 	trustedBundle.AddCertificates(clusterCA)
+
+	// TODO: Provision a trusted bundle that includes system certificates for components that need it.
 
 	component := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:      tenant.Namespace,

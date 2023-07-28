@@ -88,7 +88,7 @@ type KubeControllersConfiguration struct {
 	// take care to pass the same secret on each reconcile where possible.
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	KubeControllersGatewaySecret *corev1.Secret
-	TrustedBundle                certificatemanagement.TrustedBundle
+	TrustedBundle                certificatemanagement.TrustedBundleRO
 
 	// Whether the cluster supports pod security policies.
 	UsePSP           bool

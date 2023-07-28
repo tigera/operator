@@ -24,6 +24,7 @@ import (
 
 	"github.com/tigera/operator/pkg/controller/logstorage/elastic"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+	"github.com/tigera/operator/pkg/controller/logstorage/kubecontrollers"
 	"github.com/tigera/operator/pkg/controller/logstorage/linseed"
 	"github.com/tigera/operator/pkg/controller/logstorage/secrets"
 	"github.com/tigera/operator/pkg/controller/logstorage/users"
@@ -57,6 +58,9 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 		return err
 	}
 	if err := users.Add(mgr, opts); err != nil {
+		return err
+	}
+	if err := kubecontrollers.Add(mgr, opts); err != nil {
 		return err
 	}
 	return nil

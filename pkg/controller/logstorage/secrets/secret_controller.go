@@ -352,6 +352,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	r.status.ClearDegraded()
 	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 

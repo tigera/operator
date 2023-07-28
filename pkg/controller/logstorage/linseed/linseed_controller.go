@@ -246,7 +246,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.

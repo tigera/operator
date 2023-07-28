@@ -15,6 +15,7 @@
 package render
 
 import (
+	"crypto/x509"
 	"fmt"
 	"strings"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
 
 const (
@@ -84,6 +86,14 @@ var (
 	ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
 	ComplianceReporterSourceEntityRule    = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
 )
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(ComplianceServerCertSecret, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	certkeyusage.SetCertKeyUsage(ComplianceSnapshotterSecret, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	certkeyusage.SetCertKeyUsage(ComplianceBenchmarkerSecret, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	certkeyusage.SetCertKeyUsage(ComplianceReporterSecret, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 	return &complianceComponent{

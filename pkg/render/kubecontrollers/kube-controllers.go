@@ -455,10 +455,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.kubeControllerName == EsKubeController {
-			// Tell kube-controllers which namespace it is running in so it can provision secrets in the correct location.
-			// TODO: Should this use the downward API?
-			env = append(env, corev1.EnvVar{Name: "NAMESPACE", Value: c.cfg.Namespace})
-
 			// What started as a workaround is now the default behaviour. This feature uses our backend in order to
 			// log into Kibana for users from external identity providers, rather than configuring an authn realm
 			// in the Elastic stack.
@@ -537,7 +533,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	if c.kubeControllerName == EsKubeController {
 		container = relasticsearch.DecorateEnvironment(
 			container,
-			c.cfg.Namespace,
+			render.ElasticsearchNamespace,
 			render.DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret,
 			c.cfg.ClusterDomain,

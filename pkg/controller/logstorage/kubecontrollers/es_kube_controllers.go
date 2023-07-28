@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/tigera/operator/pkg/common"
 	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -42,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -112,17 +112,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the tigera-manager namespace.
-	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := octrl.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
-
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
 		render.TigeraElasticsearchGatewaySecret,
 		monitor.PrometheusClientTLSSecretName,
 	}
-	for _, ns := range helper.BothNamespaces() {
+	for _, ns := range []string{common.OperatorNamespace(), render.ElasticsearchNamespace} {
 		for _, name := range secretsToWatch {
 			if err := utils.AddSecretsWatch(c, name, ns); err != nil {
 				return fmt.Errorf("log-storage-kubecontrollers failed to watch Secret: %w", err)
@@ -131,18 +126,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
-	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, helper.InstallNamespace()); err != nil {
+	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
-	}
-
-	// Check if something modifies resources this controller creates.
-	if err := utils.AddServiceWatch(c, esgateway.ServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-kubecontrollers failed to watch Service resource: %w", err)
-	}
-	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, helper.InstallNamespace()); err != nil {
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
 
@@ -150,7 +137,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 func (r *ESKubeControllersController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := octrl.NewNamespaceHelper(r.multiTenant, common.CalicoNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - ESKubeControllers")
 
@@ -298,7 +285,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// via this gateway.
 	if err := r.createESGateway(
 		ctx,
-		helper,
+		octrl.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace),
 		install,
 		variant,
 		pullSecrets,

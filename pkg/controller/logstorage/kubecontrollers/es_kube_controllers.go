@@ -236,7 +236,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		certificatemanager.WithLogger(reqLogger),
 		certificatemanager.WithTenant(tenant),
 	}
-	cm, err := certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, helper.TruthNamespace(), opts...)
+	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err

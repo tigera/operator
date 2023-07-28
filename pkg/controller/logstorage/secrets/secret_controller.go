@@ -251,7 +251,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	var clusterCM, appCM certificatemanager.CertificateManager
 
 	// Cluster-scoped certificate manager, used for managing Elasticsearch secrets.
-	clusterCM, err = certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	clusterCM, err = certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)
 		return reconcile.Result{}, err
@@ -275,7 +275,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 			certificatemanager.WithLogger(reqLogger),
 			certificatemanager.WithTenant(tenant),
 		}
-		appCM, err = certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, helper.InstallNamespace(), opts...)
+		appCM, err = certificatemanager.Create(r.client, install, r.clusterDomain, helper.InstallNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)
 			return reconcile.Result{}, err

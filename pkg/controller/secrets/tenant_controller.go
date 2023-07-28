@@ -119,7 +119,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		certificatemanager.WithLogger(logc),
 		certificatemanager.WithTenant(tenant),
 	}
-	cm, err := certificatemanager.CreateWithOptions(r.client, installation, r.clusterDomain, tenant.Namespace, opts...)
+	cm, err := certificatemanager.Create(r.client, installation, r.clusterDomain, tenant.Namespace, opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create CA", err, logc)
 		return reconcile.Result{}, err

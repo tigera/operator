@@ -94,13 +94,6 @@ type CertificateManager interface {
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 }
 
-// Create creates a signer of new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
-// brings their own secrets, CertificateManager will preserve and return them.
-func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string) (CertificateManager, error) {
-	opts := []Option{WithLogger(log)}
-	return CreateWithOptions(cli, installation, clusterDomain, ns, opts...)
-}
-
 type Option func(cm *certificateManager) error
 
 func AllowCACreation() Option {
@@ -124,7 +117,9 @@ func WithTenant(t *operatorv1.Tenant) Option {
 	}
 }
 
-func CreateWithOptions(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
+// Create creates a signer of new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
+// brings their own secrets, CertificateManager will preserve and return them.
+func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
 	var (
 		cryptoCA                      *crypto.CA
 		csrImage                      string

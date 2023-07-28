@@ -342,7 +342,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		certificatemanager.WithLogger(logc),
 		certificatemanager.WithTenant(tenant),
 	}
-	certificateManager, err := certificatemanager.CreateWithOptions(r.client, installation, r.clusterDomain, helper.TruthNamespace(), opts...)
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 		return reconcile.Result{}, err

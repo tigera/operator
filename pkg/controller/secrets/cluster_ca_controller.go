@@ -91,7 +91,7 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 		certificatemanager.AllowCACreation(),
 		certificatemanager.WithLogger(logc),
 	}
-	cm, err := certificatemanager.CreateWithOptions(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), opts...)
+	cm, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), opts...)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

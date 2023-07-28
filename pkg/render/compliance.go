@@ -171,7 +171,6 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := []client.Object{
-		CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 		c.complianceAccessAllowTigeraNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(ComplianceNamespace),
 	}

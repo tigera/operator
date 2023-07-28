@@ -250,7 +250,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs,
 		managerServiceAccount(c.cfg.Namespace),
 		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
-		managerClusterRoleBinding([]string{c.cfg.Namespae}),
+		managerClusterRoleBinding([]string{c.cfg.Namespace}),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
 		managerClusterWideTigeraLayer(),

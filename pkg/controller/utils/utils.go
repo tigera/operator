@@ -398,14 +398,23 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 }
 
 // Get the Tenant instance in the given namespace.
-func GetTenant(ctx context.Context, cli client.Client, ns string) (*operatorv1.Tenant, error) {
+func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*operatorv1.Tenant, string, error) {
+	if !mt {
+		// Multi-tenancy isn't enabled. Return nil.
+		return nil, "", nil
+	}
+
 	key := client.ObjectKey{Name: "default", Namespace: ns}
 	instance := &operatorv1.Tenant{}
 	err := cli.Get(ctx, key, instance)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return instance, nil
+
+	if instance.Spec.ID == "" {
+		return nil, "", fmt.Errorf("Tenant %s/%s has no ID specified", ns, instance.Name)
+	}
+	return instance, instance.Spec.ID, nil
 }
 
 // Get all namespaces that contain a tenant.

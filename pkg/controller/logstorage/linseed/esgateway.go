@@ -35,7 +35,7 @@ import (
 
 func (r *LinseedSubController) createESGateway(
 	ctx context.Context,
-	request octrl.Request,
+	helper octrl.NamespaceHelper,
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,
@@ -69,12 +69,12 @@ func (r *LinseedSubController) createESGateway(
 	}
 
 	// Collect the certificates we need to provision ESGW. These will have been provisioned already by the ES secrets controller.
-	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, request.TruthNamespace())
+	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return err
 	}
-	gatewayKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, request.TruthNamespace())
+	gatewayKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceNotFound, "Error getting TLS certificate", err, log)
 		return err
@@ -83,7 +83,7 @@ func (r *LinseedSubController) createESGateway(
 		return err
 	}
 
-	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client, request)
+	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client, helper)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create kube-controllers secrets for Elasticsearch gateway", err, reqLogger)
 		return err
@@ -98,8 +98,8 @@ func (r *LinseedSubController) createESGateway(
 		EsAdminUserName:            esAdminUserName,
 		ESGatewayKeyPair:           gatewayKeyPair,
 		UsePSP:                     usePSP,
-		Namespace:                  request.InstallNamespace(),
-		TruthNamespace:             request.TruthNamespace(),
+		Namespace:                  helper.InstallNamespace(),
+		TruthNamespace:             helper.TruthNamespace(),
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)
@@ -115,7 +115,7 @@ func (r *LinseedSubController) createESGateway(
 	// es-kube-controllers is the only thing that needs to talk to ES (aside from Linseed) in multi-tenant setups. We could get rid of that need as well if
 	// we have the operator provision Linseed's secret instead of kube-controllers.
 	copied := []client.Object{}
-	copied = append(copied, secret.CopyToNamespace(request.InstallNamespace(), esAdminUserSecret)[0])
+	copied = append(copied, secret.CopyToNamespace(helper.InstallNamespace(), esAdminUserSecret)[0])
 	createSecretComponent := render.NewPassthrough(copied...)
 
 	for _, comp := range []render.Component{createSecretComponent, esGatewayComponent} {

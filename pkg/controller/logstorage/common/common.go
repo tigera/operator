@@ -45,8 +45,8 @@ const (
 // are generated and stored in the user secret, a hashed version of the credentials is stored in the tigera-elasticsearch namespace for ES Gateway to retrieve and use to compare
 // the gateway credentials, and a secret containing real admin level credentials is created and stored in the tigera-elasticsearch namespace to be swapped in once
 // ES Gateway has confirmed that the gateway credentials match.
-func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client, req octrl.Request) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
-	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, req.TruthNamespace())
+func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client, h octrl.NamespaceHelper) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
+	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, h.TruthNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -55,7 +55,7 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		kubeControllersGatewaySecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
-				Namespace: req.TruthNamespace(),
+				Namespace: h.TruthNamespace(),
 			},
 			Data: map[string][]byte{
 				"username": []byte(kubecontrollers.ElasticsearchKubeControllersUserName),
@@ -68,7 +68,7 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		return nil, nil, nil, err
 	}
 
-	kubeControllersVerificationSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, req.InstallNamespace())
+	kubeControllersVerificationSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, h.InstallNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -76,7 +76,7 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		kubeControllersVerificationSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret,
-				Namespace: req.InstallNamespace(),
+				Namespace: h.InstallNamespace(),
 				Labels: map[string]string{
 					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,
 				},
@@ -88,7 +88,7 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		}
 	}
 
-	kubeControllersSecureUserSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, req.InstallNamespace())
+	kubeControllersSecureUserSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, h.InstallNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -96,7 +96,7 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		kubeControllersSecureUserSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kubecontrollers.ElasticsearchKubeControllersSecureUserSecret,
-				Namespace: req.InstallNamespace(),
+				Namespace: h.InstallNamespace(),
 				Labels: map[string]string{
 					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,
 				},

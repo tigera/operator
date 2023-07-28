@@ -181,8 +181,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling LogStorage - Secrets")
+	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
+	reqLogger.Info("Reconciling LogStorage Secrets")
 
 	// Get LogStorage resource.
 	ls := &operatorv1.LogStorage{}
@@ -201,26 +202,17 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// We found the LogStorage instance.
 	r.status.OnCRFound()
 
-	// When running in multi-tenant mode, we need to install Linseed in tenant Namespaces. However, the LogStorage
-	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
-	// which tenant namespaces require a Linseed instance. We use the tenant API to determine the set of namespaces that should have a Linseed.
-	var tenant *operatorv1.Tenant
-	if r.multiTenant {
-		if request.Namespace == "" {
-			// In multi-tenant mode, we only handle namespaced reconcile triggers.
-			return reconcile.Result{}, nil
-		}
-
-		// Check if there is a manager in this namespace.
-		tenant, err = utils.GetTenant(ctx, r.client, request.Namespace)
-		if errors.IsNotFound(err) {
-			// No tenant in this namespace. Ignore the update.
-			reqLogger.Info("No Tenant in this Namespace, skip")
-			return reconcile.Result{}, nil
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	// We skip requests without a namespace specified in multi-tenant setups.
+	if r.multiTenant && request.Namespace == "" {
+		return reconcile.Result{}, nil
+	}
+	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	if errors.IsNotFound(err) {
+		reqLogger.Info("No Tenant in this Namespace, skip")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Generate keys for Tigera components if we're running in multi-tenant mode and this is a reconcile
@@ -255,10 +247,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	// Build the tenant-aware request object.
-	req := octrl.NewRequest(request.NamespacedName, r.multiTenant, "tigera-elasticsearch")
-	reqLogger = reqLogger.WithValues("installNS", req.InstallNamespace(), "truthNS", req.TruthNamespace())
-
 	// In a multi-tenant system, secrets are organized in the following way:
 	// - Each tenant has its own CA, in that tenant's namespace, used for signing tenant certificates.
 	// - Elasticsearch has its own CA and KeyPair, that is global.
@@ -291,7 +279,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 			certificatemanager.WithLogger(reqLogger),
 			certificatemanager.WithTenant(tenant),
 		}
-		appCM, err = certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, req.InstallNamespace(), opts...)
+		appCM, err = certificatemanager.CreateWithOptions(r.client, install, r.clusterDomain, helper.InstallNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)
 			return reconcile.Result{}, err
@@ -339,7 +327,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.Info("Rendering secrets for Tigera ES components")
 
 	// Create secrets for Tigera components.
-	keyPairs, err := r.generateNamespacedSecrets(reqLogger, req, appCM)
+	keyPairs, err := r.generateNamespacedSecrets(reqLogger, helper, appCM)
 	if err != nil {
 		// Status manager is handled already, so we can just return
 		return reconcile.Result{}, err
@@ -360,7 +348,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// 	hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
 	// }
 
-	if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle, req), r.status); err != nil {
+	if err = hdler.CreateOrUpdateOrDelete(ctx, keyPairs.component(trustedBundle, helper), r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -408,17 +396,17 @@ func (r *SecretSubController) generateClusterSecrets(log logr.Logger, kibana boo
 }
 
 // generateNamespacedSecrets creates keypairs for components that are provisioned per-tenant in a multi-tenant system.
-func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, req octrl.Request, cm certificatemanager.CertificateManager) (*keyPairCollection, error) {
+func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper octrl.NamespaceHelper, cm certificatemanager.CertificateManager) (*keyPairCollection, error) {
 	// Start by collecting upstream certificates that we need to trust, before generating keypairs.
-	collection, err := r.collectUpstreamCerts(log, req, cm)
+	collection, err := r.collectUpstreamCerts(log, helper, cm)
 	if err != nil {
 		return nil, err
 	}
 
 	if !r.multiTenant {
 		// Create a server key pair for the ES metrics server.
-		metricsDNSNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, req.InstallNamespace(), r.clusterDomain)
-		metricsServerKeyPair, err := cm.GetOrCreateKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, req.TruthNamespace(), metricsDNSNames)
+		metricsDNSNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, helper.InstallNamespace(), r.clusterDomain)
+		metricsServerKeyPair, err := cm.GetOrCreateKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, helper.TruthNamespace(), metricsDNSNames)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate", err, log)
 			return nil, err
@@ -426,9 +414,9 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, req oct
 		collection.keypairs = append(collection.keypairs, metricsServerKeyPair)
 
 		// ES gateway keypair.
-		gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, req.InstallNamespace(), r.clusterDomain)
-		gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, req.InstallNamespace(), r.clusterDomain)...)
-		gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, req.TruthNamespace(), gatewayDNSNames)
+		gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, helper.InstallNamespace(), r.clusterDomain)
+		gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, helper.InstallNamespace(), r.clusterDomain)...)
+		gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace(), gatewayDNSNames)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 			return nil, err
@@ -440,8 +428,8 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, req oct
 	//
 	// This fetches the existing key pair from the truth namespace if it exists, or generates a new one in-memory otherwise.
 	// It will be provisioned into the cluster in the render stage later on.
-	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, req.InstallNamespace(), r.clusterDomain)
-	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, req.TruthNamespace(), linseedDNSNames)
+	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, helper.InstallNamespace(), r.clusterDomain)
+	linseedKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedSecret, helper.TruthNamespace(), linseedDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err
@@ -449,7 +437,7 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, req oct
 	collection.keypairs = append(collection.keypairs, linseedKeyPair)
 
 	// Create a key pair for Linseed to use for tokens.
-	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, req.TruthNamespace(), []string{"localhost"})
+	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{"localhost"})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err
@@ -461,7 +449,7 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, req oct
 
 // collectUpstreamCerts collects certificates generated by upstream components to be added to the trusted bundle
 // provisioned by this controller.
-func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, req octrl.Request, cm certificatemanager.CertificateManager) (*keyPairCollection, error) {
+func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper octrl.NamespaceHelper, cm certificatemanager.CertificateManager) (*keyPairCollection, error) {
 	collection := keyPairCollection{log: log}
 
 	// Get upstream certificates that we depend on, but aren't created by this controller. Some of these are
@@ -478,7 +466,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, req octrl.Re
 		monitor.PrometheusClientTLSSecretName: common.OperatorNamespace(),
 
 		// Get certificate for es-proxy, which Linseed and es-gateway need to trust.
-		render.ManagerTLSSecretName: req.TruthNamespace(),
+		render.ManagerTLSSecretName: helper.TruthNamespace(),
 
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.
 		render.FluentdPrometheusTLSSecretName: common.OperatorNamespace(),
@@ -601,7 +589,7 @@ func (c *keyPairCollection) trustedBundle(cm certificatemanager.CertificateManag
 	return cm.CreateTrustedBundle(certs...)
 }
 
-func (c keyPairCollection) component(bundle certificatemanagement.TrustedBundle, request octrl.Request) render.Component {
+func (c keyPairCollection) component(bundle certificatemanagement.TrustedBundle, request octrl.NamespaceHelper) render.Component {
 	// Create a render.Component to provision or update key pairs and the trusted bundle.
 	kpos := []rcertificatemanagement.KeyPairOption{}
 

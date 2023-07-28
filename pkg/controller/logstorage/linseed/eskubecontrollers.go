@@ -34,7 +34,7 @@ import (
 // TODO: Move this out of this controller.
 func (r *LinseedSubController) createESKubeControllers(
 	ctx context.Context,
-	request octrl.Request,
+	helper octrl.NamespaceHelper,
 	install *operatorv1.InstallationSpec,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
@@ -48,13 +48,13 @@ func (r *LinseedSubController) createESKubeControllers(
 	}
 
 	// Get secrets needed for kube-controllers to talk to elastic.
-	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, request.TruthNamespace())
+	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
 		return err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, request.TruthNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return err
@@ -64,14 +64,14 @@ func (r *LinseedSubController) createESKubeControllers(
 	if managementCluster != nil {
 		// Add the internal traffic secret of the manager pod to the trusted bundle. We need this so we can talk to Voltron.
 		// This certificate is provisioned by the manager controller, and so we need to load it lazily once it appears.
-		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
+		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error querying for internal manager TLS certificate (%s)", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return err
 		}
 	}
 
-	namespaces := []string{request.InstallNamespace()}
+	namespaces := []string{helper.InstallNamespace()}
 	if r.multiTenant {
 		namespaces, err = utils.TenantNamespaces(ctx, r.client)
 		if err != nil {
@@ -89,7 +89,7 @@ func (r *LinseedSubController) createESKubeControllers(
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,
 		TrustedBundle:                certificateManager.CreateTrustedBundle(), // We don't care about the contents.
-		Namespace:                    request.InstallNamespace(),               // TODO: This will give tigera-elasticsearch in single-tenant systems. Is this OK?
+		Namespace:                    helper.InstallNamespace(),                // TODO: This will give tigera-elasticsearch in single-tenant systems. Is this OK?
 		BindingNamespaces:            namespaces,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)

@@ -424,7 +424,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	} else if multiTenantManagement {
 		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace.
 		// Instead, look for a Tenant instance that represent's the management cluster's own tenant.
-		tenant, err = utils.GetTenant(ctx, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
+		tenant, _, err = utils.GetTenant(ctx, r.multiTenant, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

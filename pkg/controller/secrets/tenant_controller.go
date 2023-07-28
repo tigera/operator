@@ -91,9 +91,8 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Get the Tenant.
-	tenant, err := utils.GetTenant(ctx, r.client, request.Namespace)
+	tenant, _, err := utils.GetTenant(ctx, true, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
-		// No tenant in this namespace. Ignore the update.
 		logc.V(1).Info("No Tenant in this Namespace, skip")
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil

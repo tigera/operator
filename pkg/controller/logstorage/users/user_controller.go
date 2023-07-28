@@ -104,33 +104,29 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 func (r *UserController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Users")
 
-	var tenant *operatorv1.Tenant
-	var err error
-	if r.multiTenant {
-		if request.Namespace == "" {
-			// In multi-tenant mode, we only handle namespaced reconcile triggers.
-			return reconcile.Result{}, nil
-		}
+	// We skip requests without a namespace specified in multi-tenant setups.
+	if r.multiTenant && request.Namespace == "" {
+		return reconcile.Result{}, nil
+	}
 
-		// Check if there is a manager in this namespace.
-		tenant, err = utils.GetTenant(ctx, r.client, request.Namespace)
-		if errors.IsNotFound(err) {
-			// No tenant in this namespace. Ignore the update.
-			reqLogger.Info("No Tenant in this Namespace, skip")
-			return reconcile.Result{}, nil
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	// Check if this is a tenant-scoped request.
+	tenant, tenantID, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	if errors.IsNotFound(err) {
+		reqLogger.Info("No Tenant in this Namespace, skip")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Get LogStorage resource.
-	ls := &operatorv1.LogStorage{}
+	logStorage := &operatorv1.LogStorage{}
 	key := utils.DefaultTSEEInstanceKey
-	err = r.client.Get(ctx, key, ls)
+	err = r.client.Get(ctx, key, logStorage)
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
@@ -138,46 +134,25 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		ls = nil
+		logStorage = nil
 		r.status.OnCRNotFound()
 	}
 
 	// We found the LogStorage instance (and Tenant instance if in multi-tenant mode).
 	r.status.OnCRFound()
 
-	req := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.ElasticsearchNamespace)
-	args := ReconcileArgs{LogStorage: ls, Tenant: tenant}
-	reqLogger = reqLogger.WithValues("installNS", req.InstallNamespace(), "truthNS", req.TruthNamespace())
-	return r.reconcile(ctx, reqLogger, args, req)
-}
-
-type ReconcileArgs struct {
-	LogStorage *operatorv1.LogStorage
-	Tenant     *operatorv1.Tenant
-}
-
-func (r *UserController) reconcile(ctx context.Context, reqLogger logr.Logger, args ReconcileArgs, request octrl.Request) (reconcile.Result, error) {
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
-	if args.LogStorage.Status.State != operatorv1.TigeraStatusReady {
+	if logStorage.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
-	tenantID := ""
-	if args.Tenant != nil {
-		tenantID = args.Tenant.Spec.ID
-		if tenantID == "" {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Tenant resource does not specify an ID", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-	}
-	linseedUser := utils.LinseedUser(tenantID)
-
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
+	linseedUser := utils.LinseedUser(tenantID)
 	basicCreds := corev1.Secret{}
 	credentialSecrets := []client.Object{}
-	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: request.TruthNamespace()}
+	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
 	if err := r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
@@ -190,24 +165,24 @@ func (r *UserController) reconcile(ctx context.Context, reqLogger logr.Logger, a
 		}
 		basicCreds = corev1.Secret{}
 		basicCreds.Name = render.ElasticsearchLinseedUserSecret
-		basicCreds.Namespace = request.TruthNamespace()
+		basicCreds.Namespace = helper.TruthNamespace()
 		basicCreds.StringData = map[string]string{"username": linseedUser.Username, "password": pw}
 
 		// Make sure we install the generated credentials into the truth namespace.
 		credentialSecrets = append(credentialSecrets, &basicCreds)
 	}
-	if request.TruthNamespace() != request.InstallNamespace() {
+	if helper.TruthNamespace() != helper.InstallNamespace() {
 		// Copy the credentials into the install namespace.
-		credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(request.InstallNamespace(), &basicCreds)[0])
+		credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(helper.InstallNamespace(), &basicCreds)[0])
 	}
 	credentialComponent := render.NewPassthrough(credentialSecrets...)
 
 	// In standard installs, the LogStorage owns the secret. For multi-tenant, it's owned by the Manager instance.
 	var hdler utils.ComponentHandler
 	if r.multiTenant {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, args.Tenant)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
 	} else {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, args.LogStorage)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 	}
 	if err := hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating Linseed user secret", err, reqLogger)

@@ -16,25 +16,7 @@ package controller
 
 import (
 	"github.com/tigera/operator/pkg/common"
-	"k8s.io/apimachinery/pkg/types"
 )
-
-func NewRequest(r types.NamespacedName, mt bool, defaultNS string) Request {
-	return Request{
-		NamespaceHelper: NewNamespaceHelper(mt, defaultNS, r.Namespace),
-		NamespacedName:  r,
-	}
-}
-
-// Request wraps a standard request and provides utilities to support both
-// single and multi-tenant operator modes.
-type Request struct {
-	// The name and namespace of the object that triggered this request.
-	types.NamespacedName
-
-	// Helper for determining which namespace to use.
-	NamespaceHelper
-}
 
 func NewNamespaceHelper(mt bool, singleTenantNS, multiTenantNS string) NamespaceHelper {
 	return &namespacer{
@@ -47,6 +29,7 @@ func NewNamespaceHelper(mt bool, singleTenantNS, multiTenantNS string) Namespace
 type NamespaceHelper interface {
 	TruthNamespace() string
 	InstallNamespace() string
+	BothNamespaces() []string
 }
 
 type namespacer struct {
@@ -73,4 +56,11 @@ func (r *namespacer) TruthNamespace() string {
 		return common.OperatorNamespace()
 	}
 	return r.multiTenantNamespace
+}
+
+func (r *namespacer) BothNamespaces() []string {
+	if r.TruthNamespace() == r.InstallNamespace() {
+		return []string{r.TruthNamespace()}
+	}
+	return []string{r.TruthNamespace(), r.InstallNamespace()}
 }

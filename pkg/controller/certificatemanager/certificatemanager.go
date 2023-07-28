@@ -433,46 +433,52 @@ func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(cert
 	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
 }
 
-type annotationPassthru struct {
-	annotations map[string]string
-	bundle      certificatemanagement.TrustedBundle
-}
-
-func newAnnotationPassthru(cm CertificateManager, system bool) *annotationPassthru {
-	if system {
-		bundle, _ := cm.CreateTrustedBundleWithSystemRootCertificates()
-		return &annotationPassthru{annotations: map[string]string{}, bundle: bundle}
-	}
-	return &annotationPassthru{annotations: map[string]string{}, bundle: cm.CreateTrustedBundle()}
-}
-
-func (a *annotationPassthru) MountPath() string {
-	return a.bundle.MountPath()
-}
-
-func (a *annotationPassthru) VolumeMounts(osType meta.OSType) []corev1.VolumeMount {
-	return a.bundle.VolumeMounts(osType)
-}
-
-func (a *annotationPassthru) Volume() corev1.Volume {
-	return a.bundle.Volume()
-}
-
-func (a *annotationPassthru) HashAnnotations() map[string]string {
-	return a.annotations
-}
-
 func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
 	obj := &corev1.ConfigMap{}
 	k := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: ns}
 	if err := client.Get(ctx, k, obj); err != nil {
 		return nil, err
 	}
-	a := newAnnotationPassthru(cm, len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0)
+	a := newReadOnlyTrustedBundle(cm, len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0)
 	for key, val := range obj.Annotations {
 		if strings.HasPrefix(key, "hash.operator.tigera.io/") {
 			a.annotations[key] = val
 		}
 	}
 	return a, nil
+}
+
+// newReadOnlyTrustedBundle creates a new readOnlyTrustedBundle. If system is true, the bundle will include a system root certificate bundle.
+// TrustedBundleRO is useful for mounting a bundle of certificates to trust in a pod without the ability to modify the bundle, and allows
+// one controller to create the bundle and another to mount it.
+func newReadOnlyTrustedBundle(cm CertificateManager, system bool) *readOnlyTrustedBundle {
+	if system {
+		bundle, _ := cm.CreateTrustedBundleWithSystemRootCertificates()
+		return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: bundle}
+	}
+	return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: cm.CreateTrustedBundle()}
+}
+
+// readOnlyTrustedBundle implements the TrustedBundleRO interface. It allows for annotations to be provided that will be added to
+// any resources which depend on the bundle. Otherwise, it is a lightweight wrapper around a TrustedBundle that does not allow
+// modification of the bundle and simply exposes methods for mounting bundle that has already been created in the cluster.
+type readOnlyTrustedBundle struct {
+	annotations map[string]string
+	bundle      certificatemanagement.TrustedBundle
+}
+
+func (a *readOnlyTrustedBundle) MountPath() string {
+	return a.bundle.MountPath()
+}
+
+func (a *readOnlyTrustedBundle) VolumeMounts(osType meta.OSType) []corev1.VolumeMount {
+	return a.bundle.VolumeMounts(osType)
+}
+
+func (a *readOnlyTrustedBundle) Volume() corev1.Volume {
+	return a.bundle.Volume()
+}
+
+func (a *readOnlyTrustedBundle) HashAnnotations() map[string]string {
+	return a.annotations
 }

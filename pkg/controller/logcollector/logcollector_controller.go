@@ -426,6 +426,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		// Instead, look for a Tenant instance that represent's the management cluster's own tenant.
 		tenant, _, err = utils.GetTenant(ctx, r.multiTenant, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
 		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Failed to retrieve tenant", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		linseedCertNamespace = tenant.Namespace

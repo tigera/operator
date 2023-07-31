@@ -509,8 +509,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 
-		// Create a certificate for Voltron to use for TLS connections from the managed cluster destined
+		// Create a certificate for Voltron to use when serving TLS connections from managed clusters destined
 		// to Linseed. This certificate is used only for connections received over Voltron's mTLS tunnel targeting tigera-linseed.
+		// The public cert from this keypair is sent by es-kube-controllers to managed clusters so that linseed clients in those clusters
+		// can authenticate the certificate presented by Voltron.
 		linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 		linseedVoltronSecret, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -591,6 +593,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ComplianceLicenseActive: complianceLicenseFeatureActive,
 		UsePSP:                  r.usePSP,
 		Namespace:               helper.InstallNamespace(),
+		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
 	}
 

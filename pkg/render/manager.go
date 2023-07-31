@@ -190,8 +190,9 @@ type ManagerConfiguration struct {
 	ComplianceLicenseActive bool
 
 	// Whether the cluster supports pod security policies.
-	UsePSP    bool
-	Namespace string
+	UsePSP         bool
+	Namespace      string
+	TruthNamespace string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
 	Tenant *operatorv1.Tenant
@@ -269,9 +270,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	// can authenticate the certificate presented by Voltron.
 	if c.cfg.VoltronLinseedKeyPair != nil {
 		if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
-			objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, common.OperatorNamespace()))
+			objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, c.cfg.TruthNamespace))
 		} else {
-			objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, common.OperatorNamespace()))
+			objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, c.cfg.TruthNamespace))
 		}
 	}
 

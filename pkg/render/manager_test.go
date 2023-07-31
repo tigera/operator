@@ -58,13 +58,20 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
 	compliance := &operatorv1.Compliance{}
-	const expectedResourcesNumber = 13
+	const expectedResourcesNumber = 12
 
 	expectedManagerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/manager.json")
 	expectedManagerOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/manager_ocp.json")
 
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -79,7 +86,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
@@ -228,6 +234,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				installation:            installation,
 				compliance:              complianceCR,
 				complianceFeatureActive: licenseFeatureActive,
+				ns:                      render.ManagerNamespace,
 			})
 
 			deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -244,11 +251,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	)
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
-		Expect(rtest.GetResource(resources, "tigera-manager", "tigera-manager", "apps", "v1", "Deployment")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment")).ToNot(BeNil())
 
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
@@ -395,7 +409,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(renderConfig{oidc: true, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    true,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -411,7 +432,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain)
+			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
 			tunnelSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronTunnelSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
@@ -432,7 +453,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				VoltronLinseedKeyPair: voltronLinseedCert,
 				InternalTLSKeyPair:    internalTraffic,
 				Installation:          installation,
-				ESClusterConfig:       &relasticsearch.ClusterConfig{},
+				ClusterConfig:         &relasticsearch.ClusterConfig{},
+				Namespace:             render.ManagerNamespace,
 			}
 		})
 
@@ -462,7 +484,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: &operatorv1.ManagementCluster{}, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       &operatorv1.ManagementCluster{},
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -477,7 +506,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "tigera-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
@@ -688,7 +716,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		bundle = certificateManager.CreateTrustedBundle()
 	})
@@ -698,7 +726,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		cfg := &render.ManagerConfiguration{
 			TrustedCertBundle:     bundle,
-			ESClusterConfig:       &relasticsearch.ClusterConfig{},
+			ClusterConfig:         &relasticsearch.ClusterConfig{},
 			TLSKeyPair:            kp,
 			VoltronLinseedKeyPair: voltronLinseedKP,
 			Installation:          i,
@@ -706,6 +734,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Replicas:              &replicas,
 			UsePSP:                true,
 			InternalTLSKeyPair:    internalKp,
+			Namespace:             render.ManagerNamespace,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -745,6 +774,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
 		})
 
 		// Should render the correct resources.
@@ -760,7 +790,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
@@ -799,6 +828,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -815,6 +845,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -825,7 +856,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	It("should set the right env when FIPS is enabled", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		installation.FIPSMode = &fipsEnabled
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -859,6 +897,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					installation:            installation,
 					compliance:              compliance,
 					complianceFeatureActive: true,
+					ns:                      render.ManagerNamespace,
 				})
 
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
@@ -879,6 +918,7 @@ type renderConfig struct {
 	compliance              *operatorv1.Compliance
 	complianceFeatureActive bool
 	openshift               bool
+	ns                      string
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -900,7 +940,7 @@ func renderObjects(roc renderConfig) []client.Object {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-	certificateManager, err := certificatemanager.Create(cli, roc.installation, clusterDomain)
+	certificateManager, err := certificatemanager.Create(cli, roc.installation, clusterDomain, common.OperatorNamespace())
 	Expect(err).NotTo(HaveOccurred())
 	bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 
@@ -920,7 +960,7 @@ func renderObjects(roc renderConfig) []client.Object {
 	cfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      dexCfg,
 		TrustedCertBundle:       bundle,
-		ESClusterConfig:         esConfigMap,
+		ClusterConfig:           esConfigMap,
 		TLSKeyPair:              managerTLS,
 		Installation:            roc.installation,
 		ManagementCluster:       roc.managementCluster,
@@ -934,6 +974,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ComplianceLicenseActive: roc.complianceFeatureActive,
 		Openshift:               roc.openshift,
 		UsePSP:                  true,
+		Namespace:               roc.ns,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

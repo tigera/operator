@@ -15,7 +15,11 @@
 package controller
 
 import (
+	"context"
+
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func NewSingleTenantNamespaceHelper(ns string) NamespaceHelper {
@@ -46,6 +50,11 @@ type NamespaceHelper interface {
 
 	// BothNamespaces returns both the truth namespace and the install namespace.
 	BothNamespaces() []string
+
+	// TenantNamespaces returns all namespaces in the cluster for this component, across all tenants. This is useful when
+	// binding global resources to potentially several different Tenant namespaces.
+	// For single-tenant clusters, this simply returns the InstallNamespace.
+	TenantNamespaces(client.Client) ([]string, error)
 }
 
 type namespacer struct {
@@ -73,4 +82,11 @@ func (r *namespacer) BothNamespaces() []string {
 		return []string{r.TruthNamespace()}
 	}
 	return []string{r.TruthNamespace(), r.InstallNamespace()}
+}
+
+func (r *namespacer) TenantNamespaces(c client.Client) ([]string, error) {
+	if !r.multiTenant {
+		return []string{r.InstallNamespace()}, nil
+	}
+	return utils.TenantNamespaces(context.Background(), c)
 }

@@ -78,7 +78,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, render.ManagerNamespace)
+		instance, err = GetManager(ctx, c, "")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -651,7 +651,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, render.ManagerNamespace)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -675,7 +675,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, render.ManagerNamespace)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -719,7 +719,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, render.ManagerNamespace)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -779,7 +779,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, render.ManagerNamespace)
+				instance, err := GetManager(ctx, r.client, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))

@@ -1627,7 +1627,7 @@ func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.Ke
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain)
+	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace())
 	Expect(err).NotTo(HaveOccurred())
 	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)

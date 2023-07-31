@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/go-logr/logr"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -36,49 +37,49 @@ func addAlertmanagerWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.Alertmanager{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func addPrometheusWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.Prometheus{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func addPrometheusRuleWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.PrometheusRule{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func addServiceMonitorCalicoNodeWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func addServiceMonitorElasticsearchWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func addServiceMonitorFluentdWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func addServiceMonitorKubeControllerWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.KubeControllerMetrics, Namespace: common.TigeraPrometheusNamespace},
-	})
+	}, &handler.EnqueueRequestForObject{})
 }
 
 func addWatch(c controller.Controller) error {

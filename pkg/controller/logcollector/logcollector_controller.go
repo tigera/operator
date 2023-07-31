@@ -424,9 +424,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	} else if multiTenantManagement {
 		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace.
 		// Instead, look for a Tenant instance that represent's the management cluster's own tenant.
+		if instance.Spec.MultiTenantManagementClusterNamespace == "" {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "multiTenantManagementClusterNamespace is not set", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
 		tenant, _, err = utils.GetTenant(ctx, r.multiTenant, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Failed to retrieve tenant", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Failed to retrieve tenant in ns %s", instance.Spec.MultiTenantManagementClusterNamespace), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		linseedCertNamespace = tenant.Namespace

@@ -1354,6 +1354,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for the Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName), err, reqLogger)
 			}
 
+			if instance.Spec.CalicoNetwork != nil {
+				if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
+					if v4pool.Encapsulation != operator.EncapsulationVXLAN && v4pool.Encapsulation != operator.EncapsulationNone {
+						r.status.SetDegraded(operator.ResourceValidationError, "Encapsulation not supported by Calico for Windows", fmt.Errorf("IPv4 IPPool encapsulation %s is not supported by Calico for Windows", v4pool.Encapsulation), reqLogger)
+					}
+				}
+			}
+
 			windowsCfg := render.WindowsConfiguration{
 				K8sServiceEp:            k8sapi.Endpoint,
 				Installation:            &instance.Spec,

@@ -50,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -316,17 +317,14 @@ var _ = Describe("Testing core-controller installation", func() {
 
 	Context("image reconciliation tests", func() {
 		type testConf struct {
-			EnableWindows           bool
-			EnableWindowsHPCSupport bool
+			EnableWindows bool
 		}
 		for _, testConfig := range []testConf{
-			{false, false},
-			{true, false},
-			{true, true},
+			{false},
+			{true},
 		} {
 			enableWindows := testConfig.EnableWindows
-			enableWindowsHPCSupport := testConfig.EnableWindowsHPCSupport
-			Describe(fmt.Sprintf("enableWindows: %v enableWindowsHPCSupport: %v", enableWindows, enableWindowsHPCSupport), func() {
+			Describe(fmt.Sprintf("enableWindows: %v", enableWindows), func() {
 				var c client.Client
 				var cs *kfake.Clientset
 				var ctx context.Context
@@ -379,12 +377,10 @@ var _ = Describe("Testing core-controller installation", func() {
 							},
 						}
 
-						if enableWindowsHPCSupport {
-							node.Status = corev1.NodeStatus{
-								NodeInfo: corev1.NodeSystemInfo{
-									ContainerRuntimeVersion: "containerd://1.7.1",
-								},
-							}
+						node.Status = corev1.NodeStatus{
+							NodeInfo: corev1.NodeSystemInfo{
+								ContainerRuntimeVersion: "containerd://1.7.1",
+							},
 						}
 
 						Expect(c.Create(ctx, node)).ToNot(HaveOccurred())
@@ -544,7 +540,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						fmt.Sprintf("some.registry.org/%s:%s",
 							components.ComponentCSRInitContainer.Image,
 							components.ComponentCSRInitContainer.Version)))
-					if enableWindows && enableWindowsHPCSupport {
+					if enableWindows {
 						dsWin := appsv1.DaemonSet{
 							TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 							ObjectMeta: metav1.ObjectMeta{
@@ -597,7 +593,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							},
 						},
 					}
-					if enableWindows && enableWindowsHPCSupport {
+					if enableWindows {
 						imageSet.Spec.Images = append(imageSet.Spec.Images, []operator.Image{
 							{Image: "tigera/cnx-node-windows", Digest: "sha256:tigeracnxnodewindowshash"},
 							{Image: "tigera/cni-windows", Digest: "sha256:tigeracniwindowshash"},
@@ -687,7 +683,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentCSRInitContainer.Image,
 							"sha256:calicocsrinithash")))
-					if enableWindows && enableWindowsHPCSupport {
+					if enableWindows {
 						dsWin := appsv1.DaemonSet{
 							TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 							ObjectMeta: metav1.ObjectMeta{
@@ -1607,6 +1603,253 @@ var _ = Describe("Testing core-controller installation", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		Context("Windows daemonset tests", func() {
+			var degradedMsg []string
+			var degradedErr []string
+			var dsWin appsv1.DaemonSet
+			var winNode, winNodeNoSupport *corev1.Node
+
+			BeforeEach(func() {
+				// Delete the default installation
+				c.Delete(ctx, cr)
+
+				// Add a SetDegraded callback to mockStatus to save and verify the messages and errors
+				degradedMsg = []string{}
+				degradedErr = []string{}
+				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Run(func(args mock.Arguments) {
+					degradedMsg = append(degradedMsg, args.Get(1).(string))
+					degradedErr = append(degradedErr, args.Get(2).(string))
+				})
+
+				dsWin = appsv1.DaemonSet{
+					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      common.WindowsDaemonSetName,
+						Namespace: common.CalicoNamespace,
+					},
+				}
+
+				// Windows node with a container runtime version that supports
+				// Calico for Windows HPC (containerd v1.7+)
+				winNode = &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "nodewin1",
+						Labels: map[string]string{
+							"kubernetes.io/os": "windows",
+						},
+					},
+					Status: corev1.NodeStatus{
+						NodeInfo: corev1.NodeSystemInfo{
+							ContainerRuntimeVersion: "containerd://1.7.1",
+						},
+					},
+				}
+
+				// Windows node with a container runtime version that does not
+				// supports Calico for Windows HPC (containerd less than v1.7)
+				winNodeNoSupport = &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "nodewin2",
+						Labels: map[string]string{
+							"kubernetes.io/os": "windows",
+						},
+					},
+					Status: corev1.NodeStatus{
+						NodeInfo: corev1.NodeSystemInfo{
+							ContainerRuntimeVersion: "containerd://1.6.8",
+						},
+					},
+				}
+
+				// Delete the nodes if they exist
+				c.Delete(ctx, winNode)
+				c.Delete(ctx, winNodeNoSupport)
+
+				// Add a VXLAN IP pool, which is supported by Calico for Windows
+				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{
+						{
+							CIDR:          "192.168.0.0/16",
+							Encapsulation: "VXLAN",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "all()",
+							BlockSize:     &twentySix,
+						},
+					},
+				}
+
+				// Reset WindowsConfig in the installation
+				cr.Spec.Windows = nil
+
+				// Create the service endpoint configmap for k8s API
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+					Host:        "1.2.3.4",
+					Port:        "6443",
+					ServiceCIDR: "10.96.0.0/12",
+					DNSServers:  "10.96.0.10",
+				}
+
+			})
+
+			It("should render the Windows daemonset when configuration is complete and valid and there are nodes that support Calico Windows HPC", func() {
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				// The calico-node-windows daemonset should not be rendered as there
+				// are no Windows nodes
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{}))
+				Expect(degradedErr).To(ConsistOf([]string{}))
+
+				// Create the Windows nodes
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+				Expect(c.Create(ctx, winNodeNoSupport)).ToNot(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should be rendered
+				Expect(test.GetResource(c, &dsWin)).To(BeNil())
+				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
+				Expect(degradedMsg).To(ConsistOf([]string{}))
+				Expect(degradedErr).To(ConsistOf([]string{}))
+			})
+
+			It("should not render the Windows daemonset when there are Windows nodes but they don't support Calico Windows HPC", func() {
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				// Create the Windows node
+				Expect(c.Create(ctx, winNodeNoSupport)).ToNot(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should not be rendered
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{}))
+				Expect(degradedErr).To(ConsistOf([]string{}))
+			})
+
+			It("should not render the Windows daemonset when it is explicitly disabled in the installation resource", func() {
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				// VXLANCrossSubnet is not supported
+				t := true
+				cr.Spec.Windows = &operator.WindowsConfig{
+					DisableWindowsDaemonset: &t,
+				}
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should not be rendered
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{}))
+				Expect(degradedErr).To(ConsistOf([]string{}))
+			})
+
+			It("should render the Windows daemonset in a degraded state when the kubernetes-service-endpoint configmap is incomplete", func() {
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				// Have a configmap with no ServiceCIDR and DNSServers
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+					Host: "1.2.3.4",
+					Port: "6443",
+				}
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should be rendered, but in a degraded state
+				Expect(test.GetResource(c, &dsWin)).To(BeNil())
+				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
+				Expect(degradedMsg).To(ConsistOf([]string{"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for the Calico Windows daemonset configuration"}))
+				Expect(degradedErr).To(ConsistOf([]string{"missing required information for Windows on ServiceEndpoint configuration"}))
+			})
+
+			It("should render the Windows daemonset in a degraded state when the encapsulation is VXLANCrossSubnet (not supported)", func() {
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				// VXLANCrossSubnet is not supported
+				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "VXLANCrossSubnet"
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should be rendered, but in a degraded state
+				Expect(test.GetResource(c, &dsWin)).To(BeNil())
+				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
+				Expect(degradedMsg).To(ConsistOf([]string{"Encapsulation not supported by Calico for Windows"}))
+				Expect(degradedErr).To(ConsistOf([]string{"IPv4 IPPool encapsulation VXLANCrossSubnet is not supported by Calico for Windows"}))
+			})
+
+			It("should render the Windows daemonset in a degraded state when the encapsulation is IPIP (not supported)", func() {
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				// IPIP is not supported
+				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "IPIP"
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should be rendered, but in a degraded state
+				Expect(test.GetResource(c, &dsWin)).To(BeNil())
+				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
+				Expect(degradedMsg).To(ConsistOf([]string{"Encapsulation not supported by Calico for Windows"}))
+				Expect(degradedErr).To(ConsistOf([]string{"IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"}))
+
+			})
+
+			It("should render the Windows daemonset in a degraded state with both unsupported encapsulation and incomplete configmap with all messages", func() {
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "IPIP"
+
+				// Have a configmap with no ServiceCIDR and DNSServers
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+					Host: "1.2.3.4",
+					Port: "6443",
+				}
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should be rendered, but in a degraded state
+				Expect(test.GetResource(c, &dsWin)).To(BeNil())
+				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
+				Expect(degradedMsg).To(ConsistOf([]string{
+					"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for the Calico Windows daemonset configuration",
+					"Encapsulation not supported by Calico for Windows"}))
+				Expect(degradedErr).To(ConsistOf([]string{
+					"missing required information for Windows on ServiceEndpoint configuration",
+					"IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"}))
+			})
 		})
 	})
 })

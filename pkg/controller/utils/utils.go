@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -447,6 +448,9 @@ func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) 
 	for _, t := range tenants.Items {
 		namespaces = append(namespaces, t.Namespace)
 	}
+
+	// Sort the namespaces, so that the output is deterministic.
+	sort.Strings(namespaces)
 	return namespaces, nil
 }
 

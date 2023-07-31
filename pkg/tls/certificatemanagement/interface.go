@@ -54,6 +54,7 @@ type CertificateInterface interface {
 	GetIssuer() CertificateInterface
 	GetCertificatePEM() []byte
 	GetName() string
+	GetNamespace() string
 }
 
 // TrustedBundle is used to create a trusted certificate bundle of the CertificateManager CA and 0 or more Certificates.

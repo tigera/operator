@@ -238,14 +238,15 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
 		// if we need to retry the function
 		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
-		// If the error is a resource Conflict, try the update again
 		if err != nil && errors.IsConflict(err) {
+			// If the error is a resource Conflict, try the update again
 			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
 			err = c.createOrUpdateObject(ctx, obj, osType)
 			if err != nil {
 				return err
 			}
 		} else if err != nil {
+			cmpLog.Error(err, "Failed to create or update object", "key", key)
 			return err
 		}
 

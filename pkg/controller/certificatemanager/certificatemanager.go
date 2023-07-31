@@ -216,6 +216,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	cm.Certificate = x509Cert
 	cm.keyPair = &certificatemanagement.KeyPair{
 		Name:                  caSecretName,
+		Namespace:             ns,
 		PrivateKeyPEM:         privateKeyPEM,
 		CertificatePEM:        certificatePEM,
 		CSRImage:              csrImage,
@@ -244,7 +245,7 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
 	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
 	if keyPair != nil && keyPair.UseCertificateManagement() {
-		return certificateManagementKeyPair(cm, secretName, dnsNames), nil
+		return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil
 	}
 	if err != nil && !kerrors.IsNotFound(err) {
 		return nil, err
@@ -273,6 +274,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	return &certificatemanagement.KeyPair{
 		Issuer:         cm.keyPair,
 		Name:           secretName,
+		Namespace:      secretNamespace,
 		PrivateKeyPEM:  keyContent.Bytes(),
 		CertificatePEM: crtContent.Bytes(),
 		DNSNames:       dnsNames,
@@ -292,7 +294,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 			cm.log.V(2).Info("KeyPair not found", "namespace", secretNamespace, "name", secretName)
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we expect that in most cases no secret will be present.
-				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
+				return certificateManagementKeyPair(cm, secretName, secretNamespace, nil), nil, nil
 			}
 			return nil, nil, nil
 		}
@@ -317,7 +319,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we can simply return a certificate management key pair;
 				// the old secret will be deleted automatically.
-				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
+				return certificateManagementKeyPair(cm, secretName, secretNamespace, nil), nil, nil
 			}
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
 			cm.log.V(2).Info("KeyPair is an expired legacy operator cert, make a new one", "name", secretName)
@@ -329,7 +331,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	var issuer certificatemanagement.KeyPairInterface
 	if x509Cert.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix {
 		if cm.keyPair.CertificateManagement != nil {
-			return certificateManagementKeyPair(cm, secretName, nil), nil, nil
+			return certificateManagementKeyPair(cm, secretName, secretNamespace, nil), nil, nil
 		}
 		if string(x509Cert.AuthorityKeyId) == string(cm.AuthorityKeyId) {
 			issuer = cm.keyPair
@@ -347,6 +349,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	return &certificatemanagement.KeyPair{
 		Issuer:         issuer,
 		Name:           secretName,
+		Namespace:      secretNamespace,
 		PrivateKeyPEM:  keyPEM,
 		CertificatePEM: certPEM,
 		OriginalSecret: secret,
@@ -401,7 +404,7 @@ func getKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 }
 
 // certificateManagementKeyPair returns a KeyPair for to be used when certificate management is used to provide a key pair to a pod.
-func certificateManagementKeyPair(ca *certificateManager, secretName string, dnsNames []string) *certificatemanagement.KeyPair {
+func certificateManagementKeyPair(ca *certificateManager, secretName, ns string, dnsNames []string) *certificatemanagement.KeyPair {
 	return &certificatemanagement.KeyPair{
 		Name:                  secretName,
 		CertificateManagement: ca.CertificateManagement(),

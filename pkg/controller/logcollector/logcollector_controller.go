@@ -827,7 +827,7 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName, corev1.TLSCertKey))
 		return nil, nil
 	}
-	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, []byte(cm.Data[corev1.TLSCertKey]), nil)
+	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
 
 	return syslogCert, nil
 }

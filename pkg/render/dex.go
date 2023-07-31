@@ -432,7 +432,7 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: dexIngressPortDestination,
 				},
 				{

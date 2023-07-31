@@ -268,7 +268,7 @@ func (e *elasticsearchMetrics) allowTigeraPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(false, render.ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant. Not needed in multi-tenant.
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)

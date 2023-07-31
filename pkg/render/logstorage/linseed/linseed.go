@@ -106,7 +106,7 @@ type Config struct {
 	// Namespace to install into.
 	Namespace string
 
-	// Namespaces to which we must bind the linseed clusterrole.
+	// Namespaces to which we must bind the Linseed cluster role.
 	BindNamespaces []string
 
 	// Tenant configuration, if running for a particular tenant.

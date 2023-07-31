@@ -157,7 +157,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			},
 		})).NotTo(HaveOccurred())
 
-		certificateManager, err := certificatemanager.Create(c, nil, "")
+		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})

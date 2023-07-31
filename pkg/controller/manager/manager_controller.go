@@ -93,7 +93,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// So, we need to watch the resources we care about across all namespaces.
 		installNS = ""
 		truthNS = ""
-		watchNamespaces = []string{""}
+		watchNamespaces = []string{truthNS}
 	}
 
 	err = utils.AddSecretsWatch(controller, render.VoltronLinseedTLS, installNS)

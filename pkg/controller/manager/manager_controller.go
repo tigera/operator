@@ -603,12 +603,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
 		return reconcile.Result{}, err
 	}
-	namespaces := []string{helper.InstallNamespace()}
-	if r.multiTenant {
-		namespaces, err = utils.TenantNamespaces(ctx, r.client)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+
+	// Determine the namespaces to which we must bind the cluster role.
+	namespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	clusterScopedComponent, err := render.ManagerClusterScoped(managerCfg, namespaces)

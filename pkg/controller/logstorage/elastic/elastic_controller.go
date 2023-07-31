@@ -37,11 +37,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -171,13 +169,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
 	}
 
 	for _, name := range []string{
@@ -186,28 +184,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.ElasticsearchAdminUserSecret,
 	} {
 		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
+			return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
 		}
 	}
 
 	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
 	// the utils folder where the other watch logic is.
-	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == common.OperatorNamespace() && hasLabel
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, hasLabel := e.ObjectNew.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.ObjectNew.GetNamespace() == common.OperatorNamespace() && hasLabel
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == common.OperatorNamespace() && hasLabel
-		},
-	})
-	if err != nil {
-		return err
+	if err = utils.AddSecretWatchWithLabel(c, common.OperatorNamespace(), logstoragecommon.TigeraElasticsearchUserSecretLabel); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
@@ -217,33 +201,33 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.TigeraLinseedSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+			return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 		}
 	}
 
 	// Catch if something modifies the certs that this controller creates.
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 
 	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 
 	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 
 	if err = utils.AddSecretsWatch(c, render.ElasticsearchCuratorUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
+		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
 	}
 
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
@@ -369,7 +353,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// TODO: Is this ever going to be used in multi-tenant?
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
@@ -401,11 +384,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for elastic / kibana secrets to be available", err, log)
 		return reconcile.Result{}, nil
 	}
-
-	// Create a trusted bundle to pass to the render pacakge. The actual contents of this bundle don't matter - the ConfigMap
-	// itself will be managed by the Secret controller. But, we need an interface to use as an argument to render in order
-	// to configure volume mounts properly.
-	trustedBundle := certificatemanagement.CreateTrustedBundle(elasticKeyPair, kibanaKeyPair)
 
 	// Define variables to be filled in below, conditional on cluster type.
 	var esLicenseType render.ElasticsearchLicenseType
@@ -546,6 +524,13 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
+	// Query the trusted bundle from the namespace.
+	trustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, render.ElasticsearchNamespace)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
 	// create the ComponentHandler from the managementClusterConnection.
 	var hdler utils.ComponentHandler
@@ -604,8 +589,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, nil
 		}
 
-		// TODO:
-		// In multi-tenant mode, and probably single-tenant as well, this should be handled by someone other than the operator.
+		// TODO: In multi-tenant mode, and probably single-tenant as well, ILM programming should be handled by someone other than the operator.
 		// Either out of band, or by Linseed.
 		err := r.applyILMPolicies(ls, reqLogger, ctx)
 		if err != nil {
@@ -656,8 +640,6 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 	return nil
 }
 
-// TODO: This shouldn't be done in the operator. Linseed should probably handle this for single-tenant setups, and multi-tenant should
-// either be handled by Linseed or out-of-band.
 func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) error {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
 	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ElasticEndpoint())

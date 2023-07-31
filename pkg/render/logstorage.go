@@ -220,7 +220,7 @@ type ElasticsearchConfiguration struct {
 	ClusterDomain               string
 	BaseURL                     string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
 	ElasticLicenseType          ElasticsearchLicenseType
-	TrustedBundle               certificatemanagement.TrustedBundle
+	TrustedBundle               certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret             *corev1.Secret
 	ApplyTrial                  bool
 	KeyStoreSecret              *corev1.Secret
@@ -1871,13 +1871,13 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).LinseedSourceEntityRule(),
+					Source:      networkpolicy.DefaultHelper().LinseedSourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
@@ -1954,7 +1954,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 	}...)
 
@@ -1994,7 +1994,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewaySourceEntityRule(), // TODO: multi-tenant
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: kibanaPortIngressDestination,
 				},
 				{
@@ -2016,7 +2016,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
 		Source:      v3.EntityRule{},
-		Destination: networkpolicy.Helper(false, ElasticsearchNamespace).ESGatewayEntityRule(), // TODO: multi-tenant
+		Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 	})
 
 	return &v3.NetworkPolicy{

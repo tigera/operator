@@ -20,7 +20,6 @@ import (
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/common"
 	octrl "github.com/tigera/operator/pkg/controller"
@@ -45,11 +44,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -119,25 +116,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Make a helper for determining which namespaces to use based on tenancy mode.
 	helper := octrl.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
 
-	// Watch all the elasticsearch user secrets in the operator namespace.
-	// TODO: In the future, we may want put this logic in the utils folder where the other watch logic is.
-	if err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return (helper.TruthNamespace() == "" || e.Object.GetNamespace() == helper.TruthNamespace()) && hasLabel
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, hasLabel := e.ObjectNew.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return (helper.TruthNamespace() == "" || e.ObjectNew.GetNamespace() == helper.TruthNamespace()) && hasLabel
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return (helper.TruthNamespace() == "" || e.Object.GetNamespace() == helper.TruthNamespace()) && hasLabel
-		},
-	}); err != nil {
-		return err
+	// Watch all the elasticsearch user secrets in the truth namespace.
+	if err = utils.AddSecretWatchWithLabel(c, helper.TruthNamespace(), logstoragecommon.TigeraElasticsearchUserSecretLabel); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secrets: %w", err)
 	}
-
 	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
 	}
@@ -366,11 +348,11 @@ func (r *SecretSubController) generateClusterSecrets(log logr.Logger, kibana boo
 	collection.elastic = elasticKeyPair
 
 	if !r.multiTenant {
-		// Generate a keypair for Kibana.
-		//
-		// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
-		// It will be provisioned into the cluster in the render stage later on.
 		if kibana {
+			// Generate a keypair for Kibana.
+			//
+			// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+			// It will be provisioned into the cluster in the render stage later on.
 			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 			kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 			if err != nil {
@@ -379,6 +361,33 @@ func (r *SecretSubController) generateClusterSecrets(log logr.Logger, kibana boo
 				return nil, err
 			}
 			collection.kibana = kibanaKeyPair
+
+			// Add the es-proxy certificate to the collection. This is needed in case the user has enabled Kibana with mTLS.
+			cert, err := cm.GetCertificate(r.client, render.ManagerInternalTLSSecretName, render.ManagerNamespace)
+			if err != nil && !errors.IsNotFound(err) {
+				return nil, err
+			} else {
+				collection.upstreamCerts = append(collection.upstreamCerts, cert)
+			}
+		}
+	}
+
+	linseedNamespaces := []string{render.ElasticsearchNamespace}
+	if r.multiTenant {
+		// For multi-tenant systems, linseed runs in multiple namespaces, so we need to collect the certificates from all namespaces
+		// that have a tenant.
+		linseedNamespaces, err = utils.TenantNamespaces(context.Background(), r.client)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, ns := range linseedNamespaces {
+		cert, err := cm.GetCertificate(r.client, render.TigeraLinseedSecret, ns)
+		if err != nil && !errors.IsNotFound(err) {
+			return nil, err
+		} else {
+			collection.upstreamCerts = append(collection.upstreamCerts, cert)
 		}
 	}
 
@@ -481,7 +490,6 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper octrl
 		render.TigeraElasticsearchInternalCertSecret: common.OperatorNamespace(),
 
 		// es-gateay and Linseed need to trust certificates signed by the root tigera-operator CA.
-		// TODO: Why is this needed in addition to the elasticsearch internal cert above?
 		certificatemanagement.CASecretName: common.OperatorNamespace(),
 	}
 
@@ -514,11 +522,7 @@ type elasticKeyPairCollection struct {
 
 // trustedBundle creates a certificate bundle using the keypairs and certificates from the collection.
 func (c *elasticKeyPairCollection) trustedBundle(cm certificatemanager.CertificateManager) certificatemanagement.TrustedBundle {
-	certs := []certificatemanagement.CertificateInterface{
-		// TODO: For mTLS with Elastic, we need to include Linseed certs as well.
-		// TODO: For mTLS Kibana support, we need to include es-proxy cert.
-		c.elastic, c.kibana,
-	}
+	certs := []certificatemanagement.CertificateInterface{c.elastic, c.kibana}
 	certs = append(certs, c.upstreamCerts...)
 	return cm.CreateTrustedBundle(certs...)
 }
@@ -592,7 +596,6 @@ func (c keyPairCollection) component(bundle certificatemanagement.TrustedBundle,
 		Namespace:      request.InstallNamespace(),
 		TruthNamespace: request.TruthNamespace(),
 		ServiceAccounts: []string{
-			// TODO: Dynamically build serviceaccounts list.
 			linseed.ServiceAccountName,
 			esgateway.ServiceAccountName,
 			esmetrics.ElasticsearchMetricsName,

@@ -15,15 +15,18 @@
 package common
 
 import (
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MergeMaps merges current and desired maps. If both current and desired maps contain the same key, the
 // desired map's value is used.
+// MergeMaps does not copy hash.operator.tigera.io annotations from the current map, since those are managed by the operator.
 func MergeMaps(current, desired map[string]string) map[string]string {
 	for k, v := range current {
 		// Copy over key/value that should be copied.
-		if _, ok := desired[k]; !ok {
+		if _, ok := desired[k]; !ok && !strings.HasPrefix(k, "hash.operator.tigera.io") {
 			desired[k] = v
 		}
 	}

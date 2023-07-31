@@ -15,45 +15,68 @@
 package render_test
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"fmt"
 
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("Policy recommendation rendering tests", func() {
-	var cfg *render.PolicyRecommendationConfiguration
-	var bundle certificatemanagement.TrustedBundle
+	var (
+		cfg     *render.PolicyRecommendationConfiguration
+		bundle  certificatemanagement.TrustedBundle
+		keyPair certificatemanagement.KeyPairInterface
+		cli     client.Client
+	)
+
+	// Fetch expectations from utilities that require Ginkgo context.
+	expectedUnmanagedPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation.json")
+	expectedUnmanagedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/policyrecommendation_ocp.json")
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		bundle = certificateManager.CreateTrustedBundle()
+		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.PolicyRecommendationTLSSecretName, "", "", nil)
+		Expect(err).NotTo(HaveOccurred())
+		keyPair = certificatemanagement.NewKeyPair(secretTLS, []string{""}, "")
 
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.PolicyRecommendationConfiguration{
-			ClusterDomain:   dns.DefaultClusterDomain,
-			ESClusterConfig: relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
-			TrustedBundle:   bundle,
-			Installation:    &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ManagedCluster:  notManagedCluster,
-			UsePSP:          true,
+			ClusterDomain:                  dns.DefaultClusterDomain,
+			ESClusterConfig:                relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
+			TrustedBundle:                  bundle,
+			Installation:                   &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ManagedCluster:                 notManagedCluster,
+			PolicyRecommendationCertSecret: keyPair,
+			UsePSP:                         true,
 		}
 	})
 
@@ -74,8 +97,10 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			{name: "tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "allow-tigera.default-deny", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "allow-tigera.tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -89,6 +114,10 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(prc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(prc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/policy-recommendation-tls/tls.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/policy-recommendation-tls/tls.key"},
 		))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
@@ -122,6 +151,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					"policyrecommendationscopes/status",
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
 					"globalnetworksets",
 				},
 				Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
@@ -180,5 +211,55 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+	})
+
+	It("should render an init container when certificate management is enabled", func() {
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+
+		policyRecommendationCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.PolicyRecommendationCertSecret = policyRecommendationCertSecret
+
+		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
+		component := render.PolicyRecommendation(cfg)
+		resources, _ := component.Objects()
+
+		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer := idc.Spec.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.PolicyRecommendationTLSSecretName)))
+	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-policy-recommendation", Namespace: "tigera-policy-recommendation"}
+
+		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			return testutils.SelectPolicyByClusterTypeAndProvider(
+				scenario,
+				expectedUnmanagedPolicy,
+				expectedUnmanagedPolicyForOpenshift,
+				nil,
+				nil,
+			)
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.ManagedCluster = scenario.ManagedCluster
+				cfg.Openshift = scenario.Openshift
+				component := render.PolicyRecommendation(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := getExpectedPolicy(scenario)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+		)
 	})
 })

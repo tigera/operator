@@ -15,8 +15,11 @@
 package render
 
 import (
+	"crypto/x509"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,30 +31,43 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
 
 // The names of the components related to the PolicyRecommendation APIs related rendered objects.
 const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
-	PolicyRecommendationName       = "tigera-policy-recommendation"
-	PolicyRecommendationNamespace  = PolicyRecommendationName
-	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+	PolicyRecommendationName                  = "tigera-policy-recommendation"
+	PolicyRecommendationNamespace             = PolicyRecommendationName
+	PolicyRecommendationPodSecurityPolicyName = PolicyRecommendationName
+	PolicyRecommendationPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+
+	PolicyRecommendationTLSSecretName = "policy-recommendation-tls"
 )
+
+var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(PolicyRecommendationTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
-	ClusterDomain   string
-	ESClusterConfig *relasticsearch.ClusterConfig
-	ESSecrets       []*corev1.Secret
-	Installation    *operatorv1.InstallationSpec
-	ManagedCluster  bool
-	Openshift       bool
-	PullSecrets     []*corev1.Secret
-	TrustedBundle   certificatemanagement.TrustedBundle
+	ClusterDomain                  string
+	ESClusterConfig                *relasticsearch.ClusterConfig
+	ESSecrets                      []*corev1.Secret
+	Installation                   *operatorv1.InstallationSpec
+	ManagedCluster                 bool
+	Openshift                      bool
+	PullSecrets                    []*corev1.Secret
+	TrustedBundle                  certificatemanagement.TrustedBundle
+	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -86,21 +102,31 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
+	// Management and managed clusters need API access to the resources defined in the policy
+	// recommendation cluster role
 	objs := []client.Object{
 		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
+		networkpolicy.AllowTigeraDefaultDeny(PolicyRecommendationNamespace),
 	}
+
+	if pr.cfg.ManagedCluster {
+		// No further resources are needed for managed clusters
+		return objs, nil
+	}
+
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
+	// The deployment is created on management/standalone clusters only
+	objs = append(objs,
+		pr.allowTigeraPolicyForPolicyRecommendation(),
+		pr.deployment(),
+	)
 
-	// Deployment is for standalone or management cluster
-	if !pr.cfg.ManagedCluster {
-		objs = append(objs,
-			allowTigeraPolicyForPolicyRecommendation(pr.cfg),
-			pr.deployment(),
-		)
+	if pr.cfg.UsePSP {
+		objs = append(objs, pr.podSecurityPolicy())
 	}
 
 	return objs, nil
@@ -135,10 +161,29 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				"policyrecommendationscopes/status",
 				"stagednetworkpolicies",
 				"tier.stagednetworkpolicies",
+				"networkpolicies",
+				"tier.networkpolicies",
 				"globalnetworksets",
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"flows",
+			},
+			Verbs: []string{"get"},
+		},
+	}
+
+	if pr.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PolicyRecommendationPodSecurityPolicyName},
+		})
 	}
 
 	return &rbacv1.ClusterRole{
@@ -174,24 +219,62 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 	}
 }
 
+func (pr *policyRecommendationComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(PolicyRecommendationPodSecurityPolicyName)
+}
+
+// deployment returns the policy recommendation deployments. It assumes that this is defined for
+// management and standalone clusters only.
 func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	envs := []corev1.EnvVar{
+		{
+			Name:  "LOG_LEVEL",
+			Value: "Info",
+		},
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: pr.cfg.TrustedBundle.MountPath(),
 		},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain),
+		},
+		{
+			Name:  "LINSEED_CA",
+			Value: pr.cfg.TrustedBundle.MountPath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_CERT",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:  "LINSEED_CLIENT_KEY",
+			Value: pr.cfg.PolicyRecommendationCertSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "LINSEED_TOKEN",
+			Value: GetLinseedTokenPath(false),
+		},
 	}
+
+	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
+	volumeMounts = append(volumeMounts, pr.cfg.PolicyRecommendationCertSecret.VolumeMount(pr.SupportedOSType()))
 
 	controllerContainer := corev1.Container{
 		Name:            "policy-recommendation-controller",
 		Image:           pr.image,
 		Env:             envs,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType()),
+		VolumeMounts:    volumeMounts,
 	}
 
 	volumes := []corev1.Volume{
 		pr.cfg.TrustedBundle.Volume(),
+		pr.cfg.PolicyRecommendationCertSecret.Volume(),
+	}
+	var initContainers []corev1.Container
+	if pr.cfg.PolicyRecommendationCertSecret != nil && pr.cfg.PolicyRecommendationCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, pr.cfg.PolicyRecommendationCertSecret.InitContainer(PolicyRecommendationNamespace))
 	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(
@@ -219,7 +302,8 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				container,
 			},
-			Volumes: volumes,
+			InitContainers: initContainers,
+			Volumes:        volumes,
 		},
 	}, pr.cfg.ESClusterConfig, pr.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
@@ -248,7 +332,7 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 }
 
 // allowTigeraPolicyForPolicyRecommendation defines an allow-tigera policy for policy recommendation.
-func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfiguration) *v3.NetworkPolicy {
+func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendation() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -260,13 +344,17 @@ func allowTigeraPolicyForPolicyRecommendation(cfg *PolicyRecommendationConfigura
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: ManagerEntityRule,
 		},
-		{
+	}
+
+	if !pr.cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
-		},
+			Destination: networkpolicy.LinseedEntityRule,
+		})
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pr.cfg.Openshift)
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

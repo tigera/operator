@@ -1,3 +1,17 @@
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -13,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("core handler", func() {
@@ -268,25 +283,41 @@ var _ = Describe("core handler", func() {
 					}
 					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 				})
-				It("should error if podAffinity is set", func() {
+				It("should not error if podAffinity is set", func() {
+					terms := []v1.PodAffinityTerm{{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{{
+								Key:      "foo",
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{"foo", "bar"},
+							}},
+						},
+					}}
 					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{{
-								LabelSelector: nil,
-							}},
+							RequiredDuringSchedulingIgnoredDuringExecution: terms,
 						},
 					}
-					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+					Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution).To(Equal(terms))
 				})
-				It("should error if podAntiAffinity is set", func() {
+				It("should not error if podAntiAffinity is set", func() {
+					terms := []v1.PodAffinityTerm{{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{{
+								Key:      "foo",
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{"foo", "bar"},
+							}},
+						},
+					}}
 					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
 						PodAntiAffinity: &v1.PodAntiAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{{
-								LabelSelector: nil,
-							}},
+							RequiredDuringSchedulingIgnoredDuringExecution: terms,
 						},
 					}
-					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+					Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution).To(Equal(terms))
 				})
 			})
 		})

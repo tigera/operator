@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -59,6 +60,7 @@ var _ = Describe("Compliance controller tests", func() {
 	var r ReconcileCompliance
 	var mockStatus *status.MockStatus
 	var scheme *runtime.Scheme
+	var installation *operatorv1.Installation
 
 	expectedDNSNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, dns.DefaultClusterDomain)
 	BeforeEach(func() {
@@ -83,6 +85,7 @@ var _ = Describe("Compliance controller tests", func() {
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
@@ -99,25 +102,25 @@ var _ = Describe("Compliance controller tests", func() {
 			licenseAPIReady: &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
 		}
-
 		// We start off with a 'standard' installation, with nothing special
+		installation = &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operatorv1.InstallationSpec{
+				Variant:  operatorv1.TigeraSecureEnterprise,
+				Registry: "some.registry.org/",
+			},
+			Status: operatorv1.InstallationStatus{
+				Variant: operatorv1.TigeraSecureEnterprise,
+				Computed: &operatorv1.InstallationSpec{
+					Registry: "my-reg",
+					// The test is provider agnostic.
+					KubernetesProvider: operatorv1.ProviderNone,
+				},
+			},
+		}
 		Expect(c.Create(
 			ctx,
-			&operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant: operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{
-						Registry: "my-reg",
-						// The test is provider agnostic.
-						KubernetesProvider: operatorv1.ProviderNone,
-					},
-				},
-			})).NotTo(HaveOccurred())
+			installation)).NotTo(HaveOccurred())
 
 		// The compliance reconcile loop depends on a ton of objects that should be available in your client as
 		// prerequisites. Without them, compliance will not even start creating objects. Let's create them now.
@@ -356,6 +359,43 @@ var _ = Describe("Compliance controller tests", func() {
 			Namespace: render.ComplianceNamespace,
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceControllerName))
+	})
+
+	It("should add cluster role bindings when certificate management is enabled", func() {
+		ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		Expect(err).NotTo(HaveOccurred())
+		cert, _, _ := ca.Config.GetPEMBytes()
+		installation.Spec.CertificateManagement = &operatorv1.CertificateManagement{
+			CACert:     cert,
+			SignerName: "a.b/c",
+		}
+		Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		crb := rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{},
+		}
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name: "tigera-compliance-benchmarker:csr-creator",
+		}, &crb)).NotTo(HaveOccurred())
+		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name: "tigera-compliance-controller:csr-creator",
+		}, &crb)).NotTo(HaveOccurred())
+		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name: "tigera-compliance-server:csr-creator",
+		}, &crb)).NotTo(HaveOccurred())
+		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name: "tigera-compliance-snapshotter:csr-creator",
+		}, &crb)).NotTo(HaveOccurred())
+		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name: "tigera-compliance-reporter:csr-creator",
+		}, &crb)).NotTo(HaveOccurred())
+		Expect(crb.Subjects).To(HaveLen(1))
 	})
 
 	Context("image reconciliation", func() {

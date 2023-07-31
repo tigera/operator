@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -42,14 +43,19 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("kube-controllers rendering tests", func() {
-	var instance *operatorv1.InstallationSpec
-	var k8sServiceEp k8sapi.ServiceEndpoint
-	var cfg kubecontrollers.KubeControllersConfiguration
-	var internalManagerTLSSecret certificatemanagement.KeyPairInterface
+	var (
+		instance                 *operatorv1.InstallationSpec
+		k8sServiceEp             k8sapi.ServiceEndpoint
+		cfg                      kubecontrollers.KubeControllersConfiguration
+		internalManagerTLSSecret certificatemanagement.KeyPairInterface
+		cli                      client.Client
+	)
+
 	esEnvs := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 		{Name: "ELASTIC_SCHEME", Value: "https"},
@@ -119,7 +125,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		internalManagerTLSSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
@@ -671,6 +677,26 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(passed).To(Equal(true))
 	})
 
+	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
+		cfg.Installation.Variant = operatorv1.Calico
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*appsv1.Deployment)
+
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name == kubecontrollers.KubeController {
+				Expect(container.Image).To(ContainSubstring("-fips"))
+				break
+			}
+		}
+
+	})
+
 	It("should add the OIDC prefix env variables", func() {
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true
@@ -1071,5 +1097,27 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
+	})
+
+	It("should render init containers when certificate management is enabled", func() {
+
+		instance.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.ManagerInternalSecret = internalManagerTLSSecret
+		cfg.MetricsPort = 9094
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		tls, err := certificateManager.GetOrCreateKeyPair(cli, kubecontrollers.KubeControllerPrometheusTLSSecret, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.MetricsServerTLS = tls
+
+		resources, _ := kubecontrollers.NewCalicoKubeControllers(&cfg).Objects()
+
+		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dp.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer := dp.Spec.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", kubecontrollers.KubeControllerPrometheusTLSSecret)))
 	})
 })

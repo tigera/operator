@@ -15,6 +15,7 @@
 package monitor
 
 import (
+	"crypto/x509"
 	_ "embed"
 	"fmt"
 	"strings"
@@ -44,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
 
 const (
@@ -90,6 +92,11 @@ var alertManagerSelector = fmt.Sprintf(
 	"(app == 'alertmanager' && alertmanager == '%[1]s') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == '%[1]s')",
 	CalicoNodeAlertmanager,
 )
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(PrometheusClientTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
 
 func Monitor(cfg *Config) render.Component {
 	return &monitorComponent{

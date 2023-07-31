@@ -96,7 +96,11 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
-		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
+		} else {
+			c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
+		}
 	}
 	if err != nil {
 		return err
@@ -346,6 +350,14 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{common.TyphaDeploymentName},
+		})
+	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
 		})
 	}
 	return role

@@ -65,8 +65,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	licenseAPIReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
+	policyRecScopeWatchReady := &utils.ReadyFlag{}
 
-	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady, policyRecScopeWatchReady)
 
 	policyRecController, err := controller.New(PolicyRecommendationControllerName, mgr,
 		controller.Options{
@@ -83,6 +84,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	go utils.WaitToAddLicenseKeyWatch(policyRecController, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddPolicyRecommendationScopeWatch(policyRecController, k8sClient, log, policyRecScopeWatchReady)
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, policyRecController, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(policyRecController, k8sClient, log, []types.NamespacedName{
 		{Name: render.PolicyRecommendationPolicyName, Namespace: render.PolicyRecommendationNamespace},
@@ -98,17 +100,19 @@ func newReconciler(
 	opts options.AddOptions,
 	licenseAPIReady *utils.ReadyFlag,
 	tierWatchReady *utils.ReadyFlag,
+	policyRecScopeWatchReady *utils.ReadyFlag,
 ) reconcile.Reconciler {
 
 	r := &ReconcilePolicyRecommendation{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "policy-recommendation", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		licenseAPIReady: licenseAPIReady,
-		tierWatchReady:  tierWatchReady,
-		usePSP:          opts.UsePSP,
+		client:                   mgr.GetClient(),
+		scheme:                   mgr.GetScheme(),
+		provider:                 opts.DetectedProvider,
+		status:                   status.New(mgr.GetClient(), "policy-recommendation", opts.KubernetesVersion),
+		clusterDomain:            opts.ClusterDomain,
+		licenseAPIReady:          licenseAPIReady,
+		tierWatchReady:           tierWatchReady,
+		policyRecScopeWatchReady: policyRecScopeWatchReady,
+		usePSP:                   opts.UsePSP,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -124,12 +128,6 @@ func add(c controller.Controller) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.PolicyRecommendation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
-	}
-
-	// Watch for changes to primary resource PolicyRecommendationScope
-	err = c.Watch(&source.Kind{Type: &v3.PolicyRecommendationScope{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("policy-recommendation-controller failed to watch policy recommendation scope resource: %w", err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
@@ -151,6 +149,7 @@ func add(c controller.Controller) error {
 			render.ElasticsearchPolicyRecommendationUserSecret,
 			certificatemanagement.CASecretName,
 			render.ManagerInternalTLSSecretName,
+			render.TigeraLinseedSecret,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("policy-recommendation-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -189,14 +188,15 @@ var _ reconcile.Reconciler = &ReconcilePolicyRecommendation{}
 type ReconcilePolicyRecommendation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	clusterDomain   string
-	licenseAPIReady *utils.ReadyFlag
-	scheme          *runtime.Scheme
-	status          status.StatusManager
-	tierWatchReady  *utils.ReadyFlag
-	provider        operatorv1.Provider
-	usePSP          bool
+	client                   client.Client
+	clusterDomain            string
+	licenseAPIReady          *utils.ReadyFlag
+	scheme                   *runtime.Scheme
+	status                   status.StatusManager
+	tierWatchReady           *utils.ReadyFlag
+	policyRecScopeWatchReady *utils.ReadyFlag
+	provider                 operatorv1.Provider
+	usePSP                   bool
 }
 
 func GetPolicyRecommendation(ctx context.Context, cli client.Client) (*operatorv1.PolicyRecommendation, error) {
@@ -247,6 +247,12 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", err, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Validate that the policy recommendation scope watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.policyRecScopeWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for PolicyRecommendationScope watch to be established", err, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -337,34 +343,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	var managerInternalTLSSecret certificatemanagement.CertificateInterface
-	if managementCluster != nil {
-		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
-
-	certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -376,7 +354,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		Installation:    network,
 		ManagedCluster:  isManagedCluster,
 		PullSecrets:     pullSecrets,
-		TrustedBundle:   trustedBundle,
 		Openshift:       r.provider == operatorv1.ProviderOpenShift,
 		UsePSP:          r.usePSP,
 	}
@@ -391,11 +368,59 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	components := []render.Component{
 		component,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.PolicyRecommendationNamespace,
-			ServiceAccounts: []string{render.PolicyRecommendationName},
-			TrustedBundle:   trustedBundle,
-		}),
+	}
+
+	if !isManagedCluster {
+		certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		var managerInternalTLSSecret certificatemanagement.CertificateInterface
+		if managementCluster != nil {
+			managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
+		linseedCertLocation := render.TigeraLinseedSecret
+		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if linseedCertificate == nil {
+			log.Info("Linseed certificate is not available yet, waiting until they become available")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+
+		trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+
+		// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
+		policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{render.PolicyRecommendationTLSSecretName})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		certificateManager.AddToStatusManager(r.status, render.PolicyRecommendationNamespace)
+
+		policyRecommendationCfg.TrustedBundle = trustedBundle
+		policyRecommendationCfg.PolicyRecommendationCertSecret = policyRecommendationKeyPair
+
+		components = append(components,
+			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+				Namespace:       render.PolicyRecommendationNamespace,
+				ServiceAccounts: []string{render.PolicyRecommendationName},
+				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+					rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
+				},
+				TrustedBundle: trustedBundle,
+			}),
+		)
 	}
 
 	if hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature); hasNoLicense {

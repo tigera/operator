@@ -129,7 +129,6 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{ns, "", "", "v1", "Namespace"},
 				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
@@ -178,11 +177,6 @@ var _ = Describe("compliance rendering tests", func() {
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
-			// Check the namespace.
-			namespace := rtest.GetResource(resources, "tigera-compliance", "", "", "v1", "Namespace").(*corev1.Namespace)
-			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
-
 			clusterRole := rtest.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 				{
@@ -218,7 +212,6 @@ var _ = Describe("compliance rendering tests", func() {
 
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			expectedEnvs := []corev1.EnvVar{
-				{Name: "CLUSTER_NAME", Value: "cluster"},
 				{Name: "LINSEED_CLIENT_KEY", Value: "/tigera-compliance-controller-tls/tls.key"},
 				{Name: "LINSEED_CLIENT_CERT", Value: "/tigera-compliance-controller-tls/tls.crt"},
 			}
@@ -293,7 +286,6 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{ns, "", "", "v1", "Namespace"},
 				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
@@ -347,21 +339,11 @@ var _ = Describe("compliance rendering tests", func() {
 			complianceSnapshotter := rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			complianceBenchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "CLUSTER_NAME", Value: "cluster"},
-			))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements())
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
@@ -423,7 +405,6 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{ns, "", "", "v1", "Namespace"},
 				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
@@ -533,9 +514,27 @@ var _ = Describe("compliance rendering tests", func() {
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
 			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
 			Expect(err).NotTo(HaveOccurred())
+
 			complianceTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 			cfg.ServerKeyPair = complianceTLS
+
+			controllerKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceControllerSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ControllerKeyPair = controllerKeyPair
+
+			benchmarkerKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceBenchmarkerSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.BenchmarkerKeyPair = benchmarkerKeyPair
+
+			snapshotterKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceSnapshotterSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.SnapshotterKeyPair = snapshotterKeyPair
+
+			reporterKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceReporterSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ReporterKeyPair = reporterKeyPair
+
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
@@ -547,7 +546,6 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{ns, "", "", "v1", "Namespace"},
 				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
@@ -594,6 +592,26 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(server.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 			csrInitContainer := server.Spec.Template.Spec.InitContainers[0]
 			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceServerCertSecret)))
+
+			controller := rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(controller.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = controller.Spec.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceControllerSecret)))
+
+			benchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(benchmarker.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = benchmarker.Spec.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceBenchmarkerSecret)))
+
+			snapshotter := rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(snapshotter.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = snapshotter.Spec.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceSnapshotterSecret)))
+
+			reporter := rtest.GetResource(resources, "tigera.io.report", ns, "", "v1", "PodTemplate").(*corev1.PodTemplate)
+			Expect(reporter.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer = reporter.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceReporterSecret)))
 		})
 	})
 

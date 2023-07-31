@@ -92,7 +92,6 @@ var _ = Describe("Linseed rendering tests", func() {
 				KeyPair:         kp,
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
-				ESAdminUserName: "elastic",
 				UsePSP:          true,
 				ESClusterConfig: esClusterConfig,
 			}
@@ -130,7 +129,6 @@ var _ = Describe("Linseed rendering tests", func() {
 				KeyPair:         kp,
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
-				ESAdminUserName: "elastic",
 				UsePSP:          true,
 				ESClusterConfig: esClusterConfig,
 			}
@@ -417,7 +415,8 @@ func expectedContainers() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
+				PeriodSeconds:       30,
+				TimeoutSeconds:      10,
 			},
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
@@ -426,7 +425,8 @@ func expectedContainers() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
+				PeriodSeconds:       60,
+				TimeoutSeconds:      10,
 			},
 			Env: []corev1.EnvVar{
 				{
@@ -526,18 +526,24 @@ func expectedContainers() []corev1.Container {
 					Value: "9200",
 				},
 				{
-					Name:  "ELASTIC_USERNAME",
-					Value: "elastic",
-				},
-				{
-					Name:  "ELASTIC_PASSWORD",
-					Value: "",
+					Name: "ELASTIC_USERNAME",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "tigera-secure-es-elastic-user",
+								Name: "tigera-ee-linseed-elasticsearch-user-secret",
 							},
-							Key: "elastic",
+							Key: "username",
+						},
+					},
+				},
+				{
+					Name: "ELASTIC_PASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "tigera-ee-linseed-elasticsearch-user-secret",
+							},
+							Key: "password",
 						},
 					},
 				},

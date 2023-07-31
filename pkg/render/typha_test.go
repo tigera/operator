@@ -17,6 +17,8 @@ package render_test
 import (
 	"fmt"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
@@ -88,6 +90,22 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 	})
 
+	It("should render security context constrains properly when provider is openshift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		//calico-typha clusterRole should have openshift securitycontextconstraints PolicyRule
+		typhaRole := rtest.GetResource(resources, "calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(typhaRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
+	})
+
 	It("should render all resources for a default configuration", func() {
 		expectedResources := []struct {
 			name    string
@@ -142,6 +160,23 @@ var _ = Describe("Typha rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+	})
+
+	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
+		cfg.Installation.Variant = operatorv1.Calico
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+
+		d := dResource.(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+		tc := d.Spec.Template.Spec.Containers[0]
+		Expect(tc.Image).To(ContainSubstring("-fips"))
 	})
 
 	It("should include updates needed for migration of core components from kube-system namespace", func() {

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,15 +39,33 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/kube-controllers" }}
+	ComponentCalicoKubeControllersFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components  "calico/node" }}
 	ComponentCalicoNode = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components  "calico/node" }}
+	ComponentCalicoNodeFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.typha }}
 	ComponentCalicoTypha = component{
 		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with .Components.typha }}
+	ComponentCalicoTyphaFIPS = component{
+		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
@@ -63,6 +81,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/apiserver"}}
+	ComponentCalicoAPIServerFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
 	ComponentWindowsUpgrade = component{
 		Version: "{{ .Version }}",
@@ -75,9 +99,21 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/csi"}}
+	ComponentCalicoCSIFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
 	ComponentCalicoCSIRegistrar = component{
 		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar"}}
+	ComponentCalicoCSIRegistrarFIPS = component{
+		Version: "{{ .Version }}-fips",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
@@ -90,13 +126,19 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
+		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
+		ComponentCalicoNodeFIPS,
 		ComponentCalicoTypha,
+		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
+		ComponentCalicoAPIServerFIPS,
 		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
+		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalicoCSIRegistrarFIPS,
 	}
 )

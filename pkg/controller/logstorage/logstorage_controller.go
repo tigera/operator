@@ -397,12 +397,13 @@ func (c *keyPairCollection) component(bundle certificatemanagement.TrustedBundle
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace: render.ElasticsearchNamespace,
 		ServiceAccounts: []string{
-			render.ElasticsearchName,
+			render.ElasticsearchObjectName,
 			linseed.ServiceAccountName,
 			esgateway.ServiceAccountName,
 			esmetrics.ElasticsearchMetricsName,
 			render.IntrusionDetectionName,
 			dpi.DeepPacketInspectionName,
+			render.AnomalyDetectorsName,
 		},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			// We do not want to delete the elastic keypair secret from the tigera-elasticsearch namespace when CertificateManagement is
@@ -434,14 +435,19 @@ func (r *ReconcileLogStorage) generateSecrets(
 		// Get certificate for TLS on Prometheus metrics endpoints. This is created in the monitor controller.
 		monitor.PrometheusClientTLSSecretName,
 
-		// Get certificate for es-proxy, which Linseed and es-gateway need to trust.
+		// Get certificate for es-proxy, which es-gateway needs to trust.
 		render.ManagerTLSSecretName,
+
+		// Linseed needs the manager internal cert in order to verify the cert presented by Voltron when provisioning
+		// tokens into managed clusters or when communicating with ES proxy
+		render.ManagerInternalTLSSecretName,
 
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.
 		render.FluentdPrometheusTLSSecretName,
 
 		// Get certificate for intrusion detection controller, which Linseed needs to trust in a standalone or management cluster.
 		render.IntrusionDetectionTLSSecretName,
+		render.AnomalyDetectorTLSSecretName,
 
 		// Get certificate for DPI, which Linseed needs to trust in a standalone or management cluster.
 		render.DPITLSSecretName,
@@ -451,6 +457,9 @@ func (r *ReconcileLogStorage) generateSecrets(
 		render.ComplianceSnapshotterSecret,
 		render.ComplianceBenchmarkerSecret,
 		render.ComplianceReporterSecret,
+
+		// Get certificate for policy-recommendation, which Linseed needs to trust.
+		render.PolicyRecommendationTLSSecretName,
 	}
 	for _, certName := range certs {
 		cert, err := cm.GetCertificate(r.client, certName, common.OperatorNamespace())
@@ -846,7 +855,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			install,
 			variant,
 			pullSecrets,
-			esAdminUserSecret,
 			hdler,
 			reqLogger,
 			ctx,

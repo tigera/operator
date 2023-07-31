@@ -295,10 +295,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
-					"node.master":                 "true",
-					"node.data":                   "true",
-					"node.ingest":                 "true",
-					"cluster.max_shards_per_node": 10000,
+					"node.master":                     "true",
+					"node.data":                       "true",
+					"node.ingest":                     "true",
+					"cluster.max_shards_per_node":     10000,
+					"ingest.geoip.downloader.enabled": false,
 				}))
 				resultECK := rtest.GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace,
 					"apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
@@ -571,24 +572,25 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
 				Expect(initContainers).To(HaveLen(4))
-				compareInitContainer := func(ic corev1.Container, expectedName string, expectedVolumes []corev1.VolumeMount) {
+				compareInitContainer := func(ic corev1.Container, expectedName string, expectedVolumes []corev1.VolumeMount, privileged bool) {
 					Expect(ic.Name).To(Equal(expectedName))
 					Expect(ic.VolumeMounts).To(HaveLen(len(expectedVolumes)))
+					Expect(ic.SecurityContext.Privileged).To(Equal(&privileged))
 					for i, vm := range ic.VolumeMounts {
 						Expect(vm.Name).To(Equal(expectedVolumes[i].Name))
 						Expect(vm.MountPath).To(Equal(expectedVolumes[i].MountPath))
 					}
 				}
-				compareInitContainer(initContainers[0], "elastic-internal-init-os-settings", []corev1.VolumeMount{})
+				compareInitContainer(initContainers[0], "elastic-internal-init-os-settings", []corev1.VolumeMount{}, true)
 				compareInitContainer(initContainers[1], "elastic-internal-init-filesystem", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: "/csr"},
-				})
+				}, true)
 				compareInitContainer(initContainers[2], "key-cert-elastic", []corev1.VolumeMount{
 					{Name: "elastic-internal-http-certificates", MountPath: certificatemanagement.CSRCMountPath},
-				})
+				}, false)
 				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
-				})
+				}, false)
 			})
 		})
 
@@ -1389,11 +1391,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2a",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 
@@ -1409,11 +1412,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2b",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 				})
@@ -1479,12 +1483,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2a",
-						"node.attr.rack":              "rack1",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2a",
+						"node.attr.rack":                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 
@@ -1509,12 +1514,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                 "true",
-						"node.data":                   "true",
-						"node.ingest":                 "true",
-						"cluster.max_shards_per_node": 10000,
-						"node.attr.zone":              "us-west-2b",
-						"node.attr.rack":              "rack1",
+						"node.master":                     "true",
+						"node.data":                       "true",
+						"node.ingest":                     "true",
+						"cluster.max_shards_per_node":     10000,
+						"ingest.geoip.downloader.enabled": false,
+						"node.attr.zone":                  "us-west-2b",
+						"node.attr.rack":                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 				})

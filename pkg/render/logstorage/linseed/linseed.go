@@ -95,9 +95,6 @@ type Config struct {
 	// ClusterDomain to use when building service URLs.
 	ClusterDomain string
 
-	// ESAdminUserName is the admin user used to connect to Elastic
-	ESAdminUserName string
-
 	// Whether this is a management cluster
 	ManagementCluster bool
 
@@ -257,10 +254,13 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_SCHEME", Value: "https"},
 		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
 		{Name: "ELASTIC_PORT", Value: "9200"},
-		{Name: "ELASTIC_USERNAME", Value: l.cfg.ESAdminUserName},
+		{
+			Name:      "ELASTIC_USERNAME",
+			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "username", false),
+		},
 		{
 			Name:      "ELASTIC_PASSWORD",
-			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchAdminUserSecret, l.cfg.ESAdminUserName, false),
+			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "password", false),
 		},
 		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
 	}
@@ -322,7 +322,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 							},
 						},
 						InitialDelaySeconds: 10,
-						PeriodSeconds:       5,
+						PeriodSeconds:       30,
+						TimeoutSeconds:      10,
 					},
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -331,7 +332,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 							},
 						},
 						InitialDelaySeconds: 10,
-						PeriodSeconds:       5,
+						PeriodSeconds:       60,
+						TimeoutSeconds:      10,
 					},
 				},
 			},
@@ -524,6 +526,12 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      dpi.DPISourceEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.PolicyRecommendationEntityRule,
 					Destination: linseedIngressDestinationEntityRule,
 				},
 			},

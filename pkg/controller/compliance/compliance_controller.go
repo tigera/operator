@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -134,7 +134,9 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+			relasticsearch.PublicCertSecret,
 			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
+			render.VoltronLinseedPublicCert,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -440,6 +442,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(3).Info("rendering components")
+
+	namespaceComp := render.NewPassthrough(render.CreateNamespace(render.ComplianceNamespace, network.KubernetesProvider, render.PSSPrivileged))
+
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
@@ -475,7 +480,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       render.ComplianceNamespace,
-		ServiceAccounts: []string{render.ComplianceServerServiceAccount},
+		ServiceAccounts: []string{render.ComplianceServerServiceAccount, render.ComplianceBenchmarkerServiceAccount, render.ComplianceSnapshotterServiceAccount, render.ComplianceControllerServiceAccount, render.ComplianceReporterServiceAccount},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			rcertificatemanagement.NewKeyPairOption(complianceServerKeyPair, true, true),
 			rcertificatemanagement.NewKeyPairOption(controllerKeyPair.Interface, true, true),
@@ -486,7 +491,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TrustedBundle: trustedBundle,
 	})
 
-	for _, comp := range []render.Component{comp, certificateComponent} {
+	for _, comp := range []render.Component{namespaceComp, certificateComponent, comp} {
 		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, err

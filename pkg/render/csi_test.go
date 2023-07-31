@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -295,5 +296,15 @@ var _ = Describe("CSI rendering tests", func() {
 		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(ContainSubstring("-fips"))
+	})
+
+	It("should render the labels when the provider is openshift", func() {
+		cfg.OpenShift = true
+		comp := render.CSI(&cfg)
+		Expect(comp.ResolveImages(nil)).To(BeNil())
+		createObjs, _ := comp.Objects()
+		dsResource := rtest.GetResource(createObjs, "csi.tigera.io", "", "storage", "v1", "CSIDriver")
+		Expect(dsResource.(*storagev1.CSIDriver).ObjectMeta.Labels["security.openshift.io/csi-ephemeral-volume-profile"]).To(Equal("restricted"))
+
 	})
 })

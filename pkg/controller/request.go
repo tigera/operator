@@ -16,46 +16,61 @@ package controller
 
 import (
 	"github.com/tigera/operator/pkg/common"
-	"k8s.io/apimachinery/pkg/types"
 )
 
-func NewRequest(r types.NamespacedName, mt bool, defaultNS string) Request {
-	return Request{
-		NamespacedName:        r,
-		multiTenant:           mt,
-		singleTenantNamespace: defaultNS,
+func NewSingleTenantNamespaceHelper(ns string) NamespaceHelper {
+	return &namespacer{
+		multiTenant:           false,
+		singleTenantNamespace: ns,
 	}
 }
 
-// Request wraps a standard request and provides utilities to support both
-// single and multi-tenant operator modes.
-type Request struct {
-	// The name and namespace of the object that triggered this request.
-	types.NamespacedName
-
-	// Whether the operator is running in multi-tenant or single-tenant mode.
-	multiTenant bool
-
-	// The namespace to use for single-tenant installations of this component.
-	singleTenantNamespace string
+func NewNamespaceHelper(mt bool, singleTenantNS, multiTenantNS string) NamespaceHelper {
+	return &namespacer{
+		multiTenant:           mt,
+		singleTenantNamespace: singleTenantNS,
+		multiTenantNamespace:  multiTenantNS,
+	}
 }
 
-// InstallNamespace returns the namespace that components will be installed into.
-// for single-tenant clusters, this is tigera-manager. For multi-tenancy, this
-// will be the tenant's namespace.
-func (r *Request) InstallNamespace() string {
+type NamespaceHelper interface {
+	// InstallNamespace returns the namespace that components will be installed into.
+	// for single-tenant clusters, this is tigera-manager. For multi-tenancy, this
+	// will be the tenant's namespace.
+	InstallNamespace() string
+
+	// TruthNamespace returns the namespace to use as the source of truth for storing data.
+	// For single-tenant installs, this is the tigera-operator namespace.
+	// For multi-tenant installs, this is tenant's namespace.
+	TruthNamespace() string
+
+	// BothNamespaces returns both the truth namespace and the install namespace.
+	BothNamespaces() []string
+}
+
+type namespacer struct {
+	multiTenant           bool
+	singleTenantNamespace string
+	multiTenantNamespace  string
+}
+
+func (r *namespacer) InstallNamespace() string {
 	if !r.multiTenant {
 		return r.singleTenantNamespace
 	}
-	return r.NamespacedName.Namespace
+	return r.multiTenantNamespace
 }
 
-// TruthNamespace returns the namespace to use as the source of truth for storing data.
-// For single-tenant installs, this is the tigera-operator namespace.
-// For multi-tenant installs, this is tenant's namespace.
-func (r *Request) TruthNamespace() string {
+func (r *namespacer) TruthNamespace() string {
 	if !r.multiTenant {
 		return common.OperatorNamespace()
 	}
-	return r.NamespacedName.Namespace
+	return r.multiTenantNamespace
+}
+
+func (r *namespacer) BothNamespaces() []string {
+	if r.TruthNamespace() == r.InstallNamespace() {
+		return []string{r.TruthNamespace()}
+	}
+	return []string{r.TruthNamespace(), r.InstallNamespace()}
 }

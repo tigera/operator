@@ -73,14 +73,14 @@ func (l logrWrappedESLogger) Printf(format string, v ...interface{}) {
 	log.Error(nil, fmt.Sprintf(format, v...))
 }
 
-// ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch
+// ElasticsearchSecrets gets the secrets needed for a component to be able to access Elasticsearch.
 func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli client.Client) ([]*corev1.Secret, error) {
 	var esUserSecrets []*corev1.Secret
 	for _, userSecretName := range userSecretNames {
 		esUserSecret := &corev1.Secret{}
 		err := cli.Get(ctx, types.NamespacedName{
 			Name:      userSecretName,
-			Namespace: common.OperatorNamespace(), // TODO
+			Namespace: common.OperatorNamespace(),
 		}, esUserSecret)
 		if err != nil {
 			return nil, err

@@ -151,6 +151,25 @@ func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
 	)
 }
 
+// AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.
+// If no namespace is provided, it watches cluster-wide.
+func AddSecretWatchWithLabel(c controller.Controller, ns, label string) error {
+	return c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			_, hasLabel := e.Object.GetLabels()[label]
+			return (ns == "" || e.Object.GetNamespace() == ns) && hasLabel
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			_, hasLabel := e.ObjectNew.GetLabels()[label]
+			return (ns == "" || e.ObjectNew.GetNamespace() == ns) && hasLabel
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			_, hasLabel := e.Object.GetLabels()[label]
+			return (ns == "" || e.Object.GetNamespace() == ns) && hasLabel
+		},
+	})
+}
+
 func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEvent {
 	periodicReconcileEvents := make(chan event.GenericEvent)
 	eventObject := &unstructured.Unstructured{}

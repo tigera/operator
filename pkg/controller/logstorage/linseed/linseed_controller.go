@@ -305,12 +305,9 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Determine the namespaces to which we must bind the linseed cluster role.
-	bindNamespaces := []string{helper.InstallNamespace()}
-	if r.multiTenant {
-		bindNamespaces, err = utils.TenantNamespaces(ctx, r.client)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	cfg := &linseed.Config{

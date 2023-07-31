@@ -61,8 +61,10 @@ func DecorateAnnotations(obj Annotatable, config *ClusterConfig, secrets []*core
 	return obj
 }
 
+// ContainerDecorate is the legacy implementation, which does not support multi-tenancy.
+// Use DecorateEnvironment instead.
 func ContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string, osType rmeta.OSType) corev1.Container {
-	return ContainerDecorateENVVars(c, cluster, secret, clusterDomain, osType)
+	return DecorateEnvironment(c, "tigera-elasticsearch", cluster, secret, clusterDomain, osType)
 }
 
 func ContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
@@ -75,12 +77,9 @@ func ContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) cor
 	return c
 }
 
-func ContainerDecorateENVVars(
-	c corev1.Container,
-	cluster, esUserSecretName, clusterDomain string,
-	osType rmeta.OSType) corev1.Container {
+func DecorateEnvironment(c corev1.Container, namespace string, cluster, esUserSecretName, clusterDomain string, osType rmeta.OSType) corev1.Container {
 	certPath := elasticCertPath(osType)
-	esScheme, esHost, esPort, _ := url.ParseEndpoint(HTTPSEndpoint(osType, clusterDomain))
+	esScheme, esHost, esPort, _ := url.ParseEndpoint(GatewayEndpoint(osType, clusterDomain, namespace))
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},

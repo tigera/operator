@@ -244,12 +244,12 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 	}
 
 	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName, render.TyphaCAConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, active.ActiveConfigMapName, common.CalicoNamespace); err != nil {
+	if err = utils.AddConfigMapWatch(c, active.ActiveConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
@@ -320,16 +320,6 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
-		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
-		}
-
-		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
-		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
 		// watch for change to primary resource LogCollector
@@ -1017,11 +1007,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
-		if managementCluster != nil {
-			if err != nil {
-				r.status.SetDegraded(operator.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-				return reconcile.Result{}, err
-			}
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+			return reconcile.Result{}, err
 		}
 
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
@@ -1054,19 +1042,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
-		if err != nil {
-			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
-			return reconcile.Result{}, err
-		}
 	}
 
 	typhaNodeTLS, err := GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
@@ -1178,15 +1157,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
 		}
 
-		// The following certificate is mounted by the es-kube-controllers for accessing Elasticsearch (Gateway).
+		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
+		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
+		// all components within this namespace share a trusted CA bundle.
 		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
 			return reconcile.Result{}, err
-		}
-		if esgwCertificate != nil {
+		} else if esgwCertificate != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
 		}
+
 		calicoVersion = components.EnterpriseRelease
 	}
 
@@ -1275,16 +1256,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			Namespace:       common.CalicoNamespace,
 			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName, kubecontrollers.KubeControllerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// this controller is responsible for rendering the tigera-ca-private secret.
-				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
+
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
 		K8sServiceEp:           k8sapi.Endpoint,
@@ -1364,11 +1343,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagementClusterConnection: managementClusterConnection,
 		ClusterDomain:               r.clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
-		ManagerInternalSecret:       managerInternalTLSSecret,
 		Terminating:                 terminating,
 		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
+		Namespace:                   common.CalicoNamespace,
+		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

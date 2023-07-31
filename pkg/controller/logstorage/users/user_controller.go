@@ -181,7 +181,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 	credentialComponent := render.NewPassthrough(credentialSecrets...)
 
-	// In standard installs, the LogStorage owns the secret. For multi-tenant, it's owned by the Manager instance.
+	// In standard installs, the LogStorage owns the secret. For multi-tenant, it's owned by the tenant.
 	var hdler utils.ComponentHandler
 	if r.multiTenant {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)

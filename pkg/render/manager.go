@@ -88,13 +88,28 @@ const (
 )
 
 // ManagerClusterScoped returns a component for rendering cluster-scoped manager resources.
+// These are done in a separate component so that they can be bound to multiple namespaces as needed.
 func ManagerClusterScoped(cfg *ManagerConfiguration, namespaces []string) (Component, error) {
-	objs := []client.Object{managerClusterRoleBinding(namespaces)}
+	objs := []client.Object{
+		managerClusterRoleBinding(namespaces),
+		managerClusterRole(cfg.ManagementCluster != nil, false, cfg.UsePSP, cfg.Installation.KubernetesProvider),
+		managerClusterWideSettingsGroup(),
+		managerUserSpecificSettingsGroup(),
+		managerClusterWideTigeraLayer(),
+		managerClusterWideDefaultView(),
+	}
+	if cfg.UsePSP {
+		objs = append(objs, managerPodSecurityPolicy())
+	}
 	return NewPassthrough(objs...), nil
 }
 
 func managerClusterRoleBinding(namespaces []string) client.Object {
 	return rcomponents.ClusterRoleBinding(ManagerClusterRoleBinding, ManagerClusterRole, ManagerServiceAccount, namespaces)
+}
+
+func managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy("tigera-manager")
 }
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -210,37 +225,27 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{
-		// TODO: The namespace should be pre-created in multi-tenant environments.
-		// Maybe we should do this for single-tenant as well, to keep them more similar?
-		CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+	objs := []client.Object{}
+
+	if c.cfg.Tenant == nil {
+		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
+		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted))
+	}
+
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
+	objs = append(objs,
 		c.managerAllowTigeraNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
-	}
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
-
-	objs = append(objs,
 		managerServiceAccount(c.cfg.Namespace),
-		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
-		managerClusterRoleBinding([]string{c.cfg.Namespace}),
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
-	objs = append(objs,
-		c.managerService(),
-	)
+	objs = append(objs, c.managerService())
 
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
 		objs = append(objs, c.securityContextConstraints())
 	}
 
-	if c.cfg.UsePSP {
-		objs = append(objs, c.managerPodSecurityPolicy())
-	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.managerDeployment())
 	if c.cfg.KeyValidatorConfig != nil {
@@ -637,7 +642,6 @@ func managerServiceAccount(ns string) *corev1.ServiceAccount {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-// TODO: This is global. It should be moved to the cluster scoped manager component.
 func managerClusterRole(managementCluster, managedCluster, usePSP bool, kubernetesProvider operatorv1.Provider) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -839,13 +843,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 	return objs
 }
 
-// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
-func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy("tigera-manager")
-}
-
 // Allow users to access Calico Enterprise Manager.
-// TODO: This will need major rework for multi-tenant
 func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
@@ -953,7 +951,6 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 // managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerClusterWideSettingsGroup() *v3.UISettingsGroup {
 	return &v3.UISettingsGroup{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
@@ -969,7 +966,6 @@ func managerClusterWideSettingsGroup() *v3.UISettingsGroup {
 // managerUserSpecificSettingsGroup returns a UISettingsGroup with the description "user settings"
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 	return &v3.UISettingsGroup{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
@@ -987,7 +983,6 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 // all of the tigera namespaces.
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerClusterWideTigeraLayer() *v3.UISettings {
 	namespaces := []string{
 		"tigera-compliance",
@@ -1042,7 +1037,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 // everything and uses the tigera-infrastructure layer.
 //
 // Calico Enterprise only
-// TODO: Global resource, might need to be namespaced or moved to the cluster-scoped component.
 func managerClusterWideDefaultView() *v3.UISettings {
 	return &v3.UISettings{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},

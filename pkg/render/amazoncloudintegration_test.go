@@ -17,6 +17,8 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/common"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -67,7 +69,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
 		Expect(err).NotTo(HaveOccurred())
 		trustedCaBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 		Expect(err).NotTo(HaveOccurred())

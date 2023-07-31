@@ -402,7 +402,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
@@ -829,7 +829,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
 			var err error
-			certificateManager, err = certificatemanager.Create(c, nil, "")
+			certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -1046,7 +1046,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 				},
 			}
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())

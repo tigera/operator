@@ -85,15 +85,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
 	// For single-tenant, everything is installed in the tigera-manager namespace.
-	installNS := render.ManagerNamespace
-	truthNS := common.OperatorNamespace()
-	watchNamespaces := []string{installNS, truthNS}
+	var installNS, truthNS string
+	var watchNamespaces []string
 	if opts.MultiTenant {
 		// For multi-tenant, the manager could be installed in any number of namespaces.
 		// So, we need to watch the resources we care about across all namespaces.
-		installNS = ""
-		truthNS = ""
 		watchNamespaces = []string{""}
+	} else {
+		installNS = render.ManagerNamespace
+		truthNS = common.OperatorNamespace()
+		watchNamespaces = []string{installNS, truthNS}
 	}
 
 	err = utils.AddSecretsWatch(controller, render.VoltronLinseedTLS, installNS)

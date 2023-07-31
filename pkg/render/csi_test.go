@@ -285,7 +285,6 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(fmt.Sprintf("%s%s:%s", components.CalicoRegistry, components.ComponentCalicoCSIRegistrar.Image, components.ComponentCalicoCSIRegistrar.Version)))
 	})
 
-
 	It("should render the labels when the provider is openshift", func() {
 		cfg.OpenShift = true
 		comp := render.CSI(&cfg)
@@ -293,6 +292,7 @@ var _ = Describe("CSI rendering tests", func() {
 		createObjs, _ := comp.Objects()
 		dsResource := rtest.GetResource(createObjs, "csi.tigera.io", "", "storage", "v1", "CSIDriver")
 		Expect(dsResource.(*storagev1.CSIDriver).ObjectMeta.Labels["security.openshift.io/csi-ephemeral-volume-profile"]).To(Equal("restricted"))
+	})
 
 	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled

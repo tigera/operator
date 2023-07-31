@@ -737,7 +737,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -1722,6 +1722,7 @@ func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 		Rules: rules,
 	}
 }
+
 func (c *intrusionDetectionComponent) adDetectorAccessClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -1747,7 +1748,6 @@ func (c *intrusionDetectionComponent) adDetectorAccessClusterRole() *rbacv1.Clus
 			},
 		},
 	}
-
 }
 
 func (c *intrusionDetectionComponent) adDetectorRoleBinding() *rbacv1.RoleBinding {
@@ -1824,7 +1824,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -1924,12 +1924,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		})
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		})
 
 	}
@@ -1973,7 +1973,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigera
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.ESGatewayEntityRule,
+		Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 	})
 
 	return &v3.NetworkPolicy{
@@ -2066,7 +2066,7 @@ func (c *intrusionDetectionComponent) adDetectorAllowTigeraPolicy() *v3.NetworkP
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

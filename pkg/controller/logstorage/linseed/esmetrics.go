@@ -16,6 +16,7 @@ package linseed
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/render"
@@ -63,7 +64,12 @@ func (r *LinseedSubController) createESMetrics(
 	// Getthe ES metrics server keypair. This will have previously been created by the ES secrets controller.
 	serverKeyPair, err := cm.GetKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, render.ElasticsearchNamespace)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed KeyPair", err, log)
+		r.status.SetDegraded(
+			operatorv1.ResourceReadError,
+			fmt.Sprintf("Error getting secret %s/%s", render.ElasticsearchNamespace, esmetrics.ElasticsearchMetricsServerTLSSecret),
+			err,
+			log,
+		)
 		return err
 	}
 

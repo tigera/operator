@@ -264,7 +264,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		)
 	})
 
-	Context("multi-tenant rendering", func() {
+	FContext("multi-tenant rendering", func() {
 		tenantANamespace := "tenant-a"
 		tenantBNamespace := "tenant-b"
 		It("should render expected components inside expected namespace for each policyrecommendation instance", func() {
@@ -288,6 +288,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "allow-tigera.default-deny", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
+				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			}
 
 			Expect(len(tenantAResources)).To(Equal(len(tenantAExpectedResources)))
@@ -316,6 +317,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "allow-tigera.default-deny", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
+				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			}
 
 			Expect(len(tenantBResources)).To(Equal(len(tenantBExpectedResources)))

@@ -844,7 +844,21 @@ var _ = Describe("Manager controller tests", func() {
 				r.multiTenant = true
 			})
 			It("should reconcile both with and without namespace provided while namespaced managers exist", func() {
-				err := c.Create(ctx, &operatorv1.Manager{
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, managerTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
+
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
+				managerTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantBNamespace, []string{render.ManagerInternalTLSSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, managerTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())
+
+				err = c.Create(ctx, &operatorv1.Manager{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tigera-secure",
 						Namespace: tenantANamespace,

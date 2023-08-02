@@ -909,6 +909,119 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
 		)
 	})
+
+	Context("multi-tenant rendering", func() {
+		tenantANamespace := "tenant-a"
+		tenantBNamespace := "tenant-b"
+		It("should render expected components inside expected namespace for each manager instance", func() {
+			tenantAResources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantANamespace,
+			})
+
+			expectedTenantAResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: tenantANamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: render.ManagerPolicyName, ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: render.ManagerServiceAccount, ns: tenantANamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+				{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+				{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+				{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+				{name: "tigera-manager", ns: tenantANamespace, group: "", version: "v1", kind: "Service"},
+				{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+				{name: "tigera-manager", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
+			}
+
+			Expect(len(tenantAResources)).To(Equal(len(expectedTenantAResources)))
+
+			for i, expectedRes := range expectedTenantAResources {
+				rtest.ExpectResource(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			tenantBResources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantBNamespace,
+			})
+
+			expectedTenantBResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: tenantBNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: render.ManagerPolicyName, ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: render.ManagerServiceAccount, ns: tenantBNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+				{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+				{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+				{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+				{name: "tigera-manager", ns: tenantBNamespace, group: "", version: "v1", kind: "Service"},
+				{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+				{name: "tigera-manager", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			}
+
+			Expect(len(tenantBResources)).To(Equal(len(expectedTenantBResources)))
+
+			for i, expectedRes := range expectedTenantBResources {
+				rtest.ExpectResource(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+		})
+		It("should render cluster role binding with tenant namespaces as subjects for cluster-scoped manager component", func() {
+			expectedObjs := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			}
+			clusterScoped, err := render.ManagerClusterScoped(nil, []string{tenantANamespace, tenantBNamespace})
+			Expect(err).NotTo(HaveOccurred())
+
+			actualObjsToCreate, actualObjsToDelete := clusterScoped.Objects()
+			Expect(len(actualObjsToCreate)).To(Equal(len(expectedObjs)))
+			Expect(actualObjsToDelete).To(BeNil())
+
+			for i, expectedRes := range expectedObjs {
+				rtest.ExpectResource(actualObjsToCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			crb := rtest.GetResource(actualObjsToCreate, render.ManagerClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.Subjects).To(Equal([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.ManagerServiceAccount,
+					Namespace: tenantANamespace,
+				},
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.ManagerServiceAccount,
+					Namespace: tenantBNamespace,
+				},
+			}))
+		})
+	})
 })
 
 type renderConfig struct {

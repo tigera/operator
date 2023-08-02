@@ -442,6 +442,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(3).Info("rendering components")
+
+	namespaceComp := render.NewPassthrough(render.CreateNamespace(render.ComplianceNamespace, network.KubernetesProvider, render.PSSPrivileged))
+
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
@@ -488,7 +491,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TrustedBundle: trustedBundle,
 	})
 
-	for _, comp := range []render.Component{comp, certificateComponent} {
+	for _, comp := range []render.Component{namespaceComp, certificateComponent, comp} {
 		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, err

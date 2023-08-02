@@ -15,6 +15,7 @@
 package render
 
 import (
+	"crypto/x509"
 	"fmt"
 	"strconv"
 	"strings"
@@ -46,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
 
 const (
@@ -93,6 +95,12 @@ var (
 	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule("tigera-manager", ManagerDeploymentName)
 )
 
+// Manager returns a component for rendering namespaced manager resources.
+func init() {
+	certkeyusage.SetCertKeyUsage(ManagerTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	certkeyusage.SetCertKeyUsage(ManagerInternalTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
+
 // ManagerClusterScoped returns a component for rendering cluster-scoped manager resources.
 func ManagerClusterScoped(cfg *ManagerConfiguration, namespaces []string) (Component, error) {
 	return &managerClusterScopedComponent{
@@ -125,7 +133,6 @@ func (m *managerClusterScopedComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-// Manager returns a component for rendering namespaced manager resources.
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := cfg.TrustedCertBundle.HashAnnotations()

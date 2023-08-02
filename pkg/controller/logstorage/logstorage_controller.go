@@ -464,8 +464,13 @@ func (r *ReconcileLogStorage) generateSecrets(
 	for _, certName := range certs {
 		cert, err := cm.GetCertificate(r.client, certName, common.OperatorNamespace())
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
-			return nil, err
+			if certificatemanager.IsCertUsageError(err) {
+				msg := fmt.Sprintf("skipping tigera-operator/%s secret it will be added when it is updated: %s", certName, err)
+				log.Info(msg)
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
+				return nil, err
+			}
 		} else if cert == nil {
 			msg := fmt.Sprintf("tigera-operator/%s secret not available yet, will add it if/when it becomes available", certName)
 			log.Info(msg)

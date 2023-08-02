@@ -505,6 +505,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								},
 							},
 						},
+						SecurityContext: securitycontext.NewNonRootContext(),
 					},
 				},
 				Image:            &mc.prometheusImage,

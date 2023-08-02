@@ -22,6 +22,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -61,9 +62,6 @@ type ESKubeControllersController struct {
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
-		return nil
-	}
-	if opts.MultiTenant {
 		return nil
 	}
 
@@ -207,15 +205,26 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// Wait for Elasticsearch to be installed and available.
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	var kubeControllersUserSecret *corev1.Secret
+	if !r.multiTenant {
+		// Wait for Elasticsearch to be installed and available. We don't need to do this in multi-tenant mode because because
+		// we disable kube-controllers ES access in this mode.
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		// Get secrets needed for kube-controllers to talk to elastic.
+		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Collect the certificates we need to provision es-kube-controllers. These will have been provisioned already by the ES secrets controller.
@@ -225,7 +234,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to load CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -251,24 +260,11 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// Get secrets needed for kube-controllers to talk to elastic.
-	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		// Add the internal traffic secret of the manager pod to the trusted bundle. We need this so we can talk to Voltron.
 		// This certificate is provisioned by the manager controller, and so we need to load it lazily once it appears.
-		managerInternalTLSSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
+		managerInternalTLSSecret, err = cm.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error querying for internal manager TLS certificate (%s)", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return reconcile.Result{}, err
@@ -281,20 +277,22 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// ESGateway is required in order for kube-controllers to operator successfully, since es-kube-controllers talks to ES
-	// via this gateway.
-	if err := r.createESGateway(
-		ctx,
-		octrl.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace),
-		install,
-		variant,
-		pullSecrets,
-		hdler,
-		reqLogger,
-		trustedBundle,
-		r.usePSP,
-	); err != nil {
-		return reconcile.Result{}, err
+	if !r.multiTenant {
+		// ESGateway is required in order for kube-controllers to operate successfully, since es-kube-controllers talks to ES
+		// via this gateway. However, in multi-tenant mode we disable the elasticsearch controller and so this isn't needed.
+		if err := r.createESGateway(
+			ctx,
+			octrl.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace),
+			install,
+			variant,
+			pullSecrets,
+			hdler,
+			reqLogger,
+			trustedBundle,
+			r.usePSP,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Determine the namespaces to which we must bind the cluster role.
@@ -315,6 +313,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		TrustedBundle:                trustedBundle,
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
+		Tenant:                       tenant,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 

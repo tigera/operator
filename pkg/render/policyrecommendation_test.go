@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/common"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +33,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -77,6 +77,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			ManagedCluster:                 notManagedCluster,
 			PolicyRecommendationCertSecret: keyPair,
 			UsePSP:                         true,
+			Namespace:                      render.PolicyRecommendationNamespace,
 		}
 	})
 
@@ -261,5 +262,69 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
 		)
+	})
+
+	FContext("multi-tenant rendering", func() {
+		tenantANamespace := "tenant-a"
+		tenantBNamespace := "tenant-b"
+		It("should render expected components inside expected namespace for each policyrecommendation instance", func() {
+			cfg.Namespace = tenantANamespace
+			tenantAPolicyRec := render.PolicyRecommendation(cfg)
+
+			tenantAResources, _ := tenantAPolicyRec.Objects()
+
+			// Should render the correct resources.
+			tenantAExpectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: tenantANamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: "allow-tigera.default-deny", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
+				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			}
+
+			Expect(len(tenantAResources)).To(Equal(len(tenantAExpectedResources)))
+
+			for i, expectedRes := range tenantAExpectedResources {
+				rtest.ExpectResource(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			cfg.Namespace = tenantBNamespace
+			tenantBPolicyRec := render.PolicyRecommendation(cfg)
+
+			tenantBResources, _ := tenantBPolicyRec.Objects()
+
+			// Should render the correct resources.
+			tenantBExpectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: tenantBNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: "allow-tigera.default-deny", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
+				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			}
+
+			Expect(len(tenantBResources)).To(Equal(len(tenantBExpectedResources)))
+
+			for i, expectedRes := range tenantBExpectedResources {
+				rtest.ExpectResource(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+		})
 	})
 })

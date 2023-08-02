@@ -249,7 +249,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 				_, err = certificateManager.GetCertificate(cli, secret.Name, secret.Namespace)
 				Expect(err).To(HaveOccurred())
-				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
+				// Error from GetCertificate with secret that only has server usage should
+				// be a cert error.
+				Expect(certificatemanager.IsCertUsageError(err)).To(BeTrue())
+				kp, err := certificateManager.GetKeyPair(cli, secret.Name, secret.Namespace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(kp).To(BeNil())
+				kp, err = certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
 			})

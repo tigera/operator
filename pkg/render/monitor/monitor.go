@@ -499,6 +499,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 							},
 						},
 					},
+					SecurityContext: securitycontext.NewNonRootContext(),
 				},
 			},
 			// ListenLocal makes the Prometheus server listen on loopback, so that it

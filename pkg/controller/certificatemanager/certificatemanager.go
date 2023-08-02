@@ -207,6 +207,51 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}, nil
 }
 
+// This type will be returned for errors that do not have the correct Ext Key usage types
+// for a specific secert certificate.
+type CertExtKeyUsageError struct {
+	msg string
+}
+
+func (cue *CertExtKeyUsageError) Error() string {
+	return cue.msg
+}
+
+var _ error = &CertExtKeyUsageError{}
+
+// Returns true if the error is a CertExtKeyUsageError
+func IsCertExtKeyUsageError(err error) bool {
+	_, ok := err.(*CertExtKeyUsageError)
+	return ok
+}
+
+func extKeyUsageToString(requiredExtKeyUsages []x509.ExtKeyUsage) string {
+	out := ""
+	for i, x := range requiredExtKeyUsages {
+		if i != 0 {
+			out = out + ", "
+		}
+		switch x {
+		case x509.ExtKeyUsageServerAuth:
+			out = out + "ExtKeyUsageServerAuth"
+		case x509.ExtKeyUsageClientAuth:
+			out = out + "ExtKeyUsageClientAuth"
+		default:
+			out = out + "unknown"
+		}
+
+	}
+	return out
+}
+
+func newCertExtKeyUsageError(name, ns string, requiredExtKeyUsages []x509.ExtKeyUsage) error {
+	return &CertExtKeyUsageError{
+		fmt.Sprintf(
+			"secret %s/%s must specify ext key usages: %+v",
+			ns, name, extKeyUsageToString(requiredExtKeyUsages)),
+	}
+}
+
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
 func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
 
@@ -261,7 +306,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		if timeInvalid {
 			return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
 		}
-		return nil, nil, fmt.Errorf("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
+		return nil, nil, newCertExtKeyUsageError(secretName, secretNamespace, requiredKeyUsages)
 	}
 
 	var issuer certificatemanagement.KeyPairInterface

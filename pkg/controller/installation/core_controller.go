@@ -1353,6 +1353,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation: &instance.Spec,
 		Terminating:  terminating,
 		UsePSP:       r.usePSP,
+		OpenShift:    instance.Spec.KubernetesProvider == operator.ProviderOpenShift,
 	}
 	components = append(components, render.CSI(&csiCfg))
 

@@ -15,6 +15,8 @@
 package render
 
 import (
+	"crypto/x509"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -33,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
 
 // The names of the components related to the PolicyRecommendation APIs related rendered objects.
@@ -48,6 +51,11 @@ const (
 )
 
 var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(PolicyRecommendationTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {

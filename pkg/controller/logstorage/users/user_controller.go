@@ -19,10 +19,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
-	operatorv1 "github.com/tigera/operator/api/v1"
 
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -149,6 +151,18 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	if logStorage.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+
+	// Wait for Elasticsearch to be installed and available. We don't need to do this in multi-tenant mode because because
+	// we disable kube-controllers ES access in this mode.
+	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply

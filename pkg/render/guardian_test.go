@@ -148,6 +148,13 @@ var _ = Describe("Rendering tests", func() {
 			ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)
 			Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
 			Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			crb := rtest.GetResource(resources, render.ManagerClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.Subjects).To(Equal([]rbacv1.Subject{{
+				Kind:      "ServiceAccount",
+				Name:      render.ManagerServiceAccount,
+				Namespace: render.ManagerNamespace,
+			}}))
 		})
 
 		It("should render controlPlaneTolerations", func() {

@@ -782,9 +782,13 @@ type WindowsConfig struct {
 	// +optional
 	CNIConfFilename string `json:"cniConfFilename,omitempty"`
 
-	// VXLANMACPrefix is the prefix of the VXLAN interface MAC address
+	// VXLANMACPrefix is the prefix used when generating MAC addresses for virtual NICs
 	// +optional
 	VXLANMACPrefix string `json:"vxlanMACPrefix,omitempty"`
+
+	// VXLANAdapter is the Network Adapter used for VXLAN, leave blank for primary NIC
+	// +optional
+	VXLANAdapter string `json:"vxlanAdapter,omitempty"`
 
 	// DisableWindowsDaemonset specifies whether the calico-node-windows should be disabled
 	// Default: false

@@ -54,7 +54,7 @@ func HasWindowsNodesAndHPCSupport(c client.Client) (bool, error) {
 		if len(splits) > 1 {
 			ver = strings.TrimPrefix(splits[1], "v")
 		}
-		if runtime == "containerd" && goversion.CompareNormalized(ver, "1.7.0", ">=") {
+		if runtime == "containerd" && goversion.CompareNormalized(ver, "1.6.0", ">=") {
 			return true, nil
 		}
 	}

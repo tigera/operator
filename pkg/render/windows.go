@@ -934,6 +934,11 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
+	vxlanAdapter := ""
+	if c.cfg.Installation.Windows != nil && c.cfg.Installation.Windows.VXLANAdapter != "" {
+		vxlanAdapter = c.cfg.Installation.Windows.VXLANAdapter
+	}
+
 	windowsEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
@@ -955,11 +960,12 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		},
 		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
-		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
-		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
+		{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + c.cfg.TLS.TrustedBundle.MountPath()},
+		{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
+		{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
+		{Name: "VXLANAdapter", Value: vxlanAdapter},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

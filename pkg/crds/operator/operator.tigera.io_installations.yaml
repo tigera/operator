@@ -7504,9 +7504,13 @@ spec:
                     description: 'DisableWindowsDaemonset specifies whether the calico-node-windows
                       should be disabled Default: false'
                     type: boolean
+                  vxlanAdapter:
+                    description: VXLANAdapter is the Network Adapter used for VXLAN,
+                      leave blank for primary NIC
+                    type: string
                   vxlanMACPrefix:
-                    description: VXLANMACPrefix is the prefix of the VXLAN interface
-                      MAC address
+                    description: VXLANMACPrefix is the prefix used when generating
+                      MAC addresses for virtual NICs
                     type: string
                 type: object
             type: object
@@ -15538,9 +15542,13 @@ spec:
                         description: 'DisableWindowsDaemonset specifies whether the
                           calico-node-windows should be disabled Default: false'
                         type: boolean
+                      vxlanAdapter:
+                        description: VXLANAdapter is the Network Adapter used for
+                          VXLAN, leave blank for primary NIC
+                        type: string
                       vxlanMACPrefix:
-                        description: VXLANMACPrefix is the prefix of the VXLAN interface
-                          MAC address
+                        description: VXLANMACPrefix is the prefix used when generating
+                          MAC addresses for virtual NICs
                         type: string
                     type: object
                 type: object

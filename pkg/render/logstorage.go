@@ -220,10 +220,11 @@ type ElasticsearchConfiguration struct {
 	ClusterDomain               string
 	BaseURL                     string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
 	ElasticLicenseType          ElasticsearchLicenseType
-	TrustedBundle               certificatemanagement.TrustedBundle
+	TrustedBundle               certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret             *corev1.Secret
 	ApplyTrial                  bool
 	KeyStoreSecret              *corev1.Secret
+	KibanaEnabled               bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -336,7 +337,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 				es.eckOperatorPodSecurityPolicy(),
 				es.elasticsearchPodSecurityPolicy(),
 			)
-			if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+			if es.cfg.KibanaEnabled {
 				toCreate = append(toCreate,
 					es.kibanaClusterRoleBinding(),
 					es.kibanaClusterRole(),
@@ -369,7 +370,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
-		if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		if es.cfg.KibanaEnabled {
 			// Kibana CRs
 			// In order to use restricted, we need to change elastic-internal-init-config:
 			// - securityContext.allowPrivilegeEscalation=false
@@ -1832,12 +1833,12 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
@@ -1870,13 +1871,13 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.LinseedSourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().LinseedSourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
@@ -1953,7 +1954,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 	}...)
 
@@ -1993,7 +1994,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: kibanaPortIngressDestination,
 				},
 				{
@@ -2015,7 +2016,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
 		Source:      v3.EntityRule{},
-		Destination: networkpolicy.ESGatewayEntityRule,
+		Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 	})
 
 	return &v3.NetworkPolicy{

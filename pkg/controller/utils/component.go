@@ -126,6 +126,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 		}
 		err = c.client.Create(ctx, obj)
 		if err != nil {
+			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
 			return err
 		}
 		return nil
@@ -151,6 +152,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 			// Do the Create() with the merged object so that we preserve external labels/annotations.
 			resetMetadataForCreate(mobj)
 			if err := c.client.Create(ctx, mobj); err != nil {
+				logCtx.WithValues("key", key).Error(err, "Failed to create Job.")
 				return err
 			}
 			return nil
@@ -169,6 +171,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
 				if err := c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to create Secret.")
 					return err
 				}
 				return nil
@@ -235,14 +238,15 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
 		// if we need to retry the function
 		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
-		// If the error is a resource Conflict, try the update again
 		if err != nil && errors.IsConflict(err) {
+			// If the error is a resource Conflict, try the update again
 			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
 			err = c.createOrUpdateObject(ctx, obj, osType)
 			if err != nil {
 				return err
 			}
 		} else if err != nil {
+			cmpLog.Error(err, "Failed to create or update object", "key", key)
 			return err
 		}
 

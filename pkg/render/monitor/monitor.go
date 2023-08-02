@@ -498,6 +498,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								Scheme: "HTTPS",
 							},
 						},
+						SecurityContext: securitycontext.NewNonRootContext(),
 					},
 				},
 			},

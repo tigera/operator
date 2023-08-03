@@ -110,6 +110,8 @@ func allCalicoComponents(
 		ClusterDomain:               clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		UsePSP:                      true,
+		Namespace:                   common.CalicoNamespace,
+		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	winCfg := &render.WindowsConfig{
 		Installation: cr,
@@ -192,6 +194,12 @@ var _ = Describe("Rendering tests", func() {
 			logWriter.Flush()
 			fmt.Printf("Logs:\n%s\n", logBuffer.String())
 		}
+	})
+
+	It("should render IfNotPresent image pull policy", func() {
+		// This test ensures we don't accidentally commit a change that switches the
+		// default image pull policy to Always as part of development.
+		Expect(render.ImagePullPolicy()).To(Equal(corev1.PullIfNotPresent))
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -293,7 +301,7 @@ var _ = Describe("Rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})

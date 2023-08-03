@@ -130,7 +130,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -145,7 +145,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		Expect(envs).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 			corev1.EnvVar{Name: "LINSEED_ENABLED", Value: "true"},
 			corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
 			corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
@@ -155,8 +154,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			corev1.EnvVar{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			corev1.EnvVar{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
 			corev1.EnvVar{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
-			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
 			corev1.EnvVar{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -262,7 +259,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -281,8 +278,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc.cluster.local"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -303,8 +298,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc.cluster.local"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -374,7 +367,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -452,7 +445,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -623,7 +616,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -709,7 +702,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -783,7 +776,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -846,7 +839,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -861,7 +854,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: cfg.EKSConfig.AwsRegion}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"}))
 
 		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Privileged).To(BeFalse())

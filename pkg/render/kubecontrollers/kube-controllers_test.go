@@ -127,12 +127,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		cfg = kubecontrollers.KubeControllersConfiguration{
-			K8sServiceEp:  k8sServiceEp,
-			Installation:  instance,
-			ClusterDomain: dns.DefaultClusterDomain,
-			MetricsPort:   9094,
-			TrustedBundle: certificateManager.CreateTrustedBundle(),
-			UsePSP:        true,
+			K8sServiceEp:      k8sServiceEp,
+			Installation:      instance,
+			ClusterDomain:     dns.DefaultClusterDomain,
+			MetricsPort:       9094,
+			TrustedBundle:     certificateManager.CreateTrustedBundle(),
+			UsePSP:            true,
+			Namespace:         common.CalicoNamespace,
+			BindingNamespaces: []string{common.CalicoNamespace},
 		}
 	})
 
@@ -164,10 +166,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		cfg = kubecontrollers.KubeControllersConfiguration{
-			K8sServiceEp:  k8sServiceEp,
-			Installation:  instance,
-			ClusterDomain: dns.DefaultClusterDomain,
-			UsePSP:        true,
+			K8sServiceEp:      k8sServiceEp,
+			Installation:      instance,
+			ClusterDomain:     dns.DefaultClusterDomain,
+			UsePSP:            true,
+			Namespace:         common.CalicoNamespace,
+			BindingNamespaces: []string{common.CalicoNamespace},
 		}
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -177,7 +181,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -246,7 +250,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -294,7 +298,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		// Should render the correct resources.
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -329,7 +333,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -390,7 +394,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -482,7 +486,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -534,7 +538,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -597,7 +601,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 

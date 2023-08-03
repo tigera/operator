@@ -1578,13 +1578,20 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 }
 
 func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
+	// safeAccess is a helper for accessing int32 pointers safely when populating env vars.
+	safeAccess := func(i *int32) string {
+		if i == nil {
+			return "0"
+		}
+		return fmt.Sprint(*i)
+	}
 	return []corev1.EnvVar{
-		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.Flows)},
-		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.AuditReports)},
-		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.Snapshots)},
-		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.ComplianceReports)},
-		{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.DNSLogs)},
-		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.BGPLogs)},
+		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.Flows)},
+		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.AuditReports)},
+		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.Snapshots)},
+		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.ComplianceReports)},
+		{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.DNSLogs)},
+		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.BGPLogs)},
 		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
 		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
 	}

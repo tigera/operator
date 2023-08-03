@@ -125,7 +125,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		Expect(resources).To(HaveLen(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")

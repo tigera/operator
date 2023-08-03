@@ -573,6 +573,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		bundleMaker = nil
 	}
 
+	// Determine the namespaces to which we must bind the cluster role.
+	namespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
@@ -595,22 +601,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Namespace:               helper.InstallNamespace(),
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
+		BindingNamespaces:       namespaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(managerCfg)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
-		return reconcile.Result{}, err
-	}
-
-	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	clusterScopedComponent, err := render.ManagerClusterScoped(managerCfg, namespaces)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
 		return reconcile.Result{}, err
@@ -622,11 +617,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	components := []render.Component{
-		// Installs namespaced objects.
+		// Install manager components.
 		component,
-
-		// Installs cluster-scoped objects.
-		clusterScopedComponent,
 
 		// Installs KeyPairs and trusted bundle (if not pre-installed)
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

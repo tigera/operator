@@ -203,7 +203,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			{
 				Name:            render.PacketCaptureContainerName,
 				Image:           fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: render.ImagePullPolicy(),
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 					Capabilities: &corev1.Capabilities{
@@ -270,7 +270,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	checkPacketCaptureResources := func(resources []client.Object, useCSR, enableOIDC bool) {
 		for i, expectedRes := range expectedResources(useCSR, enableOIDC) {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources(useCSR, enableOIDC))))
 

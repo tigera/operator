@@ -222,7 +222,7 @@ var _ = Describe("dex rendering tests", func() {
 			}
 
 			for i, expectedRes := range expectedResources {
-				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -310,7 +310,7 @@ var _ = Describe("dex rendering tests", func() {
 			}
 
 			for i, expectedRes := range expectedResources {
-				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 		})

@@ -181,7 +181,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		ns := rtest.GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
-		rtest.ExpectResource(ns, "tigera-system", "", "", "v1", "Namespace")
+		rtest.CompareResource(ns, "tigera-system", "", "", "v1", "Namespace")
 		meta := ns.GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("tigera-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -425,7 +425,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
-		rtest.ExpectResource(dep, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
+		rtest.CompareResource(dep, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		d := dep.(*appsv1.Deployment)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(HaveLen(4))
@@ -1583,7 +1583,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		ns := rtest.GetResource(resources, "calico-apiserver", "", "", "v1", "Namespace").(*corev1.Namespace)
-		rtest.ExpectResource(ns, "calico-apiserver", "", "", "v1", "Namespace")
+		rtest.CompareResource(ns, "calico-apiserver", "", "", "v1", "Namespace")
 		meta := ns.GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("calico-apiserver"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -1710,7 +1710,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		dep := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
-		rtest.ExpectResource(dep, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
+		rtest.CompareResource(dep, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
 		d := dep.(*appsv1.Deployment)
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(1))
 	})

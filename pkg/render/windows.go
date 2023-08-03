@@ -17,6 +17,7 @@ package render
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -375,6 +376,7 @@ func (c *windowsComponent) windowsRole() *rbacv1.ClusterRole {
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
+					"externalnetworks",
 					"licensekeys",
 					"remoteclusterconfigurations",
 					"stagedglobalnetworkpolicies",
@@ -493,6 +495,12 @@ func (c *windowsComponent) cniPluginRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
+			{
+				// Some information is stored on the node status.
+				APIGroups: []string{""},
+				Resources: []string{"nodes/status"},
+				Verbs:     []string{"patch", "update"},
+			},
 		},
 	}
 
@@ -550,7 +558,7 @@ func (c *windowsComponent) windowsCNIConfigMap() *corev1.ConfigMap {
 	pluginsArray, _ := json.Marshal(plugins)
 
 	config := fmt.Sprintf(`{
-			  "name": "k8s-pod-network",
+			  "name": "Calico",
 			  "cniVersion": "0.3.1",
 			  "plugins": %s
 			}`, string(pluginsArray))
@@ -574,12 +582,15 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 		return []corev1.EnvVar{}
 	}
 
-	// Determine directories to use for CNI artifacts based on the provider or installation configuration.
-	cniNetDir, cniBinDir, _, cniConfFilename := c.cniConfigInfo()
+	_, cniNetDir, _, cniConfFilename := c.cniConfigInfo()
+
+	// cniNetDir is used in the cni config file, and will have the "c:" prefix added to it.
+	cniNetDir = strings.TrimLeft(cniNetDir, "c:")
+	cniNetDir = strings.TrimLeft(cniNetDir, "C:")
 
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
-		{Name: "CNI_BIN_DIR", Value: cniBinDir},
+		{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 		{Name: "CNI_CONF_NAME", Value: cniConfFilename},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
@@ -664,7 +675,7 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 		"policy": map[string]interface{}{
 			"type": "k8s",
 		},
-		"log_file_path":          "/var/log/calico/cni/cni.log",
+		"log_file_path":          "c:/var/log/calico/cni/cni.log",
 		"windows_loopback_DSR":   "__DSR_SUPPORT__",
 		"capabilities":           capabilities,
 		"nodename":               "__KUBERNETES_NODE_NAME__",
@@ -700,7 +711,7 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 
 	cniNetDir, _, _, _ := c.cniConfigInfo()
 	kubernetes := map[string]interface{}{
-		"kubeconfig": "c:/" + cniNetDir + "/calico-kubeconfig",
+		"kubeconfig": filepath.ToSlash(filepath.Join("c:", cniNetDir, "calico-kubeconfig")),
 	}
 	if apiRoot != "" {
 		kubernetes["k8s_api_root"] = apiRoot
@@ -743,6 +754,11 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 func (c *windowsComponent) cniConfigInfo() (string, string, string, string) {
 	var cniBinDir, cniNetDir, cniLogDir, cniConfFilename string
 	switch c.cfg.Installation.KubernetesProvider {
+	case operatorv1.ProviderAKS:
+		cniBinDir = "/k/azurecni/bin"
+		cniNetDir = "/k/azurecni/netconf "
+		cniLogDir = "/var/log/calico/cni"
+		cniConfFilename = "10-calico.conflist"
 	default:
 		// Default locations to match vanilla Kubernetes.
 		cniBinDir = "/opt/cni/bin"
@@ -813,14 +829,13 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 
 // uninstallEnvVars creates the uninstall-calico initContainer's envvars.
 func (c *windowsComponent) uninstallEnvVars() []corev1.EnvVar {
-	// Determine directories to use for CNI artifacts based on the provider or installation configuration.
-	cniNetDir, cniBinDir, _, cniConfFilename := c.cniConfigInfo()
+	_, _, _, cniConfFilename := c.cniConfigInfo()
 
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
-		{Name: "CNI_BIN_DIR", Value: cniBinDir},
+		{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 		{Name: "CNI_CONF_NAME", Value: cniConfFilename},
-		{Name: "CNI_NET_DIR", Value: cniNetDir},
+		{Name: "CNI_NET_DIR", Value: "/host/etc/cni/net.d"},
 	}
 
 	return envVars

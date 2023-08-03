@@ -1851,8 +1851,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					// The OpenShift envvar overrides.
-					{Name: "FELIX_HEALTHPORT", Value: "9199"},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -1947,9 +1945,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
-
-					// The OpenShift envvar overrides.
-					{Name: "FELIX_HEALTHPORT", Value: "9199"},
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}

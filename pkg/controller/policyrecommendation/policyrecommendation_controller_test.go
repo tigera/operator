@@ -132,11 +132,13 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Status:     v3.LicenseKeyStatus{Features: []string{common.PolicyRecommendationFeature}}})).NotTo(HaveOccurred())
+			Status:     v3.LicenseKeyStatus{Features: []string{common.PolicyRecommendationFeature}},
+		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		})).NotTo(HaveOccurred())
 
-		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
@@ -316,20 +318,44 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		Context("Multi-tenant/namespaced reconciliation", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
+
 			BeforeEach(func() {
 				r.multiTenant = true
 			})
+
 			It("should reconcile both with and without namespace provided while namespaced policyrecommendations exist", func() {
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace)
+				// Create the Tenant resources for tenant-a and tenant-b.
+				tenantA := &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{ID: "tenant-a"},
+				}
+				Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
+				tenantB := &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default",
+						Namespace: tenantBNamespace,
+					},
+					Spec: operatorv1.TenantSpec{ID: "tenant-b"},
+				}
+				Expect(c.Create(ctx, tenantB)).NotTo(HaveOccurred())
+
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+
 				linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
 
-				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace)
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
+				Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
+
 				linseedTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantBNamespace, []string{render.TigeraLinseedSecret})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, linseedTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())

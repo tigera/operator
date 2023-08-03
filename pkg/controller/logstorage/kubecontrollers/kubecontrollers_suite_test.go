@@ -12,22 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package egressgateway
+package kubecontrollers
 
 import (
 	"testing"
 
 	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/reporters"
 	. "github.com/onsi/gomega"
+
+	"github.com/onsi/ginkgo/reporters"
 	uzap "go.uber.org/zap"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestRender(t *testing.T) {
+func TestStatus(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/ut/egressgateway_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/egressgateway/egressgateway Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/logstorage_kubecontrollers_controller_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/logstorage/kubecontrollers Suite", []Reporter{junitReporter})
 }

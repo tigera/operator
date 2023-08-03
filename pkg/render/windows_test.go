@@ -85,12 +85,12 @@ var _ = Describe("Windows-upgrade rendering tests", func() {
 
 		// Should render the correct resources.
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
 	Context("With calico-windows-upgrade DaemonSet overrides", func() {
-		var rr1 = corev1.ResourceRequirements{
+		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
 				"memory":  resource.MustParse("300Mi"),

@@ -109,7 +109,7 @@ const (
 	DefaultElasticsearchReplicas    = 0
 	DefaultElasticStorageGi         = 10
 
-	EsCuratorName           = "elastic-curator"
+	ESCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
 	EsCuratorPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + "allow-elastic-curator"
 
@@ -188,13 +188,18 @@ var (
 	KibanaEntityRule            = networkpolicy.CreateEntityRule(KibanaNamespace, KibanaName, KibanaPort)
 	KibanaSourceEntityRule      = networkpolicy.CreateSourceEntityRule(KibanaNamespace, KibanaName)
 	ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
-	ESCuratorSourceEntityRule   = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, EsCuratorName)
+	ESCuratorSourceEntityRule   = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, ESCuratorName)
 )
 
 var log = logf.Log.WithName("render")
 
 // LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
+	if cfg.KibanaEnabled && operatorv1.IsFIPSModeEnabled(cfg.Installation.FIPSMode) {
+		// This branch should only be hit if there is a coding bug in the controller, as KibanaEnabled
+		// should already take into account FIPS.
+		panic("BUG: Kibana is not supported in FIPS mode")
+	}
 	return &elasticsearchComponent{
 		cfg: cfg,
 	}
@@ -1530,23 +1535,23 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EsCuratorName,
+			Name:      ESCuratorName,
 			Namespace: ElasticsearchNamespace,
 		},
 		Spec: batchv1.CronJobSpec{
 			Schedule: schedule,
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: EsCuratorName,
+					Name: ESCuratorName,
 					Labels: map[string]string{
-						"k8s-app": EsCuratorName,
+						"k8s-app": ESCuratorName,
 					},
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
-								"k8s-app": EsCuratorName,
+								"k8s-app": ESCuratorName,
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -1554,7 +1559,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
 								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:            EsCuratorName,
+									Name:            ESCuratorName,
 									Image:           es.curatorImage,
 									ImagePullPolicy: ImagePullPolicy(),
 									Env:             es.curatorEnvVars(),
@@ -1578,13 +1583,20 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 }
 
 func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
+	// safeAccess is a helper for accessing int32 pointers safely when populating env vars.
+	safeAccess := func(i *int32) string {
+		if i == nil {
+			return "0"
+		}
+		return fmt.Sprint(*i)
+	}
 	return []corev1.EnvVar{
-		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.Flows)},
-		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.AuditReports)},
-		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.Snapshots)},
-		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.ComplianceReports)},
-		{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.DNSLogs)},
-		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.BGPLogs)},
+		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.Flows)},
+		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.AuditReports)},
+		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.Snapshots)},
+		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.ComplianceReports)},
+		{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.DNSLogs)},
+		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.BGPLogs)},
 		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
 		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
 	}
@@ -1593,7 +1605,7 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EsCuratorName,
+			Name: ESCuratorName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1601,7 +1613,7 @@ func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{EsCuratorName},
+				ResourceNames: []string{ESCuratorName},
 			},
 		},
 	}
@@ -1610,12 +1622,12 @@ func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EsCuratorName,
+			Name: ESCuratorName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     EsCuratorName,
+			Name:     ESCuratorName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1628,7 +1640,7 @@ func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRole
 }
 
 func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(EsCuratorName)
+	return podsecuritypolicy.NewBasePolicy(ESCuratorName)
 }
 
 // Applying this in the eck namespace will start a trial license for enterprise features.
@@ -2026,7 +2038,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(EsCuratorName),
+			Selector: networkpolicy.KubernetesAppSelector(ESCuratorName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Egress:   egressRules,
 		},

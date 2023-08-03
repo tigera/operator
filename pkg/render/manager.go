@@ -100,31 +100,6 @@ func init() {
 	certkeyusage.SetCertKeyUsage(ManagerInternalTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 }
 
-// ManagerClusterScoped returns a component for rendering cluster-scoped manager resources.
-// These are done in a separate component so that they can be bound to multiple namespaces as needed.
-func ManagerClusterScoped(cfg *ManagerConfiguration, namespaces []string) (Component, error) {
-	objs := []client.Object{
-		managerClusterRoleBinding(namespaces),
-		managerClusterRole(cfg.ManagementCluster != nil, false, cfg.UsePSP, cfg.Installation.KubernetesProvider),
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
-	}
-	if cfg.UsePSP {
-		objs = append(objs, managerPodSecurityPolicy())
-	}
-	return NewPassthrough(objs...), nil
-}
-
-func managerClusterRoleBinding(namespaces []string) client.Object {
-	return rcomponents.ClusterRoleBinding(ManagerClusterRoleBinding, ManagerClusterRole, ManagerServiceAccount, namespaces)
-}
-
-func managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy("tigera-manager")
-}
-
 // Manager returns a component for rendering namespaced manager resources.
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
@@ -144,7 +119,7 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 	tlsAnnotations[cfg.InternalTLSKeyPair.HashAnnotationKey()] = cfg.InternalTLSKeyPair.HashAnnotationValue()
 	if cfg.ManagementCluster != nil {
-		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.TunnelSecret.HashAnnotationValue()
+		tlsAnnotations[cfg.TunnelServerCert.HashAnnotationKey()] = cfg.TunnelServerCert.HashAnnotationValue()
 	}
 
 	return &managerComponent{
@@ -172,8 +147,8 @@ type ManagerConfiguration struct {
 	// in the management cluster.
 	VoltronLinseedKeyPair certificatemanagement.KeyPairInterface
 
-	// KeyPair used for establishing mTLS tunnel with Guardian.
-	TunnelSecret certificatemanagement.KeyPairInterface
+	// KeyPair used by Voltron as the server certificate when establishing an mTLS tunnel with Guardian.
+	TunnelServerCert certificatemanagement.KeyPairInterface
 
 	// TLS KeyPair used by both Voltron and es-proxy, presented by each as part of the mTLS handshake with
 	// other services within the cluster. This is used in both management and standalone clusters.
@@ -190,9 +165,10 @@ type ManagerConfiguration struct {
 	ComplianceLicenseActive bool
 
 	// Whether the cluster supports pod security policies.
-	UsePSP         bool
-	Namespace      string
-	TruthNamespace string
+	UsePSP            bool
+	Namespace         string
+	TruthNamespace    string
+	BindingNamespaces []string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
 	Tenant *operatorv1.Tenant
@@ -244,6 +220,19 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Tenant == nil {
 		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
 		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted))
+	}
+
+	objs = append(objs,
+		managerClusterRoleBinding(c.cfg.BindingNamespaces),
+		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
+		managerClusterWideSettingsGroup(),
+		managerUserSpecificSettingsGroup(),
+		managerClusterWideTigeraLayer(),
+		managerClusterWideDefaultView(),
+	)
+
+	if c.cfg.UsePSP {
+		objs = append(objs, managerPodSecurityPolicy())
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
@@ -360,7 +349,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	}
 	if c.cfg.ManagementCluster != nil {
 		v = append(v,
-			c.cfg.TunnelSecret.Volume(),
+			c.cfg.TunnelServerCert.Volume(),
 			c.cfg.VoltronLinseedKeyPair.Volume(),
 		)
 	}
@@ -426,7 +415,9 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	// Prepare conditional env vars up-front.
 	queryURL := "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"
 	if c.cfg.Tenant != nil {
-		queryURL = ""
+		// For multi-tenant clusters, we shouldn't ever hit the management cluster API server.
+		// TODO: How to handle this correctly.
+		// queryURL = ""
 	}
 
 	envs := []corev1.EnvVar{
@@ -500,8 +491,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	if c.cfg.InternalTLSKeyPair != nil {
 		intKeyPath, intCertPath = c.cfg.InternalTLSKeyPair.VolumeMountKeyFilePath(), c.cfg.InternalTLSKeyPair.VolumeMountCertificateFilePath()
 	}
-	if c.cfg.TunnelSecret != nil {
-		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
+	if c.cfg.TunnelServerCert != nil {
+		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelServerCert.VolumeMountKeyFilePath(), c.cfg.TunnelServerCert.VolumeMountCertificateFilePath()
 	}
 	if c.cfg.VoltronLinseedKeyPair != nil {
 		linseedKeyPath, linseedCertPath = c.cfg.VoltronLinseedKeyPair.VolumeMountKeyFilePath(), c.cfg.VoltronLinseedKeyPair.VolumeMountCertificateFilePath()
@@ -554,8 +545,12 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
 	if c.cfg.ManagementCluster != nil {
 		mounts = append(mounts, c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()))
-		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount(c.SupportedOSType()))
+		mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
 		mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+
+	if c.cfg.Tenant != nil {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
 	}
 
 	return corev1.Container{
@@ -650,6 +645,14 @@ func managerServiceAccount(ns string) *corev1.ServiceAccount {
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ns},
 	}
+}
+
+func managerClusterRoleBinding(namespaces []string) client.Object {
+	return rcomponents.ClusterRoleBinding(ManagerClusterRoleBinding, ManagerClusterRole, ManagerServiceAccount, namespaces)
+}
+
+func managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy("tigera-manager")
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
@@ -871,7 +874,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ESGatewaySourceEntityRule(),
+			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

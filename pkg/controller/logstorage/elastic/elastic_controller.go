@@ -23,6 +23,7 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	apps "k8s.io/api/apps/v1"
@@ -63,6 +64,10 @@ import (
 )
 
 var log = logf.Log.WithName("controller_logstorage_elastic")
+
+const (
+	LogStorageFinalizer = "tigera.io/eck-cleanup"
+)
 
 // ElasticSubController is a sub-controller of the main LogStorage controller
 // responsible for managing the Elasticsearch service used by Calico.
@@ -168,14 +173,46 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %w", err)
 	}
+
+	// Watch all the elasticsearch user secrets in the operator namespace.
+	if err = utils.AddSecretWatchWithLabel(c, common.OperatorNamespace(), logstoragecommon.TigeraElasticsearchUserSecretLabel); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+	}
+
+	for _, secretName := range []string{
+		render.TigeraElasticsearchGatewaySecret, render.TigeraKibanaCertSecret,
+		render.OIDCSecretName, render.DexObjectName, esmetrics.ElasticsearchMetricsServerTLSSecret,
+		render.TigeraLinseedSecret, certificatemanagement.CASecretName,
+	} {
+		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		}
+	}
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+	}
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+	}
+	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+	}
+	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+	}
+	if err = utils.AddSecretsWatch(c, render.ElasticsearchCuratorUserSecret, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+	}
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
 	}
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
+	if opts.MultiTenant {
+		if err = utils.AddSecretsWatch(c, certificatemanagement.TenantCASecretName, ""); err != nil {
+			return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		}
 	}
 
 	for _, name := range []string{
@@ -187,71 +224,21 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
 		}
 	}
-
-	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
-	// the utils folder where the other watch logic is.
-	if err = utils.AddSecretWatchWithLabel(c, common.OperatorNamespace(), logstoragecommon.TigeraElasticsearchUserSecretLabel); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
-	}
-
-	// Watch all the secrets created by this controller so we can regenerate any that are deleted
-	for _, secretName := range []string{
-		render.TigeraElasticsearchGatewaySecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName, esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.TigeraLinseedSecret,
-	} {
-		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
-		}
-	}
-
-	// Catch if something modifies the certs that this controller creates.
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, render.ElasticsearchCuratorUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
-	}
-
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
+	}
+	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
 	}
 
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
-
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
 	}
-
 	if err := utils.AddServiceWatch(c, render.LinseedServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
-	}
-
-	// Watch for changes to primary resource ManagementCluster
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
-	}
-
-	// Watch for changes to primary resource ManagementClusterConnection
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
 	return nil
@@ -282,9 +269,19 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
-	if ls == nil || ls.Status.State != operatorv1.TigeraStatusReady {
+	if ls == nil {
+		// TODO: This should be a short-circuit case once we move ManagedCluster logic to a separate controller.
+		// r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage CR to be created", nil, reqLogger)
+		// return reconcile.Result{}, nil
+	} else if ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{}, nil
+	}
+
+	// Set or remove the finalizer from the LogStorage object as needed.
+	if err = r.handleLogStorageFinalizer(ctx, ls, reqLogger); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating LogStorage finalizer", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Get Installation resource.
@@ -365,6 +362,8 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	cm.AddToStatusManager(r.status, render.ElasticsearchNamespace)
+
 	elasticKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
@@ -380,8 +379,12 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
 
 	// Wait for dependencies to exist.
-	if elasticKeyPair == nil || kibanaEnabled && kibanaKeyPair == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for elastic / kibana secrets to be available", err, log)
+	if elasticKeyPair == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for elastic key pair to be available", err, log)
+		return reconcile.Result{}, nil
+	}
+	if kibanaEnabled && kibanaKeyPair == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for kibana key pair to be available", err, log)
 		return reconcile.Result{}, nil
 	}
 
@@ -584,45 +587,92 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, nil
 		}
 
-		if kibanaEnabled && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be operational", nil, reqLogger)
+		if kibanaEnabled && kibana == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be created", nil, reqLogger)
+			return reconcile.Result{}, nil
+		} else if kibanaEnabled && kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana association to be established", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+
+		if !r.multiTenant && len(curatorSecrets) == 0 {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
 			return reconcile.Result{}, nil
 		}
 
 		// TODO: In multi-tenant mode, and probably single-tenant as well, ILM programming should be handled by someone other than the operator.
 		// Either out of band, or by Linseed.
-		err := r.applyILMPolicies(ls, reqLogger, ctx)
-		if err != nil {
+		if err := r.applyILMPolicies(ls, reqLogger, ctx); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
 			return reconcile.Result{}, err
 		}
 
-		err = r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
-		if err != nil {
-			return reconcile.Result{}, err
+		if kibanaEnabled && esLicenseType == render.ElasticsearchLicenseTypeBasic {
+			// es-kube-controllers creates the ConfigMap and Secret needed for SSO into Kibana.
+			// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
+			// needed for logging user into Kibana is not available.
+			if err = r.checkOIDCUsersEsResource(ctx); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
 }
 
-func (r *ElasticSubController) validateLogStorage(curatorSecrets []*corev1.Secret, esLicenseType render.ElasticsearchLicenseType, reqLogger logr.Logger, ctx context.Context) error {
-	var err error
+// isTerminating returns true if the LogStorage instance is terminating.
+func isTerminating(ls *operatorv1.LogStorage) bool {
+	return ls != nil && ls.DeletionTimestamp != nil
+}
 
-	if len(curatorSecrets) == 0 {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
-		return nil
-	}
+func (r *ElasticSubController) handleLogStorageFinalizer(ctx context.Context, ls *operatorv1.LogStorage, reqLogger logr.Logger) error {
+	// Add a finalizer to the LogStorage resource. This ensures we have an opportunity to clean up the resulting
+	// Elasticsearch and Kibana custom resources when the LogStorage resource is deleted.
+	prePatch := client.MergeFrom(ls.DeepCopy())
 
-	// kube-controller creates the ConfigMap and Secret needed for SSO into Kibana.
-	// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
-	// needed for logging user into Kibana is not available.
-	if esLicenseType == render.ElasticsearchLicenseTypeBasic {
-		if err = r.checkOIDCUsersEsResource(ctx); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
+	// Determine if we're terminating, and thus if we need to clean up our finalizers. We add a finalizer to the LogStorage
+	// so that we can block deletion of it until downstream resources have termianted. Specifically, the Elasticsearch and Kibana
+	// instances. So, check if those have been deleted before removing the finalizer.
+	if isTerminating(ls) {
+		// The LogStorage instance is terminating. Check whether ES and Kibana CRs exist.
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return err
+		}
+		kibana := &kbv1.Kibana{}
+		err = r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kibana)
+		if errors.IsNotFound(err) {
+			kibana = nil
+		} else if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
+			return err
+		}
+
+		if elasticsearch != nil || kibana != nil {
+			// One or both of ES and Kibana are still present. Don't remove the finalizer just yet.
+			return nil
+		}
+
+		// Remove the finalizer if both ES and Kibana have been cleaned up.
+		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+
+		// Write the logstorage back to the datastore
+		if patchErr := r.client.Patch(ctx, ls, prePatch); patchErr != nil {
+			reqLogger.Error(patchErr, "Error patching LogStorage to remove finalizer")
+			r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching to remove finalizer", patchErr, reqLogger)
+			return err
+		}
+	} else if ls != nil {
+		// Not terminating, make sure the finalizer is present.
+		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
+			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+		}
+		if err := r.client.Patch(ctx, ls, prePatch); err != nil {
+			r.status.SetDegraded(operatorv1.ResourcePatchError, "Failed to set finalizer on LogStorage", err, reqLogger)
 			return err
 		}
 	}

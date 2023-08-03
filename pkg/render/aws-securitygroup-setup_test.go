@@ -59,7 +59,7 @@ var _ = Describe("AWS SecurityGroup Setup rendering tests", func() {
 
 		for i, expectedRes := range expectedResources {
 			obj := toCreate[i]
-			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		Expect(toDelete).To(BeNil())

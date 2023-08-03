@@ -111,7 +111,7 @@ func (t *trustedBundle) MountPath() string {
 func (t *trustedBundle) HashAnnotations() map[string]string {
 	annotations := make(map[string]string)
 	for hash, cert := range t.certificates {
-		annotations[fmt.Sprintf("hash.operator.tigera.io/%s-%s", cert.GetNamespace(), cert.GetName())] = hash
+		annotations[fmt.Sprintf("%s.hash.operator.tigera.io/%s", cert.GetNamespace(), cert.GetName())] = hash
 	}
 	if len(t.systemCertificates) > 0 {
 		annotations["hash.operator.tigera.io/system"] = rmeta.AnnotationHash(t.systemCertificates)

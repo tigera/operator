@@ -18,16 +18,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
-
-	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -46,8 +43,7 @@ var log = logf.Log.WithName("controller_logstorage")
 
 const (
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
-	LogStorageFinalizer              = "tigera.io/eck-cleanup"
-	ResourceName                     = "log-storage"
+	TigeraStatusName                 = "log-storage"
 	defaultEckOperatorMemorySetting  = "512Mi"
 )
 
@@ -63,7 +59,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		client:      mgr.GetClient(),
 		scheme:      mgr.GetScheme(),
 		multiTenant: opts.MultiTenant,
-		status:      status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion),
+		status:      status.New(mgr.GetClient(), TigeraStatusName, opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -76,6 +72,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Configure watches for operator.tigera.io APIs this controller cares about.
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch LogStorage resource: %w", err)
+	}
+	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
 	}
 
 	return nil
@@ -93,8 +92,8 @@ type LogStorageInitializer struct {
 	multiTenant bool
 }
 
-// fillDefaults populates the default values onto an LogStorage object.
-func fillDefaults(opr *operatorv1.LogStorage) {
+// FillDefaults populates the default values onto an LogStorage object.
+func FillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Retention == nil {
 		opr.Spec.Retention = &operatorv1.Retention{}
 	}
@@ -174,131 +173,83 @@ func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
 	return nil
 }
 
-func setLogStorageFinalizer(ls *operatorv1.LogStorage) {
-	if ls.DeletionTimestamp == nil {
-		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
-			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
-		}
-	}
-}
-
 func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
 	ls := &operatorv1.LogStorage{}
 	key := utils.DefaultTSEEInstanceKey
-	if r.multiTenant {
-		key.Namespace = request.Namespace
-	}
 	err := r.client.Get(ctx, key, ls)
 	if errors.IsNotFound(err) {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
 		ls = nil
 		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
 	} else if err != nil {
 		// An actual error ocurred when attempting to query the LogStorage API.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
 		return reconcile.Result{}, err
-	} else {
-		// We found the LogStorage instance.
-		r.status.OnCRFound()
-
-		// Create a snapshot of the pre-defaulting LogStorage state to use when performing a
-		// merge patch to update the resource later.
-		preDefaultingPatchFrom := client.MergeFrom(ls.DeepCopy())
-
-		// Default and validate the object.
-		fillDefaults(ls)
-		err = validateComponentResources(&ls.Spec)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "An error occurred while validating LogStorage", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		setLogStorageFinalizer(ls)
-
-		// Write the logstorage back to the datastore with its newly applied defaults.
-		if err = r.client.Patch(ctx, ls, preDefaultingPatchFrom); err != nil {
-			r.status.SetDegraded(operatorv1.ResourcePatchError, "Failed to write defaults", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		defer r.status.SetMetaData(&ls.ObjectMeta)
-
-		// Update the LogStorage status conditions with the conditions found on the TigeraStatus resource.
-		// TODO: This should happen in the other sub controllers as well.
-		if request.Name == ResourceName && request.Namespace == "" {
-			ts := &operatorv1.TigeraStatus{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, ts.Status.Conditions)
-			if err := r.client.Status().Update(ctx, ls); err != nil {
-				log.WithValues("reason", err).Info("Failed to create LogStorage status conditions.")
-				return reconcile.Result{}, err
-			}
-		}
 	}
 
-	// Determine if we're terminating, and thus if we need to clean up our finalizers. We add a finalizer to the LogStorage
-	// so that we can block deletion of it until downstream resources have termianted. Specifically, the Elasticsearch and Kibana
-	// instances. So, check if those have been deleted before removing the finalizer.
-	if ls != nil && ls.DeletionTimestamp != nil {
-		prePatch := client.MergeFrom(ls.DeepCopy())
+	// We found the LogStorage instance.
+	r.status.OnCRFound()
 
-		// Get Installation resource.
-		_, install, err := utils.GetInstallation(context.Background(), r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// Check whether ES and Kibana CRs exist.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		var kibana *kbv1.Kibana
-		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
-			err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kibana)
-			if err != nil && !errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
-		// Remove the finalizer if both ES and Kibana have been cleaned up.
-		if elasticsearch == nil && kibana == nil {
-			ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
-
-			// Write the logstorage back to the datastore
-			if patchErr := r.client.Patch(ctx, ls, prePatch); patchErr != nil {
-				reqLogger.Error(patchErr, "Error patching the log-storage")
-				r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching the log-storage", patchErr, reqLogger)
-				return reconcile.Result{}, patchErr
-			}
-		}
+	// Check if there is a management cluster connection. ManagementClusterConnection is a managed cluster only resource.
+	if err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
+		// LogStorage isn't valid for managed clusters.
+		r.setConditionDegraded(ctx, ls, reqLogger)
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "LogStorage is not valid for a managed cluster", nil, reqLogger)
+		return reconcile.Result{}, nil
+	} else if !errors.IsNotFound(err) {
+		// An actual error ocurred when attempting to query the ManagementClusterConnection API.
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying ManagementClusterConnection", err, reqLogger)
+		return reconcile.Result{}, err
 	}
+
+	// Create a snapshot of the pre-defaulting LogStorage state to use when performing a
+	// merge patch to update the resource later.
+	preDefaultingPatchFrom := client.MergeFrom(ls.DeepCopy())
+
+	// Default and validate the object.
+	FillDefaults(ls)
+	err = validateComponentResources(&ls.Spec)
+	if err != nil {
+		// Invalid - mark it as such and return.
+		r.setConditionDegraded(ctx, ls, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "An error occurred while validating LogStorage", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Write the logstorage back to the datastore with its newly applied defaults.
+	if err = r.client.Patch(ctx, ls, preDefaultingPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err = r.setConditionReady(ctx, ls, reqLogger); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to update LogStorage status", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	defer r.status.SetMetaData(&ls.ObjectMeta)
 
 	// Mark the status as available.
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-
-	// Since we don't poll for the object we need to make sure the object wouldn't have been deleted on the patch
-	// that may have removed the finalizers.
-	if ls != nil && (ls.DeletionTimestamp == nil || len(ls.GetFinalizers()) > 0) {
-		ls.Status.State = operatorv1.TigeraStatusReady
-		if err := r.client.Status().Update(ctx, ls); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	return reconcile.Result{}, nil
+}
+
+func (r *LogStorageInitializer) setConditionReady(ctx context.Context, ls *operatorv1.LogStorage, log logr.Logger) error {
+	ls.Status.State = operatorv1.TigeraStatusReady
+	if err := r.client.Status().Update(ctx, ls); err != nil {
+		log.Error(err, "Failed to update LogStorage status")
+		return err
+	}
+	return nil
+}
+
+func (r *LogStorageInitializer) setConditionDegraded(ctx context.Context, ls *operatorv1.LogStorage, log logr.Logger) {
+	ls.Status.State = operatorv1.TigeraStatusDegraded
+	if err := r.client.Status().Update(ctx, ls); err != nil {
+		log.Error(err, "Failed to update LogStorage status")
+	}
 }

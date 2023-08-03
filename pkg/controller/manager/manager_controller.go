@@ -97,7 +97,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	go utils.WaitToAddLicenseKeyWatch(managerController, k8sClient, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, managerController, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(managerController, k8sClient, log, []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: helper.InstallNamespace()},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
@@ -110,32 +110,32 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for other operator.tigera.io resources.
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch Network resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(controller, ResourceName); err != nil {
+	if err = utils.AddTigeraStatusWatch(managerController, ResourceName); err != nil {
 		return fmt.Errorf("manager-controller failed to watch manager Tigerastatus: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = controller.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = managerController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -209,8 +209,11 @@ type ReconcileManager struct {
 }
 
 // GetManager returns the default manager instance with defaults populated.
-func GetManager(ctx context.Context, cli client.Client, ns string) (*operatorv1.Manager, error) {
-	key := client.ObjectKey{Name: "tigera-secure", Namespace: ns}
+func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.Manager, error) {
+	key := client.ObjectKey{Name: "tigera-secure"}
+	if mt {
+		key.Namespace = ns
+	}
 
 	// Fetch the manager instance. We only support a single instance named "tigera-secure".
 	instance := &operatorv1.Manager{}
@@ -251,7 +254,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Fetch the Manager instance that corresponds with this reconcile trigger.
-	instance, err := GetManager(ctx, r.client, request.Namespace)
+	instance, err := GetManager(ctx, r.client, r.multiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logc.Info("Manager object not found")
@@ -347,7 +350,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerTLSSecretName,
-		request.TruthNamespace(),
+		helper.TruthNamespace(),
 		[]string{"localhost"})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating manager TLS certificate", err, logc)
@@ -359,10 +362,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerInternalTLSSecretName,
-		request.TruthNamespace(),
+		helper.TruthNamespace(),
 		dnsNames)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
+		r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, logc)
 		return reconcile.Result{}, err
 	}
 
@@ -495,8 +498,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Es-proxy needs to trust Voltron for cross-cluster requests.
 	bundleMaker.AddCertificates(internalTrafficSecret)
 
-	var linseedVoltronSecret certificatemanagement.KeyPairInterface
-	var tunnelSecret certificatemanagement.KeyPairInterface
+	var linseedVoltronServerCert certificatemanagement.KeyPairInterface
+	var tunnelServerCert certificatemanagement.KeyPairInterface
 
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
@@ -514,7 +517,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// The public cert from this keypair is sent by es-kube-controllers to managed clusters so that linseed clients in those clusters
 		// can authenticate the certificate presented by Voltron.
 		linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-		linseedVoltronSecret, err = certificateManager.GetOrCreateKeyPair(
+		linseedVoltronServerCert, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
 			render.VoltronLinseedTLS,
 			helper.TruthNamespace(),
@@ -524,16 +527,37 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 
-		// We expect that the secret that holds the certificates for tunnel certificate generation
-		// is already created by the API server.
-		// TODO: Need to make sure this secret is generated in per-tenant namespace by the tigera-apiserver.
-		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, helper.TruthNamespace())
-		if tunnelSecret == nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.VoltronTunnelSecretName, helper.TruthNamespace()), nil, logc)
-			return reconcile.Result{}, err
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronTunnelSecretName, helper.TruthNamespace()), err, logc)
-			return reconcile.Result{}, nil
+		// Query the tunnel server certificate used by Voltron to serve mTLS connections from managed clusters.
+		tunnelSecretName := managementCluster.Spec.TLS.SecretName
+		if r.multiTenant {
+			// For multi-tenant clusters, ensure that we have a CA that can be used to sign the tunnel server cert within this tenant's namespace.
+			// This certificate will also be presented by Voltron to prove its identity to managed clusters.
+			tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, helper.TruthNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, logc)
+				return reconcile.Result{}, err
+			}
+			if tunnelCASecret == nil {
+				// TODO: SAN should include the tenant ID, and Guardian should set the TLS hostname to the value with the tenant ID.
+				tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(tunnelSecretName, helper.TruthNamespace(), "tigera-voltron", []string{"voltron"})
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, logc)
+					return reconcile.Result{}, err
+				}
+			}
+
+			// We use the CA as the server cert.
+			tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
+		} else {
+			// For single-tenant clusters, query the secret directly. This will have already been created by the apiserver controller.
+			tunnelServerCert, err = certificateManager.GetKeyPair(r.client, tunnelSecretName, helper.TruthNamespace())
+			if tunnelServerCert == nil {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s/%s to be available", helper.TruthNamespace(), tunnelSecretName), nil, logc)
+				return reconcile.Result{}, err
+			} else if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s/%s ", helper.TruthNamespace(), tunnelSecretName), err, logc)
+				return reconcile.Result{}, nil
+			}
 		}
 	}
 
@@ -573,18 +597,24 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		bundleMaker = nil
 	}
 
+	// Determine the namespaces to which we must bind the cluster role.
+	namespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
 		TrustedCertBundle:       trustedBundle,
 		ClusterConfig:           clusterConfig,
 		TLSKeyPair:              tlsSecret,
-		VoltronLinseedKeyPair:   linseedVoltronSecret,
+		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,
 		Openshift:               r.provider == operatorv1.ProviderOpenShift,
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
-		TunnelSecret:            tunnelSecret,
+		TunnelServerCert:        tunnelServerCert,
 		InternalTLSKeyPair:      internalTrafficSecret,
 		ClusterDomain:           r.clusterDomain,
 		ESLicenseType:           elasticLicenseType,
@@ -595,22 +625,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Namespace:               helper.InstallNamespace(),
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
+		BindingNamespaces:       namespaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(managerCfg)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
-		return reconcile.Result{}, err
-	}
-
-	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	clusterScopedComponent, err := render.ManagerClusterScoped(managerCfg, namespaces)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering Manager", err, logc)
 		return reconcile.Result{}, err
@@ -622,11 +641,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	components := []render.Component{
-		// Installs namespaced objects.
+		// Install manager components.
 		component,
-
-		// Installs cluster-scoped objects.
-		clusterScopedComponent,
 
 		// Installs KeyPairs and trusted bundle (if not pre-installed)
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -635,10 +651,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			ServiceAccounts: []string{render.ManagerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
 			},
 			TrustedBundle: bundleMaker,
 		}),

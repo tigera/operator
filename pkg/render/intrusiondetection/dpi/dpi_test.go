@@ -176,14 +176,16 @@ var _ = Describe("DPI rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		nodeKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
 		typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
 		dpiCertSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.DPITLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
+
 		trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair, dpiCertSecret)
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			TyphaSecret:   typhaKeyPair,
@@ -223,7 +225,7 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -277,7 +279,7 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -311,7 +313,7 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(createResources)).To(Equal(0))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -337,10 +339,10 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(createResources)).To(Equal(len(expectedCreateResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		for i, expectedRes := range expectedCreateResources {
-			rtest.ExpectResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -391,8 +393,8 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	Expect(dpiClusterRoleBinding.Subjects).Should(BeEquivalentTo(expectedCRB.Subjects))
 
 	dpiDaemonSet := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/node-certs"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/node-certs"))
 
 	Expect(dpiDaemonSet.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolumes))
 	Expect(dpiDaemonSet.Spec.Template.Spec.HostNetwork).Should(BeTrue())

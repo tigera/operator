@@ -101,6 +101,23 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	r.status.OnCRFound()
 
+	// Get all Tenants so we can perform validation.
+	tenants := operatorv1.TenantList{}
+	if err = r.client.List(ctx, &tenants); err != nil {
+		return reconcile.Result{}, err
+	}
+	for _, t := range tenants.Items {
+		if t.Spec.ID == tenant.Spec.ID && t.Namespace != tenant.Namespace {
+			// A tenant in a different namespace has the same ID as this tenant. This is not allowed.
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Multiple tenants with the ID '%s'", t.Spec.ID), err, logc)
+			return reconcile.Result{}, nil
+		}
+		if t.Namespace == tenant.Namespace && t.Name != tenant.Name {
+			// Multiple tenants in the same namespace. This is not allowed.
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Multiple Tenants in namespace '%s'", t.Namespace), err, logc)
+			return reconcile.Result{}, nil
+		}
+	}
 	// Get Installation resource.
 	_, installation, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {

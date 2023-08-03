@@ -1482,8 +1482,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	// Configure provider specific environment variables here.
 	switch c.cfg.Installation.KubernetesProvider {
 	case operatorv1.ProviderOpenShift:
-		// For Openshift, we need special configuration since our default port is already in use.
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})

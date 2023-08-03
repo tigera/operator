@@ -3512,7 +3512,7 @@ var _ = Describe("Node rendering tests", func() {
 					// - 2 added by the operator by default
 					// - 1 added by the calicoNodeDaemonSet override
 					Expect(ds.Spec.Template.Annotations).To(HaveLen(3))
-					Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+					Expect(ds.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
 					Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/cni-config"))
 					Expect(ds.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 

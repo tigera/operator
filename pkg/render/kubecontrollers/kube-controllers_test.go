@@ -811,7 +811,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			// - 1 added by the operator by default because TrustedBundle was set on kubecontrollerconfiguration.
 			// - 1 added by the calicoNodeDaemonSet override
 			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
-			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
 			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))

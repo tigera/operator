@@ -393,8 +393,8 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	Expect(dpiClusterRoleBinding.Subjects).Should(BeEquivalentTo(expectedCRB.Subjects))
 
 	dpiDaemonSet := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/node-certs"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/node-certs"))
 
 	Expect(dpiDaemonSet.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolumes))
 	Expect(dpiDaemonSet.Spec.Template.Spec.HostNetwork).Should(BeTrue())

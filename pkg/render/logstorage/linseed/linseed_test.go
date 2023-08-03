@@ -317,9 +317,9 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 
 	// Check annotations
 	if !useCSR {
-		ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-secure-linseed-cert", Not(BeEmpty())))
+		ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("tigera-operator.hash.operator.tigera.io/tigera-secure-linseed-cert", Not(BeEmpty())))
 	}
-	ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
+	ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("tigera-operator.hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
 
 	// Check permissions
 	clusterRole := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)

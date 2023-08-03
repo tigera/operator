@@ -297,7 +297,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		// Check annotations
 		if !useCSR {
-			Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-packetcapture-server-tls", Not(BeEmpty())))
+			Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("tigera-operator.hash.operator.tigera.io/tigera-packetcapture-server-tls", Not(BeEmpty())))
 		}
 
 		// Check permissions

@@ -58,8 +58,10 @@ var _ = Describe("Elasticsearch metrics", func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-			certificateManager, err := certificatemanager.Create(cli, nil, "", common.OperatorNamespace())
+
+			certificateManager, err := certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
+
 			bundle := certificateManager.CreateTrustedBundle()
 			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
@@ -70,7 +72,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 				ESConfig:     esConfig,
 				ESMetricsCredsSecret: &corev1.Secret{
 					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()},
+				},
 				ClusterDomain: "cluster.local",
 				ServerTLS:     secret,
 				TrustedBundle: bundle,
@@ -79,7 +82,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 		})
 
 		It("Successfully renders the Elasticsearch metrics resources", func() {
-
 			component := ElasticsearchMetrics(cfg)
 			Expect(component.ResolveImages(&operatorv1.ImageSet{
 				Spec: operatorv1.ImageSetSpec{
@@ -157,12 +159,14 @@ var _ = Describe("Elasticsearch metrics", func() {
 								Name:    ElasticsearchMetricsName,
 								Image:   "testregistry.com/tigera/elasticsearch-metrics@testdigest",
 								Command: []string{"/bin/elasticsearch_exporter"},
-								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
+								Args: []string{
+									"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
 									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
-									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt",
+								},
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},

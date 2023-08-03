@@ -65,7 +65,7 @@ var _ = Describe("Typha rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		cfg = render.TyphaConfiguration{
@@ -96,7 +96,7 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		//calico-typha clusterRole should have openshift securitycontextconstraints PolicyRule
+		// calico-typha clusterRole should have openshift securitycontextconstraints PolicyRule
 		typhaRole := rtest.GetResource(resources, "calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(typhaRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
@@ -413,7 +413,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 	It("should render all resources when certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.GetCertificatePEM()}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 		expectedResources := []struct {

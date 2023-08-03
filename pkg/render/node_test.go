@@ -124,8 +124,10 @@ var _ = Describe("Node rendering tests", func() {
 				scheme := runtime.NewScheme()
 				Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 				cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+
+				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				// Create a dummy secret to pass as input.
 				typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 
@@ -1781,7 +1783,7 @@ var _ = Describe("Node rendering tests", func() {
 					i++
 				}
 
-				//calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
+				// calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
 				nodeRole := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 				Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 					APIGroups:     []string{"security.openshift.io"},
@@ -1906,7 +1908,7 @@ var _ = Describe("Node rendering tests", func() {
 					i++
 				}
 
-				//calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
+				// calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
 				nodeRole := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 				Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 					APIGroups:     []string{"security.openshift.io"},
@@ -3280,8 +3282,10 @@ var _ = Describe("Node rendering tests", func() {
 				ca, _ := tls2.MakeCA(rmeta.DefaultOperatorCASignerName())
 				cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 				cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cert}
-				certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+
+				certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 				expectedResources := []struct {
 					name    string
@@ -3359,14 +3363,18 @@ var _ = Describe("Node rendering tests", func() {
 				cfg.Installation.FIPSMode = &fipsEnabled
 				cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
 				cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+
+				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				cfg.PrometheusServerTLS = certificateManager.KeyPair()
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
+
 				resources, _ := component.Objects()
 				nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
 				Expect(nodeDSObj).ToNot(BeNil())
+
 				nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
 				Expect(ok).To(BeTrue())
 
@@ -3382,14 +3390,18 @@ var _ = Describe("Node rendering tests", func() {
 				cfg.Installation.FIPSMode = &fipsEnabled
 				cfg.Installation.Variant = operatorv1.Calico
 				cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+
+				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				cfg.PrometheusServerTLS = certificateManager.KeyPair()
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
+
 				resources, _ := component.Objects()
 				nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
 				Expect(nodeDSObj).ToNot(BeNil())
+
 				nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
 				Expect(ok).To(BeTrue())
 

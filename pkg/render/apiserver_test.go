@@ -71,6 +71,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		dnsNames           []string
 		cli                client.Client
 		certificateManager certificatemanager.CertificateManager
+		err                error
 	)
 
 	BeforeEach(func() {
@@ -83,14 +84,17 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		dnsNames = dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		var err error
-		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
+
 		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).NotTo(HaveOccurred())
+
 		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 		trustedBundle = certificatemanagement.CreateTrustedBundle()
 		replicas = 2
@@ -879,7 +883,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should add an init container if certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		cfg.TLSKeyPair = kp
@@ -1079,7 +1083,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			}
 			// Enable certificate management.
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
-			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create and add the TLS keypair so the initContainer is rendered.
@@ -1523,7 +1527,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
@@ -1898,7 +1902,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			}
 			// Enable certificate management.
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
-			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create and add the TLS keypair so the initContainer is rendered.
@@ -2018,6 +2022,5 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
 		})
-
 	})
 })

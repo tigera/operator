@@ -207,7 +207,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	It("should render security context constrains properly when provider is openshift", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift}, compliance: compliance, complianceFeatureActive: true})
 
-		//tigera-manager-role clusterRole should have openshift securitycontextconstraints PolicyRule
+		// tigera-manager-role clusterRole should have openshift securitycontextconstraints PolicyRule
 		managerRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(managerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
@@ -432,7 +432,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
+			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
 			tunnelSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronTunnelSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
@@ -707,17 +707,23 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		var err error
 		secret, err := certificatemanagement.CreateSelfSignedSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName, nil)
 		Expect(err).NotTo(HaveOccurred())
+
 		kp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
+
 		internalKp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
+
 		voltronLinseedKP = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
+
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		bundle = certificateManager.CreateTrustedBundle()
 	})
 
@@ -1052,11 +1058,14 @@ func renderObjects(roc renderConfig) []client.Object {
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTraffic certificatemanagement.KeyPairInterface
 	var voltronLinseedKP certificatemanagement.KeyPairInterface
+
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-	certificateManager, err := certificatemanager.Create(cli, roc.installation, clusterDomain, common.OperatorNamespace())
+
+	certificateManager, err := certificatemanager.Create(cli, roc.installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
+
 	bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 
 	if roc.managementCluster != nil {

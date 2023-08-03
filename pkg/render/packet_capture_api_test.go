@@ -59,8 +59,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -377,8 +379,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
-		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 

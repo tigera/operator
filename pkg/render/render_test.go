@@ -135,8 +135,8 @@ var _ = Describe("Rendering tests", func() {
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var internalManagerKeyPair certificatemanagement.KeyPairInterface
-	var logSeverity = operatorv1.LogLevelInfo
-	var logFileMaxSize = resource.MustParse("100Mi")
+	logSeverity := operatorv1.LogLevelInfo
+	logFileMaxSize := resource.MustParse("100Mi")
 	var logFileMaxAgeDays uint32 = 30
 	var logFileMaxCount uint32 = 10
 	one := intstr.FromInt(1)
@@ -174,9 +174,11 @@ var _ = Describe("Rendering tests", func() {
 		}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		internalManagerKeyPair, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())

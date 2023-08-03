@@ -119,13 +119,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
 
-		// Set up a default config to pass to render.
-
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		cfg = kubecontrollers.KubeControllersConfiguration{
 			K8sServiceEp:  k8sServiceEp,
 			Installation:  instance,
@@ -455,16 +455,20 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			},
 		}
+
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(cli,
 			kubecontrollers.KubeControllerPrometheusTLSSecret,
 			common.OperatorNamespace(),
 			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, dns.DefaultClusterDomain))
 		Expect(err).NotTo(HaveOccurred())
+
 		// Override configuration to match expected Enterprise config.
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.MetricsPort = 9094
@@ -668,7 +672,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				break
 			}
 		}
-
 	})
 
 	It("should add the OIDC prefix env variables", func() {
@@ -709,7 +712,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	Context("With calico-kube-controllers overrides", func() {
-		var rr1 = corev1.ResourceRequirements{
+		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
 				"memory":  resource.MustParse("300Mi"),
@@ -721,7 +724,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				"storage": resource.MustParse("10Gi"),
 			},
 		}
-		var rr2 = corev1.ResourceRequirements{
+		rr2 := corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("250m"),
 				corev1.ResourceMemory: resource.MustParse("64Mi"),
@@ -1070,16 +1073,18 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render init containers when certificate management is enabled", func() {
-
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.MetricsPort = 9094
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, dns.DefaultClusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		tls, err := certificateManager.GetOrCreateKeyPair(cli, kubecontrollers.KubeControllerPrometheusTLSSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
+
 		cfg.MetricsServerTLS = tls
 
 		resources, _ := kubecontrollers.NewCalicoKubeControllers(&cfg).Objects()

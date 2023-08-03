@@ -55,8 +55,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.FluentdConfiguration{
@@ -91,7 +93,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		//tigera-fluentd clusterRole should have openshift securitycontextconstraints PolicyRule
+		// tigera-fluentd clusterRole should have openshift securitycontextconstraints PolicyRule
 		fluentdRole := rtest.GetResource(resources, "tigera-fluentd", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(fluentdRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},

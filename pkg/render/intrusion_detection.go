@@ -15,6 +15,7 @@
 package render
 
 import (
+	"crypto/x509"
 	"fmt"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -88,6 +90,7 @@ const (
 
 var adAPIReplicas int32 = 1
 
+// Register secret/certs that need Server and Client Key usage
 var (
 	intrusionDetectionNamespaceSelector = fmt.Sprintf("projectcalico.org/name == '%s'", IntrusionDetectionNamespace)
 	IntrusionDetectionSourceEntityRule  = v3.EntityRule{
@@ -99,6 +102,12 @@ var (
 var IntrusionDetectionInstallerSourceEntityRule = v3.EntityRule{
 	NamespaceSelector: intrusionDetectionNamespaceSelector,
 	Selector:          fmt.Sprintf("job-name == '%s'", IntrusionDetectionInstallerJobName),
+}
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(AnomalyDetectorTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	certkeyusage.SetCertKeyUsage(DPITLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 }
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
@@ -521,6 +530,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 
 		rules = append(rules, managementRule...)
 	}
+
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		if c.syslogForwardingIsEnabled() || c.adAPIPersistentStorageEnabled() {
+			rules = append(rules, rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{PSSPrivileged},
+			})
+		}
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

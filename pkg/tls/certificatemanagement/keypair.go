@@ -84,6 +84,9 @@ func (k *KeyPair) Secret(namespace string) *corev1.Secret {
 }
 
 func (k *KeyPair) HashAnnotationKey() string {
+	if k.GetNamespace() == "" {
+		return fmt.Sprintf("hash.operator.tigera.io/%s", k.GetName())
+	}
 	return fmt.Sprintf("%s.hash.operator.tigera.io/%s", k.GetNamespace(), k.GetName())
 }
 

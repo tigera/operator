@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	. "github.com/onsi/gomega"
@@ -94,28 +95,26 @@ func ExpectResourceInList(objs []client.Object, name, ns, group, version, kind s
 func ExpectResources(resources []client.Object, expected []client.Object) {
 	// First, check that each actual resource is in the expected list.
 	for _, resource := range resources {
-		name := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-		ns := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-		gvk := resource.GetObjectKind().GroupVersionKind()
-		ExpectWithOffset(1, ExpectResource(gvk, name, ns, expected)).NotTo(HaveOccurred(), "Unexpected resouce was rendered")
+		ExpectWithOffset(1, ExpectResource(resource, expected)).NotTo(HaveOccurred(), "Unexpected resouce was rendered")
 	}
 
 	// Then, check that each expected resource is in the actual list.
 	for _, resource := range expected {
-		name := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-		ns := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-		gvk := resource.GetObjectKind().GroupVersionKind()
-		ExpectWithOffset(1, ExpectResource(gvk, name, ns, resources)).NotTo(HaveOccurred(), "Expected resource was not rendered")
+		ExpectWithOffset(1, ExpectResource(resource, resources)).NotTo(HaveOccurred(), "Expected resource was not rendered")
 	}
 }
 
 // ExpectResource checks that the given list of resources contains a resource with the given name and
 // namespace, and that the resource has the given GroupVersionKind.
-func ExpectResource(gvk schema.GroupVersionKind, name, ns string, resources []client.Object) error {
+func ExpectResource(expected client.Object, resources []client.Object) error {
+	name := expected.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
+	ns := expected.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
+
 	for _, resource := range resources {
-		if resource.GetObjectKind().GroupVersionKind() == gvk {
+		if reflect.TypeOf(resource) == reflect.TypeOf(expected) {
 			if resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName() == name &&
 				resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace() == ns {
+				// Same type, name, and namespace. Consider it a match.
 				return nil
 			}
 		}
@@ -125,17 +124,17 @@ func ExpectResource(gvk schema.GroupVersionKind, name, ns string, resources []cl
 	items := []string{}
 	for i, r := range resources {
 		items = append(items,
-			fmt.Sprintf("%d: %s Namespace=%s Name=%s",
+			fmt.Sprintf("%d: %T Namespace=%s Name=%s",
 				i,
-				r.GetObjectKind().GroupVersionKind(),
+				r,
 				r.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace(),
 				r.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName(),
 			))
 	}
 	if ns == "" {
-		return fmt.Errorf("%s %s not found in:\n\n%s", gvk, name, strings.Join(items, "\n"))
+		return fmt.Errorf("%T %s not found in:\n\n%s", expected, name, strings.Join(items, "\n"))
 	}
-	return fmt.Errorf("%s %s/%s not found in:\n\n%s", gvk, ns, name, strings.Join(items, "\n"))
+	return fmt.Errorf("%T %s/%s not found in:\n\n%s", expected, ns, name, strings.Join(items, "\n"))
 }
 
 // CompareResource checks that the given resource matches the expected name, namespace, group, version, and kind.

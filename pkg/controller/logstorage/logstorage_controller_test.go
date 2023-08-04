@@ -91,8 +91,7 @@ func mockEsCliCreator(client client.Client, ctx context.Context, elasticHTTPSEnd
 	return &mockESClient{}, nil
 }
 
-type mockESClient struct {
-}
+type mockESClient struct{}
 
 var _ = Describe("LogStorage controller", func() {
 	var (
@@ -116,7 +115,7 @@ var _ = Describe("LogStorage controller", func() {
 		ctx = context.Background()
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = certificatemanager.Create(cli, nil, "", common.OperatorNamespace())
+		certificateManager, err = certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -485,7 +484,6 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("test LogStorage reconciles successfully for elasticsearch basic license", func() {
-
 					Expect(cli.Create(ctx, &operatorv1.Authentication{
 						ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 						Spec: operatorv1.AuthenticationSpec{
@@ -854,7 +852,6 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("test that ES gateway TLS cert secret is created if not provided and has an OwnerReference on it", func() {
-
 					resources := []client.Object{
 						&storagev1.StorageClass{
 							ObjectMeta: metav1.ObjectMeta{
@@ -925,7 +922,6 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("should not add OwnerReference to user supplied ES gateway TLS cert", func() {
-
 					resources := []client.Object{
 						&storagev1.StorageClass{
 							ObjectMeta: metav1.ObjectMeta{
@@ -1101,7 +1097,6 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
 						Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 						Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
-
 					})
 					It("should reconcile with empty tigerastatus conditions", func() {
 						ts := &operatorv1.TigeraStatus{
@@ -1371,7 +1366,8 @@ var _ = Describe("LogStorage controller", func() {
 							&corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta},
 							&corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta},
 							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-								Name: render.ElasticsearchCuratorUserSecret, Namespace: render.ElasticsearchNamespace}},
+								Name: render.ElasticsearchCuratorUserSecret, Namespace: render.ElasticsearchNamespace,
+							}},
 						}
 						resources = append(resources, createESSecrets()...)
 						resources = append(resources, createKibanaSecrets()...)
@@ -1616,7 +1612,6 @@ var _ = Describe("LogStorage controller", func() {
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentLinseed.Image,
 								"sha256:linseedhash")))
-
 					})
 				})
 

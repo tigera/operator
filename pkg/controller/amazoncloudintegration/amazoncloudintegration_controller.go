@@ -208,7 +208,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 
 	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to load CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

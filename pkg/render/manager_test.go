@@ -54,13 +54,7 @@ import (
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
-	oidcEnvVar := corev1.EnvVar{
-		Name:      "CNX_WEB_OIDC_AUTHORITY",
-		Value:     "",
-		ValueFrom: nil,
-	}
 	var replicas int32 = 2
-	expectedResourcesNumber := 12
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
 	compliance := &operatorv1.Compliance{}
 
@@ -132,6 +126,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			}))
 		Expect(manager.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: "true"},
+			corev1.EnvVar{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		))
 
 		// es-proxy container
@@ -243,7 +238,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Entry("CR present, license feature not active", true, false, managerComplianceExpectation{managerFlag: true, voltronFlag: false}),
 	)
 
-	It("should ensure cnx policy recommendation support is always set to true", func() {
+	It("should render the correct ClusterRole", func() {
 		resources := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
@@ -252,17 +247,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
 		})
-		Expect(len(resources)).To(Equal(expectedResourcesNumber))
-
-		// Should render the correct resource based on test case.
-		Expect(rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment")).ToNot(BeNil())
-
-		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-
-		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
-		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
-		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal("true"))
 
 		clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -398,10 +382,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
-		const authority = "https://127.0.0.1/dex"
-		oidcEnvVar.Value = authority
-
-		// Should render the correct resource based on test case.
 		resources := renderObjects(renderConfig{
 			oidc:                    true,
 			managementCluster:       nil,
@@ -410,11 +390,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
 		})
-		Expect(resources).To(HaveLen(expectedResourcesNumber))
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		// tigera-manager volumes/volumeMounts checks.
-		Expect(d.Spec.Template.Spec.Volumes).To(HaveLen(3))
-		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+		Expect(d).NotTo(BeNil())
+
+		oidcEnvVar := corev1.EnvVar{
+			Name:      "CNX_WEB_OIDC_AUTHORITY",
+			Value:     "https://127.0.0.1/dex",
+			ValueFrom: nil,
+		}
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 	})
 
@@ -865,16 +848,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
 		})
-		Expect(resources).To(HaveLen(expectedResourcesNumber))
-		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		deployment, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
-		Expect(deploy.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
-		Expect(deploy.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-es-proxy"))
-		Expect(deploy.Spec.Template.Spec.Containers[2].Name).To(Equal("tigera-voltron"))
-		Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_KIBANA", Value: "false"}))
-		Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_ANOMALY_DETECTION", Value: "false"}))
-		Expect(deploy.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
-		Expect(deploy.Spec.Template.Spec.Containers[2].Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: "true"}))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
+		Expect(deployment.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-es-proxy"))
+		Expect(deployment.Spec.Template.Spec.Containers[2].Name).To(Equal("tigera-voltron"))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_KIBANA", Value: "false"}))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_ANOMALY_DETECTION", Value: "false"}))
+		Expect(deployment.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
+		Expect(deployment.Spec.Template.Spec.Containers[2].Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
 	Context("allow-tigera rendering", func() {

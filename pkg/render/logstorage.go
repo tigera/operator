@@ -195,6 +195,11 @@ var log = logf.Log.WithName("render")
 
 // LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
+	if cfg.KibanaEnabled && operatorv1.IsFIPSModeEnabled(cfg.Installation.FIPSMode) {
+		// This branch should only be hit if there is a coding bug in the controller, as KibanaEnabled
+		// should already take into account FIPS.
+		panic("BUG: Kibana is not supported in FIPS mode")
+	}
 	return &elasticsearchComponent{
 		cfg: cfg,
 	}

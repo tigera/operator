@@ -844,7 +844,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				})
 			})
 		})
-		It("should not render kibana if FIPS mode is enabled", func() {
+
+		It("should not render kibana when configured not to do so", func() {
+			cfg.KibanaEnabled = false
 			fipsEnabled := operatorv1.FIPSModeEnabled
 			cfg.Installation.FIPSMode = &fipsEnabled
 			cfg.LogStorage.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
@@ -986,8 +988,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				ClusterDomain:      "cluster.local",
 				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
 				UsePSP:             true,
+				KibanaEnabled:      true,
 			}
 		})
+
 		Context("Initial creation", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []resourceTestObj{
@@ -1011,7 +1015,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareResources(deleteResources, []resourceTestObj{})
 			})
 		})
+
 		Context("Deleting LogStorage", deleteLogStorageTests(nil, managementClusterConnection))
+
 		Context("allow-tigera rendering", func() {
 			policyNames := []types.NamespacedName{
 				{Name: "allow-tigera.elasticsearch-access", Namespace: "tigera-elasticsearch"},
@@ -1092,8 +1098,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				ClusterDomain:      "cluster.local",
 				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
 				UsePSP:             true,
+				KibanaEnabled:      true,
 			}
 		})
+
 		Context("Node distribution", func() {
 			When("the number of Nodes and NodeSets is 3", func() {
 				It("creates 3 1 Node NodeSet", func() {
@@ -1115,6 +1123,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}
 				})
 			})
+
 			When("the number of Nodes is 2 and the number of NodeSets is 3", func() {
 				It("creates 2 1 Node NodeSets", func() {
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
@@ -1135,6 +1144,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}
 				})
 			})
+
 			When("the number of Nodes is 6 and the number of NodeSets is 3", func() {
 				It("creates 3 2 Node NodeSets", func() {
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
@@ -1155,6 +1165,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}
 				})
 			})
+
 			When("the number of Nodes is 5 and the number of NodeSets is 6", func() {
 				It("creates 2 2 Node NodeSets and 1 1 Node NodeSet", func() {
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
@@ -1177,6 +1188,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				})
 			})
 		})
+
 		Context("Node Resource", func() {
 			When("the ResourceRequirements is set", func() {
 				defaultLimitCpu := "1"
@@ -1206,6 +1218,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					Expect(pod.Resources).Should(Equal(res))
 					Expect(pod.Env[0].Value).To(Equal("-Xms1G -Xmx1G"))
 				})
+
 				It("sets default memory and cpu requirements in pod template", func() {
 					res := corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
@@ -1237,6 +1250,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					Expect(pod.Resources).Should(Equal(expectedRes))
 					Expect(pod.Env[0].Value).To(Equal("-Xms2G -Xmx2G"))
 				})
+
 				It("sets value of Limits to user's Requests when user's Limits is not set and default Limits is lesser than Requests", func() {
 					res := corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -1266,6 +1280,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					Expect(pod.Resources).Should(Equal(expectedRes))
 					Expect(pod.Env[0].Value).To(Equal("-Xms512M -Xmx512M"))
 				})
+
 				It("sets value of Requests to user's Limits when user's Requests is not set and default Requests is greater than Limits", func() {
 					res := corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
@@ -1293,6 +1308,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
 					Expect(podResource).Should(Equal(expectedRes))
 				})
+
 				It("sets storage requirements in pvc template", func() {
 					res := corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
@@ -1313,6 +1329,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
 					Expect(pvcResource).Should(Equal(res))
 				})
+
 				It("sets storage value of Requests to user's Limits when user's Requests is not set and default Requests is greater than Limits in pvc template", func() {
 					res := corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
@@ -1356,6 +1373,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					Expect(len(nodeSets)).Should(Equal(1))
 				})
 			})
+
 			When("there is a single selection attribute for a NodeSet", func() {
 				It("sets the Node Affinity Elasticsearch cluster awareness attributes with the single selection attribute", func() {
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
@@ -1427,6 +1445,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}))
 				})
 			})
+
 			When("there are multiple selection attributes for a NodeSet", func() {
 				It("combines to attributes for the Node Affinity and Elasticsearch cluster awareness attributes", func() {
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
@@ -1579,6 +1598,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				ClusterConfig:        esConfig,
 				ElasticsearchKeyPair: elasticsearchKeyPair,
 				KibanaKeyPair:        kibanaKeyPair,
+				KibanaEnabled:        true,
 				TrustedBundle:        trustedBundle,
 				PullSecrets: []*corev1.Secret{
 					{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
@@ -1699,6 +1719,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 				ManagementClusterConnection: managementClusterConnection,
 				Elasticsearch:               &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
 				Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
+				KibanaEnabled:               true,
 				ClusterConfig:               esConfig,
 				ElasticsearchKeyPair:        elasticsearchKeyPair,
 				KibanaKeyPair:               kibanaKeyPair,

@@ -45,7 +45,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	networkpolicy "github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -431,6 +430,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Installation:          installation,
 				ClusterConfig:         &relasticsearch.ClusterConfig{},
 				Namespace:             render.ManagerNamespace,
+				TruthNamespace:        common.OperatorNamespace(),
 			}
 		})
 
@@ -705,6 +705,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			UsePSP:                true,
 			InternalTLSKeyPair:    internalKp,
 			Namespace:             render.ManagerNamespace,
+			TruthNamespace:        common.OperatorNamespace(),
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -747,33 +748,22 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			ns:                      render.ManagerNamespace,
 		})
 
-		// Should render the correct resources.
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.ManagerPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: "tigera-manager", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
+			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
+			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
+			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsViewDefault}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
+			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 		}
-
-		Expect(resources).To(HaveLen(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(resources, expectedResources)
 
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
@@ -873,6 +863,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 				expectedPolicy := getExpectedPolicy(scenario)
+				if expectedPolicy != nil {
+					// Check fields individuall before checking the entire struct so that we get
+					// more useful failure messages.
+					Expect(policy.ObjectMeta).To(Equal(expectedPolicy.ObjectMeta))
+					Expect(policy.Spec.Ingress).To(ConsistOf(expectedPolicy.Spec.Ingress))
+					Expect(policy.Spec.Egress).To(ConsistOf(expectedPolicy.Spec.Egress))
+					Expect(policy.Spec.Selector).To(Equal(expectedPolicy.Spec.Selector))
+					Expect(policy.Spec.Order).To(Equal(expectedPolicy.Spec.Order))
+					Expect(policy.Spec.Tier).To(Equal(expectedPolicy.Spec.Tier))
+					Expect(policy.Spec.Types).To(Equal(expectedPolicy.Spec.Types))
+					Expect(policy.Spec.ServiceAccountSelector).To(Equal(expectedPolicy.Spec.ServiceAccountSelector))
+				}
 				Expect(policy).To(Equal(expectedPolicy))
 			},
 			// Manager only renders in the presence of a Manager CR, therefore does not have a config option for managed clusters.
@@ -1040,6 +1042,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		UsePSP:                  true,
 		Namespace:               roc.ns,
 		BindingNamespaces:       roc.bindingNamespaces,
+		TruthNamespace:          common.OperatorNamespace(),
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

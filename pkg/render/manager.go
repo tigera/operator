@@ -868,7 +868,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ESGatewaySourceEntityRule(),
+			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

@@ -544,6 +544,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			ResourceNames: []string{common.NodeDaemonSetName},
 		})
 	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
 	return role
 }
 
@@ -590,7 +598,6 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-
 	return role
 }
 
@@ -1647,9 +1654,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	// Configure provider specific environment variables here.
 	switch c.cfg.Installation.KubernetesProvider {
-	case operatorv1.ProviderOpenShift:
-		// For Openshift, we need special configuration since our default port is already in use.
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 	// For AKS/AzureVNET and EKS/VPCCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
 	case operatorv1.ProviderAKS:
 		if c.cfg.Installation.CNI.Type == operatorv1.PluginAzureVNET {

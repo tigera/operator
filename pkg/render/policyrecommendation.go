@@ -15,8 +15,11 @@
 package render
 
 import (
+	"crypto/x509"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,23 +31,31 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
 
 // The names of the components related to the PolicyRecommendation APIs related rendered objects.
 const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
-	PolicyRecommendationName       = "tigera-policy-recommendation"
-	PolicyRecommendationNamespace  = PolicyRecommendationName
-	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+	PolicyRecommendationName                  = "tigera-policy-recommendation"
+	PolicyRecommendationNamespace             = PolicyRecommendationName
+	PolicyRecommendationPodSecurityPolicyName = PolicyRecommendationName
+	PolicyRecommendationPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationTLSSecretName = "policy-recommendation-tls"
 )
 
 var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(PolicyRecommendationTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
 
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
@@ -114,6 +125,10 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		pr.deployment(),
 	)
 
+	if pr.cfg.UsePSP {
+		objs = append(objs, pr.podSecurityPolicy())
+	}
+
 	return objs, nil
 }
 
@@ -162,6 +177,15 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 		},
 	}
 
+	if pr.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PolicyRecommendationPodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -193,6 +217,10 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 			},
 		},
 	}
+}
+
+func (pr *policyRecommendationComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(PolicyRecommendationPodSecurityPolicyName)
 }
 
 // deployment returns the policy recommendation deployments. It assumes that this is defined for

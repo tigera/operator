@@ -778,9 +778,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
-		Expect(deployment.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		csrInitContainer := deployment.Spec.Template.Spec.InitContainers[0]
-		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ManagerTLSSecretName)))
+		Expect(deployment.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+		managerCSRInitContainer := deployment.Spec.Template.Spec.InitContainers[0]
+		internalManagerCSRInitContainer := deployment.Spec.Template.Spec.InitContainers[0]
+		Expect(managerCSRInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ManagerTLSSecretName)))
+		Expect(internalManagerCSRInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ManagerInternalTLSSecretName)))
 
 		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))

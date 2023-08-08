@@ -123,6 +123,19 @@ func (k *KeyPair) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
 
 // InitContainer contains an init container for making a CSR. is only applicable when certificate management is enabled.
 func (k *KeyPair) InitContainer(namespace string) corev1.Container {
+	if len(k.DNSNames) == 0 {
+		initContainer := CreateCSRInitContainer(
+			k.CertificateManagement,
+			k.CSRImage,
+			k.GetName(),
+			"",
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			k.DNSNames,
+			namespace)
+		initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
+		return initContainer
+	}
 	initContainer := CreateCSRInitContainer(
 		k.CertificateManagement,
 		k.CSRImage,

@@ -415,7 +415,6 @@ func expectedContainers() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
 			},
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
@@ -424,7 +423,6 @@ func expectedContainers() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
 			},
 			Env: []corev1.EnvVar{
 				{

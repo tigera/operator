@@ -1738,9 +1738,8 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	rp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
 		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
-		// This timeout should be less than the PeriodSeconds.
-		TimeoutSeconds: 5,
-		PeriodSeconds:  10,
+		// This timeout should be less than the PeriodSeconds (30s in controller/utils/component.go).
+		TimeoutSeconds: 10,
 	}
 	return lp, rp
 }

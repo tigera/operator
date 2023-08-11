@@ -90,6 +90,7 @@ var _ = Describe("Manager controller tests", func() {
 		clusterDomain := "some.domain"
 		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
 		expectedDNSNames = append(expectedDNSNames, "localhost")
+		var certificateManager certificatemanager.CertificateManager
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -166,7 +167,8 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
 			// Provision certificates that the controller will query as part of the test.
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			var err error
+			certificateManager, err = certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
 			Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
@@ -326,6 +328,28 @@ var _ = Describe("Manager controller tests", func() {
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, dnsNames...)
+		})
+
+		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
+			internalTLS := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ManagerInternalTLSSecretName,
+					Namespace: common.OperatorNamespace(),
+				},
+			}
+			Expect(c.Delete(ctx, internalTLS)).NotTo(HaveOccurred())
+			// Create a internal manager TLS secret with old DNS name.
+			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
+			dnsNames = append(dnsNames, "localhost")
+			Expect(test.GetResource(c, internalTLS)).To(BeNil())
+			test.VerifyCert(internalTLS, dnsNames...)
 		})
 	})
 

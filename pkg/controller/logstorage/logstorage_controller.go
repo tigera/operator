@@ -115,37 +115,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: linseed.PolicyName, Namespace: render.ElasticsearchNamespace},
 	})
 
-	return add(mgr, c)
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(
-	cli client.Client,
-	schema *runtime.Scheme,
-	statusMgr status.StatusManager,
-	opts options.AddOptions,
-	esCliCreator utils.ElasticsearchClientCreator,
-	tierWatchReady *utils.ReadyFlag,
-) (*ReconcileLogStorage, error) {
-	c := &ReconcileLogStorage{
-		client:         cli,
-		scheme:         schema,
-		status:         statusMgr,
-		provider:       opts.DetectedProvider,
-		esCliCreator:   esCliCreator,
-		clusterDomain:  opts.ClusterDomain,
-		tierWatchReady: tierWatchReady,
-		usePSP:         opts.UsePSP,
-	}
-
-	c.status.Run(opts.ShutdownContext)
-	return c, nil
-}
-
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch for changes to primary resource LogStorage
-	err := c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -246,6 +217,31 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	return nil
 }
 
+// newReconciler returns a new reconcile.Reconciler
+func newReconciler(
+	cli client.Client,
+	schema *runtime.Scheme,
+	statusMgr status.StatusManager,
+	opts options.AddOptions,
+	esCliCreator utils.ElasticsearchClientCreator,
+	tierWatchReady *utils.ReadyFlag,
+) (*ReconcileLogStorage, error) {
+	c := &ReconcileLogStorage{
+		client:         cli,
+		scheme:         schema,
+		status:         statusMgr,
+		provider:       opts.DetectedProvider,
+		esCliCreator:   esCliCreator,
+		clusterDomain:  opts.ClusterDomain,
+		tierWatchReady: tierWatchReady,
+		usePSP:         opts.UsePSP,
+		multiTenant:    opts.MultiTenant,
+	}
+
+	c.status.Run(opts.ShutdownContext)
+	return c, nil
+}
+
 // blank assignment to verify that ReconcileLogStorage implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileLogStorage{}
 
@@ -261,6 +257,7 @@ type ReconcileLogStorage struct {
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
 	usePSP         bool
+	multiTenant    bool
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -846,6 +843,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			authentication,
 			esLicenseType,
 			ctx,
+			r.multiTenant,
 		)
 		if err != nil || !proceed {
 			return result, err

@@ -72,6 +72,7 @@ type KubeControllersConfiguration struct {
 	Installation                *operatorv1.InstallationSpec
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+	MultiTenant                 bool
 	Authentication              *operatorv1.Authentication
 
 	// Whether or not the LogStorage CRD is present in the cluster.
@@ -480,6 +481,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
+
+		env = append(env, corev1.EnvVar{Name: "MULTI_TENANT", Value: fmt.Sprintf("%v", c.cfg.MultiTenant)})
 	}
 
 	if c.cfg.MetricsServerTLS != nil {

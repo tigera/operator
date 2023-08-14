@@ -209,8 +209,6 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{"check-status", "-r"}))
 		Expect(container.ReadinessProbe.InitialDelaySeconds).To(BeEquivalentTo(10))
-		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
-		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
 
 		Expect(*container.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*container.SecurityContext.Privileged).To(BeFalse())

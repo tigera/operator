@@ -967,7 +967,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 				},
 			},
 			InitialDelaySeconds: 90,
-			PeriodSeconds:       10,
+			TimeoutSeconds:      10,
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -977,9 +977,9 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 					},
 				},
 			},
-			InitialDelaySeconds: 5,
-			PeriodSeconds:       10,
 			FailureThreshold:    5,
+			InitialDelaySeconds: 5,
+			TimeoutSeconds:      10,
 		},
 	}
 
@@ -1059,7 +1059,6 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 				},
 			},
 			InitialDelaySeconds: 90,
-			PeriodSeconds:       10,
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,

@@ -1654,9 +1654,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	// Configure provider specific environment variables here.
 	switch c.cfg.Installation.KubernetesProvider {
-	case operatorv1.ProviderOpenShift:
-		// For Openshift, we need special configuration since our default port is already in use.
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
 	// For AKS/AzureVNET and EKS/VPCCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
 	case operatorv1.ProviderAKS:
 		if c.cfg.Installation.CNI.Type == operatorv1.PluginAzureVNET {
@@ -1748,9 +1745,8 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	rp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
 		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
-		// This timeout should be less than the PeriodSeconds.
-		TimeoutSeconds: 5,
-		PeriodSeconds:  10,
+		// This timeout should be less than the PeriodSeconds (30s in controller/utils/component.go).
+		TimeoutSeconds: 10,
 	}
 	return lp, rp
 }

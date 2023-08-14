@@ -322,7 +322,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 90,
-				PeriodSeconds:       10,
 			},
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
@@ -332,7 +331,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
 			},
 			SecurityContext: securitycontext.NewNonRootContext(),
 		},

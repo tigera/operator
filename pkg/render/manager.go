@@ -391,7 +391,6 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 90,
-		PeriodSeconds:       10,
 	}
 }
 
@@ -406,7 +405,6 @@ func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 90,
-		PeriodSeconds:       10,
 	}
 }
 
@@ -421,7 +419,6 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 90,
-		PeriodSeconds:       10,
 	}
 }
 

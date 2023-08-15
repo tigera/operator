@@ -417,7 +417,7 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	return authentication, nil
 }
 
-// Get the Tenant instance in the given namespace.
+// GetTenant returns the Tenant instance in the given namespace.
 func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*operatorv1.Tenant, string, error) {
 	if !mt {
 		// Multi-tenancy isn't enabled. Return nil.
@@ -437,7 +437,7 @@ func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*ope
 	return instance, instance.Spec.ID, nil
 }
 
-// Get all namespaces that contain a tenant.
+// TenantNamespaces returns all namespaces that contain a tenant.
 func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) {
 	namespaces := []string{}
 	tenants := operatorv1.TenantList{}

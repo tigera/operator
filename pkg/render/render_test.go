@@ -107,7 +107,6 @@ func allCalicoComponents(
 		Installation:                cr,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
-		ManagerInternalSecret:       managerInternalTLSSecret,
 		ClusterDomain:               clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		UsePSP:                      true,

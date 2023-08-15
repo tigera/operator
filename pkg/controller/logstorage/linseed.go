@@ -42,6 +42,7 @@ func (r *ReconcileLogStorage) createLinseed(
 	tokenKeyPair certificatemanagement.KeyPairInterface,
 	trustedBundle certificatemanagement.TrustedBundle,
 	managementCluster bool,
+	multiTenant bool,
 	usePSP bool,
 	esClusterConfig *relasticsearch.ClusterConfig,
 ) (reconcile.Result, bool, error) {
@@ -56,6 +57,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		UsePSP:            usePSP,
 		ESClusterConfig:   esClusterConfig,
 		ManagementCluster: managementCluster,
+		MultiTenant:       multiTenant,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

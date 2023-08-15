@@ -264,7 +264,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		)
 	})
 
-	FContext("multi-tenant rendering", func() {
+	Context("multi-tenant rendering", func() {
 		tenantANamespace := "tenant-a"
 		tenantBNamespace := "tenant-b"
 		It("should render expected components inside expected namespace for each policyrecommendation instance", func() {

@@ -243,6 +243,21 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
 		})
 	})
+	Context("multi-tenant rendering", func() {
+		It("should render correct MULTI_TENANT environment variable value", func() {
+			cfg := &Config{
+				MultiTenant: true,
+			}
+
+			component := Linseed(cfg)
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "MULTI_TENANT", Value: fmt.Sprintf("%v", true),
+			}))
+		})
+	})
 })
 
 func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {

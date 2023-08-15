@@ -289,6 +289,7 @@ WHAT?=.
 GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
 
+.PHONY: ut
 ut:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \

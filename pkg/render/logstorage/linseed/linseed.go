@@ -49,8 +49,6 @@ import (
 const (
 	DeploymentName        = "tigera-linseed"
 	ServiceAccountName    = "tigera-linseed"
-	RoleName              = "tigera-linseed"
-	ServiceName           = "tigera-linseed"
 	PodSecurityPolicyName = "tigera-linseed"
 	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
 	PortName              = "tigera-linseed"
@@ -287,6 +285,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	if l.cfg.KeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
+	}
+	if l.cfg.TokenKeyPair != nil && l.cfg.TokenKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
 	}
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()

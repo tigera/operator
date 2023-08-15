@@ -40,7 +40,6 @@ func (r *ReconcileLogStorage) createESKubeControllers(
 	authentication *operatorv1.Authentication,
 	esLicenseType render.ElasticsearchLicenseType,
 	ctx context.Context,
-	multiTenant bool,
 ) (reconcile.Result, bool, error) {
 	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace())
 	if err != nil {

@@ -843,7 +843,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			authentication,
 			esLicenseType,
 			ctx,
-			r.multiTenant,
 		)
 		if err != nil || !proceed {
 			return result, err

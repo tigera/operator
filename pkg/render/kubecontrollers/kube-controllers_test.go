@@ -97,7 +97,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 		{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 		{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
-		{Name: "MULTI_TENANT", Value: fmt.Sprintf("%v", false)},
 	}
 	expectedPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
 	expectedPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")
@@ -1098,22 +1097,5 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		csrInitContainer := dp.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", kubecontrollers.KubeControllerPrometheusTLSSecret)))
-	})
-
-	Context("multi-tenant rendering", func() {
-		BeforeEach(func() {
-			cfg.MultiTenant = true
-			instance.Variant = operatorv1.TigeraSecureEnterprise
-		})
-		It("should render correct MULTI_TENANT environment variable value", func() {
-			component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
-			resources, _ := component.Objects()
-
-			dp := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			envs := dp.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{
-				Name: "MULTI_TENANT", Value: fmt.Sprintf("%v", true),
-			}))
-		})
 	})
 })

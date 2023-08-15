@@ -136,7 +136,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(policyRecController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(policyRecController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch the ConfigMap resource: %w", err)
 	}
 

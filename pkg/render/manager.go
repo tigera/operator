@@ -263,6 +263,12 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(ManagerNamespace))
 	}
+	if c.cfg.InternalTLSKeyPair != nil && c.cfg.InternalTLSKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.InternalTLSKeyPair.InitContainer(ManagerNamespace))
+	}
+	if c.cfg.VoltronLinseedKeyPair != nil && c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.VoltronLinseedKeyPair.InitContainer(ManagerNamespace))
+	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{

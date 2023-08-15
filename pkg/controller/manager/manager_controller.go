@@ -97,7 +97,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	go utils.WaitToAddLicenseKeyWatch(managerController, k8sClient, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, managerController, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(managerController, k8sClient, log, []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: helper.InstallNamespace()},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
@@ -110,32 +110,32 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for other operator.tigera.io resources.
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch Network resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(controller, ResourceName); err != nil {
+	if err = utils.AddTigeraStatusWatch(managerController, ResourceName); err != nil {
 		return fmt.Errorf("manager-controller failed to watch manager Tigerastatus: %w", err)
 	}
-	if err = controller.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
+	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = controller.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = managerController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
 		}
 	}

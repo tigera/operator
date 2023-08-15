@@ -260,12 +260,12 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	linseedKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedSecret, helper.InstallNamespace())
+	linseedKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedSecret, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed KeyPair", err, reqLogger)
 		return reconcile.Result{}, err
 	} else if linseedKeyPair == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.InstallNamespace(), render.TigeraLinseedSecret), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.TruthNamespace(), render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, nil
 	}
 	tokenKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace())
@@ -273,7 +273,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed token secret", err, reqLogger)
 		return reconcile.Result{}, err
 	} else if tokenKeyPair == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.InstallNamespace(), render.TigeraLinseedTokenSecret), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.TruthNamespace(), render.TigeraLinseedTokenSecret), err, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

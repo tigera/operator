@@ -54,7 +54,6 @@ const (
 	ManagerServiceName           = "tigera-manager"
 	ManagerDeploymentName        = "tigera-manager"
 	ManagerNamespace             = "tigera-manager"
-	ManagerServiceIP             = "localhost"
 	ManagerServiceAccount        = "tigera-manager"
 	ManagerClusterRole           = "tigera-manager-role"
 	ManagerClusterRoleBinding    = "tigera-manager-binding"
@@ -476,6 +475,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "VOLTRON_URL", Value: "https://tigera-manager.tigera-manager.svc:9443"},
 	}
 
 	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
@@ -731,6 +731,11 @@ func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurity
 // Allow users to access Calico Enterprise Manager.
 func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ManagerEntityRule,
+		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,

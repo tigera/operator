@@ -321,14 +321,24 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Get or create a certificate for clients of the manager pod es-proxy container.
-	svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), "localhost")
+	dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerTLSSecretName,
 		common.OperatorNamespace(),
-		svcDNSNames)
+		dnsNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating manager TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		render.ManagerInternalTLSSecretName,
+		common.OperatorNamespace(),
+		dnsNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -444,16 +454,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// We expect that the secret that holds the certificates for internal communication within the management
-	// K8S cluster is already created by the KubeControllers
-	internalTrafficSecret, err := certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
-	if internalTrafficSecret == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), nil, reqLogger)
-		return reconcile.Result{}, err
-	} else if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
-		return reconcile.Result{}, nil
-	}
 	// Es-proxy needs to trust Voltron for cross-cluster requests.
 	trustedBundle.AddCertificates(internalTrafficSecret)
 
@@ -562,7 +562,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
 			},
 			TrustedBundle: trustedBundle,

@@ -295,10 +295,10 @@ var _ = Describe("Manager controller tests", func() {
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, expectedDNSNames...)
+			test.VerifyCert(secret, []string{"localhost"}...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, expectedDNSNames...)
+			test.VerifyCert(secret, []string{"localhost"}...)
 
 			// Check that the internal secret was copied over to the manager namespace
 			internalSecret := &corev1.Secret{}
@@ -347,7 +347,6 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalTLS)).To(BeNil())
 			test.VerifyCert(internalTLS, dnsNames...)
 		})

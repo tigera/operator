@@ -321,17 +321,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Get or create a certificate for clients of the manager pod es-proxy container.
-	dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerTLSSecretName,
 		common.OperatorNamespace(),
-		dnsNames)
+		[]string{"localhost"})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating manager TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
+	dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain))
 	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerInternalTLSSecretName,

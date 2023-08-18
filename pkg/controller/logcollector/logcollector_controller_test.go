@@ -131,12 +131,10 @@ var _ = Describe("LogCollector controller tests", func() {
 
 		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
-
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 
 		kibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
 		Expect(err).NotTo(HaveOccurred())
-
 		Expect(c.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, &corev1.Secret{
@@ -148,8 +146,11 @@ var _ = Describe("LogCollector controller tests", func() {
 
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
-
 		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.LinseedServiceName})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Apply the logcollector CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.LogCollector{

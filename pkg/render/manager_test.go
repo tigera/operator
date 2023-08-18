@@ -119,9 +119,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// manager container
 		Expect(*manager.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*manager.SecurityContext.Privileged).To(BeFalse())
-		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*manager.SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(999))
+		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 		Expect(manager.SecurityContext.Capabilities).To(Equal(
 			&corev1.Capabilities{
 				Drop: []corev1.Capability{"ALL"},

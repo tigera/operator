@@ -18,9 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
-
-	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -46,8 +43,7 @@ var log = logf.Log.WithName("controller_logstorage")
 
 const (
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
-	LogStorageFinalizer              = "tigera.io/eck-cleanup"
-	ResourceName                     = "log-storage"
+	TigeraStatusName                 = "log-storage"
 	defaultEckOperatorMemorySetting  = "512Mi"
 )
 
@@ -63,7 +59,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		client:      mgr.GetClient(),
 		scheme:      mgr.GetScheme(),
 		multiTenant: opts.MultiTenant,
-		status:      status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion),
+		status:      status.New(mgr.GetClient(), TigeraStatusName, opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -96,8 +92,8 @@ type LogStorageInitializer struct {
 	multiTenant bool
 }
 
-// fillDefaults populates the default values onto an LogStorage object.
-func fillDefaults(opr *operatorv1.LogStorage) {
+// FillDefaults populates the default values onto an LogStorage object.
+func FillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Retention == nil {
 		opr.Spec.Retention = &operatorv1.Retention{}
 	}
@@ -177,23 +173,12 @@ func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
 	return nil
 }
 
-func setLogStorageFinalizer(ls *operatorv1.LogStorage) {
-	if ls.DeletionTimestamp == nil {
-		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
-			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
-		}
-	}
-}
-
 func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
 	ls := &operatorv1.LogStorage{}
 	key := utils.DefaultTSEEInstanceKey
-	if r.multiTenant {
-		key.Namespace = request.Namespace
-	}
 	err := r.client.Get(ctx, key, ls)
 	if errors.IsNotFound(err) {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
@@ -213,13 +198,12 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		preDefaultingPatchFrom := client.MergeFrom(ls.DeepCopy())
 
 		// Default and validate the object.
-		fillDefaults(ls)
+		FillDefaults(ls)
 		err = validateComponentResources(&ls.Spec)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "An error occurred while validating LogStorage", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		setLogStorageFinalizer(ls)
 
 		// Write the logstorage back to the datastore with its newly applied defaults.
 		if err = r.client.Patch(ctx, ls, preDefaultingPatchFrom); err != nil {
@@ -229,10 +213,9 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		defer r.status.SetMetaData(&ls.ObjectMeta)
 
 		// Update the LogStorage status conditions with the conditions found on the TigeraStatus resource.
-		// TODO: This should happen in the other sub controllers as well.
-		if request.Name == ResourceName && request.Namespace == "" {
+		if request.Name == TigeraStatusName && request.Namespace == "" {
 			ts := &operatorv1.TigeraStatus{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts)
+			err := r.client.Get(ctx, types.NamespacedName{Name: TigeraStatusName}, ts)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -244,64 +227,8 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Determine if we're terminating, and thus if we need to clean up our finalizers. We add a finalizer to the LogStorage
-	// so that we can block deletion of it until downstream resources have termianted. Specifically, the Elasticsearch and Kibana
-	// instances. So, check if those have been deleted before removing the finalizer.
-	if ls != nil && ls.DeletionTimestamp != nil {
-		prePatch := client.MergeFrom(ls.DeepCopy())
-
-		// Get Installation resource.
-		_, install, err := utils.GetInstallation(context.Background(), r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// Check whether ES and Kibana CRs exist.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		var kibana *kbv1.Kibana
-		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
-			err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kibana)
-			if err != nil && !errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
-		// Remove the finalizer if both ES and Kibana have been cleaned up.
-		if elasticsearch == nil && kibana == nil {
-			ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
-
-			// Write the logstorage back to the datastore
-			if patchErr := r.client.Patch(ctx, ls, prePatch); patchErr != nil {
-				reqLogger.Error(patchErr, "Error patching the log-storage")
-				r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching the log-storage", patchErr, reqLogger)
-				return reconcile.Result{}, patchErr
-			}
-		}
-	}
-
 	// Mark the status as available.
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-
-	// Since we don't poll for the object we need to make sure the object wouldn't have been deleted on the patch
-	// that may have removed the finalizers.
-	if ls != nil && (ls.DeletionTimestamp == nil || len(ls.GetFinalizers()) > 0) {
-		ls.Status.State = operatorv1.TigeraStatusReady
-		if err := r.client.Status().Update(ctx, ls); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	return reconcile.Result{}, nil
 }

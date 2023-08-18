@@ -642,10 +642,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-					{render.EsCuratorName, "", &rbacv1.ClusterRole{}, nil},
-					{render.EsCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.EsCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
+					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
+					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
+					{render.ESCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
@@ -898,7 +898,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			compareResources(createResources, expectedCreateResources)
 			compareResources(deleteResources, []resourceTestObj{
 				{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
-				{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
+				{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 			})
 
 			es := getElasticsearch(createResources)

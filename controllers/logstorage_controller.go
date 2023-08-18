@@ -48,6 +48,9 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 	if err := initializer.Add(mgr, opts); err != nil {
 		return err
 	}
+	if err := initializer.AddConditionsController(mgr, opts); err != nil {
+		return err
+	}
 	if err := secrets.Add(mgr, opts); err != nil {
 		return err
 	}

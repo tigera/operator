@@ -69,7 +69,7 @@ var (
 	eckOperatorObjKey = client.ObjectKey{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}
 	esObjKey          = client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}
 	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
-	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.EsCuratorName}
+	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.ESCuratorName}
 
 	esCertSecretKey     = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: render.ElasticsearchNamespace}
 	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}
@@ -1403,13 +1403,13 @@ var _ = Describe("LogStorage controller", func() {
 						cj := batchv1.CronJob{
 							TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
 							ObjectMeta: metav1.ObjectMeta{
-								Name:      render.EsCuratorName,
+								Name:      render.ESCuratorName,
 								Namespace: render.ElasticsearchNamespace,
 							},
 						}
 						Expect(test.GetResource(cli, &cj)).To(BeNil())
 						Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
-						curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.EsCuratorName)
+						curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.ESCuratorName)
 						Expect(curator).ToNot(BeNil())
 						Expect(curator.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s:%s",
@@ -1521,13 +1521,13 @@ var _ = Describe("LogStorage controller", func() {
 						cj := batchv1.CronJob{
 							TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
 							ObjectMeta: metav1.ObjectMeta{
-								Name:      render.EsCuratorName,
+								Name:      render.ESCuratorName,
 								Namespace: render.ElasticsearchNamespace,
 							},
 						}
 						Expect(test.GetResource(cli, &cj)).To(BeNil())
 						Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
-						curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.EsCuratorName)
+						curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.ESCuratorName)
 						Expect(curator).ToNot(BeNil())
 						Expect(curator.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",

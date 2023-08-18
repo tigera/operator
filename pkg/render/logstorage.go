@@ -109,7 +109,7 @@ const (
 	DefaultElasticsearchReplicas    = 0
 	DefaultElasticStorageGi         = 10
 
-	EsCuratorName           = "elastic-curator"
+	ESCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
 	EsCuratorPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + "allow-elastic-curator"
 
@@ -188,7 +188,7 @@ var (
 	KibanaEntityRule            = networkpolicy.CreateEntityRule(KibanaNamespace, KibanaName, KibanaPort)
 	KibanaSourceEntityRule      = networkpolicy.CreateSourceEntityRule(KibanaNamespace, KibanaName)
 	ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
-	ESCuratorSourceEntityRule   = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, EsCuratorName)
+	ESCuratorSourceEntityRule   = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, ESCuratorName)
 )
 
 var log = logf.Log.WithName("render")
@@ -1535,23 +1535,23 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EsCuratorName,
+			Name:      ESCuratorName,
 			Namespace: ElasticsearchNamespace,
 		},
 		Spec: batchv1.CronJobSpec{
 			Schedule: schedule,
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: EsCuratorName,
+					Name: ESCuratorName,
 					Labels: map[string]string{
-						"k8s-app": EsCuratorName,
+						"k8s-app": ESCuratorName,
 					},
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
-								"k8s-app": EsCuratorName,
+								"k8s-app": ESCuratorName,
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -1559,7 +1559,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
 								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:            EsCuratorName,
+									Name:            ESCuratorName,
 									Image:           es.curatorImage,
 									ImagePullPolicy: ImagePullPolicy(),
 									Env:             es.curatorEnvVars(),
@@ -1605,7 +1605,7 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EsCuratorName,
+			Name: ESCuratorName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1613,7 +1613,7 @@ func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{EsCuratorName},
+				ResourceNames: []string{ESCuratorName},
 			},
 		},
 	}
@@ -1622,12 +1622,12 @@ func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EsCuratorName,
+			Name: ESCuratorName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     EsCuratorName,
+			Name:     ESCuratorName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1640,7 +1640,7 @@ func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRole
 }
 
 func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(EsCuratorName)
+	return podsecuritypolicy.NewBasePolicy(ESCuratorName)
 }
 
 // Applying this in the eck namespace will start a trial license for enterprise features.
@@ -2038,7 +2038,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(EsCuratorName),
+			Selector: networkpolicy.KubernetesAppSelector(ESCuratorName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Egress:   egressRules,
 		},

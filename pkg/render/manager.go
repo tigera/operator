@@ -34,7 +34,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -410,21 +409,15 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
-	// UID 999 is used in the manager Dockerfile.
-	sc := securitycontext.NewNonRootContext()
-	sc.RunAsUser = ptr.Int64ToPtr(999)
-	sc.RunAsGroup = ptr.Int64ToPtr(0)
-
-	tm := corev1.Container{
+	return corev1.Container{
 		Name:            "tigera-manager",
 		Image:           c.managerImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
-		SecurityContext: sc,
+		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    c.managerVolumeMounts(),
 	}
-	return tm
 }
 
 // managerOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.

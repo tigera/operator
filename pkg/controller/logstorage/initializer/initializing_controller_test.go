@@ -16,6 +16,7 @@ package initializer
 
 import (
 	"context"
+	"reflect"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -24,8 +25,10 @@ import (
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 )
 
 func NewTestInitializer(
@@ -90,7 +94,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 		readyFlag.MarkAsReady()
 	})
 
-	Context("LogStorage is nil", func() {
+	Context("Controller tests", func() {
 		BeforeEach(func() {
 			// Create a basic Installation.
 			var replicas int32 = 2
@@ -220,6 +224,153 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			ls = &operatorv1.LogStorage{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
 			Expect(ls.Status.State).Should(Equal(operatorv1.TigeraStatusDegraded))
+		})
+
+		It("should set spec.componentResources to the default settings", func() {
+			// Create the expected value.
+			limits := corev1.ResourceList{}
+			requests := corev1.ResourceList{}
+			limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+			requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+			expectedComponentResources := []operatorv1.LogStorageComponentResource{
+				{
+					ComponentName: operatorv1.ComponentNameECKOperator,
+					ResourceRequirements: &corev1.ResourceRequirements{
+						Limits:   limits,
+						Requests: requests,
+					},
+				},
+			}
+
+			// Create a LogStorage instance and reconcile it.
+			ls := &operatorv1.LogStorage{}
+			ls.Name = "tigera-secure"
+			Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
+			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+			Expect(err).ShouldNot(HaveOccurred())
+			r.Reconcile(ctx, reconcile.Request{})
+
+			// Get the LogStorage and assert the component resources are set to the expected value.
+			ls = &operatorv1.LogStorage{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
+			Expect(ls.Spec.ComponentResources).NotTo(BeNil())
+			Expect(reflect.DeepEqual(expectedComponentResources, ls.Spec.ComponentResources)).To(BeTrue())
+		})
+	})
+
+	Context("validateComponentResources", func() {
+		ls := operatorv1.LogStorage{Spec: operatorv1.LogStorageSpec{}}
+
+		It("should return an error when spec.ComponentResources is nil", func() {
+			Expect(validateComponentResources(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when spec.ComponentResources.ComponentName is not ECKOperator", func() {
+			ls.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
+				{
+					ComponentName: "Typha",
+				},
+			}
+			Expect(validateComponentResources(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return an error when spec.ComponentResources has more than one entry", func() {
+			ls.Spec.ComponentResources = append(ls.Spec.ComponentResources, operatorv1.LogStorageComponentResource{
+				ComponentName: "KubeControllers",
+			})
+			Expect(validateComponentResources(&ls.Spec)).NotTo(BeNil())
+		})
+
+		It("should return nil when spec.ComponentResources has 1 entry for ECKOperator", func() {
+			ls.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
+				{
+					ComponentName: operatorv1.ComponentNameECKOperator,
+				},
+			}
+			Expect(validateComponentResources(&ls.Spec)).To(BeNil())
+		})
+	})
+
+	Context("FillDefaults", func() {
+		It("should set the replica values to the default settings", func() {
+			retain8 := int32(8)
+			retain91 := int32(91)
+			// Create LogStorage and fill defaults.
+			ls := &operatorv1.LogStorage{}
+			ls.Name = "tigera-secure"
+			FillDefaults(ls)
+			Expect(ls.Spec.Retention.Flows).To(Equal(&retain8))
+			Expect(ls.Spec.Retention.AuditReports).To(Equal(&retain91))
+			Expect(ls.Spec.Retention.ComplianceReports).To(Equal(&retain91))
+			Expect(ls.Spec.Retention.Snapshots).To(Equal(&retain91))
+			Expect(ls.Spec.Retention.DNSLogs).To(Equal(&retain8))
+			Expect(ls.Spec.Retention.BGPLogs).To(Equal(&retain8))
+		})
+
+		It("should set the retention values to the default settings", func() {
+			ls := &operatorv1.LogStorage{}
+			ls.Name = "tigera-secure"
+			FillDefaults(ls)
+			var replicas int32 = render.DefaultElasticsearchReplicas
+			Expect(ls.Spec.Indices.Replicas).To(Equal(&replicas))
+		})
+
+		It("should set the storage class to the default settings", func() {
+			ls := &operatorv1.LogStorage{}
+			ls.Name = "tigera-secure"
+			FillDefaults(ls)
+			Expect(ls.Spec.StorageClassName).To(Equal(DefaultElasticsearchStorageClass))
+		})
+
+		It("should default the spec.nodes structure", func() {
+			ls := &operatorv1.LogStorage{}
+			ls.Name = "tigera-secure"
+			FillDefaults(ls)
+			Expect(ls.Spec.Nodes).NotTo(BeNil())
+			Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
+		})
+
+		It("should fill defaults to the expected values", func() {
+			ls := operatorv1.LogStorage{Spec: operatorv1.LogStorageSpec{}}
+			FillDefaults(&ls)
+
+			var fr int32 = 8
+			var arr int32 = 91
+			var sr int32 = 91
+			var crr int32 = 91
+			var dlr int32 = 8
+			var bgp int32 = 8
+			var replicas int32 = render.DefaultElasticsearchReplicas
+			limits := corev1.ResourceList{}
+			requests := corev1.ResourceList{}
+			limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+			requests[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
+
+			expectedSpec := operatorv1.LogStorageSpec{
+				Nodes: &operatorv1.Nodes{Count: 1},
+				Retention: &operatorv1.Retention{
+					Flows:             &fr,
+					AuditReports:      &arr,
+					Snapshots:         &sr,
+					ComplianceReports: &crr,
+					DNSLogs:           &dlr,
+					BGPLogs:           &bgp,
+				},
+				Indices: &operatorv1.Indices{
+					Replicas: &replicas,
+				},
+				StorageClassName: DefaultElasticsearchStorageClass,
+				ComponentResources: []operatorv1.LogStorageComponentResource{
+					{
+						ComponentName: operatorv1.ComponentNameECKOperator,
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Limits:   limits,
+							Requests: requests,
+						},
+					},
+				},
+			}
+			Expect(ls.Spec).To(Equal(expectedSpec))
 		})
 	})
 })

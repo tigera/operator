@@ -94,7 +94,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instanceA)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, false, tenantANamespace)
+		instance, err = GetManager(ctx, c, true, tenantANamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		tenantBNamespace := "tenant-b"
@@ -104,13 +104,13 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err = c.Create(ctx, instanceB)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, false, tenantBNamespace)
+		instance, err = GetManager(ctx, c, true, tenantBNamespace)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should return expected error when querying namespace that does not contain a manager instance", func() {
 		nsWithoutManager := "non-manager-ns"
-		instance, err := GetManager(ctx, c, false, nsWithoutManager)
+		instance, err := GetManager(ctx, c, true, nsWithoutManager)
 		Expect(kerror.IsNotFound(err)).To(BeTrue())
 		Expect(instance).To(BeNil())
 	})
@@ -265,17 +265,17 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: common.OperatorNamespace(),
 				},
 			}
-			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
-			// Create a internal manager TLS secret with old DNS name.
+			// Update the internal manager TLS secret with old DNS name.
 			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Update(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -288,7 +288,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 
-			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)

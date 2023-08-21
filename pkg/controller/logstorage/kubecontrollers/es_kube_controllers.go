@@ -328,5 +328,5 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
 }

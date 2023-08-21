@@ -18,13 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -185,50 +185,59 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		// there are still "LogStorage" related items that need to be set up
 		ls = nil
 		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
 	} else if err != nil {
 		// An actual error ocurred when attempting to query the LogStorage API.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
 		return reconcile.Result{}, err
-	} else {
-		// We found the LogStorage instance.
-		r.status.OnCRFound()
-
-		// Create a snapshot of the pre-defaulting LogStorage state to use when performing a
-		// merge patch to update the resource later.
-		preDefaultingPatchFrom := client.MergeFrom(ls.DeepCopy())
-
-		// Default and validate the object.
-		FillDefaults(ls)
-		err = validateComponentResources(&ls.Spec)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "An error occurred while validating LogStorage", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// Write the logstorage back to the datastore with its newly applied defaults.
-		if err = r.client.Patch(ctx, ls, preDefaultingPatchFrom); err != nil {
-			r.status.SetDegraded(operatorv1.ResourcePatchError, "Failed to write defaults", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		defer r.status.SetMetaData(&ls.ObjectMeta)
-
-		// Update the LogStorage status conditions with the conditions found on the TigeraStatus resource.
-		if request.Name == TigeraStatusName && request.Namespace == "" {
-			ts := &operatorv1.TigeraStatus{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: TigeraStatusName}, ts)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, ts.Status.Conditions)
-			if err := r.client.Status().Update(ctx, ls); err != nil {
-				log.WithValues("reason", err).Info("Failed to create LogStorage status conditions.")
-				return reconcile.Result{}, err
-			}
-		}
 	}
+
+	// We found the LogStorage instance.
+	r.status.OnCRFound()
+
+	// Check if there is a management cluster connection. ManagementClusterConnection is a managed cluster only resource.
+	if err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
+		// LogStorage isn't valid for managed clusters.
+		r.setConditionDegraded(ctx, ls, reqLogger)
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "LogStorage is not valid for a managed cluster", nil, reqLogger)
+		return reconcile.Result{}, nil
+	} else if !errors.IsNotFound(err) {
+		// An actual error ocurred when attempting to query the ManagementClusterConnection API.
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying ManagementClusterConnection", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Create a snapshot of the pre-defaulting LogStorage state to use when performing a
+	// merge patch to update the resource later.
+	preDefaultingPatchFrom := client.MergeFrom(ls.DeepCopy())
+
+	// Default and validate the object.
+	FillDefaults(ls)
+	err = validateComponentResources(&ls.Spec)
+	if err != nil {
+		// Invalid - mark it as such and return.
+		r.setConditionDegraded(ctx, ls, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "An error occurred while validating LogStorage", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Write the logstorage back to the datastore with its newly applied defaults.
+	ls.Status.State = operatorv1.TigeraStatusReady
+	if err = r.client.Patch(ctx, ls, preDefaultingPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	defer r.status.SetMetaData(&ls.ObjectMeta)
 
 	// Mark the status as available.
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
+}
+
+func (r *LogStorageInitializer) setConditionDegraded(ctx context.Context, ls *operatorv1.LogStorage, log logr.Logger) {
+	ls.Status.State = operatorv1.TigeraStatusDegraded
+	if err := r.client.Status().Update(ctx, ls); err != nil {
+		log.Error(err, "Failed to update LogStorage status")
+	}
 }

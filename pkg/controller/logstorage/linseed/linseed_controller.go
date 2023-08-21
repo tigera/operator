@@ -365,5 +365,5 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }

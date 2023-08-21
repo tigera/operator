@@ -57,20 +57,11 @@ import (
 )
 
 var (
-	eckOperatorObjKey = client.ObjectKey{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}
-	esObjKey          = client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}
-	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
-	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.ESCuratorName}
-
 	esCertSecretKey     = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: render.ElasticsearchNamespace}
 	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}
 
 	kbCertSecretKey     = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}
 	kbCertSecretOperKey = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
-
-	curatorUsrSecretObjMeta   = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}
-	esMetricsUsrSecretObjMeta = metav1.ObjectMeta{Name: esmetrics.ElasticsearchMetricsSecret, Namespace: common.OperatorNamespace()}
-	storageClassName          = "test-storage-class"
 
 	esDNSNames         = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	esGatewayDNSNmes   = dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)

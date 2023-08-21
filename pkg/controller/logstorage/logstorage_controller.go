@@ -435,11 +435,11 @@ func (r *ReconcileLogStorage) generateSecrets(
 		// Get certificate for TLS on Prometheus metrics endpoints. This is created in the monitor controller.
 		monitor.PrometheusClientTLSSecretName,
 
-		// Get certificate for es-proxy, which Linseed and es-gateway need to trust.
+		// Get certificate for es-proxy, which es-gateway needs to trust.
 		render.ManagerTLSSecretName,
 
 		// Linseed needs the manager internal cert in order to verify the cert presented by Voltron when provisioning
-		// tokens into managed clusters.
+		// tokens into managed clusters or when communicating with ES proxy
 		render.ManagerInternalTLSSecretName,
 
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.
@@ -464,10 +464,25 @@ func (r *ReconcileLogStorage) generateSecrets(
 	for _, certName := range certs {
 		cert, err := cm.GetCertificate(r.client, certName, common.OperatorNamespace())
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
-			return nil, err
+			// This check is needed because there is a circular dependency between the certs/secrets
+			// used here and with the linseed cert that is created by this controller.
+			// Typically this circular dependency does not cause an issue because the missing certs
+			// are ignored so the linseed cert is created which unblocks the other controllers to
+			// update their certificates.
+			// This comes into play during an upgrade when certificates need to be updated and
+			// the linseed cert needs to be created because it previously did not exist.
+			// This works around that dependency by ignoring any certs that need updated by a
+			// different controller but are blocked on updating the certs because the other controllers
+			// are also waiting on linseed certs.
+			if certificatemanager.IsCertExtKeyUsageError(err) {
+				msg := fmt.Sprintf("skipping %s/%s secret it will be added when it is updated: %s", common.OperatorNamespace(), certName, err)
+				log.Info(msg)
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
+				return nil, err
+			}
 		} else if cert == nil {
-			msg := fmt.Sprintf("tigera-operator/%s secret not available yet, will add it if/when it becomes available", certName)
+			msg := fmt.Sprintf("%s/%s secret not available yet, will add it if/when it becomes available", common.OperatorNamespace(), certName)
 			log.Info(msg)
 		} else {
 			collection.upstreamCerts = append(collection.upstreamCerts, cert)

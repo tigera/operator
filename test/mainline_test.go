@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,10 @@ import (
 	"strings"
 	"time"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+
 	kmeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -34,8 +38,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -62,6 +64,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var operatorDone chan struct{}
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable)
+		cleanupResources(c)
 		verifyCRDsExist(c)
 		ns := &corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
@@ -72,19 +75,6 @@ var _ = Describe("Mainline component function tests", func() {
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
-		//
-		Eventually(func() error {
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "operator.tigera.io",
-				Version: "v1",
-				Kind:    "Installation",
-			})
-
-			k := client.ObjectKey{Name: "default"}
-			err := c.Get(context.Background(), k, u)
-			return err
-		}, 20*time.Second).ShouldNot(BeNil())
 	})
 
 	AfterEach(func() {
@@ -97,11 +87,11 @@ var _ = Describe("Mainline component function tests", func() {
 				default:
 					return fmt.Errorf("operator did not shutdown")
 				}
-			}, 60*time.Second).Should(BeNil())
+			}, 60*time.Second).ShouldNot(HaveOccurred())
 		}()
 		removeInstallResourceCR(c, "default", context.Background())
 
-		waitForProductTeardown(c)
+		cleanupResources(c)
 
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
@@ -181,6 +171,7 @@ var _ = Describe("Mainline component function tests", func() {
 			By("Deleting CR after its tigera status becomes available")
 			err := c.Delete(context.Background(), instance)
 			Expect(err).NotTo(HaveOccurred())
+			ExpectResourceDestroyed(c, instance, 20*time.Second)
 
 			By("Verifying the tigera status is removed for deleted CR")
 			Eventually(func() error {
@@ -230,9 +221,9 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 
 		By("Verifying resources were not created")
 		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, ds)
+		ExpectResourceDestroyed(c, ds, 10*time.Second)
 		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, kc)
+		ExpectResourceDestroyed(c, kc, 10*time.Second)
 	})
 })
 
@@ -264,6 +255,10 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 	return nil
 }
 
+func newNonCachingClient(cache cache.Cache, config *rest.Config, options client.Options, uncachedObjects ...client.Object) (client.Client, error) {
+	return client.New(config, options)
+}
+
 func setupManager(manageCRDs bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
@@ -276,6 +271,9 @@ func setupManager(manageCRDs bool) (client.Client, context.Context, context.Canc
 		// say to replace restmapper but the NewDynamicRestMapper did not satisfy the
 		// MapperProvider interface
 		MapperProvider: func(c *rest.Config) (kmeta.RESTMapper, error) { return apiutil.NewDynamicRESTMapper(c) },
+		// Use a non-caching client because we've had issues with flakes in the past where the cache
+		// was not updating and tests were failing as a result of looking at stale cluster state
+		NewClient: newNonCachingClient,
 	})
 	Expect(err).NotTo(HaveOccurred())
 
@@ -291,6 +289,8 @@ func setupManager(manageCRDs bool) (client.Client, context.Context, context.Canc
 
 	// Setup Scheme for all resources
 	err = apis.AddToScheme(mgr.GetScheme())
+	Expect(err).NotTo(HaveOccurred())
+	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -339,6 +339,11 @@ func removeInstallResourceCR(c client.Client, name string, ctx context.Context) 
 	Expect(err).NotTo(HaveOccurred())
 	err = c.Delete(ctx, instance)
 	Expect(err).NotTo(HaveOccurred())
+	// Need to wait here for Installation resource to be fully deleted prior to cancelling the context
+	// which will in turn terminate the operator. Race conditions can occur otherwise that will leave the
+	// Installation resource intact while the operator is no longer running which will result in test failures
+	// that try to create an Installation resource of their own
+	ExpectResourceDestroyed(c, instance, 20*time.Second)
 }
 
 func verifyCalicoHasDeployed(c client.Client) {
@@ -393,15 +398,11 @@ func verifyCRDsExist(c client.Client) {
 	// Eventually all the Enterprise CRDs should be available
 	Eventually(func() error {
 		for _, n := range crdNames {
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "apiextensions.k8s.io",
-				Version: "v1",
-				Kind:    "CustomResourceDefinition",
-			})
-
-			k := client.ObjectKey{Name: n}
-			err := c.Get(context.Background(), k, u)
+			crd := &apiextensionsv1.CustomResourceDefinition{
+				TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: n},
+			}
+			err := GetResource(c, crd)
 			// If getting any of the CRDs is an error then the CRDs do not exist
 			if err != nil {
 				return err
@@ -412,46 +413,34 @@ func verifyCRDsExist(c client.Client) {
 }
 
 func waitForProductTeardown(c client.Client) {
-	// Validate the calico-system namespace is deleted using an unstructured type. This hits the API server
-	// directly instead of using the client cache. This should help with flaky tests.
 	Eventually(func() error {
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "",
-			Version: "v1",
-			Kind:    "Namespace",
-		})
-
-		k := client.ObjectKey{Name: "calico-system"}
-		err := c.Get(context.Background(), k, u)
+		ns := &corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
+		}
+		err := GetResource(c, ns)
 		if err == nil {
 			return fmt.Errorf("Calico namespace still exists")
 		}
 		if !kerror.IsNotFound(err) {
 			return err
 		}
-		u = &unstructured.Unstructured{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "rbac.authorization.k8s.io",
-			Version: "v1",
-			Kind:    "ClusterRoleBinding",
-		})
-		k = client.ObjectKey{Name: "calico-node"}
-		err = c.Get(context.Background(), k, u)
+		crb := &rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-node"},
+		}
+		err = GetResource(c, crb)
 		if err == nil {
 			return fmt.Errorf("Node CRB still exists")
 		}
 		if !kerror.IsNotFound(err) {
 			return err
 		}
-		u = &unstructured.Unstructured{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "operator.tigera.io",
-			Version: "v1",
-			Kind:    "Installation",
-		})
-		k = client.ObjectKey{Name: "default"}
-		err = c.Get(context.Background(), k, u)
+		defaultInstallation := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		}
+		err = GetResource(c, defaultInstallation)
 		if err == nil {
 			return fmt.Errorf("default Installation still exists")
 		}
@@ -459,5 +448,10 @@ func waitForProductTeardown(c client.Client) {
 			return err
 		}
 		return nil
-	}, 240*time.Second).Should(BeNil())
+	}, 240*time.Second).ShouldNot(HaveOccurred())
+}
+
+func cleanupResources(c client.Client) {
+	removeInstallResourceCR(c, "default", context.Background())
+	waitForProductTeardown(c)
 }

@@ -128,7 +128,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		// Add tigera-manager service account for impersonation
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(),
-		managerClusterRole(false, true, c.cfg.UsePSP),
+		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
@@ -321,7 +321,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 90,
-				PeriodSeconds:       10,
 			},
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
@@ -331,7 +330,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
 			},
 			SecurityContext: securitycontext.NewNonRootContext(),
 		},

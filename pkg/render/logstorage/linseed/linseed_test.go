@@ -83,13 +83,14 @@ var _ = Describe("Linseed rendering tests", func() {
 				Registry:             "testregistry.com/",
 			}
 			replicas = 2
-			kp, bundle := getTLS(installation)
+			kp, tokenKP, bundle := getTLS(installation)
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				UsePSP:          true,
@@ -120,13 +121,14 @@ var _ = Describe("Linseed rendering tests", func() {
 			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 			Expect(err).NotTo(HaveOccurred())
 			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
-			kp, bundle := getTLS(installation)
+			kp, tokenKP, bundle := getTLS(installation)
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				UsePSP:          true,
@@ -223,7 +225,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			)
 		})
 		It("should set the right env when FIPS mode is enabled", func() {
-			kp, bundle := getTLS(installation)
+			kp, tokenKP, bundle := getTLS(installation)
 			enabled := operatorv1.FIPSModeEnabled
 			installation.FIPSMode = &enabled
 			component := Linseed(&Config{
@@ -232,6 +234,7 @@ var _ = Describe("Linseed rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				ESClusterConfig: esClusterConfig,
@@ -245,18 +248,20 @@ var _ = Describe("Linseed rendering tests", func() {
 	})
 })
 
-func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
+func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain)
 	Expect(err).NotTo(HaveOccurred())
 	esDNSNames := dns.GetServiceDNSNames(render.TigeraLinseedSecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	gwKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
+	linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
 	Expect(err).NotTo(HaveOccurred())
-	trustedBundle := certificateManager.CreateTrustedBundle(gwKeyPair)
+	tokenKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedTokenSecret, render.ElasticsearchNamespace, esDNSNames)
+	Expect(err).NotTo(HaveOccurred())
+	trustedBundle := certificateManager.CreateTrustedBundle(linseedKeyPair)
 	Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-	return gwKeyPair, trustedBundle
+	return linseedKeyPair, tokenKeyPair, trustedBundle
 }
 
 func compareResources(resources []client.Object, expectedResources []resourceTestObj, useCSR bool) {
@@ -299,8 +304,9 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 
 	// Check init containers
 	if useCSR {
-		ExpectWithOffset(1, len(deployment.Spec.Template.Spec.InitContainers)).To(Equal(1))
+		ExpectWithOffset(1, len(deployment.Spec.Template.Spec.InitContainers)).To(Equal(2))
 		ExpectWithOffset(1, deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TigeraLinseedSecret)))
+		ExpectWithOffset(1, deployment.Spec.Template.Spec.InitContainers[1].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TigeraLinseedTokenSecret)))
 	}
 
 	// Check volumeMounts
@@ -415,7 +421,6 @@ func expectedContainers() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
 			},
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
@@ -424,7 +429,6 @@ func expectedContainers() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
 			},
 			Env: []corev1.EnvVar{
 				{

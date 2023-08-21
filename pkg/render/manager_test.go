@@ -99,11 +99,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		// deployment
-		Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(3))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-ca-bundle"))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal("tigera-ca-bundle"))
+		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 
 		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(3))
 		manager := deployment.Spec.Template.Spec.Containers[0]
@@ -117,9 +119,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// manager container
 		Expect(*manager.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*manager.SecurityContext.Privileged).To(BeFalse())
-		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*manager.SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(999))
+		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 		Expect(manager.SecurityContext.Capabilities).To(Equal(
 			&corev1.Capabilities{
 				Drop: []corev1.Capability{"ALL"},
@@ -136,13 +138,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// es-proxy container
 		Expect(esProxy.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/internal-manager-tls/tls.crt"},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 		))
 
 		Expect(esProxy.VolumeMounts).To(HaveLen(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
-		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
-		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/internal-manager-tls"))
 
 		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())
@@ -192,6 +196,19 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		ns := rtest.GetResource(resources, "tigera-manager", "", "", "v1", "Namespace").(*corev1.Namespace)
 		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
 		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+	})
+
+	It("should render security context constrains properly when provider is openshift", func() {
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift}, compliance: compliance, complianceFeatureActive: true})
+
+		//tigera-manager-role clusterRole should have openshift securitycontextconstraints PolicyRule
+		managerRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(managerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
 	})
 
 	type managerComplianceExpectation struct {
@@ -382,7 +399,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(d.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(d.Spec.Template.Spec.Volumes).To(HaveLen(3))
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 	})
@@ -413,7 +430,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				ManagementCluster:     &operatorv1.ManagementCluster{},
 				TunnelSecret:          tunnelSecret,
 				VoltronLinseedKeyPair: voltronLinseedCert,
-				InternalTrafficSecret: internalTraffic,
+				InternalTLSKeyPair:    internalTraffic,
 				Installation:          installation,
 				ESClusterConfig:       &relasticsearch.ClusterConfig{},
 			}
@@ -493,8 +510,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(esProxy.VolumeMounts).To(HaveLen(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
-		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
-		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/internal-manager-tls"))
 
 		Expect(len(voltron.VolumeMounts)).To(Equal(5))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
@@ -654,6 +671,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	var kp certificatemanagement.KeyPairInterface
+	var internalKp certificatemanagement.KeyPairInterface
 	var voltronLinseedKP certificatemanagement.KeyPairInterface
 	var bundle certificatemanagement.TrustedBundle
 
@@ -662,6 +680,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		secret, err := certificatemanagement.CreateSelfSignedSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName, nil)
 		Expect(err).NotTo(HaveOccurred())
 		kp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
+		internalKp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		voltronLinseedKP = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
@@ -685,6 +705,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
 			Replicas:              &replicas,
 			UsePSP:                true,
+			InternalTLSKeyPair:    internalKp,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -757,13 +778,17 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
-		Expect(deployment.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		csrInitContainer := deployment.Spec.Template.Spec.InitContainers[0]
-		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ManagerTLSSecretName)))
+		Expect(deployment.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+		managerCSRInitContainer := deployment.Spec.Template.Spec.InitContainers[0]
+		internalManagerCSRInitContainer := deployment.Spec.Template.Spec.InitContainers[1]
+		Expect(managerCSRInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ManagerTLSSecretName)))
+		Expect(internalManagerCSRInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ManagerInternalTLSSecretName)))
 
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret).To(BeNil())
+		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret).To(BeNil())
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
@@ -884,13 +909,13 @@ func renderObjects(roc renderConfig) []client.Object {
 	if roc.managementCluster != nil {
 		tunnelSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.VoltronTunnelSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
-		internalTraffic, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
-		Expect(err).NotTo(HaveOccurred())
 		voltronLinseedKP, err = certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedTLS, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 
 	}
 	managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
+	Expect(err).NotTo(HaveOccurred())
+	internalTraffic, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 	Expect(err).NotTo(HaveOccurred())
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
@@ -903,7 +928,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ManagementCluster:       roc.managementCluster,
 		TunnelSecret:            tunnelSecret,
 		VoltronLinseedKeyPair:   voltronLinseedKP,
-		InternalTrafficSecret:   internalTraffic,
+		InternalTLSKeyPair:      internalTraffic,
 		ClusterDomain:           dns.DefaultClusterDomain,
 		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                roc.installation.ControlPlaneReplicas,

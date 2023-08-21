@@ -1781,6 +1781,15 @@ var _ = Describe("Node rendering tests", func() {
 					i++
 				}
 
+				//calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
+				nodeRole := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"privileged"},
+				}))
+
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
@@ -1851,8 +1860,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					// The OpenShift envvar overrides.
-					{Name: "FELIX_HEALTHPORT", Value: "9199"},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -1898,6 +1905,15 @@ var _ = Describe("Node rendering tests", func() {
 					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
+
+				//calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
+				nodeRole := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"privileged"},
+				}))
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -1947,9 +1963,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
-
-					// The OpenShift envvar overrides.
-					{Name: "FELIX_HEALTHPORT", Value: "9199"},
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
@@ -3543,8 +3556,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
 		ProbeHandler:   corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
-		TimeoutSeconds: 5,
-		PeriodSeconds:  10,
+		TimeoutSeconds: 10,
 	}
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{

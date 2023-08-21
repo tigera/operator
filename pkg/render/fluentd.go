@@ -15,6 +15,7 @@
 package render
 
 import (
+	"crypto/x509"
 	"fmt"
 	"strconv"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -87,15 +89,6 @@ const (
 	LinseedVolumeMountPath = "/var/run/secrets/tigera.io/linseed/"
 	LinseedTokenPath       = "/var/run/secrets/tigera.io/linseed/token"
 
-	probeTimeoutSeconds        int32 = 5
-	probePeriodSeconds         int32 = 5
-	probeWindowsTimeoutSeconds int32 = 10
-	probeWindowsPeriodSeconds  int32 = 10
-
-	// Default failure threshold for probes is 3. For the startupProbe tolerate more failures.
-	probeFailureThreshold        int32 = 3
-	startupProbeFailureThreshold int32 = 10
-
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
 
@@ -115,6 +108,11 @@ var FluentdSourceEntityRule = v3.EntityRule{
 
 var EKSLogForwarderEntityRule = networkpolicy.CreateSourceEntityRule(LogCollectorNamespace, eksLogForwarderName)
 
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(FluentdPrometheusTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
+
 type FluentdFilters struct {
 	Flow string
 	DNS  string
@@ -131,17 +129,10 @@ type SplunkCredential struct {
 }
 
 func Fluentd(cfg *FluentdConfiguration) Component {
-	timeout := probeTimeoutSeconds
-	period := probePeriodSeconds
-	if cfg.OSType == rmeta.OSTypeWindows {
-		timeout = probeWindowsTimeoutSeconds
-		period = probeWindowsPeriodSeconds
-	}
-
 	return &fluentdComponent{
 		cfg:          cfg,
-		probeTimeout: timeout,
-		probePeriod:  period,
+		probeTimeout: 10,
+		probePeriod:  60,
 	}
 }
 
@@ -833,9 +824,10 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout * 2,
-		PeriodSeconds:    c.probePeriod * 2,
-		FailureThreshold: startupProbeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
+		// tolerate more failures for the startup probe
+		FailureThreshold: 10,
 	}
 }
 
@@ -846,9 +838,8 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout,
-		PeriodSeconds:    c.probePeriod,
-		FailureThreshold: probeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
 	}
 }
 
@@ -859,9 +850,8 @@ func (c *fluentdComponent) readiness() *corev1.Probe {
 				Command: c.readinessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout,
-		PeriodSeconds:    c.probePeriod,
-		FailureThreshold: probeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
 	}
 }
 
@@ -993,6 +983,14 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{c.fluentdName()},
+		})
+	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
 		})
 	}
 	return role

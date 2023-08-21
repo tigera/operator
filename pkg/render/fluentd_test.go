@@ -85,6 +85,22 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 	})
 
+	It("should render security context constrains properly when provider is openshift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := render.Fluentd(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		//tigera-fluentd clusterRole should have openshift securitycontextconstraints PolicyRule
+		fluentdRole := rtest.GetResource(resources, "tigera-fluentd", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(fluentdRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
+	})
+
 	It("should render with a default configuration", func() {
 		expectedResources := []struct {
 			name    string
@@ -151,18 +167,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		container := ds.Spec.Template.Spec.Containers[0]
 
 		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/readiness.sh"}))
-		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
-		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(5))
-		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/liveness.sh"}))
-		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
-		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(5))
-		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/liveness.sh"}))
 		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
-		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(60))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
 
 		Expect(*container.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
@@ -304,17 +318,15 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
 		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
-		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
-		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
 		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
-		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
-		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
-		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(20))
-		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(20))
+		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(60))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
 
 		Expect(container.SecurityContext).To(BeNil())

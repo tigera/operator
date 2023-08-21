@@ -321,14 +321,24 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Get or create a certificate for clients of the manager pod es-proxy container.
-	svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), "localhost")
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerTLSSecretName,
 		common.OperatorNamespace(),
-		svcDNSNames)
+		[]string{"localhost"})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating manager TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		render.ManagerInternalTLSSecretName,
+		common.OperatorNamespace(),
+		dnsNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -444,9 +454,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var tunnelSecret certificatemanagement.KeyPairInterface
-	var internalTrafficSecret certificatemanagement.KeyPairInterface
+	// Es-proxy needs to trust Voltron for cross-cluster requests.
+	trustedBundle.AddCertificates(internalTrafficSecret)
+
 	var linseedVoltronSecret certificatemanagement.KeyPairInterface
+	var tunnelSecret certificatemanagement.KeyPairInterface
+
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
 		fillDefaults(managementCluster)
@@ -481,19 +494,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronTunnelSecretName, common.OperatorNamespace()), err, reqLogger)
 			return reconcile.Result{}, nil
 		}
-
-		// We expect that the secret that holds the certificates for internal communication within the management
-		// K8S cluster is already created by the KubeControllers
-		internalTrafficSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
-		if internalTrafficSecret == nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), nil, reqLogger)
-			return reconcile.Result{}, err
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		// Es-proxy needs to trust Voltron for cross-cluster requests.
-		trustedBundle.AddCertificates(internalTrafficSecret)
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
@@ -533,7 +533,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
 		TunnelSecret:            tunnelSecret,
-		InternalTrafficSecret:   internalTrafficSecret,
+		InternalTLSKeyPair:      internalTrafficSecret,
 		ClusterDomain:           r.clusterDomain,
 		ESLicenseType:           elasticLicenseType,
 		Replicas:                replicas,
@@ -562,7 +562,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
 			},
 			TrustedBundle: trustedBundle,

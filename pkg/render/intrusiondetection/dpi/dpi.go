@@ -289,7 +289,6 @@ func (d *dpiComponent) dpiReadinessProbes() *corev1.Probe {
 		},
 		TimeoutSeconds:      10,
 		InitialDelaySeconds: 90,
-		PeriodSeconds:       10,
 	}
 }
 

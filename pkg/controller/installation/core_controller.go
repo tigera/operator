@@ -322,14 +322,14 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
-		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
-		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
+		// Watch the internal manager TLS secret in the operator namespace, which is mounted in the bundle for es-kube-controllers.
+		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusTLSSecretName, common.OperatorNamespace(), err)
 		}
 
 		// watch for change to primary resource LogCollector
@@ -1059,21 +1059,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operator.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
-		if err != nil {
-			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
 
 	typhaNodeTLS, err := GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")
 		r.status.SetDegraded(operator.CertificateError, "Error with Typha/Felix secrets", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
+			return reconcile.Result{}, nil
+		} else if managerInternalTLSSecret != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(managerInternalTLSSecret)
+		}
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)
@@ -1279,7 +1280,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 			},
@@ -1353,6 +1353,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation: &instance.Spec,
 		Terminating:  terminating,
 		UsePSP:       r.usePSP,
+		OpenShift:    instance.Spec.KubernetesProvider == operator.ProviderOpenShift,
 	}
 	components = append(components, render.CSI(&csiCfg))
 
@@ -1364,7 +1365,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagementClusterConnection: managementClusterConnection,
 		ClusterDomain:               r.clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
-		ManagerInternalSecret:       managerInternalTLSSecret,
 		Terminating:                 terminating,
 		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,

@@ -315,8 +315,6 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 				},
 			},
 			InitialDelaySeconds: 10,
-			PeriodSeconds:       10,
-			FailureThreshold:    3,
 		},
 		VolumeMounts: c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 	}

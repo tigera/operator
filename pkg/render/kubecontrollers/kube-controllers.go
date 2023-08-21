@@ -87,7 +87,6 @@ type KubeControllersConfiguration struct {
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
-	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundle
 
@@ -461,8 +460,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 				)
 			}
 		}
-		if c.cfg.ManagerInternalSecret != nil {
-			env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.cfg.ManagerInternalSecret.VolumeMountCertificateFilePath()})
+		if c.cfg.TrustedBundle != nil {
+			env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.cfg.TrustedBundle.MountPath()})
 		}
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
@@ -495,7 +494,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Env:             env,
 		Resources:       c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
-			PeriodSeconds: int32(10),
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -507,9 +505,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			TimeoutSeconds: 10,
 		},
 		LivenessProbe: &corev1.Probe{
-			PeriodSeconds:       int32(10),
-			InitialDelaySeconds: int32(10),
-			FailureThreshold:    int32(6),
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -518,7 +513,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 					},
 				},
 			},
-			TimeoutSeconds: 10,
+			FailureThreshold:    6,
+			InitialDelaySeconds: 10,
+			TimeoutSeconds:      10,
 		},
 		SecurityContext: sc,
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
@@ -642,9 +639,6 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	if c.cfg.MetricsServerTLS != nil {
 		am[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
 	}
-	if c.cfg.ManagerInternalSecret != nil {
-		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
-	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
 	}
@@ -657,9 +651,6 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
 	var mounts []corev1.VolumeMount
-	if c.cfg.ManagerInternalSecret != nil {
-		mounts = append(mounts, c.cfg.ManagerInternalSecret.VolumeMount(c.SupportedOSType()))
-	}
 	if c.cfg.TrustedBundle != nil {
 		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
@@ -671,9 +662,6 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 
 func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	var volumes []corev1.Volume
-	if c.cfg.ManagerInternalSecret != nil {
-		volumes = append(volumes, c.cfg.ManagerInternalSecret.Volume())
-	}
 	if c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 	}

@@ -607,10 +607,10 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{}, err
 		}
 
-		// es-kube-controllers creates the ConfigMap and Secret needed for SSO into Kibana.
-		// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
-		// needed for logging user into Kibana is not available.
-		if esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		if kibanaEnabled && esLicenseType == render.ElasticsearchLicenseTypeBasic {
+			// es-kube-controllers creates the ConfigMap and Secret needed for SSO into Kibana.
+			// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
+			// needed for logging user into Kibana is not available.
 			if err = r.checkOIDCUsersEsResource(ctx); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
 				return reconcile.Result{}, err

@@ -498,8 +498,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Es-proxy needs to trust Voltron for cross-cluster requests.
 	bundleMaker.AddCertificates(internalTrafficSecret)
 
-	var linseedVoltronSecret certificatemanagement.KeyPairInterface
-	var tunnelSecret certificatemanagement.KeyPairInterface
+	var linseedVoltronServerCert certificatemanagement.KeyPairInterface
+	var tunnelServerCert certificatemanagement.KeyPairInterface
 
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
@@ -517,7 +517,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// The public cert from this keypair is sent by es-kube-controllers to managed clusters so that linseed clients in those clusters
 		// can authenticate the certificate presented by Voltron.
 		linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-		linseedVoltronSecret, err = certificateManager.GetOrCreateKeyPair(
+		linseedVoltronServerCert, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
 			render.VoltronLinseedTLS,
 			helper.TruthNamespace(),
@@ -527,15 +527,20 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 
-		// We expect that the secret that holds the certificates for tunnel certificate generation
-		// is already created by the API server.
-		// TODO: Need to make sure this secret is generated in per-tenant namespace by the tigera-apiserver.
-		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, helper.TruthNamespace())
-		if tunnelSecret == nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.VoltronTunnelSecretName, helper.TruthNamespace()), nil, logc)
+		// Query the tunnel server certificate used by Voltron to serve mTLS connections from managed clusters.
+		tunnelSecretName := render.VoltronTunnelSecretName
+		if r.multiTenant {
+			// For multi-tenant clusters, use the per-tenant CA as the server certificate.
+			// TODO: Is it OK for this to be the same per-tenant CA that is used for the internal traffic?
+			// TODO: Should we just rely on the user-provided secret name instead?
+			tunnelSecretName = certificatemanagement.TenantCASecretName
+		}
+		tunnelServerCert, err = certificateManager.GetKeyPair(r.client, tunnelSecretName, helper.TruthNamespace())
+		if tunnelServerCert == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s/%s to be available", helper.TruthNamespace(), tunnelSecretName), nil, logc)
 			return reconcile.Result{}, err
 		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronTunnelSecretName, helper.TruthNamespace()), err, logc)
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s/%s ", helper.TruthNamespace(), tunnelSecretName), err, logc)
 			return reconcile.Result{}, nil
 		}
 	}
@@ -588,12 +593,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TrustedCertBundle:       trustedBundle,
 		ClusterConfig:           clusterConfig,
 		TLSKeyPair:              tlsSecret,
-		VoltronLinseedKeyPair:   linseedVoltronSecret,
+		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,
 		Openshift:               r.provider == operatorv1.ProviderOpenShift,
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
-		TunnelSecret:            tunnelSecret,
+		TunnelServerCert:        tunnelServerCert,
 		InternalTLSKeyPair:      internalTrafficSecret,
 		ClusterDomain:           r.clusterDomain,
 		ESLicenseType:           elasticLicenseType,
@@ -630,10 +635,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			ServiceAccounts: []string{render.ManagerServiceAccount},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
 			},
 			TrustedBundle: bundleMaker,
 		}),

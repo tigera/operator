@@ -119,7 +119,7 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 	tlsAnnotations[cfg.InternalTLSKeyPair.HashAnnotationKey()] = cfg.InternalTLSKeyPair.HashAnnotationValue()
 	if cfg.ManagementCluster != nil {
-		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.TunnelSecret.HashAnnotationValue()
+		tlsAnnotations[cfg.TunnelServerCert.HashAnnotationKey()] = cfg.TunnelServerCert.HashAnnotationValue()
 	}
 
 	return &managerComponent{
@@ -147,8 +147,8 @@ type ManagerConfiguration struct {
 	// in the management cluster.
 	VoltronLinseedKeyPair certificatemanagement.KeyPairInterface
 
-	// KeyPair used for establishing mTLS tunnel with Guardian.
-	TunnelSecret certificatemanagement.KeyPairInterface
+	// KeyPair used by Voltron as the server certificate when establishing an mTLS tunnel with Guardian.
+	TunnelServerCert certificatemanagement.KeyPairInterface
 
 	// TLS KeyPair used by both Voltron and es-proxy, presented by each as part of the mTLS handshake with
 	// other services within the cluster. This is used in both management and standalone clusters.
@@ -349,7 +349,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	}
 	if c.cfg.ManagementCluster != nil {
 		v = append(v,
-			c.cfg.TunnelSecret.Volume(),
+			c.cfg.TunnelServerCert.Volume(),
 			c.cfg.VoltronLinseedKeyPair.Volume(),
 		)
 	}
@@ -489,8 +489,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	if c.cfg.InternalTLSKeyPair != nil {
 		intKeyPath, intCertPath = c.cfg.InternalTLSKeyPair.VolumeMountKeyFilePath(), c.cfg.InternalTLSKeyPair.VolumeMountCertificateFilePath()
 	}
-	if c.cfg.TunnelSecret != nil {
-		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
+	if c.cfg.TunnelServerCert != nil {
+		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelServerCert.VolumeMountKeyFilePath(), c.cfg.TunnelServerCert.VolumeMountCertificateFilePath()
 	}
 	if c.cfg.VoltronLinseedKeyPair != nil {
 		linseedKeyPath, linseedCertPath = c.cfg.VoltronLinseedKeyPair.VolumeMountKeyFilePath(), c.cfg.VoltronLinseedKeyPair.VolumeMountCertificateFilePath()
@@ -543,7 +543,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
 	if c.cfg.ManagementCluster != nil {
 		mounts = append(mounts, c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()))
-		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount(c.SupportedOSType()))
+		mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
 		mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
 	}
 

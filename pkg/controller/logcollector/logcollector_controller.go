@@ -411,6 +411,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	// Determine whether or not this is a multi-tenant management cluster.
 	multiTenantManagement := r.multiTenant && managementCluster != nil
+	if instance.Spec.MultiTenantManagementClusterNamespace != "" && !multiTenantManagement {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "multiTenantManagementClusterNamespace can only be set on multi-tenant management clusters", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 
 	// The name of the Linseed certificate varies based on if this is a managed cluster or not.
 	// For standalone and management clusters, we just use Linseed's actual certificate.

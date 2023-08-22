@@ -222,9 +222,12 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Write the logstorage back to the datastore with its newly applied defaults.
-	ls.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Patch(ctx, ls, preDefaultingPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourcePatchError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err = r.setConditionReady(ctx, ls, reqLogger); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to update LogStorage status", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	defer r.status.SetMetaData(&ls.ObjectMeta)
@@ -233,6 +236,15 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
+}
+
+func (r *LogStorageInitializer) setConditionReady(ctx context.Context, ls *operatorv1.LogStorage, log logr.Logger) error {
+	ls.Status.State = operatorv1.TigeraStatusReady
+	if err := r.client.Status().Update(ctx, ls); err != nil {
+		log.Error(err, "Failed to update LogStorage status")
+		return err
+	}
+	return nil
 }
 
 func (r *LogStorageInitializer) setConditionDegraded(ctx context.Context, ls *operatorv1.LogStorage, log logr.Logger) {

@@ -21,9 +21,9 @@ var (
 	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = component{
-		Version:  "master",
-		Image:    "tigera/cnx-apiserver",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/cnx-apiserver",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentComplianceBenchmarker = component{

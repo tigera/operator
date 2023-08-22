@@ -307,7 +307,7 @@ run-fvs:
 	ginkgo -trace -r -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
-KUBECONFIG?=./kubeconfig.yaml
+KIND_KUBECONFIG?=./kubeconfig.yaml
 K8S_VERSION?=v1.21.14
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
@@ -316,7 +316,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
 	        --config ./deploy/kind-config.yaml \
-	        --kubeconfig $(KUBECONFIG) \
+	        --kubeconfig $(KIND_KUBECONFIG) \
 	        --image kindest/node:$(K8S_VERSION)
 
 	./deploy/scripts/ipv6_kind_cluster_update.sh
@@ -324,7 +324,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	$(MAKE) deploy-crds
 
 	# Wait for controller manager to be running and healthy.
-	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
+	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 IMAGE_REGISTRY := docker.io
 VERSION_TAG := master
@@ -388,10 +388,10 @@ IMAGE_TARS := calico-node.tar \
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.
-	KUBECONFIG=$(KUBECONFIG) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
+	KUBECONFIG=$(KIND_KUBECONFIG) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Restart the Calico containers so they launch with the newly loaded code.
 	# TODO: We should be able to do this without restarting everything in kube-system.
-	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl delete pods -n kube-system --all
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl delete pods -n kube-system --all
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 ## kubectl create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
@@ -400,7 +400,7 @@ load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 ##   The CustomResourceDefinition "installations.operator.tigera.io" is invalid: metadata.annotations: Too long: must have at most 262144 bytes
 ##
 deploy-crds: kubectl
-	@export KUBECONFIG=$(KUBECONFIG) && \
+	@export KUBECONFIG=$(KIND_KUBECONFIG) && \
 		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
@@ -409,12 +409,12 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
-	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
 
 ## Destroy local kind cluster
 cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 	-$(BINDIR)/kind delete cluster
-	rm -f $(KUBECONFIG)
+	rm -f $(KIND_KUBECONFIG)
 
 
 

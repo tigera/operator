@@ -278,7 +278,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query enterprise-only data.
-	var tunnelCASecret certificatemanagement.KeyPairInterface
+	var tunnelCAKeyPair certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
@@ -305,19 +305,20 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		if managementCluster != nil {
-			tunnelCASecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
-			if tunnelCASecret == nil {
-				tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
-				if err == nil {
-					tunnelCASecret = certificatemanagement.NewKeyPair(tunnelSecret, nil, "")
-					// Creating the voltron tunnel secret is not (yet) supported by certificate mananger.
-					tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret.Secret(common.OperatorNamespace()))
-				}
-			}
+			tunnelCASecret, err := utils.GetSecret(ctx, r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
 			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create the tunnel secret", err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
 				return reconcile.Result{}, err
 			}
+			if tunnelCASecret == nil {
+				tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+			}
+			tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret)
+			tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 		}
 
 		if r.amazonCRDExists {
@@ -378,7 +379,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		TLSKeyPair:                  tlsSecret,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
-		TunnelCASecret:              tunnelCASecret,
+		TunnelCASecret:              tunnelCAKeyPair,
 		TrustedBundle:               trustedBundle,
 		UsePSP:                      r.usePSP,
 	}
@@ -395,7 +396,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ServiceAccounts: []string{render.APIServerServiceAccountName(variant)},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelCASecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelCAKeyPair, false, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

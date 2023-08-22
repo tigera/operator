@@ -16,7 +16,6 @@ package logstorage
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -25,10 +24,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -53,22 +50,11 @@ func (r *ReconcileLogStorage) createESKubeControllers(
 		return reconcile.Result{}, false, err
 	}
 
-	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
-	if managementCluster != nil {
-		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, svcDNSNames)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
-			return reconcile.Result{}, false, err
-		}
-	}
-
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
 		ManagementCluster:            managementCluster,
 		ClusterDomain:                r.clusterDomain,
-		ManagerInternalSecret:        managerInternalTLSSecret,
 		Authentication:               authentication,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,

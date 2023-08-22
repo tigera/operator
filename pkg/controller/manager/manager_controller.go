@@ -361,14 +361,25 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 	}
 
 	// Get or create a certificate for clients of the manager pod es-proxy container.
-	svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, request.InstallNamespace(), r.clusterDomain), "localhost")
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerTLSSecretName,
 		request.TruthNamespace(),
-		svcDNSNames)
+		[]string{"localhost"})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating manager TLS certificate", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	// Get or create a certificate for the manager pod to use within the cluster.
+	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		render.ManagerInternalTLSSecretName,
+		request.TruthNamespace(),
+		dnsNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -505,17 +516,6 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 		return reconcile.Result{}, err
 	}
 
-	// We expect that the secret that holds the certificates for internal communication within the management
-	// cluster is already created by kube-controllers.
-	internalTrafficSecret, err := certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
-	if internalTrafficSecret == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, request.TruthNamespace()), nil, logc)
-		return reconcile.Result{}, err
-	} else if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, request.TruthNamespace()), err, logc)
-		return reconcile.Result{}, nil
-	}
-
 	// Es-proxy needs to trust Voltron for cross-cluster requests.
 	trustedBundle.AddCertificates(internalTrafficSecret)
 
@@ -578,7 +578,7 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 
 	// Set replicas to 1 for management or managed clusters.
 	// TODO Remove after MCM tigera-manager HA deployment is supported.
-	var replicas = args.Installation.ControlPlaneReplicas
+	replicas := args.Installation.ControlPlaneReplicas
 	if managementCluster != nil || managementClusterConnection != nil {
 		var mcmReplicas int32 = 1
 		replicas = &mcmReplicas
@@ -641,7 +641,7 @@ func (r *ReconcileManager) reconcileInstance(ctx context.Context, logc logr.Logg
 				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
 			},
 			TrustedBundle: trustedBundle,

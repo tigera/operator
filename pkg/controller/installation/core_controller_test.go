@@ -709,7 +709,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
 
-		var internalManagerTLSSecret *corev1.Secret
 		var expectedDNSNames []string
 		var certificateManager certificatemanager.CertificateManager
 
@@ -818,14 +817,6 @@ var _ = Describe("Testing core-controller installation", func() {
 					ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
 				})).NotTo(HaveOccurred())
 
-			internalManagerTLSSecret = &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ManagerInternalTLSSecretName,
-					Namespace: common.OperatorNamespace(),
-				},
-			}
-
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
 			var err error
@@ -839,32 +830,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 		AfterEach(func() {
 			cancel()
-		})
-
-		It("should create an internal manager TLS cert secret", func() {
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-			dnsNames = append(dnsNames, "localhost")
-			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
-			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
-
-		})
-
-		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
-			// Create a internal manager TLS secret with old DNS name.
-			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-			dnsNames = append(dnsNames, "localhost")
-			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
-			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
 
 		It("should create node and typha TLS cert secrets if not provided and add OwnerReference to those", func() {

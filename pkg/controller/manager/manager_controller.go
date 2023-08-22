@@ -350,7 +350,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerTLSSecretName,
-		request.TruthNamespace(),
+		helper.TruthNamespace(),
 		[]string{"localhost"})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating manager TLS certificate", err, logc)
@@ -362,10 +362,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerInternalTLSSecretName,
-		request.TruthNamespace(),
+		helper.TruthNamespace(),
 		dnsNames)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
+		r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, logc)
 		return reconcile.Result{}, err
 	}
 

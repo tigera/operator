@@ -64,6 +64,17 @@ func NewRootContext(privileged bool) *corev1.SecurityContext {
 	}
 }
 
+func NewWindowsHostProcessContext() *corev1.SecurityContext {
+	t := true
+	user := "NT AUTHORITY\\system"
+	return &corev1.SecurityContext{
+		WindowsOptions: &corev1.WindowsSecurityContextOptions{
+			HostProcess:   &t,
+			RunAsUserName: &user,
+		},
+	}
+}
+
 // NewNonRootPodContext returns the non-root and non-privileged pod security context for pods that container
 // security context can't be set directly.
 func NewNonRootPodContext() *corev1.PodSecurityContext {

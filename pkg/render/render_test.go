@@ -110,6 +110,8 @@ func allCalicoComponents(
 		ClusterDomain:               clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		UsePSP:                      true,
+		Namespace:                   common.CalicoNamespace,
+		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	winCfg := &render.WindowsConfig{
 		Installation: cr,
@@ -135,8 +137,8 @@ var _ = Describe("Rendering tests", func() {
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var internalManagerKeyPair certificatemanagement.KeyPairInterface
-	var logSeverity = operatorv1.LogLevelInfo
-	var logFileMaxSize = resource.MustParse("100Mi")
+	logSeverity := operatorv1.LogLevelInfo
+	logFileMaxSize := resource.MustParse("100Mi")
 	var logFileMaxAgeDays uint32 = 30
 	var logFileMaxCount uint32 = 10
 	one := intstr.FromInt(1)
@@ -174,9 +176,11 @@ var _ = Describe("Rendering tests", func() {
 		}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		internalManagerKeyPair, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
@@ -190,6 +194,12 @@ var _ = Describe("Rendering tests", func() {
 			logWriter.Flush()
 			fmt.Printf("Logs:\n%s\n", logBuffer.String())
 		}
+	})
+
+	It("should render IfNotPresent image pull policy", func() {
+		// This test ensures we don't accidentally commit a change that switches the
+		// default image pull policy to Always as part of development.
+		Expect(render.ImagePullPolicy()).To(Equal(corev1.PullIfNotPresent))
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -291,7 +301,7 @@ var _ = Describe("Rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})

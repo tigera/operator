@@ -136,7 +136,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(policyRecController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(policyRecController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -205,8 +205,11 @@ type ReconcilePolicyRecommendation struct {
 	multiTenant              bool
 }
 
-func GetPolicyRecommendation(ctx context.Context, cli client.Client, ns string) (*operatorv1.PolicyRecommendation, error) {
-	key := client.ObjectKey{Name: "tigera-secure", Namespace: ns}
+func GetPolicyRecommendation(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.PolicyRecommendation, error) {
+	key := client.ObjectKey{Name: "tigera-secure"}
+	if mt {
+		key.Namespace = ns
+	}
 
 	instance := &operatorv1.PolicyRecommendation{}
 	err := cli.Get(ctx, key, instance)
@@ -223,117 +226,102 @@ func GetPolicyRecommendation(ctx context.Context, cli client.Client, ns string) 
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling PolicyRecommendation")
+	helper := octrl.NewNamespaceHelper(r.multiTenant, render.PolicyRecommendationNamespace, request.Namespace)
+	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
+	logc.Info("Reconciling PolicyRecommendation")
 
+	// We skip requests without a namespace specified in multi-tenant setups.
 	if r.multiTenant && request.Namespace == "" {
-		// For now, if we're running in multi-tenant mode, just skip any non-namespaced triggers.
-		// A potential improvement here would be to reconcile multiple PolicyRecommendation instances.
 		return reconcile.Result{}, nil
 	}
 
-	// In single-tenant mode, the policyrecommendation is always global scoped. However, for multi-tenant mode
-	// the policyrecommendation instance will belong to a particular namespace.
-	ns := ""
-	if r.multiTenant {
-		ns = request.Namespace
+	// Check if this is a tenant-scoped request.
+	_, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	if errors.IsNotFound(err) {
+		logc.Info("No Tenant in this Namespace, skip")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, logc)
+		return reconcile.Result{}, err
 	}
+
 	// Fetch the PolicyRecommendation instance
-	instance, err := GetPolicyRecommendation(ctx, r.client, ns)
+	policyRecommendation, err := GetPolicyRecommendation(ctx, r.client, r.multiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use
 			// finalizers.
 			// Return and don't requeue.
-			reqLogger.Info("PolicyRecommendation config not found")
+			logc.Info("PolicyRecommendation config not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying policy-recommendation", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying policy-recommendation", err, logc)
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
-	reqLogger.V(2).Info("Loaded config", "config", instance)
+	logc.V(2).Info("Loaded config", "config", policyRecommendation)
 
 	// SetMetaData in the TigeraStatus such as observedGenerations
-	defer r.status.SetMetaData(&instance.ObjectMeta)
+	defer r.status.SetMetaData(&policyRecommendation.ObjectMeta)
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
+	if !utils.IsAPIServerReady(r.client, logc) {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, logc)
 		return reconcile.Result{}, err
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", err, logc)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Validate that the policy recommendation scope watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.policyRecScopeWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for PolicyRecommendationScope watch to be established", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for PolicyRecommendationScope watch to be established", err, logc)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, logc)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		} else {
 			log.Error(err, "Error querying allow-tigera tier")
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, logc)
 			return reconcile.Result{}, err
 		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, logc)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, logc)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, logc)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Query for the installation object.
-	variant, network, err := utils.GetInstallation(ctx, r.client)
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
 			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, logc)
 		return reconcile.Result{}, err
 	}
 
-	// Package up the request parameters needed to reconcile
-	req := octrl.NewRequest(request.NamespacedName, r.multiTenant, render.PolicyRecommendationNamespace)
-	args := ReconcileArgs{
-		Variant:              variant,
-		Installation:         network,
-		License:              license,
-		PolicyRecommendation: instance,
-	}
-	return r.reconcileInstance(ctx, reqLogger, args, req)
-}
-
-type ReconcileArgs struct {
-	Variant              operatorv1.ProductVariant
-	Installation         *operatorv1.InstallationSpec
-	PolicyRecommendation *operatorv1.PolicyRecommendation
-	License              v3.LicenseKey
-}
-
-func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, logc logr.Logger, args ReconcileArgs, request octrl.Request) (reconcile.Result, error) {
-	pullSecrets, err := utils.GetNetworkingPullSecrets(args.Installation, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve pull secrets", err, logc)
 		return reconcile.Result{}, err
@@ -383,25 +371,25 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, args.PolicyRecommendation)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
 
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
 		ClusterDomain:   r.clusterDomain,
 		ESClusterConfig: esClusterConfig,
 		ESSecrets:       esSecrets,
-		Installation:    args.Installation,
+		Installation:    installation,
 		ManagedCluster:  isManagedCluster,
 		PullSecrets:     pullSecrets,
 		Openshift:       r.provider == operatorv1.ProviderOpenShift,
 		UsePSP:          r.usePSP,
-		Namespace:       request.InstallNamespace(),
+		Namespace:       helper.InstallNamespace(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.
 	component := render.PolicyRecommendation(policyRecommendationCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, args.Variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
 		return reconcile.Result{}, err
 	}
@@ -411,7 +399,7 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 	}
 
 	if !isManagedCluster {
-		certificateManager, err := certificatemanager.Create(r.client, args.Installation, r.clusterDomain, request.TruthNamespace())
+		certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, helper.TruthNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 			return reconcile.Result{}, err
@@ -419,7 +407,7 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 
 		var managerInternalTLSSecret certificatemanagement.CertificateInterface
 		if managementCluster != nil {
-			managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, request.TruthNamespace())
+			managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, logc)
 				return reconcile.Result{}, err
@@ -427,7 +415,7 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 		}
 
 		linseedCertLocation := render.TigeraLinseedSecret
-		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, request.TruthNamespace())
+		linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, helper.TruthNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate %s", render.TigeraLinseedSecret), err, logc)
 			return reconcile.Result{}, err
@@ -440,21 +428,21 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 		trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
 
 		// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
-		policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, request.TruthNamespace(), []string{render.PolicyRecommendationTLSSecretName})
+		policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, helper.TruthNamespace(), []string{render.PolicyRecommendationTLSSecretName})
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, logc)
 			return reconcile.Result{}, err
 		}
 
-		certificateManager.AddToStatusManager(r.status, request.InstallNamespace())
+		certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
 		policyRecommendationCfg.TrustedBundle = trustedBundle
 		policyRecommendationCfg.PolicyRecommendationCertSecret = policyRecommendationKeyPair
 
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-				Namespace:       request.InstallNamespace(),
-				TruthNamespace:  request.TruthNamespace(),
+				Namespace:       helper.InstallNamespace(),
+				TruthNamespace:  helper.TruthNamespace(),
 				ServiceAccounts: []string{render.PolicyRecommendationName},
 				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 					rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
@@ -464,7 +452,7 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 		)
 	}
 
-	if hasNoLicense := !utils.IsFeatureActive(args.License, common.PolicyRecommendationFeature); hasNoLicense {
+	if hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature); hasNoLicense {
 		log.V(4).Info("PolicyRecommendation is not activated as part of this license")
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, logc)
 		return reconcile.Result{}, nil
@@ -487,8 +475,8 @@ func (r *ReconcilePolicyRecommendation) reconcileInstance(ctx context.Context, l
 	}
 
 	// Everything is available - update the CRD status.
-	args.PolicyRecommendation.Status.State = operatorv1.TigeraStatusReady
-	if err = r.client.Status().Update(ctx, args.PolicyRecommendation); err != nil {
+	policyRecommendation.Status.State = operatorv1.TigeraStatusReady
+	if err = r.client.Status().Update(ctx, policyRecommendation); err != nil {
 		return reconcile.Result{}, err
 	}
 

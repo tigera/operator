@@ -12,45 +12,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logstorage
+package linseed
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 )
 
-func (r *ReconcileLogStorage) createESMetrics(
+func (r *LinseedSubController) createESMetrics(
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
+	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	pullSecrets []*corev1.Secret,
 	reqLogger logr.Logger,
 	clusterConfig *relasticsearch.ClusterConfig,
 	ctx context.Context,
 	hdler utils.ComponentHandler,
-	serverKeyPair certificatemanagement.KeyPairInterface,
-	trustedBundle certificatemanagement.TrustedBundle,
+	trustedBundle certificatemanagement.TrustedBundleRO,
 	usePSP bool,
-) (reconcile.Result, bool, error) {
+	cm certificatemanager.CertificateManager,
+) error {
+	// Only install ES metrics if this is not a managed cluster.
+	if managementClusterConnection != nil {
+		return nil
+	}
+
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve Elasticsearch metrics user secret.", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	} else if esMetricsSecret == nil {
 		reqLogger.Info("Waiting for elasticsearch metrics secrets to become available")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for elasticsearch metrics secrets to become available", nil, reqLogger)
-		return reconcile.Result{}, false, nil
+		return nil
+	}
+
+	// Getthe ES metrics server keypair. This will have previously been created by the ES secrets controller.
+	serverKeyPair, err := cm.GetKeyPair(r.client, esmetrics.ElasticsearchMetricsServerTLSSecret, render.ElasticsearchNamespace)
+	if err != nil {
+		r.status.SetDegraded(
+			operatorv1.ResourceReadError,
+			fmt.Sprintf("Error getting secret %s/%s", render.ElasticsearchNamespace, esmetrics.ElasticsearchMetricsServerTLSSecret),
+			err,
+			log,
+		)
+		return err
 	}
 
 	esMetricsCfg := &esmetrics.Config{
@@ -66,13 +86,13 @@ func (r *ReconcileLogStorage) createESMetrics(
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, esMetricsComponent, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, false, err
+		return err
 	}
 
-	return reconcile.Result{}, true, nil
+	return nil
 }

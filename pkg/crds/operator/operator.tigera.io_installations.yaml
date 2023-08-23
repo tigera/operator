@@ -1457,6 +1457,17 @@ spec:
                           on interfaces that do not match the given regex.
                         type: string
                     type: object
+                  windowsDataplane:
+                    description: 'WindowsDataplane is used to select the dataplane
+                      used for Windows nodes. In particular, it causes the operator
+                      to add required mounts and environment variables for the particular
+                      dataplane. If not specified, HNS mode is used. If disabled,
+                      the operator will not render the Calico Windows nodes daemonset.
+                      Default: HNS'
+                    enum:
+                    - HNS
+                    - disabled
+                    type: string
                 type: object
               calicoNodeDaemonSet:
                 description: CalicoNodeDaemonSet configures the calico-node DaemonSet.
@@ -5684,6 +5695,12 @@ spec:
                   \n This option allows configuring the `<registry>` portion of the
                   above format."
                 type: string
+              serviceCIDRs:
+                description: Kubernetes Service CIDRs. Specifying this is required
+                  when using Calico for Windows.
+                items:
+                  type: string
+                type: array
               typhaAffinity:
                 description: Deprecated. Please use Installation.Spec.TyphaDeployment
                   instead. TyphaAffinity allows configuration of node affinity characteristics
@@ -7478,7 +7495,7 @@ spec:
                 - Calico
                 - TigeraSecureEnterprise
                 type: string
-              windows:
+              windowsNodes:
                 description: Windows Configuration
                 properties:
                   cniBinDir:
@@ -7491,19 +7508,10 @@ spec:
                       on Windows, it must match what is on ContainerD on the Windows
                       nodes.
                     type: string
-                  cniConfFilename:
-                    description: CNIConfFilename is the filename of the CNI configuration
-                      file on Windows.
-                    type: string
                   cniLogDir:
                     description: CNILogDir is the path to the Calico CNI logs directory
                       on Windows.
                     type: string
-                  disableWindowsDaemonset:
-                    default: false
-                    description: 'DisableWindowsDaemonset specifies whether the calico-node-windows
-                      should be disabled Default: false'
-                    type: boolean
                   vxlanAdapter:
                     description: VXLANAdapter is the Network Adapter used for VXLAN,
                       leave blank for primary NIC
@@ -9051,6 +9059,17 @@ spec:
                               on interfaces that do not match the given regex.
                             type: string
                         type: object
+                      windowsDataplane:
+                        description: 'WindowsDataplane is used to select the dataplane
+                          used for Windows nodes. In particular, it causes the operator
+                          to add required mounts and environment variables for the
+                          particular dataplane. If not specified, HNS mode is used.
+                          If disabled, the operator will not render the Calico Windows
+                          nodes daemonset. Default: HNS'
+                        enum:
+                        - HNS
+                        - disabled
+                        type: string
                     type: object
                   calicoNodeDaemonSet:
                     description: CalicoNodeDaemonSet configures the calico-node DaemonSet.
@@ -13590,6 +13609,12 @@ spec:
                       \n This option allows configuring the `<registry>` portion of
                       the above format."
                     type: string
+                  serviceCIDRs:
+                    description: Kubernetes Service CIDRs. Specifying this is required
+                      when using Calico for Windows.
+                    items:
+                      type: string
+                    type: array
                   typhaAffinity:
                     description: Deprecated. Please use Installation.Spec.TyphaDeployment
                       instead. TyphaAffinity allows configuration of node affinity
@@ -15516,7 +15541,7 @@ spec:
                     - Calico
                     - TigeraSecureEnterprise
                     type: string
-                  windows:
+                  windowsNodes:
                     description: Windows Configuration
                     properties:
                       cniBinDir:
@@ -15529,19 +15554,10 @@ spec:
                           directory on Windows, it must match what is on ContainerD
                           on the Windows nodes.
                         type: string
-                      cniConfFilename:
-                        description: CNIConfFilename is the filename of the CNI configuration
-                          file on Windows.
-                        type: string
                       cniLogDir:
                         description: CNILogDir is the path to the Calico CNI logs
                           directory on Windows.
                         type: string
-                      disableWindowsDaemonset:
-                        default: false
-                        description: 'DisableWindowsDaemonset specifies whether the
-                          calico-node-windows should be disabled Default: false'
-                        type: boolean
                       vxlanAdapter:
                         description: VXLANAdapter is the Network Adapter used for
                           VXLAN, leave blank for primary NIC

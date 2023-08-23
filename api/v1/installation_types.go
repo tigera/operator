@@ -186,7 +186,11 @@ type InstallationSpec struct {
 
 	// Windows Configuration
 	// +optional
-	Windows *WindowsConfig `json:"windows,omitempty"`
+	WindowsNodes *WindowsNodeSpec `json:"windowsNodes,omitempty"`
+
+	// Kubernetes Service CIDRs. Specifying this is required when using Calico for Windows.
+	// +optional
+	ServiceCIDRs []string `json:"serviceCIDRs,omitempty"`
 }
 
 type Logging struct {
@@ -383,6 +387,13 @@ const (
 	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
 
+type WindowsDataplaneOption string
+
+const (
+	WindowsDataplaneDisabled WindowsDataplaneOption = "disabled"
+	WindowsDataplaneHNS      WindowsDataplaneOption = "HNS"
+)
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
@@ -392,6 +403,14 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Iptables;BPF;VPP
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
+
+	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
+	// causes the operator to add required mounts and environment variables for the particular dataplane.
+	// If not specified, HNS mode is used. If disabled, the operator will not render the Calico Windows nodes daemonset.
+	// Default: HNS
+	// +optional
+	// +kubebuilder:validation:Enum=HNS;disabled
+	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
@@ -765,7 +784,7 @@ func IsFIPSModeEnabledString(mode *FIPSMode) string {
 	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
 }
 
-type WindowsConfig struct {
+type WindowsNodeSpec struct {
 	// CNIBinDir is the path to the CNI binaries directory on Windows, it must match what is on ContainerD on the Windows nodes.
 	// +optional
 	CNIBinDir string `json:"cniBinDir,omitempty"`
@@ -778,10 +797,6 @@ type WindowsConfig struct {
 	// +optional
 	CNILogDir string `json:"cniLogDir,omitempty"`
 
-	// CNIConfFilename is the filename of the CNI configuration file on Windows.
-	// +optional
-	CNIConfFilename string `json:"cniConfFilename,omitempty"`
-
 	// VXLANMACPrefix is the prefix used when generating MAC addresses for virtual NICs
 	// +optional
 	VXLANMACPrefix string `json:"vxlanMACPrefix,omitempty"`
@@ -789,10 +804,4 @@ type WindowsConfig struct {
 	// VXLANAdapter is the Network Adapter used for VXLAN, leave blank for primary NIC
 	// +optional
 	VXLANAdapter string `json:"vxlanAdapter,omitempty"`
-
-	// DisableWindowsDaemonset specifies whether the calico-node-windows should be disabled
-	// Default: false
-	// +optional
-	// +kubebuilder:default:=false
-	DisableWindowsDaemonset *bool `json:"disableWindowsDaemonset,omitempty"`
 }

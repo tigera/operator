@@ -52,6 +52,7 @@ func Windows(
 
 type WindowsConfiguration struct {
 	K8sServiceEp            k8sapi.ServiceEndpoint
+	K8sDNSServers           []string
 	Installation            *operatorv1.InstallationSpec
 	ClusterDomain           string
 	TLS                     *TyphaNodeTLS
@@ -582,7 +583,7 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 		return []corev1.EnvVar{}
 	}
 
-	_, cniNetDir, _, cniConfFilename := c.cniConfigInfo()
+	_, cniNetDir, _ := c.cniDirectories()
 
 	// cniNetDir is used in the cni config file, and will have the "c:" prefix added to it.
 	cniNetDir = strings.TrimLeft(cniNetDir, "c:")
@@ -591,8 +592,10 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
-		{Name: "CNI_CONF_NAME", Value: cniConfFilename},
+		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
+		{Name: "KUBERNETES_DNS_SERVERS", Value: strings.Join(c.cfg.K8sDNSServers, ",")},
+		{Name: "KUBERNETES_SERVICE_CIDRS", Value: strings.Join(c.cfg.Installation.ServiceCIDRs, ",")},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
 		{
 			Name: "KUBERNETES_NODE_NAME",
@@ -641,22 +644,13 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 	}
 
 	// Determine the networking backend
-	backend := "none"
-	// If BGP is enabled, use BGP
-	if bgpEnabled(c.cfg.Installation) {
-		backend = "windows-bgp"
-	} else {
-		// If BGP is not enabled, use VXLAN if using Calico networking and not host-local IPAM
-		if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico && c.cfg.Installation.CNI.IPAM.Type != operatorv1.IPAMPluginHostLocal {
-			backend = "vxlan"
-		}
-	}
+	backend := getWindowsBackend(c.cfg.Installation)
 
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
 
 	vxlanMACPrefix := "0E-2A"
-	if c.cfg.Installation.Windows != nil && c.cfg.Installation.Windows.VXLANMACPrefix != "" {
-		vxlanMACPrefix = c.cfg.Installation.Windows.VXLANMACPrefix
+	if c.cfg.Installation.WindowsNodes != nil && c.cfg.Installation.WindowsNodes.VXLANMACPrefix != "" {
+		vxlanMACPrefix = c.cfg.Installation.WindowsNodes.VXLANMACPrefix
 	}
 
 	capabilities := map[string]interface{}{
@@ -709,7 +703,7 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 		}
 	}
 
-	cniNetDir, _, _, _ := c.cniConfigInfo()
+	_, cniNetDir, _ := c.cniDirectories()
 	kubernetes := map[string]interface{}{
 		"kubeconfig": filepath.ToSlash(filepath.Join("c:", cniNetDir, "calico-kubeconfig")),
 	}
@@ -719,7 +713,7 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 	calicoPluginConfig["kubernetes"] = kubernetes
 
 	dns := map[string]interface{}{
-		"Nameservers": strings.Split(c.cfg.K8sServiceEp.DNSServers, ","),
+		"Nameservers": c.cfg.K8sDNSServers,
 		"Search": []string{
 			"svc.cluster.local",
 		},
@@ -730,60 +724,54 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 		{
 			"Name": "EndpointPolicy",
 			"Value": map[string]interface{}{
-				"Type": "OutBoundNAT",
-				"ExceptionList": []string{
-					c.cfg.K8sServiceEp.ServiceCIDR,
-				},
+				"Type":          "OutBoundNAT",
+				"ExceptionList": c.cfg.Installation.ServiceCIDRs,
 			},
 		},
-		{
+	}
+	for _, serviceCIDR := range c.cfg.Installation.ServiceCIDRs {
+		policies = append(policies, map[string]interface{}{
 			"Name": "EndpointPolicy",
 			"Value": map[string]interface{}{
 				"Type":              "SDNROUTE",
-				"DestinationPrefix": c.cfg.K8sServiceEp.ServiceCIDR,
+				"DestinationPrefix": serviceCIDR,
 				"NeedEncap":         true,
 			},
-		},
+		})
 	}
 	calicoPluginConfig["policies"] = policies
 
 	return calicoPluginConfig
 }
 
-// cniConfigInfo returns the CNI binary, network config and log directories and the CNI conf filename for the configured platform.
-func (c *windowsComponent) cniConfigInfo() (string, string, string, string) {
-	var cniBinDir, cniNetDir, cniLogDir, cniConfFilename string
+// cniDirectories returns the CNI binary, network config and log directories and the CNI conf filename for the configured platform.
+func (c *windowsComponent) cniDirectories() (string, string, string) {
+	var cniBinDir, cniNetDir, cniLogDir string
 	switch c.cfg.Installation.KubernetesProvider {
 	case operatorv1.ProviderAKS:
 		cniBinDir = "/k/azurecni/bin"
 		cniNetDir = "/k/azurecni/netconf "
 		cniLogDir = "/var/log/calico/cni"
-		cniConfFilename = "10-calico.conflist"
 	default:
 		// Default locations to match vanilla Kubernetes.
 		cniBinDir = "/opt/cni/bin"
 		cniNetDir = "/etc/cni/net.d"
 		cniLogDir = "/var/log/calico/cni"
-		cniConfFilename = "10-calico.conflist"
 	}
 
 	// Use configuration values if present
-	if c.cfg.Installation.Windows != nil {
-		if c.cfg.Installation.Windows.CNIBinDir != "" {
-			cniBinDir = c.cfg.Installation.Windows.CNIBinDir
+	if c.cfg.Installation.WindowsNodes != nil {
+		if c.cfg.Installation.WindowsNodes.CNIBinDir != "" {
+			cniBinDir = c.cfg.Installation.WindowsNodes.CNIBinDir
 		}
-		if c.cfg.Installation.Windows.CNIConfDir != "" {
-			cniNetDir = c.cfg.Installation.Windows.CNIConfDir
+		if c.cfg.Installation.WindowsNodes.CNIConfDir != "" {
+			cniNetDir = c.cfg.Installation.WindowsNodes.CNIConfDir
 		}
-		if c.cfg.Installation.Windows.CNILogDir != "" {
-			cniLogDir = c.cfg.Installation.Windows.CNILogDir
+		if c.cfg.Installation.WindowsNodes.CNILogDir != "" {
+			cniLogDir = c.cfg.Installation.WindowsNodes.CNILogDir
 		}
-		if c.cfg.Installation.Windows.CNIConfFilename != "" {
-			cniConfFilename = c.cfg.Installation.Windows.CNIConfFilename
-		}
-
 	}
-	return cniNetDir, cniBinDir, cniLogDir, cniConfFilename
+	return cniBinDir, cniNetDir, cniLogDir
 }
 
 // windowsVolumes creates the node's volumes.
@@ -804,7 +792,7 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 	// If needed for this configuration, then include the CNI volumes.
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
-		cniNetDir, cniBinDir, cniLogDir, _ := c.cniConfigInfo()
+		cniBinDir, cniNetDir, cniLogDir := c.cniDirectories()
 		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniNetDir}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir}}})
@@ -829,12 +817,10 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 
 // uninstallEnvVars creates the uninstall-calico initContainer's envvars.
 func (c *windowsComponent) uninstallEnvVars() []corev1.EnvVar {
-	_, _, _, cniConfFilename := c.cniConfigInfo()
-
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
-		{Name: "CNI_CONF_NAME", Value: cniConfFilename},
+		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "CNI_NET_DIR", Value: "/host/etc/cni/net.d"},
 	}
 
@@ -950,8 +936,8 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	}
 
 	vxlanAdapter := ""
-	if c.cfg.Installation.Windows != nil && c.cfg.Installation.Windows.VXLANAdapter != "" {
-		vxlanAdapter = c.cfg.Installation.Windows.VXLANAdapter
+	if c.cfg.Installation.WindowsNodes != nil && c.cfg.Installation.WindowsNodes.VXLANAdapter != "" {
+		vxlanAdapter = c.cfg.Installation.WindowsNodes.VXLANAdapter
 	}
 
 	windowsEnv := []corev1.EnvVar{
@@ -979,8 +965,10 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "KUBERNETES_DNS_SERVERS", Value: strings.Join(c.cfg.K8sDNSServers, ",")},
+		{Name: "KUBERNETES_SERVICE_CIDRS", Value: strings.Join(c.cfg.Installation.ServiceCIDRs, ",")},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
-		{Name: "VXLANAdapter", Value: vxlanAdapter},
+		{Name: "VXLAN_ADAPTER", Value: vxlanAdapter},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -1100,27 +1088,7 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		})
 	}
 
-	// Configure whether or not BGP should be enabled.
-	if !bgpEnabled(c.cfg.Installation) {
-		if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
-			if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
-				// If BGP is disabled and using HostLocal, then that means routing is done
-				// by Cloud routing, so networking backend is none. (because we don't support
-				// vxlan with HostLocal.)
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
-			} else {
-				// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
-				// disabled, and VXLAN will optionally be configurable via IP pools.
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"})
-			}
-		} else {
-			// If not using Calico networking at all, set the backend to "none".
-			windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
-		}
-	} else {
-		// BGP is enabled.
-		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"})
-	}
+	windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: getWindowsBackend(c.cfg.Installation)})
 
 	// IPv4 auto-detection configuration.
 	var v4Method string
@@ -1395,4 +1363,27 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 	}
 	return &ds
+}
+
+func getWindowsBackend(installation *operatorv1.InstallationSpec) string {
+	if !bgpEnabled(installation) {
+		if installation.CNI.Type == operatorv1.PluginCalico {
+			if installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
+				// If BGP is disabled and using HostLocal, then that means routing is done
+				// by Cloud routing, so networking backend is none. (because we don't support
+				// vxlan with HostLocal.)
+				return "none"
+			} else {
+				// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
+				// disabled, and VXLAN will optionally be configurable via IP pools.
+				return "vxlan"
+			}
+		} else {
+			// If not using Calico networking at all, set the backend to "none".
+			return "none"
+		}
+	} else {
+		// BGP is enabled.
+		return "windows-bgp"
+	}
 }

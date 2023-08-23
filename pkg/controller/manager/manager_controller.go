@@ -528,20 +528,36 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		// Query the tunnel server certificate used by Voltron to serve mTLS connections from managed clusters.
-		tunnelSecretName := render.VoltronTunnelSecretName
+		tunnelSecretName := managementCluster.Spec.TLS.SecretName
 		if r.multiTenant {
-			// For multi-tenant clusters, use the per-tenant CA as the server certificate.
-			// TODO: Is it OK for this to be the same per-tenant CA that is used for the internal traffic?
-			// TODO: Should we just rely on the user-provided secret name instead?
-			tunnelSecretName = certificatemanagement.TenantCASecretName
-		}
-		tunnelServerCert, err = certificateManager.GetKeyPair(r.client, tunnelSecretName, helper.TruthNamespace())
-		if tunnelServerCert == nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s/%s to be available", helper.TruthNamespace(), tunnelSecretName), nil, logc)
-			return reconcile.Result{}, err
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s/%s ", helper.TruthNamespace(), tunnelSecretName), err, logc)
-			return reconcile.Result{}, nil
+			// For multi-tenant clusters, ensure that we have a CA that can be used to sign the tunnel server cert within this tenant's namespace.
+			// This certificate will also be presented by Voltron to prove its identity to managed clusters.
+			tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, helper.TruthNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, logc)
+				return reconcile.Result{}, err
+			}
+			if tunnelCASecret == nil {
+				// TODO: SAN should include the tenant ID, and Guardian should set the TLS hostname to the value with the tenant ID.
+				tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(tunnelSecretName, helper.TruthNamespace(), "tigera-voltron", []string{"voltron"})
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, logc)
+					return reconcile.Result{}, err
+				}
+			}
+
+			// We use the CA as the server cert.
+			tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
+		} else {
+			// For single-tenant clusters, query the secret directly. This will have already been created by the apiserver controller.
+			tunnelServerCert, err = certificateManager.GetKeyPair(r.client, tunnelSecretName, helper.TruthNamespace())
+			if tunnelServerCert == nil {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s/%s to be available", helper.TruthNamespace(), tunnelSecretName), nil, logc)
+				return reconcile.Result{}, err
+			} else if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s/%s ", helper.TruthNamespace(), tunnelSecretName), err, logc)
+				return reconcile.Result{}, nil
+			}
 		}
 	}
 

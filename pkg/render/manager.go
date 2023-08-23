@@ -415,7 +415,9 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	// Prepare conditional env vars up-front.
 	queryURL := "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"
 	if c.cfg.Tenant != nil {
-		queryURL = ""
+		// For multi-tenant clusters, we shouldn't ever hit the management cluster API server.
+		// TODO: How to handle this correctly.
+		// queryURL = ""
 	}
 
 	envs := []corev1.EnvVar{
@@ -545,6 +547,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		mounts = append(mounts, c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()))
 		mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
 		mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+
+	if c.cfg.Tenant != nil {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
 	}
 
 	return corev1.Container{

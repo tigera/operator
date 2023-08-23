@@ -881,7 +881,7 @@ MODSEC_CONF_FILES :=  modsecurity.conf-recommended unicode.mapping
 CHECKSUM_CMD := shasum
 
 .PHONY: generate-crs 
-generate-crs: $(CRS_EMBED_FOLDER) $(MODSEC_CONF_FILES) .hack-modsecconf-rename .hack-test-embed
+generate-crs: $(CRS_EMBED_FOLDER) $(MODSEC_CONF_FILES) .hack-modsecconf-rename .hack-crs-custom-epilogue .hack-test-embed
 
 .PHONY: $(CRS_EMBED_FOLDER)
 $(CRS_EMBED_FOLDER):
@@ -908,5 +908,7 @@ $(MODSEC_CONF_FILES):
 .PHONY: .hack-modsecconf-rename .hack-test-embed
 .hack-modsecconf-rename:
 	mv $(CRS_EMBED_FOLDER)/modsecurity.conf-recommended  $(CRS_EMBED_FOLDER)/modsecdefault.conf
+.hack-crs-custom-epilogue:
+	cat hack/crs-custom-epilogue.txt >> $(CRS_EMBED_FOLDER)/crs-setup.conf
 .hack-test-embed:
 	go test ./$(CRS_EMBED_FOLDER)/.. -count=1

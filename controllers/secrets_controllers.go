@@ -43,8 +43,5 @@ func (r *SecretsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddO
 	if err := secrets.AddTenantController(mgr, opts); err != nil {
 		return err
 	}
-	if err := secrets.AddBundleController(mgr, opts); err != nil {
-		return err
-	}
 	return nil
 }

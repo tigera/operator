@@ -559,6 +559,12 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
 	}
 
+	// Default Windows dataplane is HNS.
+	if instance.Spec.CalicoNetwork.WindowsDataplane == nil {
+		dpHNS := operator.WindowsDataplaneHNS
+		instance.Spec.CalicoNetwork.WindowsDataplane = &dpHNS
+	}
+
 	// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".
 	// Only default IP pools if we're using Calico IPAM, otherwise there's no-one to use the IP pool.
 	if instance.Spec.CalicoNetwork.IPPools == nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico {
@@ -1339,44 +1345,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Node(&nodeCfg))
 
-	var hasWindowsNodesAndHPCSupport bool
-	// Don't render calico-node-windows if it's explicitly disabled in the installation
-	if instance.Spec.Windows != nil && instance.Spec.Windows.DisableWindowsDaemonset != nil && *instance.Spec.Windows.DisableWindowsDaemonset {
-		reqLogger.Info("Calico Windows daemonset is disabled in the operator installation")
-	} else {
-		// Build a configuration for rendering calico-node-windows, but only if there are Windows nodes in the cluster
-		hasWindowsNodesAndHPCSupport, err = common.HasWindowsNodesAndHPCSupport(r.client)
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Unable to detect if there are Windows nodes with HPC support present", err, reqLogger)
-		}
-		if hasWindowsNodesAndHPCSupport {
-			if err := k8sapi.Endpoint.WindowsRequiredInfoPresent(); err != nil {
-				r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for the Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName), err, reqLogger)
-			}
-
-			if instance.Spec.CalicoNetwork != nil {
-				if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
-					if v4pool.Encapsulation != operator.EncapsulationVXLAN && v4pool.Encapsulation != operator.EncapsulationNone {
-						r.status.SetDegraded(operator.ResourceValidationError, "Encapsulation not supported by Calico for Windows", fmt.Errorf("IPv4 IPPool encapsulation %s is not supported by Calico for Windows", v4pool.Encapsulation), reqLogger)
-					}
-				}
-			}
-
-			windowsCfg := render.WindowsConfiguration{
-				K8sServiceEp:            k8sapi.Endpoint,
-				Installation:            &instance.Spec,
-				ClusterDomain:           r.clusterDomain,
-				TLS:                     typhaNodeTLS,
-				AmazonCloudIntegration:  aci,
-				PrometheusServerTLS:     nodePrometheusTLS,
-				NodeReporterMetricsPort: nodeReporterMetricsPort,
-				VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
-				Terminating:             nodeTerminating,
-			}
-			components = append(components, render.Windows(&windowsCfg))
-		}
-	}
-
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
 		Terminating:  terminating,
@@ -1438,10 +1406,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-
-	if hasWindowsNodesAndHPCSupport {
-		r.status.AddDaemonsets([]types.NamespacedName{{Name: common.WindowsDaemonSetName, Namespace: common.CalicoNamespace}})
-	}
 
 	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)

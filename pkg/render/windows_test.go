@@ -83,6 +83,7 @@ var _ = Describe("Windows rendering tests", func() {
 		}
 		defaultInstance.CalicoNetwork.IPPools = append(defaultInstance.CalicoNetwork.IPPools, operatorv1.IPPool{CIDR: "192.168.1.0/16", Encapsulation: operatorv1.EncapsulationVXLAN})
 		defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: &ff}
+		defaultInstance.ServiceCIDRs = []string{"10.96.0.0/12"}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -93,18 +94,17 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// Dummy service endpoint for k8s API.
 		k8sServiceEp = k8sapi.ServiceEndpoint{
-			Host:        "1.2.3.4",
-			Port:        "6443",
-			ServiceCIDR: "10.96.0.0/12",
-			DNSServers:  "10.96.0.10",
+			Host: "1.2.3.4",
+			Port: "6443",
 		}
 
 		// Create a default configuration.
 		cfg = render.WindowsConfiguration{
 			K8sServiceEp:  k8sServiceEp,
+			K8sDNSServers: []string{"10.96.0.10"},
 			Installation:  defaultInstance,
-			TLS:           typhaNodeTLS,
 			ClusterDomain: defaultClusterDomain,
+			TLS:           typhaNodeTLS,
 			VXLANVNI:      4096,
 		}
 	})
@@ -175,32 +175,21 @@ var _ = Describe("Windows rendering tests", func() {
 					mode = "vxlan"
 				}
 				Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
-"name": "k8s-pod-network",
+"name": "Calico",
 "cniVersion": "0.3.1",
 "plugins": [
   {
-    "type": "calico",
-	"name": "Calico",
-	"windows_use_single_network": true,
-	"mode": "%s",
-	"mtu": 0,
-	"vxlan_mac_prefix": "0E-2A",
-	"vxlan_vni": 4096,
-	"policy": {
-	  "type": "k8s"
+	"DNS": {
+      "Nameservers": [
+	    "10.96.0.10"
+	  ],
+	  "Search": [
+		"svc.cluster.local"
+	  ]
 	},
-	"log_file_path": "/var/log/calico/cni/cni.log",
-	"log_file_max_age": 5,
-	"log_file_max_count": 5,
-	"log_file_max_size": 1,
-	"log_level": "Debug",
-	"windows_loopback_DSR": "__DSR_SUPPORT__",
 	"capabilities": {
 	  "dns": true
 	},
-	"nodename": "__KUBERNETES_NODE_NAME__",
-	"nodename_file": "__NODENAME_FILE__",
-	"nodename_file_optional": true,
 	"datastore_type": "kubernetes",
 	"ipam": {
 	  "subnet": "usePodCidr",
@@ -208,14 +197,19 @@ var _ = Describe("Windows rendering tests", func() {
 	},
 	"kubernetes": {
 	  "k8s_api_root": "https://1.2.3.4:6443",
-	  "kubeconfig": "c://etc/cni/net.d/calico-kubeconfig"
+	  "kubeconfig": "c:/etc/cni/net.d/calico-kubeconfig"
 	},
-	"DNS": {
-	  "Nameservers": [ "10.96.0.10" ],
-	  "Search": [
-		"svc.cluster.local"
-	  ]
-	},
+	"log_file_max_age": 5,
+	"log_file_max_count": 5,
+	"log_file_max_size": 1,
+	"log_file_path": "c:/var/log/calico/cni/cni.log",
+	"log_level": "Debug",
+	"mode": "%s",
+	"mtu": 0,
+	"name": "Calico",
+	"nodename": "__KUBERNETES_NODE_NAME__",
+	"nodename_file": "__NODENAME_FILE__",
+	"nodename_file_optional": true,
 	"policies": [
 	  {
 		"Name": "EndpointPolicy",
@@ -234,7 +228,15 @@ var _ = Describe("Windows rendering tests", func() {
 		  "Type": "SDNROUTE"
 		}
 	  }
-	]
+	],
+	"policy": {
+	  "type": "k8s"
+	},
+	"type": "calico",
+	"vxlan_mac_prefix": "0E-2A",
+	"vxlan_vni": 4096,
+	"windows_loopback_DSR": "__DSR_SUPPORT__",
+	"windows_use_single_network": true
   }
 ]
 }`, mode)))
@@ -405,16 +407,17 @@ var _ = Describe("Windows rendering tests", func() {
 					},
 					{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
-					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+					{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
+					{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.key"},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 					{Name: "VXLAN_VNI", Value: "4096"},
+					{Name: "VXLAN_ADAPTER", Value: ""},
 					{Name: "KUBE_NETWORK", Value: "Calico.*"},
 					{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 					{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-					{Name: "KUBERNETES_SERVICE_CIDR", Value: "10.96.0.0/12"},
+					{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 					{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 				}
 
@@ -454,7 +457,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 				expectedCNIEnv := []corev1.EnvVar{
 					{Name: "SLEEP", Value: "false"},
-					{Name: "CNI_BIN_DIR", Value: "/opt/cni/bin"},
+					{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
 					{Name: "VXLAN_VNI", Value: "4096"},
@@ -479,16 +482,16 @@ var _ = Describe("Windows rendering tests", func() {
 
 					{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 					{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-					{Name: "KUBERNETES_SERVICE_CIDR", Value: "10.96.0.0/12"},
+					{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 					{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 				}
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 				expectedUninstallEnv := []corev1.EnvVar{
 					{Name: "SLEEP", Value: "false"},
-					{Name: "CNI_BIN_DIR", Value: "/opt/cni/bin"},
+					{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
+					{Name: "CNI_NET_DIR", Value: "/host/etc/cni/net.d"},
 				}
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").Env).To(ConsistOf(expectedUninstallEnv))
 
@@ -598,33 +601,22 @@ var _ = Describe("Windows rendering tests", func() {
 		cniCmResource := rtest.GetResource(resources, "cni-config-windows", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*corev1.ConfigMap)
-		Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
-"name": "k8s-pod-network",
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+"name": "Calico",
 "cniVersion": "0.3.1",
 "plugins": [
   {
-    "type": "calico",
-	"name": "Calico",
-	"windows_use_single_network": true,
-	"mode": "windows-bgp",
-	"mtu": 1450,
-	"vxlan_mac_prefix": "0E-2A",
-	"vxlan_vni": 4096,
-	"policy": {
-	  "type": "k8s"
+	"DNS": {
+      "Nameservers": [
+	    "10.96.0.10"
+	  ],
+	  "Search": [
+		"svc.cluster.local"
+	  ]
 	},
-	"log_file_path": "/var/log/calico/cni/cni.log",
-	"log_file_max_age": 5,
-	"log_file_max_count": 5,
-	"log_file_max_size": 1,
-	"log_level": "Debug",
-	"windows_loopback_DSR": "__DSR_SUPPORT__",
 	"capabilities": {
 	  "dns": true
 	},
-	"nodename": "__KUBERNETES_NODE_NAME__",
-	"nodename_file": "__NODENAME_FILE__",
-	"nodename_file_optional": true,
 	"datastore_type": "kubernetes",
 	"ipam": {
 	  "subnet": "usePodCidr",
@@ -632,14 +624,19 @@ var _ = Describe("Windows rendering tests", func() {
 	},
 	"kubernetes": {
 	  "k8s_api_root": "https://1.2.3.4:6443",
-	  "kubeconfig": "c://etc/cni/net.d/calico-kubeconfig"
+	  "kubeconfig": "c:/etc/cni/net.d/calico-kubeconfig"
 	},
-	"DNS": {
-	  "Nameservers": [ "10.96.0.10" ],
-	  "Search": [
-		"svc.cluster.local"
-	  ]
-	},
+	"log_file_max_age": 5,
+	"log_file_max_count": 5,
+	"log_file_max_size": 1,
+	"log_file_path": "c:/var/log/calico/cni/cni.log",
+	"log_level": "Debug",
+	"mode": "windows-bgp",
+	"mtu": 1450,
+	"name": "Calico",
+	"nodename": "__KUBERNETES_NODE_NAME__",
+	"nodename_file": "__NODENAME_FILE__",
+	"nodename_file_optional": true,
 	"policies": [
 	  {
 		"Name": "EndpointPolicy",
@@ -658,10 +655,18 @@ var _ = Describe("Windows rendering tests", func() {
 		  "Type": "SDNROUTE"
 		}
 	  }
-	]
+	],
+	"policy": {
+	  "type": "k8s"
+	},
+	"type": "calico",
+	"vxlan_mac_prefix": "0E-2A",
+	"vxlan_vni": 4096,
+	"windows_loopback_DSR": "__DSR_SUPPORT__",
+	"windows_use_single_network": true
   }
 ]
-}`)))
+}`))
 
 		// Make sure daemonset has the MTU set as well.
 		dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
@@ -717,70 +722,72 @@ var _ = Describe("Windows rendering tests", func() {
 		cniCmResource := rtest.GetResource(resources, "cni-config-windows", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*corev1.ConfigMap)
-		Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
-"name": "k8s-pod-network",
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+"name": "Calico",
 "cniVersion": "0.3.1",
 "plugins": [
   {
+    "DNS": {
+      "Nameservers": [
+	    "10.96.0.10"
+	  ],
+      "Search": [
+        "svc.cluster.local"
+      ]
+    },
+    "capabilities": {
+      "dns": true
+    },
+    "datastore_type": "kubernetes",
+    "ipam": {
+      "subnet": "usePodCidr",
+      "type": "calico-ipam"
+    },
+    "kubernetes": {
+      "k8s_api_root": "https://1.2.3.4:6443",
+      "kubeconfig": "c:/etc/cni/net.d/calico-kubeconfig"
+    },
+    "log_file_max_age": 5,
+    "log_file_max_count": 5,
+    "log_file_max_size": 1,
+    "log_file_path": "c:/var/log/calico/cni/cni.log",
+    "log_level": "Debug",
+    "mode": "vxlan",
+    "mtu": 0,
+    "name": "Calico",
+    "nodename": "__KUBERNETES_NODE_NAME__",
+    "nodename_file": "__NODENAME_FILE__",
+    "nodename_file_optional": true,
+    "policies": [
+      {
+      "Name": "EndpointPolicy",
+      "Value": {
+        "ExceptionList": [
+          "10.96.0.0/12"
+        ],
+        "Type": "OutBoundNAT"
+      }
+      },
+      {
+      "Name": "EndpointPolicy",
+      "Value": {
+        "DestinationPrefix": "10.96.0.0/12",
+        "NeedEncap": true,
+        "Type": "SDNROUTE"
+      }
+      }
+    ],
+    "policy": {
+      "type": "k8s"
+    },
     "type": "calico",
-	"name": "Calico",
-	"windows_use_single_network": true,
-	"mode": "vxlan",
-	"mtu": 0,
-	"vxlan_mac_prefix": "0E-2A",
-	"vxlan_vni": 4096,
-	"policy": {
-	  "type": "k8s"
-	},
-	"log_file_path": "/var/log/calico/cni/cni.log",
-	"log_file_max_age": 5,
-	"log_file_max_count": 5,
-	"log_file_max_size": 1,
-	"log_level": "Debug",
-	"windows_loopback_DSR": "__DSR_SUPPORT__",
-	"capabilities": {
-	  "dns": true
-	},
-	"nodename": "__KUBERNETES_NODE_NAME__",
-	"nodename_file": "__NODENAME_FILE__",
-	"nodename_file_optional": true,
-	"datastore_type": "kubernetes",
-	"ipam": {
-	  "subnet": "usePodCidr",
-	  "type": "calico-ipam"
-	},
-	"kubernetes": {
-	  "k8s_api_root": "https://1.2.3.4:6443",
-	  "kubeconfig": "c://etc/cni/net.d/calico-kubeconfig"
-	},
-	"DNS": {
-	  "Nameservers": [ "10.96.0.10" ],
-	  "Search": [
-		"svc.cluster.local"
-	  ]
-	},
-	"policies": [
-	  {
-		"Name": "EndpointPolicy",
-		"Value": {
-		  "ExceptionList": [
-			"10.96.0.0/12"
-		  ],
-		  "Type": "OutBoundNAT"
-		}
-	  },
-	  {
-		"Name": "EndpointPolicy",
-		"Value": {
-		  "DestinationPrefix": "10.96.0.0/12",
-		  "NeedEncap": true,
-		  "Type": "SDNROUTE"
-		}
-	  }
-	]
+    "vxlan_mac_prefix": "0E-2A",
+    "vxlan_vni": 4096,
+    "windows_loopback_DSR": "__DSR_SUPPORT__",
+    "windows_use_single_network": true
   }
 ]
-}`)))
+}`))
 
 		dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
@@ -835,16 +842,17 @@ var _ = Describe("Windows rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
-			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.key"},
 			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},
+			{Name: "VXLAN_ADAPTER", Value: ""},
 			{Name: "KUBE_NETWORK", Value: "vpc.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDR", Value: "10.96.0.0/12"},
+			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
@@ -860,7 +868,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 		expectedCNIEnv := []corev1.EnvVar{
 			{Name: "SLEEP", Value: "false"},
-			{Name: "CNI_BIN_DIR", Value: "/opt/cni/bin"},
+			{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 			{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 			{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
 			{Name: "VXLAN_VNI", Value: "4096"},
@@ -886,16 +894,16 @@ var _ = Describe("Windows rendering tests", func() {
 
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDR", Value: "10.96.0.0/12"},
+			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		expectedUninstallEnv := []corev1.EnvVar{
 			{Name: "SLEEP", Value: "false"},
-			{Name: "CNI_BIN_DIR", Value: "/opt/cni/bin"},
+			{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 			{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-			{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
+			{Name: "CNI_NET_DIR", Value: "/host/etc/cni/net.d"},
 		}
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").Env).To(ConsistOf(expectedUninstallEnv))
 
@@ -995,6 +1003,7 @@ var _ = Describe("Windows rendering tests", func() {
 			KubernetesProvider: operatorv1.ProviderEKS,
 			CNI:                &operatorv1.CNISpec{Type: operatorv1.PluginAmazonVPC},
 			// FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+			ServiceCIDRs: []string{"10.96.0.0/12"},
 		}
 		cfg.Installation = amazonVPCInstalllation
 
@@ -1057,18 +1066,19 @@ var _ = Describe("Windows rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
-			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.key"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 			{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
 			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},
+			{Name: "VXLAN_ADAPTER", Value: ""},
 			{Name: "KUBE_NETWORK", Value: "vpc.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDR", Value: "10.96.0.0/12"},
+			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 

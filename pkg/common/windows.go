@@ -18,12 +18,9 @@ package common
 
 import (
 	"context"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	goversion "github.com/mcuadros/go-version"
 )
 
 func HasWindowsNodes(c client.Client) (bool, error) {
@@ -34,30 +31,4 @@ func HasWindowsNodes(c client.Client) (bool, error) {
 	}
 
 	return len(nodes.Items) > 0, nil
-}
-
-// HasWindowsNodesAndHPCSupport returns true if there is at least one node
-// with Windows and containerd v1.7+ (the requirement for Calico Windows
-// HPC Support)
-func HasWindowsNodesAndHPCSupport(c client.Client) (bool, error) {
-	nodes := corev1.NodeList{}
-	err := c.List(context.Background(), &nodes, client.MatchingLabels{"kubernetes.io/os": "windows"})
-	if err != nil {
-		return false, err
-	}
-
-	for _, node := range nodes.Items {
-		// ContainerRuntimeVersion will have the format "containerd://1.6.8" or "docker://2.3.4"
-		splits := strings.Split(node.Status.NodeInfo.ContainerRuntimeVersion, "://")
-		runtime := splits[0]
-		ver := ""
-		if len(splits) > 1 {
-			ver = strings.TrimPrefix(splits[1], "v")
-		}
-		if runtime == "containerd" && goversion.CompareNormalized(ver, "1.6.0", ">=") {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }

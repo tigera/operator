@@ -190,11 +190,16 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.Logging = override.Logging
 	}
 
-	switch compareFields(inst.Windows, override.Windows) {
+	switch compareFields(inst.WindowsNodes, override.WindowsNodes) {
 	case BOnlySet:
-		inst.Windows = override.Windows.DeepCopy()
+		inst.WindowsNodes = override.WindowsNodes.DeepCopy()
 	case Different:
-		inst.Windows = mergeWindows(inst.Windows, override.Windows)
+		inst.WindowsNodes = mergeWindowsNodes(inst.WindowsNodes, override.WindowsNodes)
+	}
+
+	switch compareFields(inst.ServiceCIDRs, override.ServiceCIDRs) {
+	case BOnlySet, Different:
+		inst.ServiceCIDRs = override.ServiceCIDRs
 	}
 
 	return inst
@@ -259,6 +264,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 	switch compareFields(out.LinuxDataplane, override.LinuxDataplane) {
 	case BOnlySet, Different:
 		out.LinuxDataplane = override.LinuxDataplane
+	}
+
+	switch compareFields(out.WindowsDataplane, override.WindowsDataplane) {
+	case BOnlySet, Different:
+		out.WindowsDataplane = override.WindowsDataplane
 	}
 
 	switch compareFields(out.NodeAddressAutodetectionV4, override.NodeAddressAutodetectionV4) {
@@ -743,7 +753,7 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 	return out
 }
 
-func mergeWindows(cfg, override *operatorv1.WindowsConfig) *operatorv1.WindowsConfig {
+func mergeWindowsNodes(cfg, override *operatorv1.WindowsNodeSpec) *operatorv1.WindowsNodeSpec {
 	out := cfg.DeepCopy()
 
 	switch compareFields(out.CNIBinDir, override.CNIBinDir) {
@@ -759,6 +769,16 @@ func mergeWindows(cfg, override *operatorv1.WindowsConfig) *operatorv1.WindowsCo
 	switch compareFields(out.CNILogDir, override.CNILogDir) {
 	case BOnlySet, Different:
 		out.CNILogDir = override.CNILogDir
+	}
+
+	switch compareFields(out.VXLANMACPrefix, override.VXLANMACPrefix) {
+	case BOnlySet, Different:
+		out.VXLANMACPrefix = override.VXLANMACPrefix
+	}
+
+	switch compareFields(out.VXLANAdapter, override.VXLANAdapter) {
+	case BOnlySet, Different:
+		out.VXLANAdapter = override.VXLANAdapter
 	}
 
 	return out

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -70,7 +70,6 @@ type StatusManager interface {
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
-	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
 	SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger)
 	ClearDegraded()
 	IsAvailable() bool
@@ -88,7 +87,6 @@ type statusManager struct {
 	statefulsets              map[string]types.NamespacedName
 	cronjobs                  map[string]types.NamespacedName
 	certificatestatusrequests map[string]map[string]string
-	windowsNodeUpgrades       *windowsNodeUpgrades
 	lock                      sync.Mutex
 	enabled                   *bool
 	kubernetesVersion         *common.VersionInfo
@@ -97,8 +95,6 @@ type statusManager struct {
 	degraded               bool
 	explicitDegradedMsg    string
 	explicitDegradedReason operator.TigeraStatusReason
-	// Track degraded state set by calicoWindowsUpgrader.
-	windowsUpgradeDegradedMsg string
 
 	// Keep track of currently calculated status.
 	progressing []string
@@ -137,7 +133,6 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
-		windowsNodeUpgrades:       newWindowsNodeUpgrades(),
 		kubernetesVersion:         kubernetesVersion,
 		crExists:                  crExists,
 	}
@@ -314,50 +309,6 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 	m.certificatestatusrequests[name] = labels
 }
 
-type windowsNodeUpgrades struct {
-	nodesPending    []string
-	nodesInProgress []string
-	nodesCompleted  []string
-}
-
-func newWindowsNodeUpgrades() *windowsNodeUpgrades {
-	return &windowsNodeUpgrades{
-		nodesPending:    []string{},
-		nodesInProgress: []string{},
-		nodesCompleted:  []string{},
-	}
-}
-
-func (w *windowsNodeUpgrades) progressingReason() string {
-	inProgress := len(w.nodesInProgress)
-	pending := len(w.nodesPending)
-	completed := len(w.nodesCompleted)
-	total := pending + inProgress + completed
-
-	if pending+inProgress == 0 {
-		return ""
-	}
-
-	return fmt.Sprintf("Waiting for Calico for Windows to be upgraded: %v/%v nodes have been upgraded, %v in-progress", completed, total, inProgress)
-}
-
-// SetWindowsUpgradeStatus tells the status manager to monitor the upgrade
-// status of the given Windows node upgrades.
-func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	if err != nil {
-		m.windowsUpgradeDegradedMsg = fmt.Sprintf("Windows upgrade error: %s", err.Error())
-		return
-	}
-
-	m.windowsNodeUpgrades.nodesPending = pending
-	m.windowsNodeUpgrades.nodesInProgress = inProgress
-	m.windowsNodeUpgrades.nodesCompleted = completed
-	m.windowsUpgradeDegradedMsg = ""
-}
-
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
 func (m *statusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.lock.Lock()
@@ -422,7 +373,6 @@ func (m *statusManager) ClearDegraded() {
 	m.degraded = false
 	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
-	m.windowsUpgradeDegradedMsg = ""
 }
 
 // IsAvailable returns true if the component is available and false otherwise.
@@ -465,9 +415,7 @@ func (m *statusManager) IsDegraded() bool {
 
 	// Controllers can explicitly set us degraded, which can be set even before we tell the status manager that it
 	// should start monitoring resources.
-	// windowsUpgradeDegradedReason indicates an error has occurred with the
-	// Calico Windows upgrade.
-	if m.degraded || m.windowsUpgradeDegradedMsg != "" {
+	if m.degraded {
 		return true
 	}
 
@@ -638,10 +586,6 @@ func (m *statusManager) syncState() {
 		} else if pending {
 			progressing = append(progressing, fmt.Sprintf("Waiting on CertificateSigningRequest(s) with labels %v to be approved", labels))
 		}
-	}
-
-	if reason := m.windowsNodeUpgrades.progressingReason(); reason != "" {
-		progressing = append(progressing, reason)
 	}
 
 	m.progressing = progressing
@@ -868,9 +812,6 @@ func (m *statusManager) degradedMessage() string {
 	if m.explicitDegradedMsg != "" {
 		msgs = append(msgs, m.explicitDegradedMsg)
 	}
-	if m.windowsUpgradeDegradedMsg != "" {
-		msgs = append(msgs, m.windowsUpgradeDegradedMsg)
-	}
 	msgs = append(msgs, m.failing...)
 	return strings.Join(msgs, "\n")
 }
@@ -887,10 +828,6 @@ func (m *statusManager) degradedReason() operator.TigeraStatusReason {
 			return operator.Unknown
 		}
 		return m.explicitDegradedReason
-	}
-	// Add a reason if we have a windows upgrade degraded msg.
-	if m.windowsUpgradeDegradedMsg != "" {
-		return operator.UpgradeError
 	}
 	if len(m.failing) != 0 {
 		return operator.PodFailure

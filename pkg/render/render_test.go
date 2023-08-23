@@ -111,8 +111,16 @@ func allCalicoComponents(
 		MetricsPort:                 kubeControllersMetricsPort,
 		UsePSP:                      true,
 	}
-	winCfg := &render.WindowsConfig{
-		Installation: cr,
+
+	winCfg := &render.WindowsConfiguration{
+		K8sServiceEp:            k8sServiceEp,
+		K8sDNSServers:           []string{},
+		Installation:            cr,
+		ClusterDomain:           clusterDomain,
+		TLS:                     typhaNodeTLS,
+		AmazonCloudIntegration:  aci,
+		NodeReporterMetricsPort: nodeReporterMetricsPort,
+		VXLANVNI:                4096,
 	}
 
 	nodeCertComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -196,30 +204,31 @@ var _ = Describe("Rendering tests", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:
 		// - 6 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, PodSecurityPolicy)
-		// - 3 calico-cni-plugin resources (ServiceAccount, ClusterRole, CLusterRoleBinding)
+		// - 3 calico-cni-plugin resources (ServiceAccount, ClusterRole, ClusterRoleBinding)
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 1 ConfigMap for Typha comms (1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
 		// - 1 namespace
+		// - 5 Windows node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
+		// - 3 Windows calico-cni-plugin resources (ServiceAccount, ClusterRole, ClusterRoleBinding)
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 3 + 4 + 1 + 7 + 6 + 1))
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
+		Expect(componentCount(c)).To(Equal(6 + 3 + 4 + 1 + 7 + 6 + 1 + 5 + 3))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
+		// - 1 Service to expose Windows calico/node metrics.
 		// - 1 ns (tigera-dex)
 		var nodeMetricsPort int32 = 9081
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1) + 1 + 1))
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
+		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1 + 5 + 3) + 1 + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -273,6 +282,17 @@ var _ = Describe("Rendering tests", func() {
 			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
 
+			// Windows node objects.
+			{common.WindowsDaemonSetName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{common.WindowsDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{common.WindowsDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{render.WindowsCNIPluginObjectName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{render.WindowsCNIPluginObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{render.WindowsCNIPluginObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{render.WindowsNodeMetricsService, common.CalicoNamespace, "", "v1", "Service"},
+			{"cni-config-windows", common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{common.WindowsDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
+
 			// Certificate Management objects
 			{"tigera-ca-bundle", common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
@@ -293,14 +313,6 @@ var _ = Describe("Rendering tests", func() {
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
-	})
-
-	It("should render windows upgrader resources for AKS", func() {
-		instance.KubernetesProvider = operatorv1.ProviderAKS
-		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
-		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(2))
 	})
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {
@@ -458,21 +470,6 @@ func componentCount(components []render.Component) int {
 		glog.Printf("Component: %s\n", reflect.TypeOf(c))
 		for i, o := range objsToCreate {
 			glog.Printf(" - %d/%d: %s/%s\n", i, len(objsToCreate), o.GetNamespace(), o.GetName())
-		}
-	}
-	return count
-}
-
-func getAKSWindowsUpgraderComponentCount(components []render.Component) int {
-	var resources []client.Object
-	for _, component := range components {
-		toCreate, _ := component.Objects()
-		resources = append(resources, toCreate...)
-	}
-	count := 0
-	for _, r := range resources {
-		if r.GetName() == common.CalicoWindowsUpgradeResourceName {
-			count += 1
 		}
 	}
 	return count

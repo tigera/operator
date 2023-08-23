@@ -114,6 +114,7 @@ func allCalicoComponents(
 
 	winCfg := &render.WindowsConfiguration{
 		K8sServiceEp:            k8sServiceEp,
+		K8sDNSServers:           []string{},
 		Installation:            cr,
 		ClusterDomain:           clusterDomain,
 		TLS:                     typhaNodeTLS,

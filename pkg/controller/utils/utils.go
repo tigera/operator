@@ -311,12 +311,6 @@ func GetK8sServiceEndPoint(client client.Client) error {
 	} else {
 		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
 		k8sapi.Endpoint.Port = cm.Data["KUBERNETES_SERVICE_PORT"]
-		if serviceCIDR, ok := cm.Data["KUBERNETES_SERVICE_CIDR"]; ok {
-			k8sapi.Endpoint.ServiceCIDR = serviceCIDR
-		}
-		if dnsServers, ok := cm.Data["KUBERNETES_DNS_SERVERS"]; ok {
-			k8sapi.Endpoint.DNSServers = dnsServers
-		}
 	}
 	return nil
 }

@@ -262,31 +262,6 @@ var _ = Describe("GetK8sServiceEndPoint", func() {
 
 		Expect(k8sapi.Endpoint.Host).To(Equal("1.2.3.4"))
 		Expect(k8sapi.Endpoint.Port).To(Equal("5678"))
-		Expect(k8sapi.Endpoint.ServiceCIDR).To(Equal(""))
-		Expect(k8sapi.Endpoint.DNSServers).To(Equal(""))
-	})
-
-	It("reads a ConfigMap with KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT, KUBERNETES_SERVICE_CIDR and KUBERNETES_DNS_SERVERS.", func() {
-		cmName := render.K8sSvcEndpointConfigMapName
-		cm := &corev1.ConfigMap{}
-		cm.ObjectMeta.Name = cmName
-		cm.ObjectMeta.Namespace = common.OperatorNamespace()
-		cm.Data = map[string]string{}
-		cm.Data["KUBERNETES_SERVICE_HOST"] = "1.2.3.4"
-		cm.Data["KUBERNETES_SERVICE_PORT"] = "5678"
-		cm.Data["KUBERNETES_SERVICE_CIDR"] = "1.2.3.0/24"
-		cm.Data["KUBERNETES_DNS_SERVERS"] = "9.10.11.12"
-
-		Expect(c.Create(ctx, cm)).ShouldNot(HaveOccurred())
-
-		err := GetK8sServiceEndPoint(c)
-
-		Expect(err).To(BeNil())
-
-		Expect(k8sapi.Endpoint.Host).To(Equal("1.2.3.4"))
-		Expect(k8sapi.Endpoint.Port).To(Equal("5678"))
-		Expect(k8sapi.Endpoint.ServiceCIDR).To(Equal("1.2.3.0/24"))
-		Expect(k8sapi.Endpoint.DNSServers).To(Equal("9.10.11.12"))
 	})
 
 	It("does not return error if ConfigMap is not found.", func() {

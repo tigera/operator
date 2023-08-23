@@ -1,0 +1,9 @@
+
+SecAction \
+ "id:900110,\
+  phase:1,\
+  nolog,\
+  pass,\
+  t:none,\
+  setvar:tx.inbound_anomaly_score_threshold=100,\
+  setvar:tx.outbound_anomaly_score_threshold=100"

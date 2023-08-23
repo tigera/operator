@@ -427,7 +427,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
+	} else if linseedCertificate == nil {
 		log.Info("Linseed certificate is not available yet, waiting until they become available")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil

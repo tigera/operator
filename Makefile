@@ -866,3 +866,49 @@ install-git-hooks:
 .PHONY: pre-commit
 pre-commit:
 	$(CONTAINERIZED) $(CALICO_BUILD) git-hooks/pre-commit-in-container
+
+CRS_VERSION := 3.3.5
+MODSEC_VERSION := v3.0.10
+
+CRS_EMBED_FOLDER := pkg/render/applicationlayer/embed/coreruleset
+CRS_ARCHIVE_SRC := https://github.com/coreruleset/coreruleset/archive/refs/tags/v$(CRS_VERSION).tar.gz
+CRS_ARCHIVE_SHA := b552005471446a4a2454a6b6ee7e65f864219ce0
+CRS_ARCHIVE_TAR := v$(CRS_VERSION).tar.gz
+CRS_ARCHIVE_TMP := $(shell mktemp -d)
+MODSEC_CONF_SRC := https://raw.githubusercontent.com/SpiderLabs/ModSecurity/v3.0.10
+MODSEC_CONF_FILES :=  modsecurity.conf-recommended unicode.mapping
+
+CHECKSUM_CMD := shasum
+
+.PHONY: generate-crs 
+generate-crs: $(CRS_EMBED_FOLDER) $(MODSEC_CONF_FILES) .hack-modsecconf-rename .hack-crs-custom-epilogue .hack-test-embed
+
+.PHONY: $(CRS_EMBED_FOLDER)
+$(CRS_EMBED_FOLDER):
+	cd $(CRS_ARCHIVE_TMP)
+	curl -O -L $(CRS_ARCHIVE_SRC)
+	CHECKSUM=`$(CHECKSUM_CMD) $(CRS_ARCHIVE_TAR)`; \
+	case "$$CHECKSUM" in \
+		($(CRS_ARCHIVE_SHA)\ *) : ok ;; \
+		(*) echo $(CRS_ARCHIVE_TAR) checksum mismatch, expected=\"$(CRS_ARCHIVE_SHA)\" actual=\"$$CHECKSUM\"; \
+		exit 1 ;; \
+	esac
+	tar xzvf $(CRS_ARCHIVE_TAR) -C $(CRS_ARCHIVE_TMP)
+	-rm -rf $(CRS_ARCHIVE_TAR)
+	ls $(CRS_ARCHIVE_TMP)
+	rm -rf $@ 
+	mkdir -p $@
+	mv $(CRS_ARCHIVE_TMP)/coreruleset-$(CRS_VERSION)/rules $@
+	mv $(CRS_ARCHIVE_TMP)/coreruleset-$(CRS_VERSION)/crs-setup.conf.example $@/crs-setup.conf
+
+.PHONY: $(MODSEC_CONF_FILES)
+$(MODSEC_CONF_FILES):
+	cd $(CRS_EMBED_FOLDER) && { curl $(MODSEC_CONF_SRC)/$@ -o $@; cd -; }
+
+.PHONY: .hack-modsecconf-rename .hack-test-embed
+.hack-modsecconf-rename:
+	mv $(CRS_EMBED_FOLDER)/modsecurity.conf-recommended  $(CRS_EMBED_FOLDER)/modsecdefault.conf
+.hack-crs-custom-epilogue:
+	cat hack/crs-custom-epilogue.txt >> $(CRS_EMBED_FOLDER)/crs-setup.conf
+.hack-test-embed:
+	go test ./$(CRS_EMBED_FOLDER)/.. -count=1

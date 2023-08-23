@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -183,6 +185,27 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
 		},
+	}
+
+	if l.cfg.MultiTenant {
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{render.LinseedServiceName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+				},
+			},
+		}...)
 	}
 
 	if l.cfg.UsePSP {

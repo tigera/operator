@@ -33,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -371,6 +372,27 @@ var _ = Describe("LogStorage Linseed controller - multi-tenant", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
 		Expect(err).Should(HaveOccurred())
 		Expect(err.Error()).Should(ContainSubstring("CA secret"))
+	})
+
+	It("should not reconcile any resources if no Namespace was given", func() {
+		// Run the reconciler, passing in a Request with no Namespace. It should return successfully.
+		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Check that nothing was installed on the cluster.
+		linseedDp := appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      linseed.DeploymentName,
+				Namespace: tenantNS,
+			},
+		}
+		err = cli.Get(ctx, types.NamespacedName{Name: linseedDp.Name, Namespace: linseedDp.Namespace}, &linseedDp)
+		Expect(err).Should(HaveOccurred())
+		Expect(errors.IsNotFound(err)).Should(BeTrue())
+
+		// Check that OnCRFound was not called.
+		mockStatus.AssertNotCalled(GinkgoT(), "OnCRFound")
 	})
 
 	It("should reconcile resources for a standlone cluster", func() {

@@ -160,7 +160,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	err = r.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for LogStorage to exist", err, reqLogger)
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}

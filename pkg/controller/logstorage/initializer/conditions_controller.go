@@ -20,6 +20,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,20 +50,20 @@ func AddConditionsController(mgr manager.Manager, opts options.AddOptions) error
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("log-storage-conditions-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch LogStorage resource: %w", err)
+		return fmt.Errorf("log-storage-conditions-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Installation resource: %w", err)
+		return fmt.Errorf("log-storage-conditions-controller failed to watch Installation resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.TigeraStatus{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch TigeraStatus resource: %w", err)
+		return fmt.Errorf("log-storage-conditions-controller failed to watch TigeraStatus resource: %w", err)
 	}
 
 	return nil
@@ -85,6 +86,9 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	ls := &operatorv1.LogStorage{}
 	key := utils.DefaultTSEEInstanceKey
 	if err := r.client.Get(ctx, key, ls); err != nil {
+		if errors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
 		return reconcile.Result{}, err
 	}
 

@@ -92,23 +92,23 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch LogStorage resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch Network resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementCluster resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch ManagementCluster resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementClusterConnection resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, "log-storage-access"); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
 		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch Tenant resource: %w", err)
+			return fmt.Errorf("log-storage-access-controller failed to watch Tenant resource: %w", err)
 		}
 	}
 
@@ -128,31 +128,31 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, ns := range helper.BothNamespaces() {
 		for _, name := range secretsToWatch {
 			if err := utils.AddSecretsWatch(c, name, ns); err != nil {
-				return fmt.Errorf("log-storage-controller failed to watch Secret: %w", err)
+				return fmt.Errorf("log-storage-access-controller failed to watch Secret: %w", err)
 			}
 		}
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 
 	// Check if something modifies resources this controller creates.
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Service resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch Service resource: %w", err)
 	}
 	if err := utils.AddServiceWatch(c, render.LinseedServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Service resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch Service resource: %w", err)
 	}
 	if err := utils.AddDeploymentWatch(c, render.LinseedServiceName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Deployment resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch Deployment resource: %w", err)
 	}
 	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, helper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 
 	return nil
@@ -186,7 +186,6 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	err = r.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for LogStorage to exist", err, reqLogger)
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}

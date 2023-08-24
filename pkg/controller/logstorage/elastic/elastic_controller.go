@@ -110,30 +110,30 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to establish a connection to k8s: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to establish a connection to k8s: %w", err)
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch LogStorage resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Network resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Network resource: %w", err)
 	}
 	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ImageSet: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch ImageSet: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementCluster resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch ManagementCluster resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementClusterConnection resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, "log-storage-elastic"); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Authentication resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Authentication resource: %w", err)
 	}
 
 	// Start goroutines to establish watches against projectcalico.org/v3 resources.
@@ -155,28 +155,28 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
 	err = c.Watch(&source.Kind{Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch StorageClass resource: %w", err)
 	}
 
 	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKOperatorName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch StatefulSet resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Elasticsearch resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
 	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Kibana resource: %w", err)
 	}
 
 	// Watch all the elasticsearch user secrets in the operator namespace.
 	if err = utils.AddSecretWatchWithLabel(c, common.OperatorNamespace(), logstoragecommon.TigeraElasticsearchUserSecretLabel); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 
 	for _, secretName := range []string{
@@ -185,33 +185,33 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.TigeraLinseedSecret, certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+			return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 		}
 	}
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.ElasticsearchCuratorUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 	if opts.MultiTenant {
 		if err = utils.AddSecretsWatch(c, certificatemanagement.TenantCASecretName, ""); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch Secret resource: %w", err)
+			return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 		}
 	}
 
@@ -221,24 +221,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.ElasticsearchAdminUserSecret,
 	} {
 		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
+			return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 		}
 	}
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ConfigMap resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}
 
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddServiceWatch(c, render.LinseedServiceName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
 	}
 
 	return nil
@@ -253,27 +253,21 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	key := utils.DefaultTSEEInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if err != nil {
-		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
-		// there are still "LogStorage" related items that need to be set up
-		// TODO: This controller should be responsible for installing an ES cluster and nothing more.
-		// Any extra bits should be moved to companion controllers to reduce code complexity.
 		if !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		ls = nil
+
+		// No LogStorage resource. Nothing to do.
 		r.status.OnCRNotFound()
-	} else {
-		// We found the LogStorage instance.
-		r.status.OnCRFound()
+		return reconcile.Result{}, nil
 	}
 
+	// We found the LogStorage instance.
+	r.status.OnCRFound()
+
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
-	if ls == nil {
-		// TODO: This should be a short-circuit case once we move ManagedCluster logic to a separate controller.
-		// r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage CR to be created", nil, reqLogger)
-		// return reconcile.Result{}, nil
-	} else if ls.Status.State != operatorv1.TigeraStatusReady {
+	if ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -293,6 +287,10 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+	if variant != operatorv1.TigeraSecureEnterprise {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+		return reconcile.Result{}, nil
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
@@ -323,24 +321,9 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
-	if managementClusterConnection != nil && managementCluster != nil {
-		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// These checks ensure that we're in the correct state to continue to the render function without causing a panic
-	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
-		return reconcile.Result{}, nil
-	} else if ls == nil && managementClusterConnection == nil {
-		reqLogger.Info("LogStorage must exist for management and standalone clusters that require storage.")
-		return reconcile.Result{}, nil
-	} else if ls != nil && ls.DeletionTimestamp == nil && managementClusterConnection != nil {
-		// Note that we check if the DeletionTimestamp is set as the render function is responsible for any cleanup needed
-		// before the LogStorage CR can be deleted, and removing the finalizers from that CR
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "LogStorage validation failed - cluster type is managed but LogStorage CR still exists", nil, reqLogger)
+	if managementClusterConnection != nil {
+		// LogStorage is not support on a managed cluster.
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "LogStorage is not supported on a managed cluster", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
@@ -396,68 +379,66 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	var curatorSecrets []*corev1.Secret
 	var esAdminUserSecret *corev1.Secret
 
-	if managementClusterConnection == nil {
-		flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
-		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
+	flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
+	clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
-		// Check if there is a StorageClass available to run Elasticsearch on.
-		if err = r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
-			if errors.IsNotFound(err) {
-				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Failed to get storage class", err, reqLogger)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get storage class", err, reqLogger)
-			return reconcile.Result{}, err
+	// Check if there is a StorageClass available to run Elasticsearch on.
+	if err = r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
+		if errors.IsNotFound(err) {
+			err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Failed to get storage class", err, reqLogger)
+			return reconcile.Result{}, nil
 		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get storage class", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
-		if operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
-			applyTrial, err = r.applyElasticTrialSecret(ctx, install)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get eck trial license", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-
-			keyStoreSecret = &corev1.Secret{}
-			if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchKeystoreSecret, Namespace: render.ElasticsearchNamespace}, keyStoreSecret); err != nil {
-				if errors.IsNotFound(err) {
-					// We need to render a new one.
-					keyStoreSecret = render.CreateElasticsearchKeystoreSecret()
-				} else {
-					log.Error(err, "failed to read the Elasticsearch keystore secret")
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the Elasticsearch keystore secret", err, reqLogger)
-					return reconcile.Result{}, err
-				}
-			}
-		}
-
-		// Curator secrets are created by es-kube-controllers
-		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
-		if err != nil && !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get curator credentials", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// Get the admin user secret to copy to the operator namespace.
-		esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
+	if operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+		applyTrial, err = r.applyElasticTrialSecret(ctx, install)
 		if err != nil {
-			reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch admin user secret", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get eck trial license", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		if esAdminUserSecret != nil {
-			esAdminUserSecret = rsecret.CopyToNamespace(common.OperatorNamespace(), esAdminUserSecret)[0]
-		}
 
-		esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
-		if err != nil {
-			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
+		keyStoreSecret = &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchKeystoreSecret, Namespace: render.ElasticsearchNamespace}, keyStoreSecret); err != nil {
 			if errors.IsNotFound(err) {
-				reqLogger.Info("ConfigMap not found yet", "name", render.ECKLicenseConfigMapName)
+				// We need to render a new one.
+				keyStoreSecret = render.CreateElasticsearchKeystoreSecret()
 			} else {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get elastic license", err, reqLogger)
+				log.Error(err, "failed to read the Elasticsearch keystore secret")
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the Elasticsearch keystore secret", err, reqLogger)
 				return reconcile.Result{}, err
 			}
+		}
+	}
+
+	// Curator secrets are created by es-kube-controllers
+	curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get curator credentials", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Get the admin user secret to copy to the operator namespace.
+	esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
+	if err != nil {
+		reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch admin user secret", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if esAdminUserSecret != nil {
+		esAdminUserSecret = rsecret.CopyToNamespace(common.OperatorNamespace(), esAdminUserSecret)[0]
+	}
+
+	esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
+	if err != nil {
+		// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
+		if errors.IsNotFound(err) {
+			reqLogger.Info("ConfigMap not found yet", "name", render.ECKLicenseConfigMapName)
+		} else {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get elastic license", err, reqLogger)
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -534,40 +515,32 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
-	// create the ComponentHandler from the managementClusterConnection.
-	var hdler utils.ComponentHandler
-	if ls != nil {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	} else {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
-	}
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
-		LogStorage:                  ls,
-		Installation:                install,
-		ManagementCluster:           managementCluster,
-		ManagementClusterConnection: managementClusterConnection,
-		Elasticsearch:               elasticsearch,
-		Kibana:                      kibana,
-		ClusterConfig:               clusterConfig,
-		ElasticsearchUserSecret:     esAdminUserSecret,
-		ElasticsearchKeyPair:        elasticKeyPair,
-		KibanaKeyPair:               kibanaKeyPair,
-		PullSecrets:                 pullSecrets,
-		Provider:                    r.provider,
-		CuratorSecrets:              curatorSecrets,
-		ESService:                   esService,
-		KbService:                   kbService,
-		ClusterDomain:               r.clusterDomain,
-		BaseURL:                     baseURL,
-		ElasticLicenseType:          esLicenseType,
-		TrustedBundle:               trustedBundle,
-		UnusedTLSSecret:             unusedTLSSecret,
-		UsePSP:                      r.usePSP,
-		ApplyTrial:                  applyTrial,
-		KeyStoreSecret:              keyStoreSecret,
-		KibanaEnabled:               kibanaEnabled,
+		LogStorage:              ls,
+		Installation:            install,
+		ManagementCluster:       managementCluster,
+		Elasticsearch:           elasticsearch,
+		Kibana:                  kibana,
+		ClusterConfig:           clusterConfig,
+		ElasticsearchUserSecret: esAdminUserSecret,
+		ElasticsearchKeyPair:    elasticKeyPair,
+		KibanaKeyPair:           kibanaKeyPair,
+		PullSecrets:             pullSecrets,
+		Provider:                r.provider,
+		CuratorSecrets:          curatorSecrets,
+		ESService:               esService,
+		KbService:               kbService,
+		ClusterDomain:           r.clusterDomain,
+		BaseURL:                 baseURL,
+		ElasticLicenseType:      esLicenseType,
+		TrustedBundle:           trustedBundle,
+		UnusedTLSSecret:         unusedTLSSecret,
+		UsePSP:                  r.usePSP,
+		ApplyTrial:              applyTrial,
+		KeyStoreSecret:          keyStoreSecret,
+		KibanaEnabled:           kibanaEnabled,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -581,40 +554,38 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	if managementClusterConnection == nil {
-		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
+	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 
-		if kibanaEnabled && kibana == nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be created", nil, reqLogger)
-			return reconcile.Result{}, nil
-		} else if kibanaEnabled && kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana association to be established", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
+	if kibanaEnabled && kibana == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be created", nil, reqLogger)
+		return reconcile.Result{}, nil
+	} else if kibanaEnabled && kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana association to be established", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 
-		if !r.multiTenant && len(curatorSecrets) == 0 {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
+	if !r.multiTenant && len(curatorSecrets) == 0 {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 
-		// TODO: In multi-tenant mode, and probably single-tenant as well, ILM programming should be handled by someone other than the operator.
-		// Either out of band, or by Linseed.
-		if err := r.applyILMPolicies(ls, reqLogger, ctx); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
+	// TODO: In multi-tenant mode, and probably single-tenant as well, ILM programming should be handled by someone other than the operator.
+	// Either out of band, or by Linseed.
+	if err := r.applyILMPolicies(ls, reqLogger, ctx); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if kibanaEnabled && esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		// es-kube-controllers creates the ConfigMap and Secret needed for SSO into Kibana.
+		// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
+		// needed for logging user into Kibana is not available.
+		if err = r.checkOIDCUsersEsResource(ctx); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
-		}
-
-		if kibanaEnabled && esLicenseType == render.ElasticsearchLicenseTypeBasic {
-			// es-kube-controllers creates the ConfigMap and Secret needed for SSO into Kibana.
-			// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
-			// needed for logging user into Kibana is not available.
-			if err = r.checkOIDCUsersEsResource(ctx); err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
-				return reconcile.Result{}, err
-			}
 		}
 	}
 

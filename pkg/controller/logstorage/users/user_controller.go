@@ -89,20 +89,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch LogStorage resource: %w", err)
+		return fmt.Errorf("log-storage-user-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementCluster resource: %w", err)
+		return fmt.Errorf("log-storage-user-controller failed to watch ManagementCluster resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch ManagementClusterConnection resource: %w", err)
+		return fmt.Errorf("log-storage-user-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, "log-storage-users"); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
 		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch Tenant resource: %w", err)
+			return fmt.Errorf("log-storage-user-controller failed to watch Tenant resource: %w", err)
 		}
 	}
 

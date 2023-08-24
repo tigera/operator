@@ -66,7 +66,7 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(delObjs).To(HaveLen(0))
 
 		for i, expectedRes := range expectedCreateObjs {
-			rtest.ExpectResource(createObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(createObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		ds := rtest.GetResource(createObjs, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -123,7 +123,7 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(len(delObjs)).To(Equal(len(expectedDelObjs)))
 
 		for i, expectedRes := range expectedDelObjs {
-			rtest.ExpectResource(delObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(delObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 

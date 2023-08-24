@@ -126,6 +126,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "calico/fluentd"}}
+	ComponentCalicoFluentd = component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "csi-node-driver-registrar"}}
 	ComponentCalicoCSIRegistrarFIPS = component{
 		Version:  "{{ .Version }}-fips",
@@ -155,6 +162,7 @@ var (
 		ComponentCalicoCSI,
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalicoFluentd,
 		ComponentCalicoCSIRegistrarFIPS,
 	}
 )

@@ -82,8 +82,10 @@ var _ = Describe("Linseed rendering tests", func() {
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
 			}
+
 			replicas = 2
 			kp, tokenKP, bundle := getTLS(installation)
+
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
@@ -95,12 +97,13 @@ var _ = Describe("Linseed rendering tests", func() {
 				ClusterDomain:   clusterDomain,
 				UsePSP:          true,
 				ESClusterConfig: esClusterConfig,
+				Namespace:       render.ElasticsearchNamespace,
+				BindNamespaces:  []string{render.ElasticsearchNamespace},
 			}
 		})
 
-		It("should render an Linseed deployment and all supporting resources", func() {
+		It("should render a Linseed deployment and all supporting resources", func() {
 			component := Linseed(cfg)
-
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources, false)
 		})
@@ -117,7 +120,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			}
 		})
 
-		It("should render an Linseed deployment and all supporting resources when CertificateManagement is enabled", func() {
+		It("should render a Linseed deployment and all supporting resources when CertificateManagement is enabled", func() {
 			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 			Expect(err).NotTo(HaveOccurred())
 			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
@@ -133,6 +136,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ClusterDomain:   clusterDomain,
 				UsePSP:          true,
 				ESClusterConfig: esClusterConfig,
+				Namespace:       render.ElasticsearchNamespace,
+				BindNamespaces:  []string{render.ElasticsearchNamespace},
 			}
 
 			component := Linseed(cfg)
@@ -149,7 +154,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(ok).To(BeTrue())
+			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(deploy.Spec.Template.Spec.Affinity).To(BeNil())
 		})
 
@@ -161,7 +166,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(ok).To(BeTrue())
+			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchNamespace)))
 		})
@@ -173,7 +178,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(ok).To(BeTrue())
+			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(d.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 		})
 
@@ -189,7 +194,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(ok).To(BeTrue())
+			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 		})
 
@@ -224,6 +229,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
 			)
 		})
+
 		It("should set the right env when FIPS mode is enabled", func() {
 			kp, tokenKP, bundle := getTLS(installation)
 			enabled := operatorv1.FIPSModeEnabled
@@ -238,11 +244,13 @@ var _ = Describe("Linseed rendering tests", func() {
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				ESClusterConfig: esClusterConfig,
+				Namespace:       render.ElasticsearchNamespace,
+				BindNamespaces:  []string{render.ElasticsearchNamespace},
 			})
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(ok).To(BeTrue())
+			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
 		})
 	})
@@ -256,14 +264,16 @@ func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.Ke
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 
-	esDNSNames := dns.GetServiceDNSNames(render.TigeraLinseedSecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
+	linseedDNSNames := dns.GetServiceDNSNames(render.TigeraLinseedSecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+	linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, linseedDNSNames)
 	Expect(err).NotTo(HaveOccurred())
 
-	tokenKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedTokenSecret, render.ElasticsearchNamespace, esDNSNames)
+	tokenKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedTokenSecret, render.ElasticsearchNamespace, linseedDNSNames)
 	Expect(err).NotTo(HaveOccurred())
+
 	trustedBundle := certificateManager.CreateTrustedBundle(linseedKeyPair)
 	Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 	return linseedKeyPair, tokenKeyPair, trustedBundle
 }
 
@@ -317,7 +327,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 
 	// Check annotations
 	if !useCSR {
-		ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("tigera-operator.hash.operator.tigera.io/tigera-secure-linseed-cert", Not(BeEmpty())))
+		ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("tigera-elasticsearch.hash.operator.tigera.io/tigera-secure-linseed-cert", Not(BeEmpty())))
 	}
 	ExpectWithOffset(1, deployment.Spec.Template.Annotations).To(HaveKeyWithValue("tigera-operator.hash.operator.tigera.io/tigera-ca-private", Not(BeEmpty())))
 

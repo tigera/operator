@@ -45,8 +45,6 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 	}
 	for _, r := range resources.APIResources {
 		switch r.Kind {
-		case "LogCollector":
-			fallthrough
 		case "LogStorage":
 			fallthrough
 		case "AmazonCloudIntegration":
@@ -62,8 +60,6 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 		case "ManagementCluster":
 			fallthrough
 		case "EgressGateway":
-			fallthrough
-		case "ManagementClusterConnection":
 			return true, nil
 		}
 	}

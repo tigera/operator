@@ -61,13 +61,19 @@ var log = logf.Log.WithName("controller_logcollector")
 // Add creates a new LogCollector Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		// No need to start this controller.
-		return nil
-	}
+	/*
+		if !opts.EnterpriseCRDExists {
+			// No need to start this controller.
+			return nil
+		}*/
 
-	licenseAPIReady := &utils.ReadyFlag{}
-	tierWatchReady := &utils.ReadyFlag{}
+	var licenseAPIReady *utils.ReadyFlag
+	var tierWatchReady *utils.ReadyFlag
+
+	if opts.EnterpriseCRDExists {
+		licenseAPIReady = &utils.ReadyFlag{}
+		tierWatchReady = &utils.ReadyFlag{}
+	}
 
 	// create the reconciler
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
@@ -78,39 +84,41 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
 	}
 
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		log.Error(err, "Failed to establish a connection to k8s")
-		return err
+	if opts.EnterpriseCRDExists {
+		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			log.Error(err, "Failed to establish a connection to k8s")
+			return err
+		}
+		go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+		go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+			{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+		})
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
-		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
-	})
-
-	return add(mgr, controller)
+	return add(mgr, controller, reconciler.(*ReconcileLogCollector))
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		licenseAPIReady: licenseAPIReady,
-		tierWatchReady:  tierWatchReady,
-		usePSP:          opts.UsePSP,
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		provider:            opts.DetectedProvider,
+		status:              status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
+		clusterDomain:       opts.ClusterDomain,
+		licenseAPIReady:     licenseAPIReady,
+		tierWatchReady:      tierWatchReady,
+		enterpriseCRDExists: opts.EnterpriseCRDExists,
+		usePSP:              opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
 }
 
 // add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c controller.Controller, r *ReconcileLogCollector) error {
 	var err error
 
 	// Watch for changes to primary resource LogCollector
@@ -134,13 +142,23 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
-		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
+		render.ElasticsearchLogCollectorUserSecret, relasticsearch.PublicCertSecret,
+		monitor.PrometheusTLSSecretName, render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
+		}
+	}
+
+	if r.enterpriseCRDExists {
+		for _, secretName := range []string{
+			render.ElasticsearchEksLogForwarderUserSecret,
+			render.S3FluentdSecretName, render.EksLogForwarderSecret,
+			render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName,
+		} {
+			if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
+				return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
+			}
 		}
 	}
 
@@ -170,14 +188,15 @@ var _ reconcile.Reconciler = &ReconcileLogCollector{}
 type ReconcileLogCollector struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	status          status.StatusManager
-	clusterDomain   string
-	licenseAPIReady *utils.ReadyFlag
-	tierWatchReady  *utils.ReadyFlag
-	usePSP          bool
+	client              client.Client
+	scheme              *runtime.Scheme
+	provider            operatorv1.Provider
+	status              status.StatusManager
+	clusterDomain       string
+	licenseAPIReady     *utils.ReadyFlag
+	tierWatchReady      *utils.ReadyFlag
+	enterpriseCRDExists bool
+	usePSP              bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -248,6 +267,8 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogCollector")
+	var license v3.LicenseKey
+	var err error
 	// Fetch the LogCollector instance
 	instance, err := GetLogCollector(ctx, r.client)
 	if err != nil {
@@ -281,54 +302,61 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	if !r.enterpriseCRDExists && (instance.Spec.AdditionalStores != nil || instance.Spec.CollectProcessPath != nil) {
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Configuring additional log sources requires enterprise license.", nil, reqLogger)
+		return reconcile.Result{}, fmt.Errorf("Configuring additional log sources requires enterprise license.")
+	}
+
 	// Default fields on the LogCollector instance if needed.
-	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
-	modifiedFields := fillDefaults(instance)
-	if len(modifiedFields) > 0 {
-		if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-			r.status.SetDegraded(operatorv1.ResourcePatchError, fmt.Sprintf("Failed to set defaults for LogCollector fields: [%s]",
-				strings.Join(modifiedFields, ", "),
-			), err, reqLogger)
-			return reconcile.Result{}, err
+	if r.enterpriseCRDExists {
+		preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+		modifiedFields := fillDefaults(instance)
+		if len(modifiedFields) > 0 {
+			if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+				r.status.SetDegraded(operatorv1.ResourcePatchError, fmt.Sprintf("Failed to set defaults for LogCollector fields: [%s]",
+					strings.Join(modifiedFields, ", "),
+				), err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
-	}
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
-	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		} else {
-			log.Error(err, "Error querying allow-tigera tier")
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
-			return reconcile.Result{}, err
+		if !utils.IsAPIServerReady(r.client, reqLogger) {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
+			return reconcile.Result{}, nil
 		}
-	}
 
-	if !r.licenseAPIReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	license, err := utils.FetchLicenseKey(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+		// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+		if !r.tierWatchReady.IsReady() {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+
+		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			} else {
+				log.Error(err, "Error querying allow-tigera tier")
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
+		if !r.licenseAPIReady.IsReady() {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		license, err = utils.FetchLicenseKey(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -344,30 +372,34 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-			return reconcile.Result{}, nil
+	var pullSecrets, esSecrets []*corev1.Secret
+	var esClusterConfig *relasticsearch.ClusterConfig
+	if r.enterpriseCRDExists {
+		pullSecrets, err = utils.GetNetworkingPullSecrets(installation, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+		esClusterConfig, err = utils.GetElasticsearchClusterConfig(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
+			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
-		return reconcile.Result{}, err
+
+		esSecrets, err = utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
+				return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
@@ -389,30 +421,33 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// fluentdKeyPair is the key pair fluentd presents to identify itself
-	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
-	}
+	var prometheusCertificate, esgwCertificate certificatemanagement.CertificateInterface
+	var fluentdKeyPair certificatemanagement.KeyPairInterface
+	if r.enterpriseCRDExists {
+		// fluentdKeyPair is the key pair fluentd presents to identify itself
+		fluentdKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		prometheusCertificate, err = certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if prometheusCertificate == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 
-	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if prometheusCertificate == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-	}
-
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
+		esgwCertificate, err = certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if esgwCertificate == nil {
+			log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
@@ -433,8 +468,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	trustedBundleCerts := []certificatemanagement.CertificateInterface{linseedCertificate}
+	if r.enterpriseCRDExists {
+		trustedBundleCerts = append(trustedBundleCerts, prometheusCertificate, esgwCertificate)
+	}
 	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate, linseedCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(trustedBundleCerts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
@@ -442,72 +481,74 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
-	exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
-	if !exportLogs && instance.Spec.AdditionalStores != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs", nil, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	var s3Credential *render.S3Credential
-	if instance.Spec.AdditionalStores != nil {
-		if instance.Spec.AdditionalStores.S3 != nil {
-			s3Credential, err = getS3Credential(r.client)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceValidationError, "Error with S3 credential secret", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			if s3Credential == nil {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "S3 credential secret does not exist", nil, reqLogger)
-				return reconcile.Result{}, nil
-			}
-		}
-	}
-
 	var splunkCredential *render.SplunkCredential
-	if instance.Spec.AdditionalStores != nil {
-		if instance.Spec.AdditionalStores.Splunk != nil {
-			splunkCredential, err = getSplunkCredential(r.client)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceValidationError, "Error with Splunk credential secret", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			if splunkCredential == nil {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Splunk credential secret does not exist", nil, reqLogger)
-				return reconcile.Result{}, nil
-			}
-		}
-	}
-
 	var useSyslogCertificate bool
-	if instance.Spec.AdditionalStores != nil {
-		if instance.Spec.AdditionalStores.Syslog != nil && instance.Spec.AdditionalStores.Syslog.Encryption == v1.EncryptionTLS {
-			syslogCert, err := getSysLogCertificate(r.client)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading Syslog certificate", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			if syslogCert != nil {
-				useSyslogCertificate = true
-				trustedBundle.AddCertificates(syslogCert)
+	if r.enterpriseCRDExists {
+		exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
+		if !exportLogs && instance.Spec.AdditionalStores != nil {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs", nil, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		if instance.Spec.AdditionalStores != nil {
+			if instance.Spec.AdditionalStores.S3 != nil {
+				s3Credential, err = getS3Credential(r.client)
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceValidationError, "Error with S3 credential secret", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				if s3Credential == nil {
+					r.status.SetDegraded(operatorv1.ResourceNotFound, "S3 credential secret does not exist", nil, reqLogger)
+					return reconcile.Result{}, nil
+				}
 			}
 		}
-	}
 
-	if instance.Spec.AdditionalStores != nil {
-		if instance.Spec.AdditionalStores.Syslog != nil {
-			syslog := instance.Spec.AdditionalStores.Syslog
+		if instance.Spec.AdditionalStores != nil {
+			if instance.Spec.AdditionalStores.Splunk != nil {
+				splunkCredential, err = getSplunkCredential(r.client)
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceValidationError, "Error with Splunk credential secret", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				if splunkCredential == nil {
+					r.status.SetDegraded(operatorv1.ResourceNotFound, "Splunk credential secret does not exist", nil, reqLogger)
+					return reconcile.Result{}, nil
+				}
+			}
+		}
 
-			// If the user set Syslog.logTypes, we need to ensure that they did not include
-			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
-			// ManagementClusterConnection CR is present). This is because IDS events
-			// are only forwarded within a non-managed cluster (where LogStorage is present).
-			if syslog.LogTypes != nil {
-				if err == nil && managedCluster {
-					for _, l := range syslog.LogTypes {
-						// Set status to degraded to warn user and let them fix the issue themselves.
-						if l == v1.SyslogLogIDSEvents {
-							r.status.SetDegraded(operatorv1.ResourceValidationError, "IDSEvents option is not supported for Syslog config in a managed cluster", nil, reqLogger)
-							return reconcile.Result{}, err
+		if instance.Spec.AdditionalStores != nil {
+			if instance.Spec.AdditionalStores.Syslog != nil && instance.Spec.AdditionalStores.Syslog.Encryption == v1.EncryptionTLS {
+				syslogCert, err := getSysLogCertificate(r.client)
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading Syslog certificate", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				if syslogCert != nil {
+					useSyslogCertificate = true
+					trustedBundle.AddCertificates(syslogCert)
+				}
+			}
+		}
+
+		if instance.Spec.AdditionalStores != nil {
+			if instance.Spec.AdditionalStores.Syslog != nil {
+				syslog := instance.Spec.AdditionalStores.Syslog
+
+				// If the user set Syslog.logTypes, we need to ensure that they did not include
+				// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
+				// ManagementClusterConnection CR is present). This is because IDS events
+				// are only forwarded within a non-managed cluster (where LogStorage is present).
+				if syslog.LogTypes != nil {
+					if err == nil && managedCluster {
+						for _, l := range syslog.LogTypes {
+							// Set status to degraded to warn user and let them fix the issue themselves.
+							if l == v1.SyslogLogIDSEvents {
+								r.status.SetDegraded(operatorv1.ResourceValidationError, "IDSEvents option is not supported for Syslog config in a managed cluster", nil, reqLogger)
+								return reconcile.Result{}, err
+							}
 						}
 					}
 				}
@@ -522,18 +563,20 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
-	if installation.KubernetesProvider == operatorv1.ProviderEKS {
-		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
-		if instance.Spec.AdditionalSources != nil {
-			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
-				eksConfig, err = getEksCloudwatchLogConfig(r.client,
-					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
-					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
-					instance.Spec.AdditionalSources.EksCloudwatchLog.GroupName,
-					instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix)
-				if err != nil {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving EKS Cloudwatch Logs configuration", err, reqLogger)
-					return reconcile.Result{}, err
+	if r.enterpriseCRDExists {
+		if installation.KubernetesProvider == operatorv1.ProviderEKS {
+			log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
+			if instance.Spec.AdditionalSources != nil {
+				if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+					eksConfig, err = getEksCloudwatchLogConfig(r.client,
+						instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
+						instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
+						instance.Spec.AdditionalSources.EksCloudwatchLog.GroupName,
+						instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix)
+					if err != nil {
+						r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving EKS Cloudwatch Logs configuration", err, reqLogger)
+						return reconcile.Result{}, err
+					}
 				}
 			}
 		}
@@ -559,20 +602,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
 		UseSyslogCertificate: useSyslogCertificate,
+		EnterpriseCRDExists:  r.enterpriseCRDExists,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
-	components := []render.Component{
-		comp,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.LogCollectorNamespace,
-			ServiceAccounts: []string{render.FluentdNodeName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
+	components := []render.Component{comp}
+	certMgmt := &rcertificatemanagement.Config{
+		Namespace:       render.LogCollectorNamespace,
+		ServiceAccounts: []string{render.FluentdNodeName},
+		TrustedBundle:   trustedBundle,
 	}
+	if r.enterpriseCRDExists {
+		certMgmt.KeyPairOptions = []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
+		}
+	}
+	components = append(components, rcertificatemanagement.CertificateManagement(certMgmt))
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
@@ -587,43 +632,45 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Render a fluentd component for Windows if the cluster has Windows nodes.
-	hasWindowsNodes, err := hasWindowsNodes(r.client)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if hasWindowsNodes {
-		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:         instance,
-			ESSecrets:            esSecrets,
-			ESClusterConfig:      esClusterConfig,
-			S3Credential:         s3Credential,
-			SplkCredential:       splunkCredential,
-			Filters:              filters,
-			EKSConfig:            eksConfig,
-			PullSecrets:          pullSecrets,
-			Installation:         installation,
-			ClusterDomain:        r.clusterDomain,
-			OSType:               rmeta.OSTypeWindows,
-			TrustedBundle:        trustedBundle,
-			ManagedCluster:       managedCluster,
-			UsePSP:               r.usePSP,
-			UseSyslogCertificate: useSyslogCertificate,
-			FluentdKeyPair:       fluentdKeyPair,
-		}
-		comp = render.Fluentd(fluentdCfg)
-
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+	if r.enterpriseCRDExists {
+		hasWindowsNodes, err := hasWindowsNodes(r.client)
+		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		// Create a component handler to manage the rendered component.
-		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
+		if hasWindowsNodes {
+			fluentdCfg = &render.FluentdConfiguration{
+				LogCollector:         instance,
+				ESSecrets:            esSecrets,
+				ESClusterConfig:      esClusterConfig,
+				S3Credential:         s3Credential,
+				SplkCredential:       splunkCredential,
+				Filters:              filters,
+				EKSConfig:            eksConfig,
+				PullSecrets:          pullSecrets,
+				Installation:         installation,
+				ClusterDomain:        r.clusterDomain,
+				OSType:               rmeta.OSTypeWindows,
+				TrustedBundle:        trustedBundle,
+				ManagedCluster:       managedCluster,
+				UsePSP:               r.usePSP,
+				UseSyslogCertificate: useSyslogCertificate,
+				FluentdKeyPair:       fluentdKeyPair,
+			}
+			comp = render.Fluentd(fluentdCfg)
 
-		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, err
+			if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+
+			// Create a component handler to manage the rendered component.
+			handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+			if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 

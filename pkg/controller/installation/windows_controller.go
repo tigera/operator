@@ -559,10 +559,12 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 				}
 			}
 
-			// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, "openshift-dns" on OpenShift)
+			// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
 			kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
 			if r.autoDetectedProvider == operator.ProviderOpenShift {
-				kubeDNSServiceName = types.NamespacedName{Name: "openshift-dns", Namespace: "default"}
+				kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+			} else if r.autoDetectedProvider == operator.ProviderRKE2 {
+				kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
 			}
 
 			kubeDNSService := &corev1.Service{}

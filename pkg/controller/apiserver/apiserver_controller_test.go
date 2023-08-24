@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -75,10 +76,12 @@ var _ = Describe("apiserver controller tests", func() {
 		ctx = context.Background()
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 
+		// Create a CertificateManagement instance for tests that need it.
 		ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		Expect(err).NotTo(HaveOccurred())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		certificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
 		replicas := int32(2)
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
@@ -95,7 +98,11 @@ var _ = Describe("apiserver controller tests", func() {
 				Registry:             "some.registry.org/",
 			},
 		}
+
 		// Apply prerequisites for the basic reconcile to succeed.
+		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		})).ToNot(HaveOccurred())

@@ -26,13 +26,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var (
-	ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
-)
+var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
 	CSRImage       string
 	Name           string
+	Namespace      string
 	PrivateKeyPEM  []byte
 	CertificatePEM []byte
 	ClusterDomain  string
@@ -50,6 +49,10 @@ func (k *KeyPair) GetCertificatePEM() []byte {
 
 func (k *KeyPair) GetName() string {
 	return k.Name
+}
+
+func (k *KeyPair) GetNamespace() string {
+	return k.Namespace
 }
 
 // UseCertificateManagement is true if this secret is not BYO and certificate management is used to provide the a pair to a pod.
@@ -81,7 +84,10 @@ func (k *KeyPair) Secret(namespace string) *corev1.Secret {
 }
 
 func (k *KeyPair) HashAnnotationKey() string {
-	return fmt.Sprintf("hash.operator.tigera.io/%s", k.GetName())
+	if k.GetNamespace() == "" {
+		return fmt.Sprintf("hash.operator.tigera.io/%s", k.GetName())
+	}
+	return fmt.Sprintf("%s.hash.operator.tigera.io/%s", k.GetNamespace(), k.GetName())
 }
 
 func (k *KeyPair) HashAnnotationValue() string {

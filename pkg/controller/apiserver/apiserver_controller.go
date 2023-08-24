@@ -99,6 +99,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		clusterDomain:       opts.ClusterDomain,
 		usePSP:              opts.UsePSP,
 		tierWatchReady:      &utils.ReadyFlag{},
+		multiTenant:         opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -118,7 +119,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
@@ -192,6 +193,7 @@ type ReconcileAPIServer struct {
 	clusterDomain       string
 	usePSP              bool
 	tierWatchReady      *utils.ReadyFlag
+	multiTenant         bool
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -305,6 +307,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		if managementCluster != nil {
+			// TODO: Does this belong here or in the manager?
 			tunnelCASecret, err := utils.GetSecret(ctx, r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
@@ -382,6 +385,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		TunnelCASecret:              tunnelCAKeyPair,
 		TrustedBundle:               trustedBundle,
 		UsePSP:                      r.usePSP,
+		MultiTenant:                 r.multiTenant,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

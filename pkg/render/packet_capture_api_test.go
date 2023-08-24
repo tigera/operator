@@ -59,8 +59,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -201,7 +203,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			{
 				Name:            render.PacketCaptureContainerName,
 				Image:           fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: render.ImagePullPolicy(),
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 					Capabilities: &corev1.Capabilities{
@@ -268,7 +270,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	checkPacketCaptureResources := func(resources []client.Object, useCSR, enableOIDC bool) {
 		for i, expectedRes := range expectedResources(useCSR, enableOIDC) {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources(useCSR, enableOIDC))))
 
@@ -295,7 +297,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		// Check annotations
 		if !useCSR {
-			Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-packetcapture-server-tls", Not(BeEmpty())))
+			Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("tigera-operator.hash.operator.tigera.io/tigera-packetcapture-server-tls", Not(BeEmpty())))
 		}
 
 		// Check permissions
@@ -377,8 +379,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
-		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace())
+
+		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 

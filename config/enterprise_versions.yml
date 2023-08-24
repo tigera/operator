@@ -7,13 +7,11 @@ components:
     image: tigera/cnx-manager
     version: master
   voltron:
-    registry: gcr.io/unique-caldron-775/
-    image: casey/voltron
-    version: latest
+    image: tigera/voltron
+    version: master
   cnx-apiserver:
-    registry: gcr.io/unique-caldron-775/
-    image: casey/cnx-apiserver
-    version: latest
+    image: tigera/cnx-apiserver
+    version: master
   cnx-queryserver:
     image: tigera/cnx-queryserver
     version: master

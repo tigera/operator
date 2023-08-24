@@ -21,9 +21,9 @@ var (
 	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = component{
-		Version:  "latest",
-		Image:    "casey/cnx-apiserver",
-		Registry: "gcr.io/unique-caldron-775/",
+		Version:  "master",
+		Image:    "tigera/cnx-apiserver",
+		Registry: "",
 	}
 
 	ComponentComplianceBenchmarker = component{
@@ -180,9 +180,9 @@ var (
 	}
 
 	ComponentManagerProxy = component{
-		Version:  "latest",
-		Image:    "casey/voltron",
-		Registry: "gcr.io/unique-caldron-775/",
+		Version:  "master",
+		Image:    "tigera/voltron",
+		Registry: "",
 	}
 
 	ComponentPacketCapture = component{

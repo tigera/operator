@@ -38,6 +38,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -111,6 +112,12 @@ var _ = Describe("Monitor controller tests", func() {
 		})).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+		// Create a certificate manager and provision the CA to unblock the controller. Generally this would be done by
+		// the cluster CA controller and is a prerequisite for the monitor controller to function.
+		cm, err := certificatemanager.Create(cli, &installation.Spec, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Mark that watches were successful.
 		r.prometheusReady.MarkAsReady()
@@ -215,7 +222,6 @@ var _ = Describe("Monitor controller tests", func() {
 					"alertmanager.yaml": []byte("Alertmanager secret in tigera-prometheus namespace"),
 				},
 			}
-
 		})
 
 		AfterEach(func() {
@@ -358,6 +364,7 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with empty tigerastatus conditions", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "monitor"},
@@ -376,6 +383,7 @@ var _ = Describe("Monitor controller tests", func() {
 
 			Expect(instance.Status.Conditions).To(HaveLen(0))
 		})
+
 		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "monitor"},
@@ -435,6 +443,7 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "monitor"},

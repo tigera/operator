@@ -80,7 +80,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, "")
+		instance, err = GetManager(ctx, c, false, "")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -94,7 +94,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instanceA)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, tenantANamespace)
+		instance, err = GetManager(ctx, c, true, tenantANamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		tenantBNamespace := "tenant-b"
@@ -104,13 +104,13 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err = c.Create(ctx, instanceB)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, tenantBNamespace)
+		instance, err = GetManager(ctx, c, true, tenantBNamespace)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should return expected error when querying namespace that does not contain a manager instance", func() {
 		nsWithoutManager := "non-manager-ns"
-		instance, err := GetManager(ctx, c, nsWithoutManager)
+		instance, err := GetManager(ctx, c, true, nsWithoutManager)
 		Expect(kerror.IsNotFound(err)).To(BeTrue())
 		Expect(instance).To(BeNil())
 	})
@@ -119,6 +119,7 @@ var _ = Describe("Manager controller tests", func() {
 		var r ReconcileManager
 		var cr *operatorv1.Manager
 		var mockStatus *status.MockStatus
+		var certificateManager certificatemanager.CertificateManager
 
 		clusterDomain := "some.domain"
 		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
@@ -201,7 +202,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Provision certificates that the controller will query as part of the test.
 			var err error
-			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
+			certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
 			Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
@@ -251,6 +252,46 @@ var _ = Describe("Manager controller tests", func() {
 			// Mark that watches were successful.
 			r.licenseAPIReady.MarkAsReady()
 			r.tierWatchReady.MarkAsReady()
+		})
+
+		It("should create an internal manager TLS cert secret", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			internalManagerTLSSecret := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ManagerInternalTLSSecretName,
+					Namespace: common.OperatorNamespace(),
+				},
+			}
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
+			dnsNames = append(dnsNames, "localhost")
+			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
+			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
+		})
+
+		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
+			// Update the internal manager TLS secret with old DNS name.
+			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Update(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			internalManagerTLSSecret := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ManagerInternalTLSSecretName,
+					Namespace: common.OperatorNamespace(),
+				},
+			}
+
+			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
+			dnsNames = append(dnsNames, "localhost")
+			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
+			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
 
 		It("should reconcile if user supplied a manager TLS cert", func() {
@@ -387,6 +428,7 @@ var _ = Describe("Manager controller tests", func() {
 		var mockStatus *status.MockStatus
 		var licenseKey *v3.LicenseKey
 		var compliance *operatorv1.Compliance
+		var certificateManager certificatemanager.CertificateManager
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -465,7 +507,8 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			// Provision certificates that the controller will query as part of the test.
-			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
+			var err error
+			certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
 			Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
@@ -704,7 +747,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, "")
+				instance, err := GetManager(ctx, r.client, false, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -728,7 +771,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, "")
+				instance, err := GetManager(ctx, r.client, false, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -772,7 +815,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, "")
+				instance, err := GetManager(ctx, r.client, false, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -794,6 +837,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
 				Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 			})
+
 			It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 				ts := &operatorv1.TigeraStatus{
@@ -832,7 +876,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "",
 				}})
 				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, "")
+				instance, err := GetManager(ctx, r.client, false, "")
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -863,15 +907,16 @@ var _ = Describe("Manager controller tests", func() {
 			BeforeEach(func() {
 				r.multiTenant = true
 			})
+
 			It("should reconcile both with and without namespace provided while namespaced managers exist", func() {
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace)
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, managerTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
 
-				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace)
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
 				managerTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantBNamespace, []string{render.ManagerInternalTLSSecretName})

@@ -69,8 +69,9 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		trustedCaBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -124,29 +125,24 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 		Expect(resources).To(HaveLen(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")
 		d := resource.(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal(AwsCIName))
-
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
-
 		Expect(d.Spec.Template.Name).To(Equal(AwsCIName))
 		Expect(d.Spec.Template.Namespace).To(Equal(AwsCINs))
-
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(0))
-
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal(AwsCIName))
-
 		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
-
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.ObjectMeta.Annotations).To(HaveKey("hash.operator.tigera.io/credential-secret"))
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+
 		container := d.Spec.Template.Spec.Containers[0]
 		Expect(container.Name).To(Equal(AwsCIName))
 		Expect(container.Image).To(Equal(
@@ -163,14 +159,16 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			}))
 		Expect(d.Spec.Template.Spec.Volumes).To(Equal(
 			[]corev1.Volume{
-				{Name: "tigera-ca-bundle",
+				{
+					Name: "tigera-ca-bundle",
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: "tigera-ca-bundle",
 							},
 						},
-					}},
+					},
+				},
 			},
 		))
 
@@ -224,7 +222,6 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
-
 	})
 
 	It("should set MetadataAccess when configured", func() {
@@ -274,6 +271,5 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		}
 		Expect(envs).To(HaveLen(len(env)))
 		Expect(envs).To(ConsistOf(env))
-
 	})
 })

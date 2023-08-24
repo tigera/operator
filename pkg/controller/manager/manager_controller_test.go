@@ -124,7 +124,6 @@ var _ = Describe("Manager controller tests", func() {
 		clusterDomain := "some.domain"
 		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
 		expectedDNSNames = append(expectedDNSNames, "localhost")
-		var certificateManager certificatemanager.CertificateManager
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -908,20 +907,40 @@ var _ = Describe("Manager controller tests", func() {
 				r.multiTenant = true
 			})
 
-			It("should reconcile both with and without namespace provided while namespaced managers exist", func() {
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation())
+			It("Should reconcile only if a namespace is provided.", func() {
+				// Create the Tenant resources for tenant-a and tenant-b.
+				tenantA := &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{ID: "tenant-a"},
+				}
+				Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
+				tenantB := &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default",
+						Namespace: tenantBNamespace,
+					},
+					Spec: operatorv1.TenantSpec{ID: "tenant-b"},
+				}
+				Expect(c.Create(ctx, tenantB)).NotTo(HaveOccurred())
+
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, managerTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
-				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation())
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
 				managerTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantBNamespace, []string{render.ManagerInternalTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, managerTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
 
 				err = c.Create(ctx, &operatorv1.Manager{
 					ObjectMeta: metav1.ObjectMeta{
@@ -968,8 +987,9 @@ var _ = Describe("Manager controller tests", func() {
 
 				// Now reconcile only tenant A's namespace and check that its deployment exists, but tenant B's deployment
 				// still hasn't been reconciled so it should still not exist
-				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+				result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
 				Expect(err).ShouldNot(HaveOccurred())
+				Expect(result).To(Equal(reconcile.Result{}))
 
 				err = test.GetResource(c, &tenantADeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())

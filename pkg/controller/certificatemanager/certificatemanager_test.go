@@ -498,37 +498,42 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 	Describe("test TrustedBundle interface", func() {
 		It("should add a pem block for each certificate", func() {
-			By("creating five secrets in the datastore")
-			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, keyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			keyPair2, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName2, appNs, appDNSNames)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, keyPair2.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(err).NotTo(HaveOccurred())
-			byoSecret.Name, byoSecret.Namespace = "byo-secret", common.OperatorNamespace()
-			Expect(cli.Create(ctx, byoSecret)).NotTo(HaveOccurred())
-			Expect(err).NotTo(HaveOccurred())
-			legacySecret.Name, legacySecret.Namespace = "legacy-secret", common.OperatorNamespace()
-			Expect(cli.Create(ctx, legacySecret)).NotTo(HaveOccurred())
-			Expect(err).NotTo(HaveOccurred())
-			legacyWithClientKeyUsage.Name, legacyWithClientKeyUsage.Namespace = "legacy-secret-wcku", common.OperatorNamespace()
-			Expect(cli.Create(ctx, legacyWithClientKeyUsage)).NotTo(HaveOccurred())
-			Expect(err).NotTo(HaveOccurred())
+			By("creating five secrets in the datastore", func() {
+				keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cli.Create(ctx, keyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-			By("creating and validating the five certificates")
+				keyPair2, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName2, appNs, appDNSNames)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cli.Create(ctx, keyPair2.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+				byoSecret.Name, byoSecret.Namespace = "byo-secret", common.OperatorNamespace()
+				Expect(cli.Create(ctx, byoSecret)).NotTo(HaveOccurred())
+
+				legacySecret.Name, legacySecret.Namespace = "legacy-secret", common.OperatorNamespace()
+				Expect(cli.Create(ctx, legacySecret)).NotTo(HaveOccurred())
+
+				legacyWithClientKeyUsage.Name, legacyWithClientKeyUsage.Namespace = "legacy-secret-wcku", common.OperatorNamespace()
+				Expect(cli.Create(ctx, legacyWithClientKeyUsage)).NotTo(HaveOccurred())
+			})
+
+			By("querying and validating the five certificates")
 			cert, err := certificateManager.GetCertificate(cli, appSecretName, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
+
 			cert2, err := certificateManager.GetCertificate(cli, appSecretName2, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
+
 			byo, err := certificateManager.GetCertificate(cli, byoSecret.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
+
 			lwcku, err := certificateManager.GetCertificate(cli, legacyWithClientKeyUsage.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
 			kp, err := certificateManager.GetOrCreateKeyPair(cli, legacySecret.Name, common.OperatorNamespace(), []string{appSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.Update(ctx, kp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 			legacy, err := certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
@@ -562,13 +567,14 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(configMap.Name).To(Equal("tigera-ca-bundle"))
 			Expect(configMap.Namespace).To(Equal(appNs))
 			Expect(configMap.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
-			Expect(configMap.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/legacy-secret"))
+			Expect(configMap.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/legacy-secret-wcku"))
 			Expect(configMap.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/byo-secret"))
 			Expect(configMap.TypeMeta).To(Equal(metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}))
 
 			By("counting the number of pem blocks in the configmap")
 			bundle := configMap.Data[certificatemanagement.TrustedCertConfigMapKeyName]
 			numBlocks := strings.Count(bundle, "certificate name:")
+
 			// While we have the ca + 4 certs, we expect 3 cert blocks (+ 2):
 			// - the certificateManager: this covers for all certs signed by the tigera root ca
 			// - the byo block (+ its ca block)

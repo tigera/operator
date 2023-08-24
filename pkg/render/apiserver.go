@@ -117,6 +117,7 @@ type APIServerConfiguration struct {
 	Openshift                   bool
 	TunnelCASecret              certificatemanagement.KeyPairInterface
 	TrustedBundle               certificatemanagement.TrustedBundle
+	MultiTenant                 bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -196,8 +197,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
-	if c.cfg.ManagementCluster != nil {
-		// TODO: This is only needed for multi-tenant management clusters.
+	if c.cfg.ManagementCluster != nil && c.cfg.MultiTenant {
+		// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
+		// per-tenant guardian certificates when creating ManagedClusters.
 		globalObjects = append(globalObjects, c.secretsClusterRole()...)
 	} else {
 		objsToDelete = append(objsToDelete, c.secretsClusterRole()...)
@@ -992,7 +994,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		{Name: "MULTITENANT_ENABLED", Value: "true"}, // TODO: This is a temporary flag to enable multi-tenancy for PoC.
+	}
+
+	if c.cfg.MultiTenant {
+		env = append(env, corev1.EnvVar{Name: "MULTITENANT_ENABLED", Value: "true"}) // TODO: This is a temporary flag to enable multi-tenancy for PoC.
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)

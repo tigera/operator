@@ -210,31 +210,10 @@ var _ = Describe("windows-controller installation tests", func() {
 
 			})
 
-			It("should render the Windows daemonset when configuration is complete and valid and there are Windows nodes", func() {
-				// Create the installation resource
-				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-
-				// The calico-node-windows daemonset should not be rendered as there
-				// are no Windows nodes
-				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
-				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
-				Expect(degradedMsg).To(ConsistOf([]string{}))
-				Expect(degradedErr).To(ConsistOf([]string{}))
-
-				// Create the Windows nodes
+			It("should not render the Windows daemonset when it is disabled in the installation resource", func() {
+				// Create the Windows node
 				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
 
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// The calico-node-windows daemonset should be rendered
-				Expect(test.GetResource(c, &dsWin)).To(BeNil())
-				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
-				Expect(degradedMsg).To(ConsistOf([]string{}))
-				Expect(degradedErr).To(ConsistOf([]string{}))
-			})
-
-			It("should not render the Windows daemonset when there are no Windows nodes", func() {
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
@@ -268,7 +247,54 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(degradedErr).To(ConsistOf([]string{}))
 			})
 
+			It("should render the Windows daemonset when configuration is complete and valid and there are Windows nodes", func() {
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				// The calico-node-windows daemonset should not be rendered as there
+				// are no Windows nodes
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{}))
+				Expect(degradedErr).To(ConsistOf([]string{}))
+
+				// Create the Windows nodes
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should be rendered
+				Expect(test.GetResource(c, &dsWin)).To(BeNil())
+				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
+				Expect(degradedMsg).To(ConsistOf([]string{}))
+				Expect(degradedErr).To(ConsistOf([]string{}))
+			})
+
+			It("should not render the Windows daemonset when there are no Windows nodes", func() {
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The calico-node-windows daemonset should not be rendered
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{}))
+				Expect(degradedErr).To(ConsistOf([]string{}))
+			})
+
 			It("should render the Windows daemonset in a degraded state when the kubernetes-service-endpoint configmap is incomplete", func() {
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
 				// Create the Windows node
 				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
 
@@ -297,6 +323,9 @@ var _ = Describe("windows-controller installation tests", func() {
 				// VXLANCrossSubnet is not supported
 				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "VXLANCrossSubnet"
 
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
@@ -323,6 +352,9 @@ var _ = Describe("windows-controller installation tests", func() {
 							Namespace: "kube-system",
 						},
 					})).ToNot(HaveOccurred())
+
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
 
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -357,6 +389,9 @@ var _ = Describe("windows-controller installation tests", func() {
 						Spec: crdv1.FelixConfigurationSpec{},
 					})).ToNot(HaveOccurred())
 
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
@@ -378,6 +413,9 @@ var _ = Describe("windows-controller installation tests", func() {
 				cr.Spec.ServiceCIDRs = []string{}
 				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
 				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "IPIP"
+
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
 
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -507,13 +545,17 @@ var _ = Describe("windows-controller installation tests", func() {
 					Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 					// We start off with a 'standard' installation, with nothing special
 
-					// Create installation CR with defaults
+					// Create installation CR with defaults and WindowsDataplaneHNS
+					dpHNS := operator.WindowsDataplaneHNS
 					instance := &operator.Installation{
 						ObjectMeta: metav1.ObjectMeta{Name: "default"},
 						Spec: operator.InstallationSpec{
 							Variant:               operator.TigeraSecureEnterprise,
 							Registry:              "some.registry.org/",
 							CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
+							CalicoNetwork: &operator.CalicoNetworkSpec{
+								WindowsDataplane: &dpHNS,
+							},
 						},
 						Status: operator.InstallationStatus{
 							Variant: operator.TigeraSecureEnterprise,

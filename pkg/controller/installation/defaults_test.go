@@ -51,7 +51,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
-		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneHNS))
+		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -83,7 +83,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
-		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneHNS))
+		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -109,7 +109,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpIptables := operator.LinuxDataplaneIptables
-		dpHNS := operator.WindowsDataplaneHNS
+		winDataplane := operator.WindowsDataplaneDisabled
 		nonPrivileged := operator.NonPrivilegedEnabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
@@ -130,7 +130,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpIptables, // Actually the default but BPF would make other values invalid.
-					WindowsDataplane: &dpHNS,
+					WindowsDataplane: &winDataplane,
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",
@@ -200,7 +200,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpBPF := operator.LinuxDataplaneBPF
-		dpHNS := operator.WindowsDataplaneHNS
+		winDataplane := operator.WindowsDataplaneDisabled
 		hpEnabled := operator.HostPortsEnabled
 		npDisabled := operator.NonPrivilegedDisabled
 		instance := &operator.Installation{
@@ -222,7 +222,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpBPF, // Actually the default but BPF would make other values invalid.
-					WindowsDataplane: &dpHNS,
+					WindowsDataplane: &winDataplane,
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",
@@ -530,11 +530,14 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
 			iptables := operator.LinuxDataplaneIptables
-			dpHNS := operator.WindowsDataplaneHNS
+			winDataplane := operator.WindowsDataplaneDisabled
+			if provider == operator.ProviderAKS {
+				winDataplane = operator.WindowsDataplaneHNS
+			}
 			bgpDisabled := operator.BGPDisabled
 			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
 				LinuxDataplane:   &iptables,
-				WindowsDataplane: &dpHNS,
+				WindowsDataplane: &winDataplane,
 				BGP:              &bgpDisabled,
 			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -554,11 +557,11 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(plugin))
 			iptables := operator.LinuxDataplaneIptables
-			dpHNS := operator.WindowsDataplaneHNS
+			winDataplane := operator.WindowsDataplaneDisabled
 			bgpDisabled := operator.BGPDisabled
 			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
 				LinuxDataplane:   &iptables,
-				WindowsDataplane: &dpHNS,
+				WindowsDataplane: &winDataplane,
 				BGP:              &bgpDisabled,
 			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -602,11 +605,11 @@ var _ = Describe("Defaulting logic tests", func() {
 			err := fillDefaults(instance)
 			Expect(err).NotTo(HaveOccurred())
 			iptables := operator.LinuxDataplaneIptables
-			dpHNS := operator.WindowsDataplaneHNS
+			winDataplane := operator.WindowsDataplaneDisabled
 			bgpDisabled := operator.BGPDisabled
 			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{
 				LinuxDataplane:   &iptables,
-				WindowsDataplane: &dpHNS,
+				WindowsDataplane: &winDataplane,
 				BGP:              &bgpDisabled,
 			}))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -614,13 +617,13 @@ var _ = Describe("Defaulting logic tests", func() {
 
 		It("should default properly with iptables explicitly enabled", func() {
 			dpIpt := operator.LinuxDataplaneIptables
-			dpHNS := operator.WindowsDataplaneHNS
+			winDataplane := operator.WindowsDataplaneDisabled
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
 					KubernetesProvider: operator.ProviderEKS,
 					CalicoNetwork: &operator.CalicoNetworkSpec{
 						LinuxDataplane:   &dpIpt,
-						WindowsDataplane: &dpHNS,
+						WindowsDataplane: &winDataplane,
 					},
 					CNI: &operator.CNISpec{
 						Type: operator.PluginAmazonVPC,
@@ -637,13 +640,13 @@ var _ = Describe("Defaulting logic tests", func() {
 
 		It("should default properly with BPF enabled", func() {
 			dpBPF := operator.LinuxDataplaneBPF
-			dpHNS := operator.WindowsDataplaneHNS
+			winDataplane := operator.WindowsDataplaneDisabled
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
 					KubernetesProvider: operator.ProviderEKS,
 					CalicoNetwork: &operator.CalicoNetworkSpec{
 						LinuxDataplane:   &dpBPF,
-						WindowsDataplane: &dpHNS,
+						WindowsDataplane: &winDataplane,
 					},
 					CNI: &operator.CNISpec{
 						Type: operator.PluginAmazonVPC,

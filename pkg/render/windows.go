@@ -117,7 +117,23 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 		objs = []client.Object{}
 	}
 
-	objsToDelete := []client.Object{}
+	// Clean up old windows upgrader daemonset if present
+	objsToDelete := []client.Object{
+		&corev1.ServiceAccount{
+			TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      common.CalicoWindowsUpgradeResourceName,
+				Namespace: common.CalicoNamespace,
+			},
+		},
+		&appsv1.DaemonSet{
+			TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      common.CalicoWindowsUpgradeResourceName,
+				Namespace: "calico-system",
+			},
+		},
+	}
 
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())

@@ -559,10 +559,15 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
 	}
 
-	// Default Windows dataplane is HNS.
+	// Default Windows dataplane is disabled, unless provider is AKS
 	if instance.Spec.CalicoNetwork.WindowsDataplane == nil {
-		dpHNS := operator.WindowsDataplaneHNS
-		instance.Spec.CalicoNetwork.WindowsDataplane = &dpHNS
+		winDataplane := operator.WindowsDataplaneDisabled
+		if instance.Spec.KubernetesProvider == operator.ProviderAKS {
+			// On AKS, we had the windows upgrade daemonset, which is replaced by the
+			// calico-node-windows daemonset, so default to HNS dataplane in this case.
+			winDataplane = operator.WindowsDataplaneHNS
+		}
+		instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplane
 	}
 
 	// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".

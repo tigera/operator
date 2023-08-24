@@ -23,6 +23,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	CalicoWindowsUpgradeResourceName = "calico-windows-upgrade"
+)
+
 func HasWindowsNodes(c client.Client) (bool, error) {
 	nodes := corev1.NodeList{}
 	err := c.List(context.Background(), &nodes, client.MatchingLabels{"kubernetes.io/os": "windows"})

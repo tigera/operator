@@ -86,7 +86,8 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Create the cluster CA. This is done implicitly by initializing a certificate manager instance
-	// and passing the "AllowCACreation" option.
+	// and passing the "AllowCACreation" option. The cluster CA is used in single-tenant mode to sign all other certificates.
+	// In multi-tenant mode, this certificate is used to sign certificates for components that do not belong to any one tenant.
 	opts := []certificatemanager.Option{
 		certificatemanager.AllowCACreation(),
 		certificatemanager.WithLogger(logc),

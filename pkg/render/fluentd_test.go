@@ -109,7 +109,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -131,11 +130,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
-
-		// Check the namespace.
-		ns := rtest.GetResource(resources, "tigera-fluentd", "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
@@ -241,7 +235,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -352,7 +345,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "log-collector-s3-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
@@ -419,7 +411,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -600,7 +591,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
@@ -687,7 +677,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
@@ -761,7 +750,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "fluentd-filters", ns: "tigera-fluentd", group: "", version: "v1", kind: "ConfigMap"},
@@ -801,7 +789,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},

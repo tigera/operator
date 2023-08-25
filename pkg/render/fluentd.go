@@ -253,7 +253,6 @@ func (c *fluentdComponent) path(path string) string {
 
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
-	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
 	objs = append(objs, c.allowTigeraPolicy())
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs, c.metricsService())

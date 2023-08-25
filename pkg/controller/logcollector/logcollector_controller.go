@@ -542,6 +542,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	namespaceComp := render.NewPassthrough(render.CreateNamespace(render.LogCollectorNamespace, installation.KubernetesProvider, render.PSSPrivileged))
+
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:         instance,
 		ESSecrets:            esSecrets,
@@ -563,7 +565,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
 	components := []render.Component{
-		comp,
+		namespaceComp,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.LogCollectorNamespace,
 			ServiceAccounts: []string{render.FluentdNodeName},
@@ -572,6 +574,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			},
 			TrustedBundle: trustedBundle,
 		}),
+		comp,
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {

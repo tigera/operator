@@ -109,7 +109,7 @@ const (
 	DefaultElasticsearchReplicas    = 0
 	DefaultElasticStorageGi         = 10
 
-	EsCuratorName           = "elastic-curator"
+	ESCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
 	EsCuratorPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + "allow-elastic-curator"
 
@@ -188,13 +188,18 @@ var (
 	KibanaEntityRule            = networkpolicy.CreateEntityRule(KibanaNamespace, KibanaName, KibanaPort)
 	KibanaSourceEntityRule      = networkpolicy.CreateSourceEntityRule(KibanaNamespace, KibanaName)
 	ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
-	ESCuratorSourceEntityRule   = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, EsCuratorName)
+	ESCuratorSourceEntityRule   = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, ESCuratorName)
 )
 
 var log = logf.Log.WithName("render")
 
 // LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
+	if cfg.KibanaEnabled && operatorv1.IsFIPSModeEnabled(cfg.Installation.FIPSMode) {
+		// This branch should only be hit if there is a coding bug in the controller, as KibanaEnabled
+		// should already take into account FIPS.
+		panic("BUG: Kibana is not supported in FIPS mode")
+	}
 	return &elasticsearchComponent{
 		cfg: cfg,
 	}
@@ -202,28 +207,28 @@ func LogStorage(cfg *ElasticsearchConfiguration) Component {
 
 // ElasticsearchConfiguration contains all the config information needed to render the component.
 type ElasticsearchConfiguration struct {
-	LogStorage                  *operatorv1.LogStorage
-	Installation                *operatorv1.InstallationSpec
-	ManagementCluster           *operatorv1.ManagementCluster
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	Elasticsearch               *esv1.Elasticsearch
-	Kibana                      *kbv1.Kibana
-	ClusterConfig               *relasticsearch.ClusterConfig
-	ElasticsearchUserSecret     *corev1.Secret
-	ElasticsearchKeyPair        certificatemanagement.KeyPairInterface
-	KibanaKeyPair               certificatemanagement.KeyPairInterface
-	PullSecrets                 []*corev1.Secret
-	Provider                    operatorv1.Provider
-	CuratorSecrets              []*corev1.Secret
-	ESService                   *corev1.Service
-	KbService                   *corev1.Service
-	ClusterDomain               string
-	BaseURL                     string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
-	ElasticLicenseType          ElasticsearchLicenseType
-	TrustedBundle               certificatemanagement.TrustedBundle
-	UnusedTLSSecret             *corev1.Secret
-	ApplyTrial                  bool
-	KeyStoreSecret              *corev1.Secret
+	LogStorage              *operatorv1.LogStorage
+	Installation            *operatorv1.InstallationSpec
+	ManagementCluster       *operatorv1.ManagementCluster
+	Elasticsearch           *esv1.Elasticsearch
+	Kibana                  *kbv1.Kibana
+	ClusterConfig           *relasticsearch.ClusterConfig
+	ElasticsearchUserSecret *corev1.Secret
+	ElasticsearchKeyPair    certificatemanagement.KeyPairInterface
+	KibanaKeyPair           certificatemanagement.KeyPairInterface
+	PullSecrets             []*corev1.Secret
+	Provider                operatorv1.Provider
+	CuratorSecrets          []*corev1.Secret
+	ESService               *corev1.Service
+	KbService               *corev1.Service
+	ClusterDomain           string
+	BaseURL                 string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
+	ElasticLicenseType      ElasticsearchLicenseType
+	TrustedBundle           certificatemanagement.TrustedBundleRO
+	UnusedTLSSecret         *corev1.Secret
+	ApplyTrial              bool
+	KeyStoreSecret          *corev1.Secret
+	KibanaEnabled           bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -308,139 +313,128 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		return toCreate, toDelete
 	}
 
-	if es.cfg.ManagementClusterConnection == nil {
+	// ECK operator
+	toCreate = append(toCreate,
+		CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
+		es.eckOperatorAllowTigeraPolicy(),
+	)
 
-		// ECK operator
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
+
+	toCreate = append(toCreate,
+		es.eckOperatorClusterRole(),
+		es.eckOperatorClusterRoleBinding(),
+		es.eckOperatorServiceAccount(),
+	)
+	// This is needed for the operator to be able to set privileged mode for pods.
+	// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
+	if es.cfg.Provider == operatorv1.ProviderDockerEE {
+		toCreate = append(toCreate, es.eckOperatorClusterAdminClusterRoleBinding())
+	}
+
+	if es.cfg.UsePSP {
 		toCreate = append(toCreate,
-			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
-			es.eckOperatorAllowTigeraPolicy(),
+			es.elasticsearchClusterRoleBinding(),
+			es.elasticsearchClusterRole(),
+			es.eckOperatorPodSecurityPolicy(),
+			es.elasticsearchPodSecurityPolicy(),
 		)
-
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
-
-		toCreate = append(toCreate,
-			es.eckOperatorClusterRole(),
-			es.eckOperatorClusterRoleBinding(),
-			es.eckOperatorServiceAccount(),
-		)
-		// This is needed for the operator to be able to set privileged mode for pods.
-		// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
-		if es.cfg.Provider == operatorv1.ProviderDockerEE {
-			toCreate = append(toCreate, es.eckOperatorClusterAdminClusterRoleBinding())
-		}
-
-		if es.cfg.UsePSP {
+		if es.cfg.KibanaEnabled {
 			toCreate = append(toCreate,
-				es.elasticsearchClusterRoleBinding(),
-				es.elasticsearchClusterRole(),
-				es.eckOperatorPodSecurityPolicy(),
-				es.elasticsearchPodSecurityPolicy(),
+				es.kibanaClusterRoleBinding(),
+				es.kibanaClusterRole(),
+				es.kibanaPodSecurityPolicy(),
 			)
-			if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-				toCreate = append(toCreate,
-					es.kibanaClusterRoleBinding(),
-					es.kibanaClusterRole(),
-					es.kibanaPodSecurityPolicy(),
-				)
-			}
 		}
+	}
 
-		if es.cfg.ApplyTrial {
-			toCreate = append(toCreate, es.elasticEnterpriseTrial())
-		}
-		toCreate = append(toCreate, es.eckOperatorStatefulSet())
+	if es.cfg.ApplyTrial {
+		toCreate = append(toCreate, es.elasticEnterpriseTrial())
+	}
+	toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
-		// Elasticsearch CRs
-		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
-		toCreate = append(toCreate, es.elasticsearchAllowTigeraPolicy())
-		toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
-		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
+	// Elasticsearch CRs
+	toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
+	toCreate = append(toCreate, es.elasticsearchAllowTigeraPolicy())
+	toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
+	toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
+
+	if len(es.cfg.PullSecrets) > 0 {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
+	}
+
+	if es.cfg.ElasticsearchUserSecret != nil {
+		toCreate = append(toCreate, es.cfg.ElasticsearchUserSecret)
+	}
+
+	toCreate = append(toCreate, es.elasticsearchServiceAccount())
+	toCreate = append(toCreate, es.cfg.ClusterConfig.ConfigMap())
+
+	toCreate = append(toCreate, es.elasticsearchCluster())
+
+	if es.cfg.KibanaEnabled {
+		// Kibana CRs
+		// In order to use restricted, we need to change elastic-internal-init-config:
+		// - securityContext.allowPrivilegeEscalation=false
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.runAsNonRoot=true
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
+		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
+		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
+		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.cfg.PullSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
 		}
 
-		if es.cfg.ElasticsearchUserSecret != nil {
-			toCreate = append(toCreate, es.cfg.ElasticsearchUserSecret)
+		if len(es.kibanaSecrets) > 0 {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
-		toCreate = append(toCreate, es.elasticsearchServiceAccount())
-		toCreate = append(toCreate, es.cfg.ClusterConfig.ConfigMap())
+		toCreate = append(toCreate, es.kibanaCR())
 
-		toCreate = append(toCreate, es.elasticsearchCluster())
+		// Curator CRs
+		// If we have the curator secrets then create curator
+		if len(es.cfg.CuratorSecrets) > 0 {
+			toCreate = append(toCreate, es.esCuratorAllowTigeraPolicy())
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
+			toCreate = append(toCreate, es.esCuratorServiceAccount())
 
-		if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-			// Kibana CRs
-			// In order to use restricted, we need to change elastic-internal-init-config:
-			// - securityContext.allowPrivilegeEscalation=false
-			// - securityContext.capabilities.drop=["ALL"]
-			// - securityContext.runAsNonRoot=true
-			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-			toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
-			toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
-			toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
-			toCreate = append(toCreate, es.kibanaServiceAccount())
-
-			if len(es.cfg.PullSecrets) > 0 {
-				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
+			if es.cfg.UsePSP {
+				toCreate = append(toCreate,
+					es.curatorClusterRole(),
+					es.curatorClusterRoleBinding(),
+					es.curatorPodSecurityPolicy(),
+				)
 			}
 
-			if len(es.kibanaSecrets) > 0 {
-				toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
-			}
-
-			toCreate = append(toCreate, es.kibanaCR())
-
-			// Curator CRs
-			// If we have the curator secrets then create curator
-			if len(es.cfg.CuratorSecrets) > 0 {
-				toCreate = append(toCreate, es.esCuratorAllowTigeraPolicy())
-				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
-				toCreate = append(toCreate, es.esCuratorServiceAccount())
-
-				if es.cfg.UsePSP {
-					toCreate = append(toCreate,
-						es.curatorClusterRole(),
-						es.curatorClusterRoleBinding(),
-						es.curatorPodSecurityPolicy(),
-					)
-				}
-
-				toCreate = append(toCreate, es.curatorCronJob())
-			}
-		} else {
-			if es.cfg.KeyStoreSecret != nil {
-				if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-					es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
-				}
-
-				toCreate = append(toCreate, es.cfg.KeyStoreSecret)
-				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
-			}
-			toDelete = append(toDelete, es.kibanaCR())
-			toDelete = append(toDelete, es.curatorCronJob())
-		}
-
-		toCreate = append(toCreate, es.oidcUserRole())
-		toCreate = append(toCreate, es.oidcUserRoleBinding())
-
-		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
-		// service as it differs between these cluster types
-		if es.cfg.ESService != nil && es.cfg.ESService.Spec.Type == corev1.ServiceTypeExternalName {
-			toDelete = append(toDelete, es.cfg.ESService)
-		}
-
-		if es.cfg.KbService != nil && es.cfg.KbService.Spec.Type == corev1.ServiceTypeExternalName {
-			toDelete = append(toDelete, es.cfg.KbService)
+			toCreate = append(toCreate, es.curatorCronJob())
 		}
 	} else {
-		role, binding := es.linseedExternalRoleAndBinding()
-		toCreate = append(toCreate,
-			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
-			es.elasticsearchExternalService(),
-			es.linseedExternalService(),
-			role, binding,
-		)
+		if es.cfg.KeyStoreSecret != nil {
+			if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+				es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
+			}
+
+			toCreate = append(toCreate, es.cfg.KeyStoreSecret)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
+		}
+		toDelete = append(toDelete, es.kibanaCR())
+		toDelete = append(toDelete, es.curatorCronJob())
+	}
+
+	toCreate = append(toCreate, es.oidcUserRole())
+	toCreate = append(toCreate, es.oidcUserRoleBinding())
+
+	// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
+	// service as it differs between these cluster types
+	if es.cfg.ESService != nil && es.cfg.ESService.Spec.Type == corev1.ServiceTypeExternalName {
+		toDelete = append(toDelete, es.cfg.ESService)
+	}
+
+	if es.cfg.KbService != nil && es.cfg.KbService.Spec.Type == corev1.ServiceTypeExternalName {
+		toDelete = append(toDelete, es.cfg.KbService)
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
@@ -468,76 +462,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 func (es *elasticsearchComponent) Ready() bool {
 	return true
-}
-
-// In managed clusters, we need to provision a role and binding for linseed to provide permissions
-// to create configmaps.
-func (es elasticsearchComponent) linseedExternalRoleAndBinding() (*rbacv1.ClusterRole, *rbacv1.RoleBinding) {
-	// Create a ClusterRole to provide configmap permissions. However, we'll only bind this to
-	// specific namespaces using RoleBindings so that we only have permissions in our namespaces.
-	role := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-linseed",
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "update", "get", "list"},
-			},
-		},
-	}
-
-	// Bind the permission to the tigera-fluentd namespace. Other controllers may also bind
-	// this cluster role to their own namespace if they require linseed access tokens.
-	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-linseed",
-			Namespace: "tigera-fluentd",
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "tigera-linseed",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "tigera-linseed",
-				Namespace: ElasticsearchNamespace,
-			},
-		},
-	}
-
-	return role, binding
-}
-
-func (es elasticsearchComponent) linseedExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      LinseedServiceName,
-			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, es.cfg.ClusterDomain),
-		},
-	}
-}
-
-func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ESGatewayServiceName,
-			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, es.cfg.ClusterDomain),
-		},
-	}
 }
 
 func (es elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAccount {
@@ -1529,23 +1453,23 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 			APIVersion: "batch/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EsCuratorName,
+			Name:      ESCuratorName,
 			Namespace: ElasticsearchNamespace,
 		},
 		Spec: batchv1.CronJobSpec{
 			Schedule: schedule,
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: EsCuratorName,
+					Name: ESCuratorName,
 					Labels: map[string]string{
-						"k8s-app": EsCuratorName,
+						"k8s-app": ESCuratorName,
 					},
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
-								"k8s-app": EsCuratorName,
+								"k8s-app": ESCuratorName,
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -1553,7 +1477,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
 								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:            EsCuratorName,
+									Name:            ESCuratorName,
 									Image:           es.curatorImage,
 									ImagePullPolicy: ImagePullPolicy(),
 									Env:             es.curatorEnvVars(),
@@ -1577,13 +1501,20 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 }
 
 func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
+	// safeAccess is a helper for accessing int32 pointers safely when populating env vars.
+	safeAccess := func(i *int32) string {
+		if i == nil {
+			return "0"
+		}
+		return fmt.Sprint(*i)
+	}
 	return []corev1.EnvVar{
-		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.Flows)},
-		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.AuditReports)},
-		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.Snapshots)},
-		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.ComplianceReports)},
-		{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.DNSLogs)},
-		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.BGPLogs)},
+		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.Flows)},
+		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.AuditReports)},
+		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.Snapshots)},
+		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.ComplianceReports)},
+		{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.DNSLogs)},
+		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.BGPLogs)},
 		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
 		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
 	}
@@ -1592,7 +1523,7 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EsCuratorName,
+			Name: ESCuratorName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1600,7 +1531,7 @@ func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{EsCuratorName},
+				ResourceNames: []string{ESCuratorName},
 			},
 		},
 	}
@@ -1609,12 +1540,12 @@ func (es elasticsearchComponent) curatorClusterRole() *rbacv1.ClusterRole {
 func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EsCuratorName,
+			Name: ESCuratorName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     EsCuratorName,
+			Name:     ESCuratorName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1627,7 +1558,7 @@ func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRole
 }
 
 func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(EsCuratorName)
+	return podsecuritypolicy.NewBasePolicy(ESCuratorName)
 }
 
 // Applying this in the eck namespace will start a trial license for enterprise features.
@@ -1830,12 +1761,12 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
@@ -1868,13 +1799,13 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.LinseedSourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().LinseedSourceEntityRule(),
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
@@ -1951,7 +1882,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 	}...)
 
@@ -1991,7 +1922,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: kibanaPortIngressDestination,
 				},
 				{
@@ -2013,7 +1944,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
 		Source:      v3.EntityRule{},
-		Destination: networkpolicy.ESGatewayEntityRule,
+		Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 	})
 
 	return &v3.NetworkPolicy{
@@ -2025,7 +1956,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(EsCuratorName),
+			Selector: networkpolicy.KubernetesAppSelector(ESCuratorName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Egress:   egressRules,
 		},
@@ -2100,4 +2031,117 @@ func GetLinseedTokenPath(managedCluster bool) string {
 
 	// Default to using our serviceaccount token.
 	return "/var/run/secrets/kubernetes.io/serviceaccount/token"
+}
+
+// ManagedClusterLogStorageConfiguration contains configuration for managed cluster log storage.
+type ManagedClusterLogStorageConfiguration struct {
+	Installation  *operatorv1.InstallationSpec
+	ClusterDomain string
+}
+
+// NewManagedClusterLogStorage returns a component for managed cluster log storage resources.
+func NewManagedClusterLogStorage(cfg *ManagedClusterLogStorageConfiguration) Component {
+	return &managedClusterLogStorage{cfg: cfg}
+}
+
+// managedClusterLogStorage implements the Component interface and generates resources for managed clusters
+// to store logs in the management cluster.
+type managedClusterLogStorage struct {
+	cfg *ManagedClusterLogStorageConfiguration
+}
+
+func (m *managedClusterLogStorage) ResolveImages(is *operatorv1.ImageSet) error {
+	return nil
+}
+
+func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
+	// ManagedClusters simply need the namespace, role, and binding created so that Linseed in the management cluster has permissions
+	// to create token secrets in the managed cluster.
+	toCreate := []client.Object{}
+	role, binding := m.linseedExternalRoleAndBinding()
+	toCreate = append(toCreate,
+		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged),
+		m.elasticsearchExternalService(),
+		m.linseedExternalService(),
+		role, binding,
+	)
+	return toCreate, nil
+}
+
+func (m *managedClusterLogStorage) Ready() bool {
+	return true
+}
+
+func (m *managedClusterLogStorage) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
+}
+
+func (m *managedClusterLogStorage) linseedExternalService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      LinseedServiceName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, m.cfg.ClusterDomain),
+		},
+	}
+}
+
+func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ESGatewayServiceName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, m.cfg.ClusterDomain),
+		},
+	}
+}
+
+// In managed clusters, we need to provision a role and binding for linseed to provide permissions
+// to create configmaps.
+func (m managedClusterLogStorage) linseedExternalRoleAndBinding() (*rbacv1.ClusterRole, *rbacv1.RoleBinding) {
+	// Create a ClusterRole to provide configmap permissions. However, we'll only bind this to
+	// specific namespaces using RoleBindings so that we only have permissions in our namespaces.
+	role := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-linseed",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "update", "get", "list"},
+			},
+		},
+	}
+
+	// Bind the permission to the tigera-fluentd namespace. Other controllers may also bind
+	// this cluster role to their own namespace if they require linseed access tokens.
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: "tigera-fluentd",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-linseed",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
+
+	return role, binding
 }

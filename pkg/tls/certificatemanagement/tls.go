@@ -51,7 +51,8 @@ func CreateSelfSignedSecret(secretName, namespace, cn string, altNames []string)
 	var keyPem bytes.Buffer
 	err = pem.Encode(&keyPem, &pem.Block{
 		Type:  blockTypePrivateKey,
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
 	if err != nil {
 		return nil, err
 	}

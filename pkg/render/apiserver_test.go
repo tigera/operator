@@ -71,6 +71,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		dnsNames           []string
 		cli                client.Client
 		certificateManager certificatemanager.CertificateManager
+		err                error
 	)
 
 	BeforeEach(func() {
@@ -83,14 +84,17 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		dnsNames = dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		var err error
-		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
+
 		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).NotTo(HaveOccurred())
+
 		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 		trustedBundle = certificatemanagement.CreateTrustedBundle()
 		replicas = 2
@@ -177,7 +181,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		ns := rtest.GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
-		rtest.ExpectResource(ns, "tigera-system", "", "", "v1", "Namespace")
+		rtest.CompareResource(ns, "tigera-system", "", "", "v1", "Namespace")
 		meta := ns.GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("tigera-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -421,7 +425,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
-		rtest.ExpectResource(dep, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
+		rtest.CompareResource(dep, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		d := dep.(*appsv1.Deployment)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(HaveLen(4))
@@ -800,47 +804,38 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-access-tigera-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-		}
-		Expect(resources).To(HaveLen(len(expectedResources)))
 
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceInList(resources, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		expected := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-crds"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-access-tigera-crds"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tier-getter"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tier-getter"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}},
+			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}},
 		}
+		rtest.ExpectResources(resources, expected)
 
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
@@ -879,7 +874,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should add an init container if certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		cfg.TLSKeyPair = kp
@@ -1079,7 +1074,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			}
 			// Enable certificate management.
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
-			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create and add the TLS keypair so the initContainer is rendered.
@@ -1523,7 +1518,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace())
+		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
@@ -1579,7 +1574,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		ns := rtest.GetResource(resources, "calico-apiserver", "", "", "v1", "Namespace").(*corev1.Namespace)
-		rtest.ExpectResource(ns, "calico-apiserver", "", "", "v1", "Namespace")
+		rtest.CompareResource(ns, "calico-apiserver", "", "", "v1", "Namespace")
 		meta := ns.GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("calico-apiserver"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -1706,7 +1701,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		dep := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
-		rtest.ExpectResource(dep, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
+		rtest.CompareResource(dep, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
 		d := dep.(*appsv1.Deployment)
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(1))
 	})
@@ -1898,7 +1893,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			}
 			// Enable certificate management.
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
-			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace())
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create and add the TLS keypair so the initContainer is rendered.
@@ -2018,6 +2013,5 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
 		})
-
 	})
 })

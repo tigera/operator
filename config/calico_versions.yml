@@ -9,13 +9,15 @@ components:
     version: master
   calico/cni:
     version: master
+  calico/node-windows:
+    version: master
+  calico/cni-windows:
+    version: master
   calico/kube-controllers:
     version: master
   flexvol:
     version: master
   calico/apiserver:
-    version: master
-  calico/windows-upgrade:
     version: master
   calico/csi:
     version: master

@@ -196,6 +196,7 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
 	}
+	c.image = "sridhartigera/fluentd:flowtest"
 	return err
 }
 
@@ -259,8 +260,8 @@ func (c *fluentdComponent) path(path string) string {
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
 	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
+	objs = append(objs, c.allowTigeraPolicy())
 	if c.cfg.EnterpriseCRDExists {
-		objs = append(objs, c.allowTigeraPolicy())
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	}
 	objs = append(objs, c.metricsService())
@@ -660,6 +661,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "FLUENT_UID", Value: "0"},
+		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
+		{Name: "TLS_CRT_PATH", Value: c.certPath()},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
@@ -668,8 +671,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.cfg.EnterpriseCRDExists {
 		eeEnvs := []corev1.EnvVar{
-			{Name: "TLS_KEY_PATH", Value: c.keyPath()},
-			{Name: "TLS_CRT_PATH", Value: c.certPath()},
 			{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		}
 		envs = append(envs, eeEnvs...)
@@ -860,21 +861,14 @@ func (c *fluentdComponent) keyPath() string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		return fmt.Sprintf("c:/%s/%s", c.cfg.FluentdKeyPair.GetName(), corev1.TLSPrivateKeyKey)
 	}
-
-	if c.cfg.FluentdKeyPair != nil {
-		return c.cfg.FluentdKeyPair.VolumeMountKeyFilePath()
-	}
-	return ""
+	return c.cfg.FluentdKeyPair.VolumeMountKeyFilePath()
 }
 
 func (c *fluentdComponent) certPath() string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		return fmt.Sprintf("c:/%s/%s", c.cfg.FluentdKeyPair.GetName(), corev1.TLSCertKey)
 	}
-	if c.cfg.FluentdKeyPair != nil {
-		return c.cfg.FluentdKeyPair.VolumeMountCertificateFilePath()
-	}
-	return ""
+	return c.cfg.FluentdKeyPair.VolumeMountCertificateFilePath()
 }
 
 // The startup probe uses the same action as the liveness probe, but with

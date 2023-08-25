@@ -421,15 +421,15 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// fluentdKeyPair is the key pair fluentd presents to identify itself
+	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	var prometheusCertificate, esgwCertificate certificatemanagement.CertificateInterface
-	var fluentdKeyPair certificatemanagement.KeyPairInterface
 	if r.enterpriseCRDExists {
-		// fluentdKeyPair is the key pair fluentd presents to identify itself
-		fluentdKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 		prometheusCertificate, err = certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)

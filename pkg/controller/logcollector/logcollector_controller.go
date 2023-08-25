@@ -61,18 +61,12 @@ var log = logf.Log.WithName("controller_logcollector")
 // Add creates a new LogCollector Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	/*
-		if !opts.EnterpriseCRDExists {
-			// No need to start this controller.
-			return nil
-		}*/
 
 	var licenseAPIReady *utils.ReadyFlag
-	var tierWatchReady *utils.ReadyFlag
 
+	tierWatchReady := &utils.ReadyFlag{}
 	if opts.EnterpriseCRDExists {
 		licenseAPIReady = &utils.ReadyFlag{}
-		tierWatchReady = &utils.ReadyFlag{}
 	}
 
 	// create the reconciler
@@ -84,17 +78,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
 	}
 
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+	})
+
 	if opts.EnterpriseCRDExists {
-		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-		if err != nil {
-			log.Error(err, "Failed to establish a connection to k8s")
-			return err
-		}
 		go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
-		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-		go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
-			{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
-		})
 	}
 
 	return add(mgr, controller, reconciler.(*ReconcileLogCollector))
@@ -307,6 +303,28 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, fmt.Errorf("Configuring additional log sources requires enterprise license.")
 	}
 
+	if !utils.IsAPIServerReady(r.client, reqLogger) {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
 	// Default fields on the LogCollector instance if needed.
 	if r.enterpriseCRDExists {
 		preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
@@ -316,29 +334,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 				r.status.SetDegraded(operatorv1.ResourcePatchError, fmt.Sprintf("Failed to set defaults for LogCollector fields: [%s]",
 					strings.Join(modifiedFields, ", "),
 				), err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
-		if !utils.IsAPIServerReady(r.client, reqLogger) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-
-		// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-		if !r.tierWatchReady.IsReady() {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		}
-
-		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			} else {
-				log.Error(err, "Error querying allow-tigera tier")
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}

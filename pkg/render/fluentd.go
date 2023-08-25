@@ -196,7 +196,6 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
 	}
-	c.image = "sridhartigera/fluentd:flowtest"
 	return err
 }
 

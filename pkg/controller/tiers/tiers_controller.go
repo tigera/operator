@@ -55,10 +55,6 @@ var log = logf.Log.WithName("controller_tiers")
 // Add creates a new Tiers Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		// No need to start this controller.
-		return nil
-	}
 
 	reconciler := newReconciler(mgr, opts)
 
@@ -75,21 +71,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, nil)
 
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
-		{Name: tiers.ClusterDNSPolicyName, Namespace: "openshift-dns"},
-		{Name: tiers.ClusterDNSPolicyName, Namespace: "kube-system"},
-	})
+	if opts.EnterpriseCRDExists {
+		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+			{Name: tiers.ClusterDNSPolicyName, Namespace: "openshift-dns"},
+			{Name: tiers.ClusterDNSPolicyName, Namespace: "kube-system"},
+		})
+	}
 
-	return add(mgr, c)
+	return add(mgr, c, reconciler.(*ReconcileTiers))
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &ReconcileTiers{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: opts.DetectedProvider,
-		status:   status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		provider:            opts.DetectedProvider,
+		status:              status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
+		enterpriseCRDExists: opts.EnterpriseCRDExists,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -98,16 +97,17 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 var _ reconcile.Reconciler = &ReconcileTiers{}
 
 type ReconcileTiers struct {
-	client             client.Client
-	scheme             *runtime.Scheme
-	provider           operatorv1.Provider
-	status             status.StatusManager
-	tierWatchReady     *utils.ReadyFlag
-	policyWatchesReady *utils.ReadyFlag
+	client              client.Client
+	scheme              *runtime.Scheme
+	provider            operatorv1.Provider
+	status              status.StatusManager
+	tierWatchReady      *utils.ReadyFlag
+	policyWatchesReady  *utils.ReadyFlag
+	enterpriseCRDExists bool
 }
 
 // add adds watches for resources that are available at startup.
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c controller.Controller, r *ReconcileTiers) error {
 	if err := utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("tiers-controller failed to watch Tigera network resource: %v", err)
 	}
@@ -116,8 +116,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("tiers-controller failed to watch APIServer resource: %v", err)
 	}
 
-	if err := utils.AddNodeLocalDNSWatch(c); err != nil {
-		return fmt.Errorf("tiers-controller failed to watch node-local-dns daemonset: %v", err)
+	if r.enterpriseCRDExists {
+		if err := utils.AddNodeLocalDNSWatch(c); err != nil {
+			return fmt.Errorf("tiers-controller failed to watch node-local-dns daemonset: %v", err)
+		}
 	}
 
 	return nil
@@ -133,18 +135,20 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Ensure a license is present that enables this controller to create/manage tiers.
-	license, err := utils.FetchLicenseKey(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+	if r.enterpriseCRDExists {
+		license, err := utils.FetchLicenseKey(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-	if !utils.IsFeatureActive(license, common.TiersFeature) {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		if !utils.IsFeatureActive(license, common.TiersFeature) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
 	}
 
 	tiersConfig, reconcileResult := r.prepareTiersConfig(ctx, reqLogger)
@@ -155,7 +159,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	component := tiers.Tiers(tiersConfig)
 
 	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
+	err := componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
@@ -165,10 +169,13 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 }
 
 func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.Logger) (*tiers.Config, *reconcile.Result) {
-	tiersConfig := tiers.Config{
-		Openshift:      r.provider == operatorv1.ProviderOpenShift,
-		DNSEgressCIDRs: tiers.DNSEgressCIDR{},
+	tiersConfig := tiers.Config{EnterpriseCRDExists: r.enterpriseCRDExists}
+	if !r.enterpriseCRDExists {
+		return &tiersConfig, nil
 	}
+
+	tiersConfig.Openshift = r.provider == operatorv1.ProviderOpenShift
+	tiersConfig.DNSEgressCIDRs = tiers.DNSEgressCIDR{}
 
 	if r.provider != operatorv1.ProviderOpenShift {
 		nodeLocalDNSExists, err := utils.IsNodeLocalDNSAvailable(ctx, r.client)

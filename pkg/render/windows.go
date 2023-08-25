@@ -163,32 +163,22 @@ func (c *windowsComponent) Ready() bool {
 
 // windowsServiceAccount creates the windows node's service account.
 func (c *windowsComponent) windowsServiceAccount() *corev1.ServiceAccount {
-	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
-	}
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       WindowsNodeObjectName,
-			Namespace:  common.CalicoNamespace,
-			Finalizers: finalizer,
+			Name:      WindowsNodeObjectName,
+			Namespace: common.CalicoNamespace,
 		},
 	}
 }
 
 // RoleBinding creates a clusterrolebinding giving the windows node service account the required permissions to operate.
 func (c *windowsComponent) windowsRoleBinding() *rbacv1.ClusterRoleBinding {
-	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
-	}
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       WindowsNodeObjectName,
-			Labels:     map[string]string{},
-			Finalizers: finalizer,
+			Name:   WindowsNodeObjectName,
+			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -234,16 +224,11 @@ func (c *windowsComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleB
 
 // windowsRole creates the clusterrole containing policy rules that allow the windows node daemonset to operate normally.
 func (c *windowsComponent) windowsRole() *rbacv1.ClusterRole {
-	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
-	}
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       WindowsNodeObjectName,
-			Labels:     map[string]string{},
-			Finalizers: finalizer,
+			Name:   WindowsNodeObjectName,
+			Labels: map[string]string{},
 		},
 
 		Rules: []rbacv1.PolicyRule{
@@ -428,32 +413,21 @@ func (c *windowsComponent) windowsRole() *rbacv1.ClusterRole {
 
 // cniPluginServiceAccount creates the Windows Calico CNI plugin's service account.
 func (c *windowsComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
-	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
-	}
-
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       WindowsCNIPluginObjectName,
-			Namespace:  common.CalicoNamespace,
-			Finalizers: finalizer,
+			Name:      WindowsCNIPluginObjectName,
+			Namespace: common.CalicoNamespace,
 		},
 	}
 }
 
 // cniPluginRoleBinding creates a rolebinding giving the Windows Calico CNI plugin service account the required permissions to operate.
 func (c *windowsComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
-	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
-	}
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       WindowsCNIPluginObjectName,
-			Finalizers: finalizer,
+			Name: WindowsCNIPluginObjectName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -473,15 +447,10 @@ func (c *windowsComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 
 // cniPluginRole creates the role containing policy rules that allow the Windows Calico CNI plugin to operate normally.
 func (c *windowsComponent) cniPluginRole() *rbacv1.ClusterRole {
-	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
-	}
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       WindowsCNIPluginObjectName,
-			Finalizers: finalizer,
+			Name: WindowsCNIPluginObjectName,
 		},
 
 		Rules: []rbacv1.PolicyRule{

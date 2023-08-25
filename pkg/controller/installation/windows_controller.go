@@ -46,7 +46,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -303,31 +302,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// See the section 'Node and Installation finalizer' at the top of this file for details.
-	if terminating {
-		// Keep the finalizer on the Installation until the ClusterRoleBinding for calico-node-windows
-		// (and ClusterRole and ServiceAccount) is removed.
-		crb := rbacv1.ClusterRoleBinding{}
-		crbKey := types.NamespacedName{Name: "calico-node-windows"}
-		err := r.client.Get(ctx, crbKey, &crb)
-		if err != nil && !apierrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Unable to get ClusterRoleBinding", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		found := false
-		for _, x := range crb.Finalizers {
-			if x == render.NodeFinalizer {
-				found = true
-			}
-		}
-		if !found {
-			reqLogger.Info("Removing installation finalizer")
-			removeInstallationFinalizer(instance)
-		}
-	} else {
-		setInstallationFinalizer(instance)
-	}
-
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
@@ -504,28 +478,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	components := []render.Component{}
 
-	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
-	nodeTerminating := false
-	if terminating {
-		// When terminating, after kube-controllers has terminated then
-		// node can finish terminating by removing the finalizers on the ClusterRole,
-		// ClusterRoleBinding, and ServiceAccount.
-		l := corev1.PodList{}
-		err := r.client.List(ctx, &l,
-			client.MatchingLabels(map[string]string{
-				"k8s-app": kubecontrollers.KubeController,
-			}),
-			client.InNamespace(common.CalicoNamespace))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query for KubeController pods", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if len(l.Items) == 0 {
-			reqLogger.Info("calico-kube-controllers is removed, calico-node-windows RBAC resources can be removed")
-			nodeTerminating = true
-		}
-	}
-
 	// Fetch any existing default BGPConfiguration object.
 	bgpConfiguration := &crdv1.BGPConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
@@ -595,7 +547,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 				PrometheusServerTLS:     nodePrometheusTLS,
 				NodeReporterMetricsPort: nodeReporterMetricsPort,
 				VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
-				Terminating:             nodeTerminating,
+				Terminating:             terminating,
 			}
 			components = append(components, render.Windows(&windowsCfg))
 		}

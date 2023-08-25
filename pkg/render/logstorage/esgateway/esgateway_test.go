@@ -46,13 +46,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-type resourceTestObj struct {
-	name string
-	ns   string
-	typ  runtime.Object
-	f    func(resource runtime.Object)
-}
-
 var _ = Describe("ES Gateway rendering tests", func() {
 	Context("ES Gateway deployment", func() {
 		var installation *operatorv1.InstallationSpec

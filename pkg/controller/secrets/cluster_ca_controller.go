@@ -44,7 +44,6 @@ type ClusterCAController struct {
 	client        client.Client
 	scheme        *runtime.Scheme
 	clusterDomain string
-	multiTenant   bool
 	log           logr.Logger
 }
 

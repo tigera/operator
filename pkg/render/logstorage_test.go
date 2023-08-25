@@ -979,8 +979,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			managementClusterConnection = &operatorv1.ManagementClusterConnection{}
 
 			cfg = &render.ElasticsearchConfiguration{
-				Installation:                installation,
-				ManagementClusterConnection: managementClusterConnection,
+				Installation: installation,
 				PullSecrets: []*corev1.Secret{
 					{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
@@ -1713,17 +1712,16 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS(installation)
 
 			cfg = &render.ElasticsearchConfiguration{
-				LogStorage:                  logStorage,
-				Installation:                installation,
-				ManagementCluster:           managementCluster,
-				ManagementClusterConnection: managementClusterConnection,
-				Elasticsearch:               &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
-				Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
-				KibanaEnabled:               true,
-				ClusterConfig:               esConfig,
-				ElasticsearchKeyPair:        elasticsearchKeyPair,
-				KibanaKeyPair:               kibanaKeyPair,
-				TrustedBundle:               trustedBundle,
+				LogStorage:           logStorage,
+				Installation:         installation,
+				ManagementCluster:    managementCluster,
+				Elasticsearch:        &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+				Kibana:               &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
+				KibanaEnabled:        true,
+				ClusterConfig:        esConfig,
+				ElasticsearchKeyPair: elasticsearchKeyPair,
+				KibanaKeyPair:        kibanaKeyPair,
+				TrustedBundle:        trustedBundle,
 				PullSecrets: []*corev1.Secret{
 					{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},

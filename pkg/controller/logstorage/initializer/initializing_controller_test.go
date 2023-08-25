@@ -132,7 +132,8 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			// Run the reconciler. It should fill in defaults.
 			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 
 			// Expect the LogStorage to be updated with defaults.
 			ls = &operatorv1.LogStorage{}
@@ -155,7 +156,8 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			// Run the reconciler. Expect an error and a degraded status.
 			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
 			Expect(mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 1)).Should(BeTrue())
 
 			// Get the LogStorage and expect the degraded status to be set.
@@ -166,7 +168,8 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			// Fixing the invalid field should clear the degraded status.
 			ls.Spec.ComponentResources[0].ComponentName = "ECKOperator"
 			Expect(cli.Update(ctx, ls)).ShouldNot(HaveOccurred())
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 
 			// Get the LogStorage and expect the degraded status to be cleared.
 			ls = &operatorv1.LogStorage{}
@@ -183,14 +186,16 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			// Run the reconciler and expect an OK status.
 			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 			Expect(mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)).Should(BeTrue())
 
 			// Delete the LogStorage instance.
 			Expect(cli.Delete(ctx, ls)).ShouldNot(HaveOccurred())
 
 			// Run the reconciler and expect an OK status.
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 			Expect(mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)).Should(BeTrue())
 
 			// Expect OnCRNotFound to be called.
@@ -206,7 +211,8 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			// Run the reconciler and expect everyting to be ok
 			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderOpenShift, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 			Expect(mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)).Should(BeTrue())
 
 			// Create a ManagementClusterConnection instance.
@@ -215,9 +221,10 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			Expect(cli.Create(ctx, mcc)).ShouldNot(HaveOccurred())
 
 			// Run the reconciler again.
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
 
-			// Expect SetDegraded to be called with an error.
+			// We don't return an error in this case because we don't want to retry, but we do set the status as degraded.
+			Expect(err).ShouldNot(HaveOccurred())
 			Expect(mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 1)).Should(BeTrue())
 
 			// Query the LogStorage instance and expect the status to be degraded.
@@ -248,7 +255,8 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
 			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
 			Expect(err).ShouldNot(HaveOccurred())
-			r.Reconcile(ctx, reconcile.Request{})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 
 			// Get the LogStorage and assert the component resources are set to the expected value.
 			ls = &operatorv1.LogStorage{}

@@ -414,11 +414,12 @@ func (c *managerComponent) kibanaEnabled() bool {
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	// Prepare conditional env vars up-front.
 	queryURL := "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"
-	if c.cfg.Tenant != nil {
-		// For multi-tenant clusters, we shouldn't ever hit the management cluster API server.
-		// TODO: How to handle this correctly.
-		// queryURL = ""
-	}
+
+	// if c.cfg.Tenant != nil {
+	// For multi-tenant clusters, we shouldn't ever hit the management cluster API server.
+	// TODO: How to handle this correctly.
+	// queryURL = ""
+	// }
 
 	envs := []corev1.EnvVar{
 		// TODO: Prometheus URL will need to change.

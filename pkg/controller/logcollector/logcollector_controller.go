@@ -457,7 +457,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
+	} else if linseedCertificate == nil {
 		log.Info("Linseed certificate is not available yet, waiting until they become available")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
 		return reconcile.Result{}, nil
@@ -601,18 +601,17 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
-	components := []render.Component{comp}
-	certMgmt := &rcertificatemanagement.Config{
-		Namespace:       render.LogCollectorNamespace,
-		ServiceAccounts: []string{render.FluentdNodeName},
-		TrustedBundle:   trustedBundle,
+	components := []render.Component{
+		comp,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.LogCollectorNamespace,
+			ServiceAccounts: []string{render.FluentdNodeName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
 	}
-	if r.enterpriseCRDExists {
-		certMgmt.KeyPairOptions = []rcertificatemanagement.KeyPairOption{
-			rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
-		}
-	}
-	components = append(components, rcertificatemanagement.CertificateManagement(certMgmt))
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

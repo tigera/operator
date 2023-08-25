@@ -20,7 +20,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
@@ -58,7 +57,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
@@ -69,18 +67,13 @@ var (
 	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
 	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.ESCuratorName}
 
-	esCertSecretKey     = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: render.ElasticsearchNamespace}
 	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}
 
 	kbCertSecretOperKey = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
 
 	curatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}
 	storageClassName        = "test-storage-class"
-
-	esDNSNames         = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	esGatewayDNSNmes   = dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	kbDNSNames         = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-	kbInternalDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
+	kbDNSNames              = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 
 	successResult = reconcile.Result{RequeueAfter: 1 * time.Minute}
 )
@@ -163,10 +156,12 @@ var _ = Describe("LogStorage controller", func() {
 		Expect(cli.Create(ctx, bundle.ConfigMap(render.ElasticsearchNamespace))).NotTo(HaveOccurred())
 	})
 
+	// The ElasticController isn't meant to run on a managed cluster. However there are some edge cases covered by the following tests.
 	Context("Managed Cluster", func() {
-		Context("LogStorage is nil", func() {
+		BeforeEach(func() {
+			// Test that when there is no LogStorage, on a ManagedCluster, that the controller doesn't error.
 			var install *operatorv1.Installation
-			BeforeEach(func() {
+			It("should not error on a managed cluster", func() {
 				var replicas int32 = 2
 				install = &operatorv1.Installation{
 					ObjectMeta: metav1.ObjectMeta{
@@ -202,39 +197,20 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("Run").Return()
 			})
 
-			Context("ExternalService is correctly setup", func() {
-				BeforeEach(func() {
-					mockStatus.On("AddDaemonsets", mock.Anything).Return()
-					mockStatus.On("AddDeployments", mock.Anything).Return()
-					mockStatus.On("AddStatefulSets", mock.Anything).Return()
-					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-					mockStatus.On("AddCronJobs", mock.Anything)
-					mockStatus.On("OnCRNotFound").Return()
-					mockStatus.On("ClearDegraded")
-					mockStatus.On("ReadyToMonitor")
-					// mockStatus.On("SetMetaData", mock.Anything).Return()
-				})
-				DescribeTable("tests that the ExternalService is setup with the default service name", func(clusterDomain, expectedSvcName string) {
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, clusterDomain, readyFlag)
-					Expect(err).ShouldNot(HaveOccurred())
-					_, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
-					svc := &corev1.Service{}
-					Expect(
-						cli.Get(ctx, client.ObjectKey{Name: esgateway.ServiceName, Namespace: render.ElasticsearchNamespace}, svc),
-					).ShouldNot(HaveOccurred())
-
-					Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
-					Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-				},
-					Entry("default cluster domain", dns.DefaultClusterDomain, "tigera-guardian.tigera-guardian.svc.cluster.local"),
-					Entry("custom cluster domain", "custom-domain.internal", "tigera-guardian.tigera-guardian.svc.custom-domain.internal"),
-				)
+			Context("LogStorage is nil", func() {
+				// Run the reconciler, expect no error.
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				Expect(err).ShouldNot(HaveOccurred())
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 
 			Context("LogStorage exists", func() {
+				// If the LogStorage exists on a managed cluster, the controller should error. The one exception being if the LogStorage is marked for deletion,
+				// in which case the controller should facilitate the deletion of the LogStorage.
+
 				BeforeEach(func() {
-					setUpLogStorageComponents(cli, ctx, storageClassName, nil, certificateManager)
+					setUpLogStorageComponents(cli, ctx, storageClassName, certificateManager)
 					mockStatus.On("OnCRFound").Return()
 					// mockStatus.On("SetMetaData", mock.Anything).Return()
 				})
@@ -246,7 +222,6 @@ var _ = Describe("LogStorage controller", func() {
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(result).Should(Equal(reconcile.Result{}))
 					Expect(err).ShouldNot(HaveOccurred())
-
 					mockStatus.AssertExpectations(GinkgoT())
 				})
 
@@ -1136,7 +1111,7 @@ var _ = Describe("LogStorage controller", func() {
 						ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
 					})).NotTo(HaveOccurred())
 
-				setUpLogStorageComponents(cli, ctx, "", nil, certificateManager)
+				setUpLogStorageComponents(cli, ctx, "", certificateManager)
 
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("Run").Return()
@@ -1229,7 +1204,7 @@ var _ = Describe("LogStorage controller", func() {
 	})
 })
 
-func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageClass string, managementClusterConnection *operatorv1.ManagementClusterConnection, certificateManager certificatemanager.CertificateManager) {
+func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageClass string, certificateManager certificatemanager.CertificateManager) {
 	if storageClass == "" {
 		Expect(cli.Create(ctx, &storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1286,12 +1261,11 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			KubernetesProvider:   operatorv1.ProviderNone,
 			Registry:             "testregistry.com/",
 		},
-		ManagementClusterConnection: managementClusterConnection,
-		Elasticsearch:               &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
-		Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
-		ClusterConfig:               relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
-		ElasticsearchKeyPair:        esKeyPair,
-		TrustedBundle:               trustedBundle,
+		Elasticsearch:        &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+		Kibana:               &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
+		ClusterConfig:        relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
+		ElasticsearchKeyPair: esKeyPair,
+		TrustedBundle:        trustedBundle,
 		PullSecrets: []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		},

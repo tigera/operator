@@ -181,9 +181,6 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	key := utils.DefaultTSEEInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if errors.IsNotFound(err) {
-		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
-		// there are still "LogStorage" related items that need to be set up
-		ls = nil
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	} else if err != nil {

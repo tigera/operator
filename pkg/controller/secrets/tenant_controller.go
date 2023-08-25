@@ -49,7 +49,6 @@ type TenantController struct {
 	scheme        *runtime.Scheme
 	status        status.StatusManager
 	clusterDomain string
-	multiTenant   bool
 	log           logr.Logger
 }
 

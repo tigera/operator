@@ -19,14 +19,15 @@ import (
 	"fmt"
 	"time"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -44,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -69,11 +71,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &LinseedSubController{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		clusterDomain: opts.ClusterDomain,
-		multiTenant:   opts.MultiTenant,
-		status:        status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		clusterDomain:  opts.ClusterDomain,
+		tierWatchReady: &utils.ReadyFlag{},
+		multiTenant:    opts.MultiTenant,
+		status:         status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -155,6 +158,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("log-storage-elastic-controller failed to establish a connection to k8s: %w", err)
+	}
+
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+
 	return nil
 }
 
@@ -211,6 +221,23 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)

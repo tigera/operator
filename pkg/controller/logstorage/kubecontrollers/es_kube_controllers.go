@@ -51,13 +51,12 @@ import (
 var log = logf.Log.WithName("controller_logstorage_kube-controllers")
 
 type ESKubeControllersController struct {
-	client         client.Client
-	scheme         *runtime.Scheme
-	status         status.StatusManager
-	clusterDomain  string
-	tierWatchReady *utils.ReadyFlag
-	usePSP         bool
-	multiTenant    bool
+	client        client.Client
+	scheme        *runtime.Scheme
+	status        status.StatusManager
+	clusterDomain string
+	usePSP        bool
+	multiTenant   bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {

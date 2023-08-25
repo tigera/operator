@@ -2037,6 +2037,7 @@ func GetLinseedTokenPath(managedCluster bool) string {
 type ManagedClusterLogStorageConfiguration struct {
 	Installation  *operatorv1.InstallationSpec
 	ClusterDomain string
+	Provider      operatorv1.Provider
 }
 
 // NewManagedClusterLogStorage returns a component for managed cluster log storage resources.

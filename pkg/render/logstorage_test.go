@@ -965,7 +965,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 
 	Context("Managed cluster", func() {
-		var cfg *render.ElasticsearchConfiguration
+		var cfg *render.ManagedClusterLogStorageConfiguration
 		var managementClusterConnection *operatorv1.ManagementClusterConnection
 
 		BeforeEach(func() {
@@ -975,20 +975,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
 			}
-
 			managementClusterConnection = &operatorv1.ManagementClusterConnection{}
-
-			cfg = &render.ElasticsearchConfiguration{
-				Installation:                installation,
-				ManagementClusterConnection: managementClusterConnection,
-				PullSecrets: []*corev1.Secret{
-					{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				Provider:           operatorv1.ProviderNone,
-				ClusterDomain:      "cluster.local",
-				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
-				UsePSP:             true,
-				KibanaEnabled:      true,
+			cfg = &render.ManagedClusterLogStorageConfiguration{
+				Installation:  installation,
+				ClusterDomain: "cluster.local",
 			}
 		})
 
@@ -1009,7 +999,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"tigera-linseed", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-linseed", "tigera-fluentd", &rbacv1.RoleBinding{}, nil},
 				}
-				component := render.LogStorage(cfg)
+				component := render.NewManagedClusterLogStorage(cfg)
 				createResources, deleteResources := component.Objects()
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
@@ -1035,7 +1025,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						cfg.Provider = operatorv1.ProviderNone
 					}
 
-					component := render.LogStorage(cfg)
+					component := render.NewManagedClusterLogStorage(cfg)
 					resources, _ := component.Objects()
 
 					for _, policyName := range policyNames {
@@ -1713,17 +1703,16 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS(installation)
 
 			cfg = &render.ElasticsearchConfiguration{
-				LogStorage:                  logStorage,
-				Installation:                installation,
-				ManagementCluster:           managementCluster,
-				ManagementClusterConnection: managementClusterConnection,
-				Elasticsearch:               &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
-				Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
-				KibanaEnabled:               true,
-				ClusterConfig:               esConfig,
-				ElasticsearchKeyPair:        elasticsearchKeyPair,
-				KibanaKeyPair:               kibanaKeyPair,
-				TrustedBundle:               trustedBundle,
+				LogStorage:           logStorage,
+				Installation:         installation,
+				ManagementCluster:    managementCluster,
+				Elasticsearch:        &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+				Kibana:               &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
+				KibanaEnabled:        true,
+				ClusterConfig:        esConfig,
+				ElasticsearchKeyPair: elasticsearchKeyPair,
+				KibanaKeyPair:        kibanaKeyPair,
+				TrustedBundle:        trustedBundle,
 				PullSecrets: []*corev1.Secret{
 					{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},

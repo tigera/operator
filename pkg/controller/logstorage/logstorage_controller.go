@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 
 	"github.com/go-logr/logr"
@@ -99,6 +101,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to establish a connection to k8s: %w", err)
 	}
+
+	dpiAPIReady := &utils.ReadyFlag{}
+	go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
+		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
@@ -241,6 +247,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
+	}
+
+	if err = utils.AddAPIServerWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
 	}
 
 	return nil
@@ -627,6 +637,11 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if !utils.IsAPIServerReady(r.client, reqLogger) {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
@@ -786,6 +801,13 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	dpiList := &v3.DeepPacketInspectionList{}
+	if err := r.client.List(ctx, dpiList); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve DeepPacketInspection resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	hasDPIResource := len(dpiList.Items) != 0
+
 	result, proceed, finalizerCleanup, err := r.createLogStorage(
 		ls,
 		install,
@@ -879,6 +901,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			managementCluster != nil,
 			r.usePSP,
 			clusterConfig,
+			hasDPIResource,
 		)
 		if err != nil || !proceed {
 			return result, err

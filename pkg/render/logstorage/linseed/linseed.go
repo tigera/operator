@@ -41,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -510,13 +509,6 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      esmetrics.ESMetricsSourceEntityRule,
-			Destination: linseedIngressDestinationEntityRule,
-		},
-		// TODO: Should we delete this ?
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      dpi.DPISourceEntityRule,
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

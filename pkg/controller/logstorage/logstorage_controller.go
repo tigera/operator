@@ -253,7 +253,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	if err = utils.AddAPIServerWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
+		return fmt.Errorf("logstorage-controller failed to watch APIServer resource: %v", err)
 	}
 
 	return nil

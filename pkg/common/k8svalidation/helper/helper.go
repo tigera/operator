@@ -1,6 +1,5 @@
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 /*
-Copyright (c) 2022 Tigera, Inc. All rights reserved.
-
 Copyright 2014 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,8 +52,6 @@ func IsQuotaHugePageResourceName(name core.ResourceName) bool {
 var Semantic = conversion.EqualitiesOrDie(
 	func(a, b resource.Quantity) bool {
 		// Ignore formatting, only care that numeric value stayed the same.
-		// TODO: if we decide it's important, it should be safe to start comparing the format.
-		//
 		// Uninitialized quantities are equivalent to 0 quantities.
 		return a.Cmp(b) == 0
 	},

@@ -86,7 +86,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	tierWatchReady := &utils.ReadyFlag{}
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient, tierWatchReady)
+	dpiAPIReady := &utils.ReadyFlag{}
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient, tierWatchReady, dpiAPIReady)
 	if err != nil {
 		return err
 	}
@@ -102,7 +103,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-controller failed to establish a connection to k8s: %w", err)
 	}
 
-	dpiAPIReady := &utils.ReadyFlag{}
+	// Start the watch for DPI
 	go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
 		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
@@ -132,6 +133,7 @@ func newReconciler(
 	opts options.AddOptions,
 	esCliCreator utils.ElasticsearchClientCreator,
 	tierWatchReady *utils.ReadyFlag,
+	dpiAPIReady *utils.ReadyFlag,
 ) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
 		client:         cli,
@@ -141,6 +143,7 @@ func newReconciler(
 		esCliCreator:   esCliCreator,
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
+		dpiAPIReady:    dpiAPIReady,
 		usePSP:         opts.UsePSP,
 	}
 
@@ -270,6 +273,7 @@ type ReconcileLogStorage struct {
 	esCliCreator   utils.ElasticsearchClientCreator
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
+	dpiAPIReady    *utils.ReadyFlag
 	usePSP         bool
 }
 
@@ -645,6 +649,12 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	if !r.dpiAPIReady.IsReady() {
+		log.Info("Waiting for DeepPacketInspection API to be ready")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

@@ -280,13 +280,17 @@ var _ = Describe("Linseed rendering tests", func() {
 				ClusterDomain:   clusterDomain,
 				ESClusterConfig: esClusterConfig,
 				MultiTenant:     true,
+				Namespace:       "tenant-a",
 			}
 		})
 		It("should render correct MULTI_TENANT environment variable value", func() {
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			d := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			for _, res := range resources {
+				fmt.Printf("JOSH-DBG: res = %v\n", res)
+			}
+			d := rtest.GetResource(resources, DeploymentName, "tenant-a", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{
 				Name: "MULTI_TENANT", Value: "true",

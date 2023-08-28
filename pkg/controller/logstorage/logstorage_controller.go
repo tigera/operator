@@ -811,13 +811,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	dpiList := &v3.DeepPacketInspectionList{}
-	if err := r.client.List(ctx, dpiList); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve DeepPacketInspection resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	hasDPIResource := len(dpiList.Items) != 0
-
 	result, proceed, finalizerCleanup, err := r.createLogStorage(
 		ls,
 		install,
@@ -911,7 +904,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			managementCluster != nil,
 			r.usePSP,
 			clusterConfig,
-			hasDPIResource,
 		)
 		if err != nil || !proceed {
 			return result, err

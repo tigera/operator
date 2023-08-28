@@ -91,6 +91,22 @@ func RequiresAmazonController(cfg *rest.Config) (bool, error) {
 	return false, nil
 }
 
+func MultiTenant(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	resources, err := c.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
+	if err != nil {
+		return false, err
+	}
+	for _, res := range resources.APIResources {
+		if strings.EqualFold(res.Kind, "Manager") {
+			// If the Manager is namespaced, it means we're operating in multi-tenant mode.
+			return res.Namespaced, nil
+		}
+	}
+
+	// Default to single-tenant.
+	return false, nil
+}
+
 func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (operatorv1.Provider, error) {
 	// First, try to determine the platform based on the present API groups.
 	if platform, err := autodetectFromGroup(clientset); err != nil {

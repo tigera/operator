@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	TigeraStatusReady = "Ready"
+	TigeraStatusReady    = "Ready"
+	TigeraStatusDegraded = "Degraded"
 )
 
 // TigeraStatusSpec defines the desired state of TigeraStatus
-type TigeraStatusSpec struct {
-}
+type TigeraStatusSpec struct{}
 
 // TigeraStatusStatus defines the observed state of TigeraStatus
 type TigeraStatusStatus struct {

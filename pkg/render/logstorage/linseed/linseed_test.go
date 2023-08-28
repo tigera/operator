@@ -77,6 +77,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		}
 
 		BeforeEach(func() {
+			replicas = 2
 			installation = &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
@@ -147,7 +148,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
-			var replicas int32 = 1
+			replicas = 1
 			installation.ControlPlaneReplicas = &replicas
 
 			component := Linseed(cfg)
@@ -159,7 +160,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
-			var replicas int32 = 2
+			replicas = 2
 			installation.ControlPlaneReplicas = &replicas
 
 			component := Linseed(cfg)
@@ -252,6 +253,45 @@ var _ = Describe("Linseed rendering tests", func() {
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
+		})
+	})
+	Context("multi-tenant rendering", func() {
+		var installation *operatorv1.InstallationSpec
+		var replicas int32
+		var cfg *Config
+		clusterDomain := "cluster.local"
+		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
+		BeforeEach(func() {
+			replicas = 2
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
+			}
+			kp, tokenKP, bundle := getTLS(installation)
+			cfg = &Config{
+				Installation: installation,
+				PullSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
+				TrustedBundle:   bundle,
+				ClusterDomain:   clusterDomain,
+				ESClusterConfig: esClusterConfig,
+				MultiTenant:     true,
+				Namespace:       "tenant-a",
+			}
+		})
+		It("should render correct MULTI_TENANT environment variable value", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, "tenant-a", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "MULTI_TENANT", Value: "true",
+			}))
 		})
 	})
 })
@@ -565,6 +605,10 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:  "ELASTIC_CA",
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
+				},
+				{
+					Name:  "MULTI_TENANT",
+					Value: "false",
 				},
 			},
 			VolumeMounts: []corev1.VolumeMount{

@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -96,6 +98,8 @@ type Config struct {
 
 	// Whether this is a management cluster
 	ManagementCluster bool
+
+	MultiTenant bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -183,6 +187,27 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
+	if l.cfg.MultiTenant {
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{render.LinseedServiceName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+				},
+			},
+		}...)
+	}
+
 	if l.cfg.UsePSP {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -254,6 +279,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "password", false),
 		},
 		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
+		{Name: "MULTI_TENANT", Value: fmt.Sprintf("%v", l.cfg.MultiTenant)},
 	}
 
 	volumes := []corev1.Volume{

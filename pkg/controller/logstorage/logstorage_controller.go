@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 
 	"github.com/go-logr/logr"
@@ -84,7 +86,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	tierWatchReady := &utils.ReadyFlag{}
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient, tierWatchReady)
+	dpiAPIReady := &utils.ReadyFlag{}
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient, tierWatchReady, dpiAPIReady)
 	if err != nil {
 		return err
 	}
@@ -99,6 +102,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to establish a connection to k8s: %w", err)
 	}
+
+	// Start the watch for DPI
+	go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
+		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
@@ -126,6 +133,7 @@ func newReconciler(
 	opts options.AddOptions,
 	esCliCreator utils.ElasticsearchClientCreator,
 	tierWatchReady *utils.ReadyFlag,
+	dpiAPIReady *utils.ReadyFlag,
 ) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
 		client:         cli,
@@ -135,6 +143,7 @@ func newReconciler(
 		esCliCreator:   esCliCreator,
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
+		dpiAPIReady:    dpiAPIReady,
 		usePSP:         opts.UsePSP,
 	}
 
@@ -243,6 +252,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 
+	if err = utils.AddAPIServerWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -260,6 +273,7 @@ type ReconcileLogStorage struct {
 	esCliCreator   utils.ElasticsearchClientCreator
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
+	dpiAPIReady    *utils.ReadyFlag
 	usePSP         bool
 }
 
@@ -627,9 +641,20 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if !utils.IsAPIServerReady(r.client, reqLogger) {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	if !r.dpiAPIReady.IsReady() {
+		log.Info("Waiting for DeepPacketInspection API to be ready")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

@@ -17,6 +17,8 @@ package logstorage
 import (
 	"context"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/go-logr/logr"
@@ -46,6 +48,13 @@ func (r *ReconcileLogStorage) createLinseed(
 	esClusterConfig *relasticsearch.ClusterConfig,
 ) (reconcile.Result, bool, error) {
 
+	dpiList := &v3.DeepPacketInspectionList{}
+	if err := r.client.List(ctx, dpiList); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve DeepPacketInspection resource", err, reqLogger)
+		return reconcile.Result{}, false, err
+	}
+	hasDPIResource := len(dpiList.Items) != 0
+
 	cfg := &linseed.Config{
 		Installation:      install,
 		PullSecrets:       pullSecrets,
@@ -56,6 +65,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		UsePSP:            usePSP,
 		ESClusterConfig:   esClusterConfig,
 		ManagementCluster: managementCluster,
+		HasDPIResource:    hasDPIResource,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

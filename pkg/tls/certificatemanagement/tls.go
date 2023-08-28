@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,7 +51,8 @@ func CreateSelfSignedSecret(secretName, namespace, cn string, altNames []string)
 	var keyPem bytes.Buffer
 	err = pem.Encode(&keyPem, &pem.Block{
 		Type:  blockTypePrivateKey,
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
 	if err != nil {
 		return nil, err
 	}

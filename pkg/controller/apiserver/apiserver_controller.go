@@ -99,6 +99,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		clusterDomain:       opts.ClusterDomain,
 		usePSP:              opts.UsePSP,
 		tierWatchReady:      &utils.ReadyFlag{},
+		multiTenant:         opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -118,7 +119,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
@@ -157,7 +158,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 	}
 
 	for _, secretName := range []string{
-		"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureCertSecret,
+		"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureServerCert,
 		certificatemanagement.CASecretName, render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -192,6 +193,7 @@ type ReconcileAPIServer struct {
 	clusterDomain       string
 	usePSP              bool
 	tierWatchReady      *utils.ReadyFlag
+	multiTenant         bool
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -255,7 +257,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	ns := rmeta.APIServerNamespace(variant)
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -305,6 +307,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		if managementCluster != nil {
+			// TODO: Does this belong here or in the manager?
 			tunnelCASecret, err := utils.GetSecret(ctx, r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
@@ -382,6 +385,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		TunnelCASecret:              tunnelCAKeyPair,
 		TrustedBundle:               trustedBundle,
 		UsePSP:                      r.usePSP,
+		MultiTenant:                 r.multiTenant,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)
@@ -409,7 +413,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if variant == operatorv1.TigeraSecureEnterprise {
 		packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
-			render.PacketCaptureCertSecret,
+			render.PacketCaptureServerCert,
 			common.OperatorNamespace(),
 			dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain))
 		if err != nil {

@@ -44,6 +44,7 @@ func (r *ReconcileLogStorage) createLinseed(
 	managementCluster bool,
 	usePSP bool,
 	esClusterConfig *relasticsearch.ClusterConfig,
+	hasDPIResource bool,
 ) (reconcile.Result, bool, error) {
 
 	cfg := &linseed.Config{
@@ -56,6 +57,7 @@ func (r *ReconcileLogStorage) createLinseed(
 		UsePSP:            usePSP,
 		ESClusterConfig:   esClusterConfig,
 		ManagementCluster: managementCluster,
+		HasDPIResource:    hasDPIResource,
 	}
 
 	linseedComponent := linseed.Linseed(cfg)

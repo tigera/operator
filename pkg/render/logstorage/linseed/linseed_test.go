@@ -287,9 +287,6 @@ var _ = Describe("Linseed rendering tests", func() {
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			for _, res := range resources {
-				fmt.Printf("JOSH-DBG: res = %v\n", res)
-			}
 			d := rtest.GetResource(resources, DeploymentName, "tenant-a", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{

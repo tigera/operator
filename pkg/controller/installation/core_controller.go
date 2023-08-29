@@ -1034,7 +1034,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
+		dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
 		if err != nil {
 			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)

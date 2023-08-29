@@ -79,7 +79,6 @@ var _ = Describe("Linseed rendering tests", func() {
 		}
 
 		BeforeEach(func() {
-			replicas = 2
 			installation = &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
@@ -162,7 +161,6 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
-			replicas = 2
 			installation.ControlPlaneReplicas = &replicas
 
 			component := Linseed(cfg)

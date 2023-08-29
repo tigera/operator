@@ -55,6 +55,10 @@ var log = logf.Log.WithName("controller_tiers")
 // Add creates a new Tiers Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
+		// No need to start this controller.
+		return nil
+	}
 
 	reconciler := newReconciler(mgr, opts)
 

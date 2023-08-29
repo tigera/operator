@@ -17,7 +17,6 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
-
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -30,7 +29,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -169,7 +167,7 @@ type FluentdConfiguration struct {
 	UsePSP bool
 	// Whether to use User provided certificate or not.
 	UseSyslogCertificate bool
-	EnterpriseCRDExists  bool
+	EnterpriseVariant    bool
 }
 
 type fluentdComponent struct {
@@ -184,14 +182,14 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	if c.cfg.OSType == rmeta.OSTypeWindows && c.cfg.EnterpriseCRDExists {
+	if c.cfg.OSType == rmeta.OSTypeWindows && c.cfg.EnterpriseVariant {
 		var err error
 		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, is)
 		return err
 	}
 
 	var err error
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
 	} else {
 		c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
@@ -241,14 +239,14 @@ func (c *fluentdComponent) securityContext(privileged bool) *corev1.SecurityCont
 }
 
 func (c *fluentdComponent) volumeHostPath() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows && c.cfg.EnterpriseCRDExists {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
 		return "c:/TigeraCalico"
 	}
 	return "/var/log/calico"
 }
 
 func (c *fluentdComponent) path(path string) string {
-	if c.cfg.OSType == rmeta.OSTypeWindows && c.cfg.EnterpriseCRDExists {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
 		// Use c: path prefix for windows.
 		return "c:" + path
 	}
@@ -260,7 +258,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
 	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
 	objs = append(objs, c.allowTigeraPolicy())
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	}
 	objs = append(objs, c.metricsService())
@@ -281,7 +279,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Filters != nil {
 		objs = append(objs, c.filtersConfigMap())
 	}
-	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux && c.cfg.EnterpriseCRDExists {
+	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux && c.cfg.EnterpriseVariant {
 		if c.cfg.UsePSP {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
@@ -307,7 +305,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs, c.fluentdServiceAccount())
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
 		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	}
@@ -476,7 +474,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 
 	var podTemplate *corev1.PodTemplateSpec
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		podTemplate = relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: annots,
@@ -589,7 +587,7 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		return relasticsearch.ContainerDecorateENVVars(corev1.Container{
 			Name:            "fluentd",
 			Image:           c.image,
@@ -668,7 +666,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
 
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		eeEnvs := []corev1.EnvVar{
 			{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		}
@@ -821,7 +819,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		envs = append(envs,
 			corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
 			corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
@@ -1024,7 +1022,7 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if c.cfg.EnterpriseCRDExists {
+	if c.cfg.EnterpriseVariant {
 		role.Rules[0].Resources = append(role.Rules[0].Resources, []string{
 			"kube_auditlogs",
 			"ee_auditlogs",

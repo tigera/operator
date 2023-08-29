@@ -93,28 +93,27 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 	}
 
-	return add(mgr, controller, reconciler.(*ReconcileLogCollector))
+	return add(mgr, controller, opts.EnterpriseCRDExists)
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
-		client:              mgr.GetClient(),
-		scheme:              mgr.GetScheme(),
-		provider:            opts.DetectedProvider,
-		status:              status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
-		clusterDomain:       opts.ClusterDomain,
-		licenseAPIReady:     licenseAPIReady,
-		tierWatchReady:      tierWatchReady,
-		enterpriseCRDExists: opts.EnterpriseCRDExists,
-		usePSP:              opts.UsePSP,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
+		licenseAPIReady: licenseAPIReady,
+		tierWatchReady:  tierWatchReady,
+		usePSP:          opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
 }
 
 // add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c controller.Controller, r *ReconcileLogCollector) error {
+func add(mgr manager.Manager, c controller.Controller, enterpriseCRDExists bool) error {
 	var err error
 
 	// Watch for changes to primary resource LogCollector
@@ -146,7 +145,7 @@ func add(mgr manager.Manager, c controller.Controller, r *ReconcileLogCollector)
 		}
 	}
 
-	if r.enterpriseCRDExists {
+	if enterpriseCRDExists {
 		for _, secretName := range []string{
 			render.ElasticsearchEksLogForwarderUserSecret,
 			render.S3FluentdSecretName, render.EksLogForwarderSecret,
@@ -184,15 +183,14 @@ var _ reconcile.Reconciler = &ReconcileLogCollector{}
 type ReconcileLogCollector struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client              client.Client
-	scheme              *runtime.Scheme
-	provider            operatorv1.Provider
-	status              status.StatusManager
-	clusterDomain       string
-	licenseAPIReady     *utils.ReadyFlag
-	tierWatchReady      *utils.ReadyFlag
-	enterpriseCRDExists bool
-	usePSP              bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	licenseAPIReady *utils.ReadyFlag
+	tierWatchReady  *utils.ReadyFlag
+	usePSP          bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -298,9 +296,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if !r.enterpriseCRDExists && (instance.Spec.AdditionalStores != nil || instance.Spec.CollectProcessPath != nil) {
-		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Configuring additional log sources requires enterprise license.", nil, reqLogger)
-		return reconcile.Result{}, fmt.Errorf("Configuring additional log sources requires enterprise license.")
+	// Fetch the Installation instance. We need this for a few reasons.
+	// - We need to make sure it has successfully completed installation.
+	// - We need to get the registry information from its spec.
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if variant != operatorv1.TigeraSecureEnterprise && (instance.Spec.AdditionalStores != nil || instance.Spec.CollectProcessPath != nil) {
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Additional log sources can be configured only in calico enterprise.", nil, reqLogger)
+		return reconcile.Result{}, fmt.Errorf("Additional log sources can be configured only in calico enterprise.")
 	}
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
@@ -325,8 +336,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
+
 	// Default fields on the LogCollector instance if needed.
-	if r.enterpriseCRDExists {
+	if variant == operatorv1.TigeraSecureEnterprise {
 		preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 		modifiedFields := fillDefaults(instance)
 		if len(modifiedFields) > 0 {
@@ -354,22 +366,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Fetch the Installation instance. We need this for a few reasons.
-	// - We need to make sure it has successfully completed installation.
-	// - We need to get the registry information from its spec.
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	var pullSecrets, esSecrets []*corev1.Secret
 	var esClusterConfig *relasticsearch.ClusterConfig
-	if r.enterpriseCRDExists {
+	if variant == operatorv1.TigeraSecureEnterprise {
 		pullSecrets, err = utils.GetNetworkingPullSecrets(installation, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -424,7 +423,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var prometheusCertificate, esgwCertificate certificatemanagement.CertificateInterface
-	if r.enterpriseCRDExists {
+	if variant == operatorv1.TigeraSecureEnterprise {
 		prometheusCertificate, err = certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
@@ -464,7 +463,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	trustedBundleCerts := []certificatemanagement.CertificateInterface{linseedCertificate}
-	if r.enterpriseCRDExists {
+	if variant == operatorv1.TigeraSecureEnterprise {
 		trustedBundleCerts = append(trustedBundleCerts, prometheusCertificate, esgwCertificate)
 	}
 	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
@@ -479,7 +478,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	var s3Credential *render.S3Credential
 	var splunkCredential *render.SplunkCredential
 	var useSyslogCertificate bool
-	if r.enterpriseCRDExists {
+	if variant == operatorv1.TigeraSecureEnterprise {
 		exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
 		if !exportLogs && instance.Spec.AdditionalStores != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs", nil, reqLogger)
@@ -558,7 +557,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
-	if r.enterpriseCRDExists {
+	if variant == operatorv1.TigeraSecureEnterprise {
 		if installation.KubernetesProvider == operatorv1.ProviderEKS {
 			log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 			if instance.Spec.AdditionalSources != nil {
@@ -597,7 +596,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
 		UseSyslogCertificate: useSyslogCertificate,
-		EnterpriseCRDExists:  r.enterpriseCRDExists,
+		EnterpriseVariant:    variant == operatorv1.TigeraSecureEnterprise,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -626,7 +625,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Render a fluentd component for Windows if the cluster has Windows nodes.
-	if r.enterpriseCRDExists {
+	if variant == operatorv1.TigeraSecureEnterprise {
 		hasWindowsNodes, err := hasWindowsNodes(r.client)
 		if err != nil {
 			return reconcile.Result{}, err

@@ -99,8 +99,6 @@ type Config struct {
 	// Whether this is a management cluster
 	ManagementCluster bool
 
-	MultiTenant bool
-
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 
@@ -187,7 +185,7 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if l.cfg.MultiTenant {
+	if l.cfg.Tenant != nil {
 		rules = append(rules, []rbacv1.PolicyRule{
 			{
 				APIGroups:     []string{""},
@@ -279,7 +277,6 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "password", false),
 		},
 		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
-		{Name: "MULTI_TENANT", Value: fmt.Sprintf("%v", l.cfg.MultiTenant)},
 	}
 
 	volumes := []corev1.Volume{

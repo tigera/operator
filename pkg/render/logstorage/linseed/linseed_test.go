@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	. "github.com/onsi/ginkgo"
@@ -255,18 +257,29 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
 		})
 	})
+
 	Context("multi-tenant rendering", func() {
 		var installation *operatorv1.InstallationSpec
+		var tenant *operatorv1.Tenant
 		var replicas int32
 		var cfg *Config
 		clusterDomain := "cluster.local"
 		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
+
 		BeforeEach(func() {
 			replicas = 2
 			installation = &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
+			}
+			tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-tenant",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "test-tenant",
+				},
 			}
 			kp, tokenKP, bundle := getTLS(installation)
 			cfg = &Config{
@@ -279,19 +292,35 @@ var _ = Describe("Linseed rendering tests", func() {
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				ESClusterConfig: esClusterConfig,
-				MultiTenant:     true,
-				Namespace:       "tenant-a",
+				Namespace:       "tenant-test-tenant",
+				Tenant:          tenant,
 			}
 		})
-		It("should render correct MULTI_TENANT environment variable value", func() {
+
+		It("should render impersonation permissions as part of tigera-linseed ClusterRole", func() {
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			d := rtest.GetResource(resources, DeploymentName, "tenant-a", "apps", "v1", "Deployment").(*appsv1.Deployment)
-			envs := d.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{
-				Name: "MULTI_TENANT", Value: "true",
-			}))
+			cr := rtest.GetResource(resources, ClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{render.LinseedServiceName},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
 		})
 	})
 })
@@ -605,10 +634,6 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:  "ELASTIC_CA",
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
-				},
-				{
-					Name:  "MULTI_TENANT",
-					Value: "false",
 				},
 			},
 			VolumeMounts: []corev1.VolumeMount{

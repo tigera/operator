@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	. "github.com/onsi/ginkgo"
@@ -147,7 +149,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
-			var replicas int32 = 1
+			replicas = 1
 			installation.ControlPlaneReplicas = &replicas
 
 			component := Linseed(cfg)
@@ -159,7 +161,6 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
-			var replicas int32 = 2
 			installation.ControlPlaneReplicas = &replicas
 
 			component := Linseed(cfg)
@@ -252,6 +253,72 @@ var _ = Describe("Linseed rendering tests", func() {
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
+		})
+	})
+
+	Context("multi-tenant rendering", func() {
+		var installation *operatorv1.InstallationSpec
+		var tenant *operatorv1.Tenant
+		var replicas int32
+		var cfg *Config
+		clusterDomain := "cluster.local"
+		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
+
+		BeforeEach(func() {
+			replicas = 2
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
+			}
+			tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-tenant",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "test-tenant",
+				},
+			}
+			kp, tokenKP, bundle := getTLS(installation)
+			cfg = &Config{
+				Installation: installation,
+				PullSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
+				TrustedBundle:   bundle,
+				ClusterDomain:   clusterDomain,
+				ESClusterConfig: esClusterConfig,
+				Namespace:       "tenant-test-tenant",
+				Tenant:          tenant,
+			}
+		})
+
+		It("should render impersonation permissions as part of tigera-linseed ClusterRole", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			cr := rtest.GetResource(resources, ClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{render.LinseedServiceName},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
 		})
 	})
 })

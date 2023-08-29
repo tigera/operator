@@ -87,13 +87,6 @@ const (
 	defaultTunnelVoltronPort = "9449"
 )
 
-var (
-	// TODO: NetworkPolicy rules will need to be generated dynamically for each namespace.
-	// Each tenant will need its own policies to ensure only its own components within its namespace can talk.
-	ManagerEntityRule       = networkpolicy.CreateEntityRule("tigera-manager", ManagerDeploymentName, managerPort)
-	ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule("tigera-manager", ManagerDeploymentName)
-)
-
 // Manager returns a component for rendering namespaced manager resources.
 func init() {
 	certkeyusage.SetCertKeyUsage(ManagerTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
@@ -864,7 +857,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ManagerEntityRule,
+			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ManagerEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

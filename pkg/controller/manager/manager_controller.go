@@ -542,8 +542,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				return reconcile.Result{}, err
 			}
 			if tunnelCASecret == nil {
-				// TODO: SAN should include the tenant ID, and Guardian should set the TLS hostname to the value with the tenant ID.
-				tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(tunnelSecretName, helper.TruthNamespace(), "tigera-voltron", []string{"voltron"})
+				tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(tunnelSecretName, helper.TruthNamespace(), "tigera-voltron", []string{tenant.Spec.ID})
 				if err != nil {
 					r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, logc)
 					return reconcile.Result{}, err

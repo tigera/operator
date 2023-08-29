@@ -57,9 +57,8 @@ func Tiers(cfg *Config) render.Component {
 }
 
 type Config struct {
-	Openshift           bool
-	DNSEgressCIDRs      DNSEgressCIDR
-	EnterpriseCRDExists bool
+	Openshift      bool
+	DNSEgressCIDRs DNSEgressCIDR
 }
 
 type DNSEgressCIDR struct {
@@ -78,17 +77,15 @@ func (t tiersComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
 		t.allowTigeraTier(),
+		t.allowTigeraClusterDNSPolicy(),
 	}
 
 	objsToDelete := []client.Object{}
-	if t.cfg.EnterpriseCRDExists {
-		objsToCreate = append(objsToCreate, t.allowTigeraClusterDNSPolicy())
 
-		if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 || len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
-			objsToCreate = append(objsToCreate, t.allowTigeraNodeLocalDNSPolicy())
-		} else {
-			objsToDelete = append(objsToDelete, t.allowTigeraNodeLocalDNSPolicy())
-		}
+	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 || len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
+		objsToCreate = append(objsToCreate, t.allowTigeraNodeLocalDNSPolicy())
+	} else {
+		objsToDelete = append(objsToDelete, t.allowTigeraNodeLocalDNSPolicy())
 	}
 
 	return objsToCreate, objsToDelete

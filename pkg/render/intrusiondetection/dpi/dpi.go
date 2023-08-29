@@ -47,8 +47,6 @@ const (
 	DefaultCPURequest              = "100m"
 )
 
-var DPISourceEntityRule = networkpolicy.CreateSourceEntityRule(DeepPacketInspectionNamespace, DeepPacketInspectionName)
-
 type DPIConfig struct {
 	IntrusionDetection *operatorv1.IntrusionDetection
 	Installation       *operatorv1.InstallationSpec

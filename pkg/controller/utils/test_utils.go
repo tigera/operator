@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,7 +45,14 @@ func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r 
 // Assumes that mockStatus has any required initial status progression expectations set, and that the Reconciler utilizes
 // the mockStatus object.
 func ExpectWaitForTierWatch(ctx context.Context, r reconcile.Reconciler, mockStatus *status.MockStatus) {
-	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for Tier watch to be established", mock.Anything, mock.Anything).Return()
+	ExpectWaitForWatch(ctx, r, mockStatus, "Waiting for Tier watch to be established")
+}
+
+// ExpectWaitForWatch expects the Reconciler issues a degraded status, waiting for a watch to be established.
+// Assumes that mockStatus has any required initial status progression expectations set, and that the Reconciler utilizes
+// the mockStatus object.
+func ExpectWaitForWatch(ctx context.Context, r reconcile.Reconciler, mockStatus *status.MockStatus, message string) {
+	mockStatus.On("SetDegraded", operator.ResourceNotReady, message, mock.Anything, mock.Anything).Return()
 	_, err := r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())
 	mockStatus.AssertExpectations(GinkgoT())

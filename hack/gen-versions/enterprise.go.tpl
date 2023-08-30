@@ -143,14 +143,14 @@ var (
 	}
 {{- end }}
 {{ with .Components.fluentd }}
-	ComponentFluentd = component{
+	ComponentTigeraFluentd = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "fluentd-windows" }}
-	ComponentFluentdWindows = component{
+	ComponentTigeraFluentdWindows = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -387,8 +387,8 @@ var (
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
-		ComponentFluentd,
-		ComponentFluentdWindows,
+		ComponentTigeraFluentd,
+		ComponentTigeraFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentAnomalyDetectionJobs,

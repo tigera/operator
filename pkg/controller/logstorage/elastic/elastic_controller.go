@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -347,12 +348,14 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 	cm.AddToStatusManager(r.status, render.ElasticsearchNamespace)
 
-	elasticKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace())
+	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	elasticKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
 		return reconcile.Result{}, err
 	}
-	kibanaKeyPair, err := cm.GetKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
+	kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+	kibanaKeyPair, err := cm.GetKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 	if err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)

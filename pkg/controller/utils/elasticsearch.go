@@ -26,6 +26,7 @@ import (
 
 	"github.com/olivere/elastic/v7"
 
+	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
@@ -447,31 +448,50 @@ func getClientCredentials(client client.Client, ctx context.Context) (string, st
 		return "", "", nil, err
 	}
 
-	esPublicCert := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchInternalCertSecret, Namespace: common.OperatorNamespace()}, esPublicCert); err != nil {
-		return "", "", nil, err
-	}
+	// Extract the password from the secret. The username is always "elastic".
+	username := "elastic"
+	password := string(esSecret.Data[username])
 
-	roots, err := getESRoots(esPublicCert)
+	// Determine the CA to use for validating the Elasticsearch server certificate.
+	roots, err := getESRoots(ctx, client)
 	if err != nil {
 		return "", "", nil, err
 	}
-	pass := string(esSecret.Data["elastic"])
-	return "elastic", pass, roots, nil
+
+	return username, password, roots, nil
 }
 
-func getESRoots(esCertSecret *corev1.Secret) (*x509.CertPool, error) {
-	rootPEM, exists := esCertSecret.Data["tls.crt"]
-	if !exists {
-		return nil, fmt.Errorf("couldn't find tls.crt in Elasticsearch secret")
+// getESRoots returns the root certificates used to validate the Elasticsearch server certificate.
+func getESRoots(ctx context.Context, client client.Client) (*x509.CertPool, error) {
+	instance := &operator.Installation{}
+	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
+		return nil, err
 	}
 
+	// Determine the CA to use for validating the Elasticsearch server certificate.
+	caPEM := []byte{}
+	if instance.Spec.CertificateManagement != nil {
+		// If certificate managemement is enabled, use the provided CA.
+		caPEM = instance.Spec.CertificateManagement.CACert
+	} else {
+		// Otherwise, load the CA from the Elasticsearch internal cert secret.
+		esPublicCert := &corev1.Secret{}
+		if err := client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchInternalCertSecret, Namespace: common.OperatorNamespace()}, esPublicCert); err != nil {
+			return nil, err
+		}
+		var exists bool
+		caPEM, exists = esPublicCert.Data["tls.crt"]
+		if !exists {
+			return nil, fmt.Errorf("couldn't find tls.crt in Elasticsearch secret")
+		}
+	}
+
+	// Build a cert pool using the CA.
 	roots := x509.NewCertPool()
-	ok := roots.AppendCertsFromPEM(rootPEM)
+	ok := roots.AppendCertsFromPEM(caPEM)
 	if !ok {
 		return nil, fmt.Errorf("failed to parse root certificate")
 	}
-
 	return roots, nil
 }
 

@@ -81,13 +81,14 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
-	URL               string
-	PullSecrets       []*corev1.Secret
-	Openshift         bool
-	Installation      *operatorv1.InstallationSpec
-	TunnelSecret      *corev1.Secret
-	TrustedCertBundle certificatemanagement.TrustedBundle
-	TunnelCAType      operatorv1.CAType
+	URL                 string
+	PullSecrets         []*corev1.Secret
+	Openshift           bool
+	Installation        *operatorv1.InstallationSpec
+	TunnelSecret        *corev1.Secret
+	TrustedCertBundle   certificatemanagement.TrustedBundle
+	TunnelCAType        operatorv1.CAType
+	EnterpriseCRDExists bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -103,7 +104,11 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	if c.cfg.EnterpriseCRDExists {
+		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	} else {
+		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -125,16 +130,21 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
-		// Add tigera-manager service account for impersonation
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
-		managerServiceAccount(),
-		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
-		managerClusterRoleBinding(),
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
+
+	if c.cfg.EnterpriseCRDExists {
+		// Add tigera-manager service account for impersonation
+		objs = append(objs,
+			CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+			managerServiceAccount(),
+			managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
+			managerClusterRoleBinding(),
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
+	}
 
 	if c.cfg.UsePSP {
 		objs = append(objs, c.podSecurityPolicy())

@@ -73,7 +73,7 @@ type certificateManager struct {
 // brings their own secrets, CertificateManager will preserve and return them.
 type CertificateManager interface {
 	// GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
-	GetKeyPair(cli client.Client, secretName, secretNamespace string) (certificatemanagement.KeyPairInterface, error)
+	GetKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
@@ -244,7 +244,7 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 
 // GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
+	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false, dnsNames)
 	if keyPair != nil && keyPair.UseCertificateManagement() {
 		return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil
 	}
@@ -328,7 +328,7 @@ func newCertExtKeyUsageError(name, ns string, requiredExtKeyUsages []x509.ExtKey
 }
 
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
-func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
+func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool, dnsNames []string) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
 	cm.log.V(2).Info("Querying secret for keypair", "namespace", secretNamespace, "name", secretName)
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
@@ -340,7 +340,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 			cm.log.V(2).Info("KeyPair not found", "namespace", secretNamespace, "name", secretName)
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we expect that in most cases no secret will be present.
-				return certificateManagementKeyPair(cm, secretName, secretNamespace, nil), nil, nil
+				return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil, nil
 			}
 			return nil, nil, nil
 		}
@@ -360,16 +360,16 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		return nil, nil, err
 	}
 
-	timeInvalid := x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now())
 	// Get specific usages to check for certs that are utilized for mTLS with Linseed
 	requiredKeyUsages := certkeyusage.GetCertKeyUsage(secretName)
 	invalidKeyUsage := !HasRequiredKeyUsage(x509Cert, requiredKeyUsages)
+	timeInvalid := x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now())
 	if timeInvalid || invalidKeyUsage {
 		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			if cm.keyPair.CertificateManagement != nil {
 				// When certificate management is enabled, we can simply return a certificate management key pair;
 				// the old secret will be deleted automatically.
-				return certificateManagementKeyPair(cm, secretName, secretNamespace, nil), nil, nil
+				return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil, nil
 			}
 
 			if invalidKeyUsage {
@@ -389,7 +389,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	var issuer certificatemanagement.KeyPairInterface
 	if x509Cert.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix {
 		if cm.keyPair.CertificateManagement != nil {
-			return certificateManagementKeyPair(cm, secretName, secretNamespace, nil), nil, nil
+			return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil, nil
 		}
 		if string(x509Cert.AuthorityKeyId) == string(cm.AuthorityKeyId) {
 			issuer = cm.keyPair
@@ -435,13 +435,13 @@ func HasRequiredKeyUsage(cert *x509.Certificate, required []x509.ExtKeyUsage) bo
 
 // GetCertificate returns a Certificate. If the certificate is not found or outdated, a k8s.io NotFound error is returned.
 func (cm *certificateManager) GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error) {
-	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, true)
+	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, true, nil)
 	return keyPair, err
 }
 
 // GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
-func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
+func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
+	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false, dnsNames)
 	return keyPair, err
 }
 
@@ -487,6 +487,7 @@ func certificateManagementKeyPair(ca *certificateManager, secretName, ns string,
 		CertificateManagement: ca.CertificateManagement(),
 		DNSNames:              dnsNames,
 		CSRImage:              ca.keyPair.CSRImage,
+		Namespace:             ns,
 	}
 }
 

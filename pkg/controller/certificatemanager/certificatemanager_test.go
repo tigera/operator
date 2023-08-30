@@ -208,7 +208,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 		It("should be able to fetch a key pair if it exists", func() {
 			By("verifying that it returns nil if the key pair does not exist")
-			key, err := certificateManager.GetKeyPair(cli, appSecretName, appNs)
+			key, err := certificateManager.GetKeyPair(cli, appSecretName, appNs, nil)
 			Expect(key).To(BeNil())
 			Expect(err).NotTo(HaveOccurred())
 
@@ -218,7 +218,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(cli.Create(ctx, keyPair.Secret(appNs))).NotTo(HaveOccurred())
 
 			By("verifying that it returns the key pair")
-			keyPair2, err := certificateManager.GetKeyPair(cli, appSecretName, appNs)
+			keyPair2, err := certificateManager.GetKeyPair(cli, appSecretName, appNs, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair2).NotTo(BeNil())
 		})
@@ -260,7 +260,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				Expect(certificatemanager.IsCertExtKeyUsageError(err)).To(BeTrue())
 				Expect(err.Error()).To(ContainSubstring("ExtKeyUsageServerAuth"))
 				Expect(err.Error()).To(ContainSubstring("ExtKeyUsageClientAuth"))
-				kp, err := certificateManager.GetKeyPair(cli, secret.Name, secret.Namespace)
+				kp, err := certificateManager.GetKeyPair(cli, secret.Name, secret.Namespace, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(kp).To(BeNil())
 				kp, err = certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
@@ -395,7 +395,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(mount.Name).To(Equal(appSecretName))
 
 			By("verifying the annotations")
-			Expect(keyPair.HashAnnotationKey()).To(Equal("hash.operator.tigera.io/my-app-tls"))
+			Expect(keyPair.HashAnnotationKey()).To(Equal("my-app.hash.operator.tigera.io/my-app-tls"))
 			Expect(keyPair.HashAnnotationValue()).To(Equal(""))
 
 			By("verifying the init container")

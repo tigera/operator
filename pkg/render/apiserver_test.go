@@ -1111,7 +1111,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			// - 1 added by the operator by default
 			// - 1 added by the calicoNodeDaemonSet override
 			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
-			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-apiserver-certs"))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-apiserver-certs"))
 			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
@@ -1930,7 +1930,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			// - 1 added by the operator by default
 			// - 1 added by the calicoNodeDaemonSet override
 			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
-			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/calico-apiserver-certs"))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/calico-apiserver-certs"))
 			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))

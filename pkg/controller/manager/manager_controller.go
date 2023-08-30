@@ -550,7 +550,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 		} else {
 			// For single-tenant clusters, query the secret directly. This will have already been created by the apiserver controller.
-			tunnelServerCert, err = certificateManager.GetKeyPair(r.client, tunnelSecretName, helper.TruthNamespace())
+			tunnelServerCert, err = certificateManager.GetKeyPair(r.client, tunnelSecretName, helper.TruthNamespace(), []string{"voltron"})
 			if tunnelServerCert == nil {
 				r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s/%s to be available", helper.TruthNamespace(), tunnelSecretName), nil, logc)
 				return reconcile.Result{}, err

@@ -140,6 +140,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "calico/guardian" }}
+	ComponentCalicoGuardian = component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -164,5 +171,6 @@ var (
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoFluentd,
 		ComponentCalicoCSIRegistrarFIPS,
+		ComponentCalicoGuardian
 	}
 )

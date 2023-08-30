@@ -123,6 +123,11 @@ var (
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
+	ComponentCalicoGuardian = component{
+		Version: "master",
+		//Image:   "calico/guardian",
+		Image: "tigera/guardian",
+	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -147,5 +152,6 @@ var (
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoFluentd,
 		ComponentCalicoCSIRegistrarFIPS,
+		ComponentCalicoGuardian,
 	}
 )

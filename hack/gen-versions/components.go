@@ -45,6 +45,7 @@ var defaultImages = map[string]string{
 	"calico/windows-upgrade":     "calico/windows-upgrade",
 	"tigera/linseed":             "tigera/linseed",
 	"calico/fluentd":             "calico/fluentd",
+	"calico/guardian":            "calico/guardian",
 }
 
 var ignoredImages = map[string]struct{}{

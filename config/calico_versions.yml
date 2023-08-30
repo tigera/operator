@@ -22,4 +22,5 @@ components:
   csi-node-driver-registrar:
     version: master
   calico/fluentd:
+  calico/guardian:
     version: master

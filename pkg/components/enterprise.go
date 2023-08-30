@@ -125,13 +125,13 @@ var (
 		Registry: "",
 	}
 
-	ComponentFluentd = component{
+	ComponentTigeraFluentd = component{
 		Version:  "master",
 		Image:    "tigera/fluentd",
 		Registry: "",
 	}
 
-	ComponentFluentdWindows = component{
+	ComponentTigeraFluentdWindows = component{
 		Version:  "master",
 		Image:    "tigera/fluentd-windows",
 		Registry: "",
@@ -336,8 +336,8 @@ var (
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
-		ComponentFluentd,
-		ComponentFluentdWindows,
+		ComponentTigeraFluentd,
+		ComponentTigeraFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentAnomalyDetectionJobs,

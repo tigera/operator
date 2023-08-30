@@ -319,26 +319,26 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		} else {
-			log.Error(err, "Error querying allow-tigera tier")
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
-	// Default fields on the LogCollector instance if needed.
 	if variant == operatorv1.TigeraSecureEnterprise {
+		// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+		if !r.tierWatchReady.IsReady() {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		// Default fields on the LogCollector instance if needed.
+		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			} else {
+				log.Error(err, "Error querying allow-tigera tier")
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
 		preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 		modifiedFields := fillDefaults(instance)
 		if len(modifiedFields) > 0 {
@@ -366,14 +366,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	var pullSecrets, esSecrets []*corev1.Secret
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	var esSecrets []*corev1.Secret
 	var esClusterConfig *relasticsearch.ClusterConfig
 	if variant == operatorv1.TigeraSecureEnterprise {
-		pullSecrets, err = utils.GetNetworkingPullSecrets(installation, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 
 		esClusterConfig, err = utils.GetElasticsearchClusterConfig(ctx, r.client)
 		if err != nil {
@@ -596,7 +596,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ManagedCluster:       managedCluster,
 		UsePSP:               r.usePSP,
 		UseSyslogCertificate: useSyslogCertificate,
-		EnterpriseVariant:    variant == operatorv1.TigeraSecureEnterprise,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)

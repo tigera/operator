@@ -17,7 +17,6 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
-	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -167,7 +166,6 @@ type FluentdConfiguration struct {
 	UsePSP bool
 	// Whether to use User provided certificate or not.
 	UseSyslogCertificate bool
-	EnterpriseVariant    bool
 }
 
 type fluentdComponent struct {
@@ -182,17 +180,18 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	if c.cfg.OSType == rmeta.OSTypeWindows && c.cfg.EnterpriseVariant {
+	if c.cfg.OSType == rmeta.OSTypeWindows && c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		var err error
-		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, is)
+		c.image, err = components.GetReference(components.ComponentTigeraFluentdWindows, reg, path, prefix, is)
 		return err
 	}
 
 	var err error
-	if c.cfg.EnterpriseVariant {
-		c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.image, err = components.GetReference(components.ComponentTigeraFluentd, reg, path, prefix, is)
 	} else {
-		c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
+		//c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
+		c.image = "gcr.io/tigera-dev/summoner/fluentd:r1"
 	}
 	return err
 }
@@ -257,9 +256,9 @@ func (c *fluentdComponent) path(path string) string {
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
 	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
-	objs = append(objs, c.allowTigeraPolicy())
-	if c.cfg.EnterpriseVariant {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs, c.allowTigeraPolicy())
 	}
 	objs = append(objs, c.metricsService())
 
@@ -279,7 +278,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Filters != nil {
 		objs = append(objs, c.filtersConfigMap())
 	}
-	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux && c.cfg.EnterpriseVariant {
+	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux && c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.UsePSP {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
@@ -305,8 +304,11 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs, c.fluentdServiceAccount())
-	if c.cfg.EnterpriseVariant {
+	if len(c.cfg.ESSecrets) > 0 {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	}
 	objs = append(objs, c.daemonset())
@@ -473,39 +475,24 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		initContainers = append(initContainers, c.cfg.FluentdKeyPair.InitContainer(LogCollectorNamespace))
 	}
 
-	var podTemplate *corev1.PodTemplateSpec
-	if c.cfg.EnterpriseVariant {
-		podTemplate = relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: annots,
-			},
-			Spec: corev1.PodSpec{
-				NodeSelector:                  map[string]string{},
-				Tolerations:                   c.tolerations(),
-				ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
-				TerminationGracePeriodSeconds: &terminationGracePeriod,
-				InitContainers:                initContainers,
-				Containers:                    []corev1.Container{c.container()},
-				Volumes:                       c.volumes(),
-				ServiceAccountName:            c.fluentdNodeName(),
-			},
-		}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
-	} else {
-		podTemplate = &corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: annots,
-			},
-			Spec: corev1.PodSpec{
-				NodeSelector:                  map[string]string{},
-				Tolerations:                   c.tolerations(),
-				ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
-				TerminationGracePeriodSeconds: &terminationGracePeriod,
-				InitContainers:                initContainers,
-				Containers:                    []corev1.Container{c.container()},
-				Volumes:                       c.volumes(),
-				ServiceAccountName:            c.fluentdNodeName(),
-			},
-		}
+	podTemplate := &corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: annots,
+		},
+		Spec: corev1.PodSpec{
+			NodeSelector:                  map[string]string{},
+			Tolerations:                   c.tolerations(),
+			ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
+			TerminationGracePeriodSeconds: &terminationGracePeriod,
+			InitContainers:                initContainers,
+			Containers:                    []corev1.Container{c.container()},
+			Volumes:                       c.volumes(),
+			ServiceAccountName:            c.fluentdNodeName(),
+		},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		podTemplate = relasticsearch.DecorateAnnotations(podTemplate, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 	}
 
 	ds := &appsv1.DaemonSet{
@@ -587,42 +574,27 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	if c.cfg.EnterpriseVariant {
-		return relasticsearch.ContainerDecorateENVVars(corev1.Container{
-			Name:            "fluentd",
-			Image:           c.image,
-			ImagePullPolicy: ImagePullPolicy(),
-			Env:             envs,
-			// On OpenShift Fluentd needs privileged access to access logs on host path volume
-			SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
-			VolumeMounts:    volumeMounts,
-			StartupProbe:    c.startup(),
-			LivenessProbe:   c.liveness(),
-			ReadinessProbe:  c.readiness(),
-			Ports: []corev1.ContainerPort{{
-				Name:          "metrics-port",
-				ContainerPort: FluentdMetricsPort,
-			}},
-		}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)
-	} else {
-		return corev1.Container{
-			Name:            "fluentd",
-			Image:           c.image,
-			ImagePullPolicy: ImagePullPolicy(),
-			Env:             envs,
-			// On OpenShift Fluentd needs privileged access to access logs on host path volume
-			SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
-			VolumeMounts:    volumeMounts,
-			StartupProbe:    c.startup(),
-			LivenessProbe:   c.liveness(),
-			ReadinessProbe:  c.readiness(),
-			Ports: []corev1.ContainerPort{{
-				Name:          "metrics-port",
-				ContainerPort: FluentdMetricsPort,
-			}},
-		}
+	container := corev1.Container{
+		Name:            "fluentd",
+		Image:           c.image,
+		ImagePullPolicy: ImagePullPolicy(),
+		Env:             envs,
+		// On OpenShift Fluentd needs privileged access to access logs on host path volume
+		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
+		VolumeMounts:    volumeMounts,
+		StartupProbe:    c.startup(),
+		LivenessProbe:   c.liveness(),
+		ReadinessProbe:  c.readiness(),
+		Ports: []corev1.ContainerPort{{
+			Name:          "metrics-port",
+			ContainerPort: FluentdMetricsPort,
+		}},
 	}
 
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		container = relasticsearch.ContainerDecorateENVVars(container, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)
+	}
+	return container
 }
 
 func (c *fluentdComponent) metricsService() *corev1.Service {
@@ -666,7 +638,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
 
-	if c.cfg.EnterpriseVariant {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		eeEnvs := []corev1.EnvVar{
 			{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		}
@@ -817,26 +789,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 			envs = append(envs,
 				corev1.EnvVar{Name: "FLUENTD_DNS_FILTERS", Value: "true"})
 		}
-	}
-
-	if c.cfg.EnterpriseVariant {
-		envs = append(envs,
-			corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-			corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-			corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-			corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-			corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-			corev1.EnvVar{Name: "ELASTIC_L7_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-			corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-
-			corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.FlowShards())},
-			corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-			corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-			corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-			corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-			corev1.EnvVar{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-			corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		)
 	}
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
@@ -1005,25 +957,17 @@ func (c *fluentdComponent) fluentdClusterRoleBinding() *rbacv1.ClusterRoleBindin
 }
 
 func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
-	role := &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: c.fluentdName(),
+	linseedRule := rbacv1.PolicyRule{
+		// Add write access to Linseed APIs.
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{
+			"flowlogs",
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Add write access to Linseed APIs.
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{
-					"flowlogs",
-				},
-				Verbs: []string{"create"},
-			},
-		},
+		Verbs: []string{"create"},
 	}
 
-	if c.cfg.EnterpriseVariant {
-		role.Rules[0].Resources = append(role.Rules[0].Resources, []string{
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		linseedRule.Resources = append(linseedRule.Resources, []string{
 			"kube_auditlogs",
 			"ee_auditlogs",
 			"dnslogs",
@@ -1033,6 +977,14 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 			"waflogs",
 			"runtimereports",
 		}...)
+	}
+
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: c.fluentdName(),
+		},
+		Rules: []rbacv1.PolicyRule{linseedRule},
 	}
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster

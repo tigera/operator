@@ -469,7 +469,7 @@ func getESRoots(ctx context.Context, client client.Client) (*x509.CertPool, erro
 	}
 
 	// Determine the CA to use for validating the Elasticsearch server certificate.
-	caPEM := []byte{}
+	var caPEM []byte
 	if instance.Spec.CertificateManagement != nil {
 		// If certificate managemement is enabled, use the provided CA.
 		caPEM = instance.Spec.CertificateManagement.CACert

@@ -296,7 +296,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.TruthNamespace(), render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	tokenKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{"localhost"})
+	tokenKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{render.TigeraLinseedTokenSecret})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed token secret", err, reqLogger)
 		return reconcile.Result{}, err

@@ -63,7 +63,9 @@ var _ = Describe("Linseed rendering tests", func() {
 		var cfg *Config
 		clusterDomain := "cluster.local"
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed.json")
+		expectedPolicyWithDPI := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_dpi_enabled.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp.json")
+		expectedPolicyForOpenshiftWithDPI := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp_dpi_enabled.json")
 		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
 
 		expectedResources := []resourceTestObj{
@@ -206,6 +208,10 @@ var _ = Describe("Linseed rendering tests", func() {
 					return nil
 				}
 
+				if scenario.DPIEnabled {
+					return testutils.SelectPolicyByProvider(scenario, expectedPolicyWithDPI, expectedPolicyForOpenshiftWithDPI)
+				}
+
 				return testutils.SelectPolicyByProvider(scenario, expectedPolicy, expectedPolicyForOpenshift)
 			}
 
@@ -216,6 +222,7 @@ var _ = Describe("Linseed rendering tests", func() {
 					} else {
 						cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
 					}
+					cfg.HasDPIResource = scenario.DPIEnabled
 					component := Linseed(cfg)
 					resources, _ := component.Objects()
 
@@ -226,7 +233,9 @@ var _ = Describe("Linseed rendering tests", func() {
 				// Linseed only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
 				// does not have a config option for managed clusters.
 				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+				Entry("for management/standalone, kube-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, DPIEnabled: true}),
 				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+				Entry("for management/standalone, openshift-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true, DPIEnabled: true}),
 			)
 		})
 

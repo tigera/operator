@@ -81,8 +81,10 @@ func NewLinseedControllerWithShims(
 		clusterDomain:  opts.ClusterDomain,
 		multiTenant:    opts.MultiTenant,
 		tierWatchReady: &utils.ReadyFlag{},
+		dpiAPIReady:    &utils.ReadyFlag{},
 	}
 	r.tierWatchReady.MarkAsReady()
+	r.dpiAPIReady.MarkAsReady()
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
 }

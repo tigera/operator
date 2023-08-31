@@ -23,6 +23,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,6 +62,7 @@ type LinseedSubController struct {
 	status         status.StatusManager
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
+	dpiAPIReady    *utils.ReadyFlag
 	usePSP         bool
 	multiTenant    bool
 }
@@ -76,6 +78,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:         mgr.GetScheme(),
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: &utils.ReadyFlag{},
+		dpiAPIReady:    &utils.ReadyFlag{},
 		multiTenant:    opts.MultiTenant,
 		status:         status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
 	}
@@ -165,6 +168,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+	go utils.WaitToAddResourceWatch(c, k8sClient, log, r.dpiAPIReady, []client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
 	return nil
 }
@@ -227,6 +231,11 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+	if !r.dpiAPIReady.IsReady() {
+		log.Info("Waiting for DeepPacketInspection API to be ready")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -332,6 +341,13 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
+	dpiList := &v3.DeepPacketInspectionList{}
+	if err := r.client.List(ctx, dpiList); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve DeepPacketInspection resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	hasDPIResource := len(dpiList.Items) != 0
+
 	// Determine the namespaces to which we must bind the linseed cluster role.
 	bindNamespaces, err := helper.TenantNamespaces(r.client)
 	if err != nil {
@@ -349,6 +365,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		TokenKeyPair:      tokenKeyPair,
 		UsePSP:            r.usePSP,
 		ESClusterConfig:   esClusterConfig,
+		HasDPIResource:    hasDPIResource,
 		ManagementCluster: managementCluster != nil,
 		Tenant:            tenant,
 	}

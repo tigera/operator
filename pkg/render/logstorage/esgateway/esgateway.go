@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -459,16 +458,10 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      dpi.DPISourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
 					Destination: esgatewayIngressDestinationEntityRule,
 					// The operator needs access to Elasticsearch and Kibana (through ES Gateway), however, since the
 					// operator is on the hostnetwork it's hard to create specific network policies for it.
-					// Allow all sources, as node CIDRs are not known.
+					// Allow all sources, as node CIDRs are not known. This also applies to DPI, which is host networked
 				},
 			},
 			Egress: egressRules,

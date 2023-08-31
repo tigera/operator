@@ -846,7 +846,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 
@@ -862,7 +861,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})

@@ -426,18 +426,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		// management cluster into the managed cluster by kube-controllers.
 		linseedCertName = render.VoltronLinseedPublicCert
 	} else if multiTenantManagement {
-		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace.
-		// Instead, look for a Tenant instance that represent's the management cluster's own tenant.
+		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace. Instead, each Linseed has its own
+		// certificate in the namespace of the tenant it belongs to. We need to figure out which Linseed belongs to the management cluster itself,
+		// and use that certificate instead. We can find this out by looking at the multiTenantManagementClusterNamespace field.
 		if instance.Spec.MultiTenantManagementClusterNamespace == "" {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "multiTenantManagementClusterNamespace is not set", nil, reqLogger)
 			return reconcile.Result{}, nil
 		}
+		linseedCertNamespace = instance.Spec.MultiTenantManagementClusterNamespace
+
+		// Make sure that a tenant actually exists in the configured namespace before continuing.
 		tenant, _, err = utils.GetTenant(ctx, r.multiTenant, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Failed to retrieve tenant in ns %s", instance.Spec.MultiTenantManagementClusterNamespace), err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		linseedCertNamespace = tenant.Namespace
 	}
 	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertName, linseedCertNamespace)
 	if err != nil {

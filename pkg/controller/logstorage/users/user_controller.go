@@ -129,8 +129,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
-	err = r.client.Get(ctx, key, logStorage)
+	err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, logStorage)
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
@@ -168,7 +167,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	linseedUser := utils.LinseedUser(tenantID)
 	basicCreds := corev1.Secret{}
 	credentialSecrets := []client.Object{}
-	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
+	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
 	if err := r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err

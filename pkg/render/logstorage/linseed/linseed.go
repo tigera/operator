@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/common"
+
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	"github.com/tigera/operator/pkg/ptr"
@@ -293,6 +295,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
 			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: common.OperatorNamespace()},
 		)
 		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
 		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))

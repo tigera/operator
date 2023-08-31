@@ -320,6 +320,16 @@ var _ = Describe("Linseed rendering tests", func() {
 			}
 			Expect(cr.Rules).To(ContainElements(expectedRules))
 		})
+
+		It("should render MANAGEMENT_OPERATOR_NS environment variable", func() {
+			cfg.ManagementCluster = true
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
+		})
 	})
 })
 

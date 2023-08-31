@@ -269,7 +269,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Secret used for TLS between dex and other components.
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -289,7 +289,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	idpSecret, err := utils.GetIdpSecret(ctx, r.client, authentication)
+	idpSecret, err := utils.GetIDPSecret(ctx, r.client, authentication)
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid or missing identity provider secret", err, reqLogger)
 		return reconcile.Result{}, err

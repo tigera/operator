@@ -114,7 +114,7 @@ const (
 	EsCuratorPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + "allow-elastic-curator"
 
 	OIDCUsersConfigMapName = "tigera-known-oidc-users"
-	OIDCUsersEsSecreteName = "tigera-oidc-users-elasticsearch-credentials"
+	OIDCUsersESSecretName  = "tigera-oidc-users-elasticsearch-credentials"
 
 	// As soon as the total disk utilization exceeds the max-total-storage-percent,
 	// indices will be removed starting with the oldest. Picking a low value leads
@@ -1686,7 +1686,7 @@ func (es elasticsearchComponent) oidcUserRole() client.Object {
 			{
 				APIGroups:     []string{""},
 				Resources:     []string{"secrets"},
-				ResourceNames: []string{OIDCUsersEsSecreteName},
+				ResourceNames: []string{OIDCUsersESSecretName},
 				Verbs:         []string{"get", "list"},
 			},
 		},

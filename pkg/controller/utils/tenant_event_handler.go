@@ -39,7 +39,7 @@ type enqueueAllTenants struct {
 	client client.Client
 }
 
-// Create is called in response to an create event - e.g. Pod Creation.
+// Create is called in response to a create event - e.g. Pod Creation.
 func (h *enqueueAllTenants) Create(e event.CreateEvent, q workqueue.RateLimitingInterface) {
 	elog.V(2).Info("Create event triggered reconciliation for all tenants", "event", e)
 	h.enqueue(q)
@@ -65,8 +65,7 @@ func (h *enqueueAllTenants) Generic(e event.GenericEvent, q workqueue.RateLimiti
 }
 
 func (h *enqueueAllTenants) enqueue(q workqueue.RateLimitingInterface) {
-	tenants := h.getAllTenants()
-	for _, t := range tenants {
+	for _, t := range h.getAllTenants() {
 		q.Add(reconcile.Request{NamespacedName: t})
 	}
 }
@@ -81,7 +80,7 @@ func (h *enqueueAllTenants) getAllTenants() []types.NamespacedName {
 		return nil
 	}
 
-	names := []types.NamespacedName{}
+	var names []types.NamespacedName
 	for _, tenant := range allTenants.Items {
 		names = append(names, types.NamespacedName{Name: tenant.Name, Namespace: tenant.Namespace})
 	}

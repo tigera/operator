@@ -83,7 +83,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
-	// we should update all tenants whenever one changes. For single-tenatn clusters, we can just queue the object.
+	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
 		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
@@ -141,7 +141,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch any secrets that this controller depends upon.
-	for _, namespace := range helper.BothNamespaces() {
+	namespacesToWatch := []string{helper.TruthNamespace(), helper.InstallNamespace()}
+	if helper.TruthNamespace() == helper.InstallNamespace() {
+		namespacesToWatch = []string{helper.InstallNamespace()}
+	}
+	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,

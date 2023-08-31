@@ -132,7 +132,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		monitor.PrometheusClientTLSSecretName,
 		render.ElasticsearchLinseedUserSecret,
 	}
-	for _, ns := range helper.BothNamespaces() {
+
+	// Determine namespaces to watch.
+	namespacesToWatch := []string{helper.TruthNamespace(), helper.InstallNamespace()}
+	if helper.TruthNamespace() == helper.InstallNamespace() {
+		namespacesToWatch = []string{helper.InstallNamespace()}
+	}
+	for _, ns := range namespacesToWatch {
 		for _, name := range secretsToWatch {
 			if err := utils.AddSecretsWatch(c, name, ns); err != nil {
 				return fmt.Errorf("log-storage-access-controller failed to watch Secret: %w", err)

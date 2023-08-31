@@ -48,9 +48,6 @@ type NamespaceHelper interface {
 	// For multi-tenant installs, this is tenant's namespace.
 	TruthNamespace() string
 
-	// BothNamespaces returns both the truth namespace and the install namespace.
-	BothNamespaces() []string
-
 	// TenantNamespaces returns all namespaces in the cluster for this component, across all tenants. This is useful when
 	// binding global resources to potentially several different Tenant namespaces.
 	// For single-tenant clusters, this simply returns the InstallNamespace.
@@ -75,13 +72,6 @@ func (r *namespacer) TruthNamespace() string {
 		return common.OperatorNamespace()
 	}
 	return r.multiTenantNamespace
-}
-
-func (r *namespacer) BothNamespaces() []string {
-	if r.TruthNamespace() == r.InstallNamespace() {
-		return []string{r.TruthNamespace()}
-	}
-	return []string{r.TruthNamespace(), r.InstallNamespace()}
 }
 
 func (r *namespacer) TenantNamespaces(c client.Client) ([]string, error) {

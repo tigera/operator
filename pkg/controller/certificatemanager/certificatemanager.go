@@ -166,7 +166,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		}
 		certificatePEM = certificateManagement.CACert
 	} else {
-		// Using operator-managed certificates. Check to see if we have already provisioned one.
+		// Using operator-managed certificates. Check to see if we have already provisioned a CA.
 		cm.log.V(2).Info("Looking for an existing CA", "secret", fmt.Sprintf("%s/%s", ns, caSecretName))
 		caSecret := &corev1.Secret{}
 		k := types.NamespacedName{Name: caSecretName, Namespace: ns}
@@ -205,7 +205,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		}
 	}
 
-	// At this point, we've located an existing CA or genrated a new one. Build a certificateManager
+	// At this point, we've located an existing CA or generated a new one. Build a certificateManager
 	// instance based on it.
 	x509Cert, err := certificatemanagement.ParseCertificate(certificatePEM)
 	if err != nil {
@@ -376,7 +376,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 				log.Info("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
 			}
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
-			cm.log.V(2).Info("KeyPair is an expired legacy operator cert, make a new one", "name", secretName)
+			cm.log.Info("KeyPair is an expired legacy operator cert, make a new one", "name", secretName)
 			return nil, nil, nil
 		}
 
@@ -396,7 +396,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		} else {
 			if !readCertOnly {
 				// We want to return nothing, so a new secret will be created to overwrite this one.
-				cm.log.V(2).Info("KeyPair's authority key id doesn't match", "name", secretName)
+				cm.log.Info("KeyPair's authority key id doesn't match, will create a new one", "name", secretName)
 				return nil, nil, nil
 			}
 			// We treat the certificate as a BYO secret, because this may be a certificate created by a management cluster

@@ -23,7 +23,6 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	apps "k8s.io/api/apps/v1"
@@ -31,6 +30,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -68,6 +68,7 @@ var log = logf.Log.WithName("controller_logstorage_elastic")
 
 const (
 	LogStorageFinalizer = "tigera.io/eck-cleanup"
+	tigeraStatusName    = "log-storage=-elastic"
 )
 
 // ElasticSubController is a sub-controller of the main LogStorage controller
@@ -95,7 +96,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:         mgr.GetScheme(),
 		esCliCreator:   utils.NewElasticClient,
 		tierWatchReady: &utils.ReadyFlag{},
-		status:         status.New(mgr.GetClient(), "log-storage-elastic", opts.KubernetesVersion),
+		status:         status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
 		usePSP:         opts.UsePSP,
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
@@ -130,7 +131,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, "log-storage-elastic"); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{}); err != nil {
@@ -180,58 +181,63 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 	}
 
+	// Establish watches for secrets in the tigera-operator namespace.
 	for _, secretName := range []string{
-		render.TigeraElasticsearchGatewaySecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName, esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.TigeraLinseedSecret, certificatemanagement.CASecretName,
+		render.TigeraElasticsearchGatewaySecret,
+		render.TigeraKibanaCertSecret,
+		render.OIDCSecretName,
+		render.DexObjectName,
+		esmetrics.ElasticsearchMetricsServerTLSSecret,
+		render.TigeraLinseedSecret,
+		certificatemanagement.CASecretName,
+		relasticsearch.PublicCertSecret,
+		monitor.PrometheusClientTLSSecretName,
+		render.ElasticsearchAdminUserSecret,
+		render.ElasticsearchCuratorUserSecret,
+		render.TigeraElasticsearchInternalCertSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 		}
 	}
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
+
+	// Establish watches for secrets in the tigera-elasticsearch namespace.
+	for _, secretName := range []string{
+		relasticsearch.PublicCertSecret,
+		render.ElasticsearchAdminUserSecret,
+		render.TigeraElasticsearchInternalCertSecret,
+		render.OIDCUsersESSecretName,
+	} {
+		if err = utils.AddSecretsWatch(c, secretName, render.ElasticsearchNamespace); err != nil {
+			return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
+		}
 	}
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
-	}
-	if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
-	}
-	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
-	}
-	if err = utils.AddSecretsWatch(c, render.ElasticsearchCuratorUserSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
-	}
-	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
-	}
-	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
-	}
+
+	// Establish a watch on the tenant CA secret across all namespaces if multi-tenancy is enabled.
 	if opts.MultiTenant {
 		if err = utils.AddSecretsWatch(c, certificatemanagement.TenantCASecretName, ""); err != nil {
 			return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 		}
 	}
 
+	// Establish watches for ConfigMaps in the tigera-elasticsearch namespace.
 	for _, name := range []string{
 		render.OIDCUsersConfigMapName,
-		render.OIDCUsersEsSecreteName,
-		render.ElasticsearchAdminUserSecret,
 	} {
 		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 		}
 	}
+
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}
+
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}
 
+	// Watch services that this controller cares about.
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
 	}
@@ -658,7 +664,7 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 		return err
 	}
 
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersEsSecreteName, Namespace: render.ElasticsearchNamespace}, &corev1.Secret{}); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.OIDCUsersESSecretName, Namespace: render.ElasticsearchNamespace}, &corev1.Secret{}); err != nil {
 		return err
 	}
 	return nil

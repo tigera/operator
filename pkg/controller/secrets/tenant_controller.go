@@ -144,7 +144,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Create the CA in the tenant's namespace.
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
-		rcertificatemanagement.NewKeyPairOption(cm.KeyPair(), true, true),
+		rcertificatemanagement.NewKeyPairOption(cm.KeyPair(), true, false),
 	}
 
 	// Get the cluster-scoped CA certificate.

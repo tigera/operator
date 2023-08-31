@@ -465,7 +465,7 @@ var _ = Describe("LogStorage controller", func() {
 				})).ShouldNot(HaveOccurred())
 
 				Expect(cli.Create(ctx, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersEsSecreteName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersESSecretName},
 				})).ShouldNot(HaveOccurred())
 
 				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
@@ -536,7 +536,7 @@ var _ = Describe("LogStorage controller", func() {
 				})).ShouldNot(HaveOccurred())
 
 				Expect(cli.Delete(ctx, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersEsSecreteName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersESSecretName},
 				})).ShouldNot(HaveOccurred())
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())

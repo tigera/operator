@@ -16,20 +16,26 @@ package users
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"time"
-
-	"github.com/go-logr/logr"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/go-logr/logr"
+
+	octrl "github.com/tigera/operator/pkg/controller"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/crypto"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -37,14 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	octrl "github.com/tigera/operator/pkg/controller"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 var log = logf.Log.WithName("controller_logstorage_users")
@@ -176,15 +174,10 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
 		// Create the secret to provision into the cluster.
-		pw, err := randomPassword(16)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error generating Linseed password", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 		basicCreds = corev1.Secret{}
 		basicCreds.Name = render.ElasticsearchLinseedUserSecret
 		basicCreds.Namespace = helper.TruthNamespace()
-		basicCreds.StringData = map[string]string{"username": linseedUser.Username, "password": pw}
+		basicCreds.StringData = map[string]string{"username": linseedUser.Username, "password": crypto.GeneratePassword(16)}
 
 		// Make sure we install the generated credentials into the truth namespace.
 		credentialSecrets = append(credentialSecrets, &basicCreds)
@@ -244,11 +237,4 @@ func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string
 	}
 
 	return nil
-}
-
-func randomPassword(length int) (string, error) {
-	byts := make([]byte, length)
-	_, err := rand.Read(byts)
-
-	return base64.URLEncoding.EncodeToString(byts), err
 }

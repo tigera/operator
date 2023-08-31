@@ -1178,7 +1178,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
 			return reconcile.Result{}, err
-		} else if esgwCertificate != nil {
+		}
+		if esgwCertificate != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
 		}
 

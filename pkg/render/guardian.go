@@ -103,7 +103,11 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	} else {
+		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -125,16 +129,21 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
-		// Add tigera-manager service account for impersonation
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(),
 		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
 		managerClusterRoleBinding(),
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Add tigera-manager service account for impersonation
+		objs = append(objs,
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
+	}
 
 	if c.cfg.UsePSP {
 		objs = append(objs, c.podSecurityPolicy())

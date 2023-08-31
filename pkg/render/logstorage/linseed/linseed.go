@@ -35,6 +35,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -59,7 +60,7 @@ const (
 func Linseed(c *Config) render.Component {
 	return &linseed{
 		cfg:       c,
-		namespace: render.ElasticsearchNamespace,
+		namespace: c.Namespace,
 	}
 }
 
@@ -87,7 +88,7 @@ type Config struct {
 	TokenKeyPair certificatemanagement.KeyPairInterface
 
 	// Trusted bundle to use when validating client certificates.
-	TrustedBundle certificatemanagement.TrustedBundle
+	TrustedBundle certificatemanagement.TrustedBundleRO
 
 	// ClusterDomain to use when building service URLs.
 	ClusterDomain string
@@ -103,6 +104,15 @@ type Config struct {
 
 	// Indicates whether DPI is installed in the cluster or not
 	HasDPIResource bool
+
+	// Namespace to install into.
+	Namespace string
+
+	// Namespaces to which we must bind the Linseed cluster role.
+	BindNamespaces []string
+
+	// Tenant configuration, if running for a particular tenant.
+	Tenant *operatorv1.Tenant
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -134,7 +144,7 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedAllowTigeraPolicy())
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
-	toCreate = append(toCreate, l.linseedRoleBinding())
+	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.UsePSP {
@@ -193,25 +203,8 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func (l *linseed) linseedRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ClusterRoleName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			Kind:     "ClusterRole",
-			Name:     ClusterRoleName,
-			APIGroup: "rbac.authorization.k8s.io",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ServiceAccountName,
-				Namespace: l.namespace,
-			},
-		},
-	}
+func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
+	return rcomponents.ClusterRoleBinding(ClusterRoleName, ClusterRoleName, ServiceAccountName, namespaces)
 }
 
 func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -282,6 +275,11 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		)
 		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
 		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+	}
+
+	if l.cfg.Tenant != nil {
+		// If a tenant was provided, set the expected tenant ID.
+		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 	}
 
 	var initContainers []corev1.Container
@@ -423,7 +421,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.ManagerEntityRule,
+			Destination: networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerEntityRule(),
 		})
 	}
 
@@ -460,7 +458,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ManagerSourceEntityRule,
+			Source:      networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

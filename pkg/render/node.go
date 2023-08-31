@@ -153,10 +153,11 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIFIPS, reg, path, prefix, is))
+			c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNodeFIPS, reg, path, prefix, is))
 		} else {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
+			c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 		}
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolumePrivate, reg, path, prefix, is))
 	} else {
 		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))

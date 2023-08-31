@@ -437,7 +437,7 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper 
 	collection.keypairs = append(collection.keypairs, linseedKeyPair)
 
 	// Create a key pair for Linseed to use for tokens.
-	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{"localhost"})
+	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{render.TigeraLinseedTokenSecret})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return nil, err

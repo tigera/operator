@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/tigera/operator/pkg/common"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -35,7 +37,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -84,18 +85,24 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
+
 		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.IntrusionDetectionTLSSecretName, "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
+
 		keyPair = certificatemanagement.NewKeyPair(secretTLS, []string{""}, "")
 		anomalySecretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.AnomalyDetectorTLSSecretName, "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
+
 		anomalyKeyPair = certificatemanagement.NewKeyPair(anomalySecretTLS, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
+
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{
@@ -188,7 +195,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
@@ -590,7 +597,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
@@ -718,7 +725,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
@@ -912,7 +919,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
@@ -950,7 +957,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(toRemove).To(HaveLen(len(expectedResourcesToRemove)))
 
 		for i, expectedRes := range expectedResourcesToRemove {
-			rtest.ExpectResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.CompareResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -958,7 +965,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 
 		intrusionDetectionCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{""})

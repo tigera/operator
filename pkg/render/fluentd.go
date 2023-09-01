@@ -191,8 +191,7 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.image, err = components.GetReference(components.ComponentTigeraFluentd, reg, path, prefix, is)
 	} else {
-		//c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
-		c.image = "gcr.io/tigera-dev/summoner/fluentd:r1"
+		c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
 	}
 	return err
 }

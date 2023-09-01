@@ -23,51 +23,51 @@ var (
 	CalicoRelease string = "master"
 
 	ComponentCalicoCNI = component{
-		Version:  "master",
-		Image:    "calico/cni",
-		Registry: "",
+		Version:  "os-flowlog",
+		Image:    "tigera/cni",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoCNIFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/cni",
-		Registry: "",
+		Version:  "os-flowlog-fips",
+		Image:    "tigera/cni",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version:  "master",
-		Image:    "calico/kube-controllers",
-		Registry: "",
+		Version:  "os-flowlog",
+		Image:    "tigera/kube-controllers",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoKubeControllersFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/kube-controllers",
-		Registry: "",
+		Version:  "os-flowlog-fips",
+		Image:    "tigera/kube-controllers",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoNode = component{
-		Version:  "master",
-		Image:    "calico/node",
-		Registry: "",
+		Version:  "os-flowlog",
+		Image:    "tigera/node",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/node",
-		Registry: "",
+		Version:  "os-flowlog-fips",
+		Image:    "tigera/node",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoTypha = component{
-		Version:  "master",
-		Image:    "calico/typha",
-		Registry: "",
+		Version:  "os-flowlog",
+		Image:    "tigera/typha",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoTyphaFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/typha",
-		Registry: "",
+		Version:  "os-flowlog-fips",
+		Image:    "tigera/typha",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentFlexVolume = component{
@@ -77,15 +77,15 @@ var (
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version:  "master",
-		Image:    "calico/apiserver",
-		Registry: "",
+		Version:  "os-flowlog-amd64",
+		Image:    "tigera/apiserver",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoAPIServerFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/apiserver",
-		Registry: "",
+		Version:  "os-flowlog-amd64-fips",
+		Image:    "tigera/apiserver",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentWindowsUpgrade = component{
@@ -113,9 +113,9 @@ var (
 	}
 
 	ComponentCalicoFluentd = component{
-		Version:  "master",
-		Image:    "calico/fluentd",
-		Registry: "",
+		Version:  "os-flowlog",
+		Image:    "tigera/fluentd",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = component{
@@ -123,10 +123,11 @@ var (
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
+
 	ComponentCalicoGuardian = component{
-		Version: "master",
-		//Image:   "calico/guardian",
-		Image: "tigera/guardian",
+		Version:  "master",
+		Image:    "tigera/guardian",
+		Registry: "",
 	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,

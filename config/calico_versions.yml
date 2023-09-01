@@ -4,17 +4,27 @@ components:
   libcalico-go:
     version: master
   typha:
-    version: master
+    version: os-flowlog
+    registry: gcr.io/unique-caldron-775/cnx/
+    image: tigera/typha
   calico/node:
-    version: master
+    version: os-flowlog
+    registry: gcr.io/unique-caldron-775/cnx/
+    image: tigera/node
   calico/cni:
-    version: master
+    version: os-flowlog
+    registry: gcr.io/unique-caldron-775/cnx/
+    image: tigera/cni
   calico/kube-controllers:
-    version: master
+    version: os-flowlog
+    registry: gcr.io/unique-caldron-775/cnx/
+    image: tigera/kube-controllers
   flexvol:
     version: master
   calico/apiserver:
-    version: master
+    version: os-flowlog-amd64
+    registry: gcr.io/unique-caldron-775/cnx/
+    image: tigera/apiserver
   calico/windows-upgrade:
     version: master
   calico/csi:
@@ -22,5 +32,8 @@ components:
   csi-node-driver-registrar:
     version: master
   calico/fluentd:
+    version: os-flowlog
+    registry: gcr.io/unique-caldron-775/cnx/
+    image: tigera/fluentd
   calico/guardian:
     version: master

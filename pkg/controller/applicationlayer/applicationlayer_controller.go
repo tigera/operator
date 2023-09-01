@@ -117,7 +117,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch for configmap changes in tigera-operator namespace; the cm contains ruleset for ModSecurity library:
-	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace())
+	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf(
 			"applicationlayer-controller failed to watch ConfigMap %s: %v",
@@ -131,7 +131,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		applicationlayer.ModSecurityRulesetConfigMapName,
 	}
 	for _, configMapName := range maps {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}

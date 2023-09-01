@@ -173,7 +173,6 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
 		// Create the secret to provision into the cluster.
-		basicCreds = corev1.Secret{}
 		basicCreds.Name = render.ElasticsearchLinseedUserSecret
 		basicCreds.Namespace = helper.TruthNamespace()
 		basicCreds.StringData = map[string]string{"username": linseedUser.Username, "password": crypto.GeneratePassword(16)}

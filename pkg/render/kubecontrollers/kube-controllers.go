@@ -319,6 +319,17 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Resources: []string{"kubecontrollersconfigurations"},
 			Verbs:     []string{"get", "create", "update", "watch"},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps", "secrets"},
+			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
+		},
+		{
+			// calico-kube-controllers requires tiers create
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"create"},
+		},
 	}
 
 	if cfg.UsePSP {
@@ -337,21 +348,10 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps", "secrets"},
-			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
-		},
-		{
 			// Needed to validate the license
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch", "list"},
-		},
-		{
-			// calico-kube-controllers requires tiers create
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"tiers"},
-			Verbs:     []string{"create"},
 		},
 		{
 			// Needed to validate the license

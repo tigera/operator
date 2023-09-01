@@ -63,10 +63,10 @@ var log = logf.Log.WithName("controller_logcollector")
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	var licenseAPIReady *utils.ReadyFlag
-
-	tierWatchReady := &utils.ReadyFlag{}
+	var tierWatchReady *utils.ReadyFlag
 	if opts.EnterpriseCRDExists {
 		licenseAPIReady = &utils.ReadyFlag{}
+		tierWatchReady = &utils.ReadyFlag{}
 	}
 
 	// create the reconciler
@@ -78,19 +78,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
 	}
 
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		log.Error(err, "Failed to establish a connection to k8s")
-		return err
-	}
-
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
-		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
-	})
-
 	if opts.EnterpriseCRDExists {
+		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			log.Error(err, "Failed to establish a connection to k8s")
+			return err
+		}
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
 		go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+		go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+			{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+		})
 	}
 
 	return add(mgr, controller, opts.EnterpriseCRDExists)

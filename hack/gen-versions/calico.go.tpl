@@ -171,6 +171,6 @@ var (
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoFluentd,
 		ComponentCalicoCSIRegistrarFIPS,
-		ComponentCalicoGuardian
+		ComponentCalicoGuardian,
 	}
 )

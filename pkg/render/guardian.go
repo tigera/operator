@@ -130,13 +130,13 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+		// Add tigera-manager service account for impersonation
 		managerServiceAccount(),
 		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
 		managerClusterRoleBinding(),
 	)
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		// Add tigera-manager service account for impersonation
 		objs = append(objs,
 			managerClusterWideSettingsGroup(),
 			managerUserSpecificSettingsGroup(),

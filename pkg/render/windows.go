@@ -408,6 +408,14 @@ func (c *windowsComponent) windowsRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
 	return role
 }
 
@@ -603,12 +611,6 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 
 	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			envVars = append(envVars, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
-		}
-	}
-
 	return envVars
 }
 
@@ -780,7 +782,7 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 		cniBinDir, cniNetDir, cniLogDir := c.cniDirectories()
 		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniNetDir}}})
-		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir, Type: &dirOrCreate}}})
 	}
 
 	// Override with Tigera-specific config.

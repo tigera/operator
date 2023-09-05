@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
-	// . "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -505,7 +506,7 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
-					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni", Type: &dirOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
 						Name: "tigera-ca-bundle",
@@ -560,32 +561,7 @@ var _ = Describe("Windows rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 				// Verify readiness and liveness probes.
-				expectedLiveness := &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						Exec: &corev1.ExecAction{
-							Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}}},
-					InitialDelaySeconds: 10,
-					FailureThreshold:    6,
-					TimeoutSeconds:      10,
-					PeriodSeconds:       10,
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").LivenessProbe).To(Equal(expectedLiveness))
-
-				expectedReadiness := &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						Exec: &corev1.ExecAction{
-							Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}}},
-					TimeoutSeconds: 10,
-					PeriodSeconds:  10,
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").ReadinessProbe).To(Equal(expectedReadiness))
-
-				expectedLifecycle := &corev1.Lifecycle{
-					PreStop: &corev1.LifecycleHandler{
-						Exec: &corev1.ExecAction{
-							Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}}},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Lifecycle).To(Equal(expectedLifecycle))
+				verifyWindowsProbesAndLifecycle(ds)
 			})
 		}
 	})
@@ -682,6 +658,398 @@ var _ = Describe("Windows rendering tests", func() {
 			Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ContainElement(e))
 			Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ContainElement(e))
 			Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ContainElement(e))
+		}
+	})
+
+	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
+		type testConf struct {
+			EnableBGP   bool
+			EnableVXLAN bool
+		}
+		for _, testConfig := range []testConf{
+			{true, false},
+			{false, true},
+			{true, true},
+		} {
+			enableBGP := testConfig.EnableBGP
+			enableVXLAN := testConfig.EnableVXLAN
+
+			if enableBGP {
+				defaultInstance.CalicoNetwork.BGP = &bgpEnabled
+			} else {
+				defaultInstance.CalicoNetwork.BGP = &bgpDisabled
+			}
+
+			if enableVXLAN {
+				defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationVXLAN
+			} else {
+				defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationNone
+			}
+			Context(fmt.Sprintf("BGP enabled: %v, VXLAN enabled: %v", enableBGP, enableVXLAN), func() {
+
+				expectedResources := []struct {
+					name    string
+					ns      string
+					group   string
+					version string
+					kind    string
+				}{
+					{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+					{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+					{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+					{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+					{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+					{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+				}
+				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				cfg.NodeReporterMetricsPort = 9081
+
+				component := render.Windows(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				Expect(len(resources)).To(Equal(len(expectedResources)))
+
+				// Should render the correct resources.
+				i := 0
+				for _, expectedRes := range expectedResources {
+					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					i++
+				}
+
+				// The DaemonSet should have the correct configuration.
+				ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+				// The calico-node-windows daemonset has 3 containers (felix, node and confd).
+				// confd is only instantiated if using BGP.
+				numContainers := 3
+				if !enableBGP {
+					numContainers = 2
+				}
+				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(numContainers))
+				for _, container := range ds.Spec.Template.Spec.Containers {
+					rtest.ExpectEnv(container.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
+
+					// Windows node image override results in correct image.
+					Expect(container.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+					Expect(container.SecurityContext.Capabilities).To(BeNil())
+					Expect(container.SecurityContext.Privileged).To(BeNil())
+					Expect(container.SecurityContext.SELinuxOptions).To(BeNil())
+					Expect(container.SecurityContext.WindowsOptions).To(Not(BeNil()))
+					Expect(container.SecurityContext.WindowsOptions.GMSACredentialSpecName).To(BeNil())
+					Expect(container.SecurityContext.WindowsOptions.GMSACredentialSpec).To(BeNil())
+					Expect(*container.SecurityContext.WindowsOptions.RunAsUserName).To(Equal("NT AUTHORITY\\system"))
+					Expect(*container.SecurityContext.WindowsOptions.HostProcess).To(BeTrue())
+					Expect(container.SecurityContext.RunAsUser).To(BeNil())
+					Expect(container.SecurityContext.RunAsGroup).To(BeNil())
+					Expect(container.SecurityContext.RunAsNonRoot).To(BeNil())
+					Expect(container.SecurityContext.ReadOnlyRootFilesystem).To(BeNil())
+					Expect(container.SecurityContext.AllowPrivilegeEscalation).To(BeNil())
+					Expect(container.SecurityContext.ProcMount).To(BeNil())
+					Expect(container.SecurityContext.SeccompProfile).To(BeNil())
+				}
+
+				felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+				rtest.ExpectEnv(felixContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
+
+				// Windows node image override results in correct image.
+				Expect(felixContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+				Expect(felixContainer.SecurityContext.Capabilities).To(BeNil())
+				Expect(felixContainer.SecurityContext.Privileged).To(BeNil())
+				Expect(felixContainer.SecurityContext.SELinuxOptions).To(BeNil())
+				Expect(felixContainer.SecurityContext.WindowsOptions).To(Not(BeNil()))
+				Expect(felixContainer.SecurityContext.WindowsOptions.GMSACredentialSpecName).To(BeNil())
+				Expect(felixContainer.SecurityContext.WindowsOptions.GMSACredentialSpec).To(BeNil())
+				Expect(*felixContainer.SecurityContext.WindowsOptions.RunAsUserName).To(Equal("NT AUTHORITY\\system"))
+				Expect(*felixContainer.SecurityContext.WindowsOptions.HostProcess).To(BeTrue())
+				Expect(felixContainer.SecurityContext.RunAsUser).To(BeNil())
+				Expect(felixContainer.SecurityContext.RunAsGroup).To(BeNil())
+				Expect(felixContainer.SecurityContext.RunAsNonRoot).To(BeNil())
+				Expect(felixContainer.SecurityContext.ReadOnlyRootFilesystem).To(BeNil())
+				Expect(felixContainer.SecurityContext.AllowPrivilegeEscalation).To(BeNil())
+				Expect(felixContainer.SecurityContext.ProcMount).To(BeNil())
+				Expect(felixContainer.SecurityContext.SeccompProfile).To(BeNil())
+
+				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
+				rtest.ExpectEnv(nodeContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
+
+				// Windows node image override results in correct image.
+				Expect(nodeContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+				Expect(nodeContainer.SecurityContext.Capabilities).To(BeNil())
+				Expect(nodeContainer.SecurityContext.Privileged).To(BeNil())
+				Expect(nodeContainer.SecurityContext.SELinuxOptions).To(BeNil())
+				Expect(nodeContainer.SecurityContext.WindowsOptions).To(Not(BeNil()))
+				Expect(nodeContainer.SecurityContext.WindowsOptions.GMSACredentialSpecName).To(BeNil())
+				Expect(nodeContainer.SecurityContext.WindowsOptions.GMSACredentialSpec).To(BeNil())
+				Expect(*nodeContainer.SecurityContext.WindowsOptions.RunAsUserName).To(Equal("NT AUTHORITY\\system"))
+				Expect(*nodeContainer.SecurityContext.WindowsOptions.HostProcess).To(BeTrue())
+				Expect(nodeContainer.SecurityContext.RunAsUser).To(BeNil())
+				Expect(nodeContainer.SecurityContext.RunAsGroup).To(BeNil())
+				Expect(nodeContainer.SecurityContext.RunAsNonRoot).To(BeNil())
+				Expect(nodeContainer.SecurityContext.ReadOnlyRootFilesystem).To(BeNil())
+				Expect(nodeContainer.SecurityContext.AllowPrivilegeEscalation).To(BeNil())
+				Expect(nodeContainer.SecurityContext.ProcMount).To(BeNil())
+				Expect(nodeContainer.SecurityContext.SeccompProfile).To(BeNil())
+
+				if enableBGP {
+					confdContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd")
+					rtest.ExpectEnv(confdContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
+
+					// Windows node image override results in correct image.
+					Expect(confdContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+					Expect(confdContainer.SecurityContext.Capabilities).To(BeNil())
+					Expect(confdContainer.SecurityContext.Privileged).To(BeNil())
+					Expect(confdContainer.SecurityContext.SELinuxOptions).To(BeNil())
+					Expect(confdContainer.SecurityContext.WindowsOptions).To(Not(BeNil()))
+					Expect(confdContainer.SecurityContext.WindowsOptions.GMSACredentialSpecName).To(BeNil())
+					Expect(confdContainer.SecurityContext.WindowsOptions.GMSACredentialSpec).To(BeNil())
+					Expect(*confdContainer.SecurityContext.WindowsOptions.RunAsUserName).To(Equal("NT AUTHORITY\\system"))
+					Expect(*confdContainer.SecurityContext.WindowsOptions.HostProcess).To(BeTrue())
+					Expect(confdContainer.SecurityContext.RunAsUser).To(BeNil())
+					Expect(confdContainer.SecurityContext.RunAsGroup).To(BeNil())
+					Expect(confdContainer.SecurityContext.RunAsNonRoot).To(BeNil())
+					Expect(confdContainer.SecurityContext.ReadOnlyRootFilesystem).To(BeNil())
+					Expect(confdContainer.SecurityContext.AllowPrivilegeEscalation).To(BeNil())
+					Expect(confdContainer.SecurityContext.ProcMount).To(BeNil())
+					Expect(confdContainer.SecurityContext.SeccompProfile).To(BeNil())
+				}
+
+				// Validate correct number of init containers.
+				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+
+				// CNI container uses image override.
+				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
+				Expect(cniContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cni-windows:" + components.ComponentTigeraCNIWindows.Version))
+
+				Expect(cniContainer.SecurityContext.Capabilities).To(BeNil())
+				Expect(cniContainer.SecurityContext.Privileged).To(BeNil())
+				Expect(cniContainer.SecurityContext.SELinuxOptions).To(BeNil())
+				Expect(cniContainer.SecurityContext.WindowsOptions).To(Not(BeNil()))
+				Expect(cniContainer.SecurityContext.WindowsOptions.GMSACredentialSpecName).To(BeNil())
+				Expect(cniContainer.SecurityContext.WindowsOptions.GMSACredentialSpec).To(BeNil())
+				Expect(*cniContainer.SecurityContext.WindowsOptions.RunAsUserName).To(Equal("NT AUTHORITY\\system"))
+				Expect(*cniContainer.SecurityContext.WindowsOptions.HostProcess).To(BeTrue())
+				Expect(cniContainer.SecurityContext.RunAsUser).To(BeNil())
+				Expect(cniContainer.SecurityContext.RunAsGroup).To(BeNil())
+				Expect(cniContainer.SecurityContext.RunAsNonRoot).To(BeNil())
+				Expect(cniContainer.SecurityContext.ReadOnlyRootFilesystem).To(BeNil())
+				Expect(cniContainer.SecurityContext.AllowPrivilegeEscalation).To(BeNil())
+				Expect(cniContainer.SecurityContext.ProcMount).To(BeNil())
+				Expect(cniContainer.SecurityContext.SeccompProfile).To(BeNil())
+
+				// uninstall container uses image override.
+				uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
+				Expect(uninstallContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+
+				Expect(uninstallContainer.SecurityContext.Capabilities).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.Privileged).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.SELinuxOptions).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.WindowsOptions).To(Not(BeNil()))
+				Expect(uninstallContainer.SecurityContext.WindowsOptions.GMSACredentialSpecName).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.WindowsOptions.GMSACredentialSpec).To(BeNil())
+				Expect(*uninstallContainer.SecurityContext.WindowsOptions.RunAsUserName).To(Equal("NT AUTHORITY\\system"))
+				Expect(*uninstallContainer.SecurityContext.WindowsOptions.HostProcess).To(BeTrue())
+				Expect(uninstallContainer.SecurityContext.RunAsUser).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.RunAsGroup).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.RunAsNonRoot).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.ReadOnlyRootFilesystem).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.AllowPrivilegeEscalation).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.ProcMount).To(BeNil())
+				Expect(uninstallContainer.SecurityContext.SeccompProfile).To(BeNil())
+
+				// Verify env
+				expectedNodeEnv := []corev1.EnvVar{
+					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+					{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+					{Name: "CALICO_MANAGE_CNI", Value: "true"},
+					{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+					{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+					{Name: "FELIX_HEALTHENABLED", Value: "true"},
+					{
+						Name: "NODENAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+						},
+					},
+					{
+						Name: "NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+						},
+					},
+					{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+					{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
+					{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.key"},
+					{Name: "FIPS_MODE_ENABLED", Value: "false"},
+
+					{Name: "VXLAN_VNI", Value: "4096"},
+					{Name: "VXLAN_ADAPTER", Value: ""},
+					{Name: "KUBE_NETWORK", Value: "Calico.*"},
+					{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
+					{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
+					{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
+					{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
+
+					// Tigera-specific envvars
+					{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+					{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+					{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+					{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+					{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+					{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
+					{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+					{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
+					{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
+					{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
+				}
+
+				// Set CALICO_NETWORKING_BACKEND
+				if enableBGP {
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"})
+				} else if enableVXLAN {
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"})
+				} else {
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+				}
+
+				// Set CLUSTER_TYPE
+				if enableBGP {
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"})
+				} else {
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator"})
+				}
+
+				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
+
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
+				if enableBGP {
+					Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ConsistOf(expectedNodeEnv))
+				}
+
+				// Expect the SECURITY_GROUP env variables to not be set
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
+				if enableBGP {
+					Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
+					Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
+				}
+
+				expectedCNIEnv := []corev1.EnvVar{
+					{Name: "SLEEP", Value: "false"},
+					{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
+					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
+					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
+					{Name: "VXLAN_VNI", Value: "4096"},
+					{
+						Name:  "KUBERNETES_NODE_NAME",
+						Value: "",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+						},
+					},
+					{
+						Name: "CNI_NETWORK_CONFIG",
+						ValueFrom: &corev1.EnvVarSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								Key: "config",
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "cni-config-windows",
+								},
+							},
+						},
+					},
+
+					{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
+					{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
+					{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
+					{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
+				}
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
+
+				expectedUninstallEnv := []corev1.EnvVar{
+					{Name: "SLEEP", Value: "false"},
+					{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
+					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
+					{Name: "CNI_NET_DIR", Value: "/host/etc/cni/net.d"},
+				}
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").Env).To(ConsistOf(expectedUninstallEnv))
+
+				// Verify volumes.
+				fileOrCreate := corev1.HostPathFileOrCreate
+				dirOrCreate := corev1.HostPathDirectoryOrCreate
+				expectedVols := []corev1.Volume{
+					{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
+					{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+					{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
+					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
+					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni", Type: &dirOrCreate}}},
+					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+					{
+						Name: "tigera-ca-bundle",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "tigera-ca-bundle",
+								},
+							},
+						},
+					},
+					{
+						Name: render.NodeTLSSecretName,
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName:  render.NodeTLSSecretName,
+								DefaultMode: &defaultMode,
+							},
+						},
+					},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
+				}
+				Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
+
+				// Verify volume mounts.
+				expectedNodeVolumeMounts := []corev1.VolumeMount{
+					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+					{MountPath: "/var/run/calico", Name: "var-run-calico"},
+					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+					{MountPath: "c:/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
+					{MountPath: "c:/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
+					{MountPath: "/var/log/calico", Name: "var-log-calico", ReadOnly: false},
+				}
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
+				if enableBGP {
+					Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
+				}
+
+				expectedCNIVolumeMounts := []corev1.VolumeMount{
+					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+				}
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+
+				expectedUninstallVolumeMounts := []corev1.VolumeMount{
+					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+				}
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").VolumeMounts).To(ConsistOf(expectedUninstallVolumeMounts))
+
+				// Verify tolerations.
+				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
+
+				// Verify readiness and liveness probes.
+				verifyWindowsProbesAndLifecycle(ds)
+			})
 		}
 	})
 
@@ -917,7 +1285,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 			{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
-			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni", Type: &dirOrCreate}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
 				Name: "tigera-ca-bundle",
@@ -969,32 +1337,7 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 		// Verify readiness and liveness probes.
-		expectedLiveness := &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}}},
-			InitialDelaySeconds: 10,
-			FailureThreshold:    6,
-			TimeoutSeconds:      10,
-			PeriodSeconds:       10,
-		}
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").LivenessProbe).To(Equal(expectedLiveness))
-
-		expectedReadiness := &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}}},
-			TimeoutSeconds: 10,
-			PeriodSeconds:  10,
-		}
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").ReadinessProbe).To(Equal(expectedReadiness))
-
-		expectedLifecycle := &corev1.Lifecycle{
-			PreStop: &corev1.LifecycleHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}}},
-		}
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Lifecycle).To(Equal(expectedLifecycle))
+		verifyWindowsProbesAndLifecycle(ds)
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
@@ -1002,15 +1345,14 @@ var _ = Describe("Windows rendering tests", func() {
 		amazonVPCInstalllation := &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderEKS,
 			CNI:                &operatorv1.CNISpec{Type: operatorv1.PluginAmazonVPC},
-			// FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
-			ServiceCIDRs: []string{"10.96.0.0/12"},
+			ServiceCIDRs:       []string{"10.96.0.0/12"},
 		}
 		cfg.Installation = amazonVPCInstalllation
 
 		component := render.Windows(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(defaultNumExpectedResources - 1)) //TODO: ?
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources - 1))
 
 		// Should render the correct resources.
 		Expect(rtest.GetResource(resources, "calico-node-windows", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
@@ -1136,31 +1478,678 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 		// Verify readiness and liveness probes.
-		expectedLiveness := &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}}},
-			InitialDelaySeconds: 10,
-			FailureThreshold:    6,
-			TimeoutSeconds:      10,
-			PeriodSeconds:       10,
-		}
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").LivenessProbe).To(Equal(expectedLiveness))
-
-		expectedReadiness := &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}}},
-			TimeoutSeconds: 10,
-			PeriodSeconds:  10,
-		}
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").ReadinessProbe).To(Equal(expectedReadiness))
-
-		expectedLifecycle := &corev1.Lifecycle{
-			PreStop: &corev1.LifecycleHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}}},
-		}
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Lifecycle).To(Equal(expectedLifecycle))
+		verifyWindowsProbesAndLifecycle(ds)
 	})
+
+	It("should render all resources when running on openshift", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		defaultInstance.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := render.Windows(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		//calico-node-windows clusterRole should have openshift securitycontextconstraints PolicyRule
+		nodeRole := rtest.GetResource(resources, "calico-node-windows", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
+
+		// The DaemonSet should have the correct configuration.
+		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
+		Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+		Expect(cniContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
+		uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
+		Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+
+		// FIXME: confirm openshift CNI path defaults
+		expectedCNIVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		}
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+
+		// FIXME: confirm openshift CNI path defaults
+		expectedUninstallVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		}
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").VolumeMounts).To(ConsistOf(expectedUninstallVolumeMounts))
+
+		// Verify volumes
+		// FIXME: confirm openshift CNI path defaults
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
+		expectedVols := []corev1.Volume{
+			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
+			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+			{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
+			{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
+			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni", Type: &dirOrCreate}}},
+			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+			{
+				Name: "tigera-ca-bundle",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ca-bundle",
+						},
+					},
+				},
+			},
+			{
+				Name: render.NodeTLSSecretName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
+					},
+				},
+			},
+		}
+		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
+
+		expectedNodeEnv := []corev1.EnvVar{
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
+			{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+				},
+			},
+			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.key"},
+
+			{Name: "FIPS_MODE_ENABLED", Value: "false"},
+
+			// Calico Windows specific envvars
+			{Name: "VXLAN_VNI", Value: "4096"},
+			{Name: "VXLAN_ADAPTER", Value: ""},
+			{Name: "KUBE_NETWORK", Value: "Calico.*"},
+			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
+			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
+			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
+		}
+
+		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ConsistOf(expectedNodeEnv))
+
+		verifyWindowsProbesAndLifecycle(ds)
+	})
+
+	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+		defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+		cfg.NodeReporterMetricsPort = 9081
+
+		component := render.Windows(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		//calico-node-windows clusterRole should have openshift securitycontextconstraints PolicyRule
+		nodeRole := rtest.GetResource(resources, "calico-node-windows", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
+
+		// The DaemonSet should have the correct configuration.
+		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
+		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
+		Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
+		cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+		Expect(cniContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraCNIWindows.Image, components.ComponentTigeraCNIWindows.Version)))
+		uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
+		Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
+
+		// FIXME: confirm openshift CNI path defaults
+		expectedCNIVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		}
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+
+		// FIXME: confirm openshift CNI path defaults
+		expectedUninstallVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		}
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").VolumeMounts).To(ConsistOf(expectedUninstallVolumeMounts))
+
+		// Verify volumes
+		// FIXME: confirm openshift CNI path defaults
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
+		expectedVols := []corev1.Volume{
+			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
+			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+			{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
+			{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
+			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni", Type: &dirOrCreate}}},
+			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+			{
+				Name: "tigera-ca-bundle",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ca-bundle",
+						},
+					},
+				},
+			},
+			{
+				Name: render.NodeTLSSecretName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
+					},
+				},
+			},
+			{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
+		}
+		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
+
+		expectedNodeEnv := []corev1.EnvVar{
+			// Default envvars.
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
+			{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+				},
+			},
+			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.key"},
+
+			{Name: "FIPS_MODE_ENABLED", Value: "false"},
+
+			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
+
+			// Tigera-specific envvars
+			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
+			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
+
+			// Calico Windows specific envvars
+			{Name: "VXLAN_VNI", Value: "4096"},
+			{Name: "VXLAN_ADAPTER", Value: ""},
+			{Name: "KUBE_NETWORK", Value: "Calico.*"},
+			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
+			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
+			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
+		}
+		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ConsistOf(expectedNodeEnv))
+
+		verifyWindowsProbesAndLifecycle(ds)
+	})
+
+	It("should render all resources when variant is TigeraSecureEnterprise and running on RKE2", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+		defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
+		cfg.NodeReporterMetricsPort = 9081
+
+		component := render.Windows(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)), fmt.Sprintf("Actual resources: %#v", resources))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		// The DaemonSet should have the correct configuration.
+		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
+		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
+		Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
+		cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+		Expect(cniContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraCNIWindows.Image, components.ComponentTigeraCNIWindows.Version)))
+		uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
+		Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
+
+		// FIXME: confirm RKE2 CNI path defaults
+		expectedCNIVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		}
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+
+		// FIXME: confirm RKE2 CNI path defaults
+		expectedUninstallVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		}
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").VolumeMounts).To(ConsistOf(expectedUninstallVolumeMounts))
+
+		// Verify volumes
+		// FIXME: confirm RKE2 CNI path defaults
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
+		expectedVols := []corev1.Volume{
+			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
+			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+			{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
+			{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
+			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni", Type: &dirOrCreate}}},
+			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+			{
+				Name: "tigera-ca-bundle",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ca-bundle",
+						},
+					},
+				},
+			},
+			{
+				Name: render.NodeTLSSecretName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
+					},
+				},
+			},
+			{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
+		}
+		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
+
+		expectedNodeEnv := []corev1.EnvVar{
+			// Default envvars.
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
+			{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+				},
+			},
+			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT/node-certs/tls.key"},
+
+			{Name: "FIPS_MODE_ENABLED", Value: "false"},
+
+			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"},
+
+			// Tigera-specific envvars
+			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
+			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
+
+			// Calico Windows specific envvars
+			{Name: "VXLAN_VNI", Value: "4096"},
+			{Name: "VXLAN_ADAPTER", Value: ""},
+			{Name: "KUBE_NETWORK", Value: "Calico.*"},
+			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
+			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
+			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
+		}
+		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
+
+		verifyWindowsProbesAndLifecycle(ds)
+
+		// The metrics service should have the correct configuration.
+		ms := rtest.GetResource(resources, "calico-node-metrics-windows", "calico-system", "", "v1", "Service").(*corev1.Service)
+		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
+	})
+
+	Describe("AKS", func() {
+		It("should avoid virtual nodes", func() {
+			defaultInstance.KubernetesProvider = operatorv1.ProviderAKS
+			component := render.Windows(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "type",
+						Operator: corev1.NodeSelectorOpNotIn,
+						Values:   []string{"virtual-kubelet"},
+					}},
+				},
+			))
+		})
+	})
+
+	Describe("EKS", func() {
+		It("should avoid virtual fargate nodes", func() {
+			defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+			component := render.Windows(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "eks.amazonaws.com/compute-type",
+						Operator: corev1.NodeSelectorOpNotIn,
+						Values:   []string{"fargate"},
+					}},
+				},
+			))
+		})
+	})
+
+	Describe("test IP auto detection", func() {
+		It("should support canReach", func() {
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
+			component := render.Windows(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "can-reach=1.1.1.1")
+		})
+
+		It("should support interface regex", func() {
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
+			component := render.Windows(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "interface=eth*")
+		})
+
+		It("should support skip-interface regex", func() {
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
+			component := render.Windows(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "skip-interface=eth*")
+		})
+
+		It("should support cidr", func() {
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS = []string{"10.0.1.0/24", "10.0.2.0/24"}
+			component := render.Windows(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
+			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "cidr=10.0.1.0/24,10.0.2.0/24")
+		})
+	})
+
+	DescribeTable("should properly render configuration using non-Calico CNI plugin",
+		func(cni operatorv1.CNIPluginType, ipam operatorv1.IPAMPluginType) {
+			installlation := &operatorv1.InstallationSpec{
+				CNI: &operatorv1.CNISpec{
+					Type: cni,
+					IPAM: &operatorv1.IPAMSpec{Type: ipam},
+				},
+			}
+			cfg.Installation = installlation
+
+			component := render.Windows(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			// Should render the correct resources.
+			Expect(rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// Should not render CNI configuration.
+			cniCmResource := rtest.GetResource(resources, "cni-config-windows", "calico-system", "", "v1", "ConfigMap")
+			Expect(cniCmResource).To(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+
+			// CNI install container should not be present.
+			cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+			Expect(cniContainer).To(BeNil())
+			// Validate correct number of init containers.
+			Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(1))
+
+			// Verify env
+			expectedEnvs := []corev1.EnvVar{
+				corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
+				corev1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"},
+				corev1.EnvVar{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+			}
+			for _, expected := range expectedEnvs {
+				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(expected))
+			}
+
+			// Verify readiness and liveness probes.
+			verifyWindowsProbesAndLifecycle(ds)
+		},
+		Entry("GKE", operatorv1.PluginGKE, operatorv1.IPAMPluginHostLocal),
+		Entry("AmazonVPC", operatorv1.PluginAmazonVPC, operatorv1.IPAMPluginAmazonVPC),
+		Entry("AzureVNET", operatorv1.PluginAzureVNET, operatorv1.IPAMPluginAzureVNET),
+	)
+
 })
+
+// verifyWindowsProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.
+func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet) {
+	// Verify readiness and liveness probes.
+	expectedLiveness := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}}},
+		InitialDelaySeconds: 10,
+		FailureThreshold:    6,
+		TimeoutSeconds:      10,
+		PeriodSeconds:       10,
+	}
+	ExpectWithOffset(1, rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").LivenessProbe).To(Equal(expectedLiveness))
+
+	expectedReadiness := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}}},
+		TimeoutSeconds: 10,
+		PeriodSeconds:  10,
+	}
+	ExpectWithOffset(1, rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").ReadinessProbe).To(Equal(expectedReadiness))
+
+	expectedLifecycle := &corev1.Lifecycle{
+		PreStop: &corev1.LifecycleHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}}},
+	}
+	ExpectWithOffset(1, rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Lifecycle).To(Equal(expectedLifecycle))
+}

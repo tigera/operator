@@ -487,8 +487,8 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var hasWindowsNodes bool
-	// Don't render calico-node-windows if it's explicitly disabled in the installation
-	if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.WindowsDataplane != nil && *instance.Spec.CalicoNetwork.WindowsDataplane == operatorv1.WindowsDataplaneDisabled {
+	// Don't render calico-node-windows if it's disabled in the installation
+	if instance.Spec.CalicoNetwork != nil && (instance.Spec.CalicoNetwork.WindowsDataplane == nil || *instance.Spec.CalicoNetwork.WindowsDataplane == operatorv1.WindowsDataplaneDisabled) {
 		reqLogger.Info("Calico Windows daemonset is disabled in the operator installation")
 	} else {
 		// Build a configuration for rendering calico-node-windows, but only if there are Windows nodes in the cluster

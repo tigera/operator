@@ -47,8 +47,6 @@ const (
 	DefaultCPURequest              = "100m"
 )
 
-var DPISourceEntityRule = networkpolicy.CreateSourceEntityRule(DeepPacketInspectionNamespace, DeepPacketInspectionName)
-
 type DPIConfig struct {
 	IntrusionDetection *operatorv1.IntrusionDetection
 	Installation       *operatorv1.InstallationSpec
@@ -429,7 +427,7 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedServiceSelectorEntityRule,
+			Destination: networkpolicy.Helper(false, render.ElasticsearchNamespace).LinseedServiceSelectorEntityRule(),
 		})
 	}
 

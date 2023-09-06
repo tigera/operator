@@ -135,8 +135,8 @@ func add(mgr manager.Manager, c controller.Controller, enterpriseCRDExists bool)
 			return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 		}
 		// Watch for changes to the secrets associated with the PacketCapture APIs.
-		if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureCertSecret, err)
+		if err = utils.AddSecretsWatch(c, render.PacketCaptureServerCert, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert, err)
 		}
 		// Watch for changes to the secrets associated with Prometheus.
 		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
@@ -252,7 +252,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -283,7 +283,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	var certs = []string{}
 	if variant == operatorv1.TigeraSecureEnterprise {
-		certs = []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+		certs = []string{render.PacketCaptureServerCert, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
 	} else {
 		certs = []string{render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
 	}

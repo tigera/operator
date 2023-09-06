@@ -607,7 +607,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Render a fluentd component for Windows if the cluster has Windows nodes.
-	hasWindowsNodes, err := hasWindowsNodes(r.client)
+	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -661,16 +661,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-func hasWindowsNodes(c client.Client) (bool, error) {
-	nodes := corev1.NodeList{}
-	err := c.List(context.Background(), &nodes, client.MatchingLabels{"kubernetes.io/os": "windows"})
-	if err != nil {
-		return false, err
-	}
-
-	return len(nodes.Items) > 0, nil
 }
 
 func getS3Credential(client client.Client) (*render.S3Credential, error) {

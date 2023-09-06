@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -116,25 +116,34 @@ var _ = Describe("dex config tests", func() {
 		google      = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 		ocp         = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, Openshift: &operatorv1.AuthenticationOpenshift{IssuerURL: iss}}}
 		ldap        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, LDAP: &operatorv1.AuthenticationLDAP{Host: iss, UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}, GroupSearch: &operatorv1.GroupSearch{NameAttribute: attribute, Filter: validFilter, BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}}}}
-		ldapSecret  = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.LDAPSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			Data: map[string][]byte{"bindDN": []byte(validDN), "bindPW": []byte("my-secret"), "rootCA": []byte("ca")}}
-		ocpSecret = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OpenshiftSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			Data: map[string][]byte{"clientID": []byte(validDN), "clientSecret": []byte("my-secret"), "rootCA": []byte("ca")}}
+		ldapSecret  = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: render.LDAPSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			Data: map[string][]byte{"bindDN": []byte(validDN), "bindPW": []byte("my-secret"), "rootCA": []byte("ca")},
+		}
+		ocpSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: render.OpenshiftSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			Data: map[string][]byte{"clientID": []byte(validDN), "clientSecret": []byte("my-secret"), "rootCA": []byte("ca")},
+		}
 	)
 
 	DescribeTable("Test DexConfig methods for various connectors ", func(auth *operatorv1.Authentication, expectedConnector map[string]interface{}, expectedVolumes []corev1.Volume, expectedEnv []corev1.EnvVar, secret *corev1.Secret) {
 		dexConfig := render.NewDexConfig(nil, auth, dexSecret, secret, dns.DefaultClusterDomain)
 		Expect(dexConfig.Connector()).To(BeEquivalentTo(expectedConnector))
 		annotations := dexConfig.RequiredAnnotations()
+
+		Expect(annotations).To(HaveKey("hash.operator.tigera.io/tigera-dex-config"))
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-config"]).NotTo(BeEmpty())
+
+		Expect(annotations).To(HaveKey("hash.operator.tigera.io/tigera-idp-secret"))
 		Expect(annotations["hash.operator.tigera.io/tigera-idp-secret"]).NotTo(BeEmpty())
+
+		Expect(annotations).To(HaveKey("hash.operator.tigera.io/tigera-dex-secret"))
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
 		Expect(dexConfig.Issuer()).To(Equal(fmt.Sprintf("%s/dex", domain)))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(expectedVolumes))
 		Expect(dexConfig.RequiredEnv("")).To(Equal(expectedEnv))
 		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(dexSecret, secret))
-
 	},
 		Entry("Compare actual and expected OIDC config",
 			oidc, map[string]interface{}{
@@ -157,7 +166,8 @@ var _ = Describe("dex config tests", func() {
 				{
 					Name: "config",
 					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}},
+					}},
 				},
 				{
 					Name:         "secrets",
@@ -204,7 +214,8 @@ var _ = Describe("dex config tests", func() {
 				{
 					Name: "config",
 					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}},
+					}},
 				},
 				{
 					Name:         "secrets",
@@ -233,7 +244,8 @@ var _ = Describe("dex config tests", func() {
 				{
 					Name: "config",
 					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}},
+					}},
 				},
 				{
 					Name:         "secrets",

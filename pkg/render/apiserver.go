@@ -117,6 +117,7 @@ type APIServerConfiguration struct {
 	Openshift                   bool
 	TunnelCASecret              certificatemanagement.KeyPairInterface
 	TrustedBundle               certificatemanagement.TrustedBundle
+	MultiTenant                 bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -194,6 +195,14 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
 	if c.cfg.UsePSP {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
+	}
+
+	if c.cfg.ManagementCluster != nil && c.cfg.MultiTenant {
+		// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
+		// per-tenant guardian certificates when creating ManagedClusters.
+		globalObjects = append(globalObjects, c.secretsClusterRole()...)
+	} else {
+		objsToDelete = append(objsToDelete, c.secretsClusterRole()...)
 	}
 
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
@@ -652,6 +661,51 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 		}
 }
 
+// secretsClusterRole provides the tigera API server with the ability to read secrets on the cluster.
+// This is needed in multi-tenant management clusters only, in order to read tenant secrets for signing managed cluster certificates.
+func (c *apiServerComponent) secretsClusterRole() []client.Object {
+	name := "tigera-extension-apiserver-secrets-access"
+
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	return []client.Object{
+		// Return the cluster role itself.
+		&rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Rules: rules,
+		},
+
+		// And a binding to attach it to the API server.
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     name,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				},
+			},
+		},
+	}
+}
+
 // authClusterRoleBinding returns a clusterrolebinding to create, and a clusterrolebinding to delete.
 //
 // Both Calico and Calico Enterprise, with different names.
@@ -944,6 +998,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+	}
+
+	if c.cfg.MultiTenant {
+		env = append(env, corev1.EnvVar{Name: "MULTITENANT_ENABLED", Value: "true"}) // TODO: This is a temporary flag to enable multi-tenancy for PoC.
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)

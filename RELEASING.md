@@ -23,8 +23,11 @@ format `vX.Y.Z` for each of the following files:
 2. `config/enterprise_versions.yml` (Calico Enterprise version)
 3. `config/common_versions.yaml` (components common to both)
 
-(When updating versions for enterprise, if necessary also update
-the `TigeraRegistry` field in `pkg/components/images.go`.)
+For the first build of a new minor version (e.g. v1.31.0), also update
+the following values to reference `quay.io` instead of `gcr.io`:
+
+1. `TigeraRegistry` in `pkg/components/images.go`
+2. `defaultEnterpriseRegistry` in `hack/gen-versions/main.go`
 
 Then ensure `make gen-versions` has been ran and the resulting updates have been committed.
 

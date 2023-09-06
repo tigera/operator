@@ -131,7 +131,7 @@ var _ = Describe("windows-controller installation tests", func() {
 				},
 			}
 			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.autoDetectedProvider)).NotTo(HaveOccurred())
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
@@ -536,7 +536,7 @@ var _ = Describe("windows-controller installation tests", func() {
 						enterpriseCRDsExist:  true,
 					}
 
-					certificateManager, err := certificatemanager.Create(c, nil, "")
+					certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 					Expect(err).NotTo(HaveOccurred())
 					prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 					Expect(err).NotTo(HaveOccurred())

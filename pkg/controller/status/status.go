@@ -197,7 +197,6 @@ func (m *statusManager) updateStatus() {
 			m.clearDegraded()
 		}
 	}
-
 }
 
 func (m *statusManager) isExplicitlyDegraded() bool {
@@ -561,7 +560,7 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		var numFailed = 0
+		numFailed := 0
 		for _, jref := range cj.Status.Active {
 			j := &batchv1.Job{}
 			if err := m.client.Get(context.TODO(), types.NamespacedName{Namespace: jref.Namespace, Name: jref.Name}, j); err != nil {
@@ -694,7 +693,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	for _, condition := range conditions {
 		found := false
 
-		//set the CR's observedGeneration for tigerastatus condition
+		// set the CR's observedGeneration for tigerastatus condition
 		if m.observedGeneration != 0 {
 			condition.ObservedGeneration = m.observedGeneration
 		}

@@ -89,7 +89,6 @@ var _ = Describe("Mainline component function tests", func() {
 				}
 			}, 60*time.Second).ShouldNot(HaveOccurred())
 		}()
-		removeInstallResourceCR(c, "default", context.Background())
 
 		cleanupResources(c)
 

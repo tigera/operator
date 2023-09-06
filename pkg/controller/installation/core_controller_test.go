@@ -68,18 +68,20 @@ type fakeNamespaceMigration struct{}
 func (f *fakeNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context) (bool, error) {
 	return false, nil
 }
+
 func (f *fakeNamespaceMigration) Run(ctx context.Context, log logr.Logger) error {
 	return nil
 }
+
 func (f *fakeNamespaceMigration) NeedCleanup() bool {
 	return false
 }
+
 func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context) error {
 	return nil
 }
 
 var _ = Describe("Testing core-controller installation", func() {
-
 	table.DescribeTable("checking rendering configuration",
 		func(detectedProvider, configuredProvider operator.Provider, expectedErr error) {
 			configuredInstallation := &operator.Installation{}
@@ -201,7 +203,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{
 						IPPools: []operator.IPPool{
-							operator.IPPool{
+							{
 								CIDR:          "10.0.0.0/24",
 								Encapsulation: "VXLAN",
 								NATOutgoing:   "Disabled",
@@ -234,7 +236,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{
 						IPPools: []operator.IPPool{
-							operator.IPPool{
+							{
 								CIDR:          "10.0.0.0/16",
 								Encapsulation: "VXLAN",
 								NATOutgoing:   "Disabled",
@@ -396,7 +398,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 
 			r.typhaAutoscaler.start(ctx)
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
@@ -808,7 +810,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
 			var err error
-			certificateManager, err = certificatemanager.Create(c, nil, "")
+			certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -821,7 +823,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should create node and typha TLS cert secrets if not provided and add OwnerReference to those", func() {
-
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -839,7 +840,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should not add OwnerReference to user supplied node and typha certs", func() {
-
 			testCA := test.MakeTestCA("core-test")
 			crtContent := &bytes.Buffer{}
 			keyContent := &bytes.Buffer{}
@@ -994,7 +994,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 				},
 			}
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())

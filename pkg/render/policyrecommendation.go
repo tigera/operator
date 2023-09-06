@@ -70,7 +70,8 @@ type PolicyRecommendationConfiguration struct {
 	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
-	UsePSP bool
+	UsePSP    bool
+	Namespace string
 }
 
 type policyRecommendationComponent struct {
@@ -105,11 +106,11 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
 	objs := []client.Object{
-		CreateNamespace(PolicyRecommendationNamespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
+		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
-		networkpolicy.AllowTigeraDefaultDeny(PolicyRecommendationNamespace),
+		networkpolicy.AllowTigeraDefaultDeny(pr.cfg.Namespace),
 	}
 
 	if pr.cfg.ManagedCluster {
@@ -117,8 +118,8 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		return objs, nil
 	}
 
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.PullSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PolicyRecommendationNamespace, pr.cfg.ESSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(pr.cfg.Namespace, pr.cfg.PullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(pr.cfg.Namespace, pr.cfg.ESSecrets...)...)...)
 	// The deployment is created on management/standalone clusters only
 	objs = append(objs,
 		pr.allowTigeraPolicyForPolicyRecommendation(),
@@ -213,7 +214,7 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 			{
 				Kind:      "ServiceAccount",
 				Name:      PolicyRecommendationName,
-				Namespace: PolicyRecommendationNamespace,
+				Namespace: pr.cfg.Namespace,
 			},
 		},
 	}
@@ -237,7 +238,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain),
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain, ElasticsearchNamespace),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -292,7 +293,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	podTemplateSpec := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        PolicyRecommendationName,
-			Namespace:   PolicyRecommendationNamespace,
+			Namespace:   pr.cfg.Namespace,
 			Annotations: pr.policyRecommendationAnnotations(),
 		},
 		Spec: corev1.PodSpec{
@@ -312,7 +313,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PolicyRecommendationName,
-			Namespace: PolicyRecommendationNamespace,
+			Namespace: pr.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.Int32ToPtr(1),
@@ -328,7 +329,7 @@ func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[s
 func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: PolicyRecommendationNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: pr.cfg.Namespace},
 	}
 }
 
@@ -343,7 +344,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ManagerEntityRule,
+			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
 		},
 	}
 
@@ -351,7 +352,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		})
 	}
 
@@ -361,7 +362,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PolicyRecommendationPolicyName,
-			Namespace: PolicyRecommendationNamespace,
+			Namespace: pr.cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

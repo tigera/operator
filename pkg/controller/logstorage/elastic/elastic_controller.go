@@ -69,7 +69,7 @@ var log = logf.Log.WithName("controller_logstorage_elastic")
 
 const (
 	LogStorageFinalizer = "tigera.io/eck-cleanup"
-	tigeraStatusName    = "log-storage=-elastic"
+	tigeraStatusName    = "log-storage-elastic"
 )
 
 // ElasticSubController is a sub-controller of the main LogStorage controller

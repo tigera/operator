@@ -63,7 +63,6 @@ const (
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
 	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
 	fluentdDefaultFlush                      = "5s"
-	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
 	ElasticsearchEksLogForwarderUserSecret   = "tigera-eks-log-forwarder-elasticsearch-access"
 	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
 	EksLogForwarderAwsId                     = "aws-id"
@@ -149,7 +148,6 @@ type EksCloudwatchLogConfig struct {
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
 	LogCollector    *operatorv1.LogCollector
-	ESSecrets       []*corev1.Secret
 	ESClusterConfig *relasticsearch.ClusterConfig
 	S3Credential    *S3Credential
 	SplkCredential  *SplunkCredential
@@ -162,6 +160,10 @@ type FluentdConfiguration struct {
 	FluentdKeyPair  certificatemanagement.KeyPairInterface
 	TrustedBundle   certificatemanagement.TrustedBundle
 	ManagedCluster  bool
+
+	// Set if running as a multi-tenant management cluster. Configures the management cluster's
+	// own fluentd daemonset.
+	Tenant *operatorv1.Tenant
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -304,9 +306,6 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs, c.fluentdServiceAccount())
-	if len(c.cfg.ESSecrets) > 0 {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
-	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
@@ -498,10 +497,6 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		},
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		podTemplate = relasticsearch.DecorateAnnotations(podTemplate, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
-	}
-
 	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -581,7 +576,7 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	container := corev1.Container{
+	return corev1.Container{
 		Name:            "fluentd",
 		Image:           c.image,
 		ImagePullPolicy: ImagePullPolicy(),
@@ -597,11 +592,6 @@ func (c *fluentdComponent) container() corev1.Container {
 			ContainerPort: FluentdMetricsPort,
 		}},
 	}
-
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		container = relasticsearch.ContainerDecorateENVVars(container, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)
-	}
-	return container
 }
 
 func (c *fluentdComponent) metricsService() *corev1.Service {
@@ -632,9 +622,16 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
+	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
+	// namespace. For multi-tenant management clusters, this may vary.
+	linseedNS := ElasticsearchNamespace
+	if c.cfg.Tenant != nil {
+		linseedNS = c.cfg.Tenant.Namespace
+	}
+
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, linseedNS)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
@@ -646,10 +643,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		eeEnvs := []corev1.EnvVar{
-			{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
-		}
-		envs = append(envs, eeEnvs...)
+		envs = append(envs, corev1.EnvVar{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")})
+	}
+	if c.cfg.Tenant != nil {
+		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
@@ -1090,7 +1087,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
-					InitContainers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
+					InitContainers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
 						Name:            eksLogForwarderName + "-startup",
 						Image:           c.image,
 						ImagePullPolicy: ImagePullPolicy(),
@@ -1099,7 +1096,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
-					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
+					Containers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
 						Name:            eksLogForwarderName,
 						Image:           c.image,
 						ImagePullPolicy: ImagePullPolicy(),

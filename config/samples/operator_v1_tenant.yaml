@@ -1,0 +1,6 @@
+apiVersion: operator.tigera.io/v1
+kind: Tenant
+metadata:
+  name: tenant-sample
+spec:
+  id: some-id

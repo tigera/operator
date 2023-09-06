@@ -732,6 +732,7 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 }
 
 // cniDirectories returns the CNI binary, network config and log directories and the CNI conf filename for the configured platform.
+// FIXME: populate with known default for other providers
 func (c *windowsComponent) cniDirectories() (string, string, string) {
 	var cniBinDir, cniNetDir, cniLogDir string
 	switch c.cfg.Installation.KubernetesProvider {

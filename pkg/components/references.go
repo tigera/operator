@@ -40,8 +40,10 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 	if registry == "" || registry == UseDefault {
 		switch c {
 		case ComponentCalicoNode,
+			ComponentCalicoNodeWindows,
 			ComponentCalicoCNI,
 			ComponentCalicoCNIFIPS,
+			ComponentCalicoCNIWindows,
 			ComponentCalicoTypha,
 			ComponentCalicoTyphaFIPS,
 			ComponentCalicoKubeControllers,
@@ -49,7 +51,6 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 			ComponentFlexVolume,
 			ComponentCalicoAPIServer,
 			ComponentCalicoAPIServerFIPS,
-			ComponentWindowsUpgrade,
 			ComponentCalicoCSI,
 			ComponentCalicoCSIFIPS,
 			ComponentCalicoCSIRegistrar,

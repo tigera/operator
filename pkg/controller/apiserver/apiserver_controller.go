@@ -144,12 +144,6 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
-		//for _, namespace := range []string{common.OperatorNamespace(), rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)} {
-		//	if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
-		//		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-		//	}
-		//}
-
 		// Watch for changes to authentication
 		err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -280,7 +274,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query enterprise-only data.
-	//var tunnelCAKeyPair certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
@@ -364,10 +357,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		TLSKeyPair:                  tlsSecret,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
-		//TunnelCASecret:              tunnelCAKeyPair,
-		TrustedBundle: trustedBundle,
-		UsePSP:        r.usePSP,
-		MultiTenant:   r.multiTenant,
+		TrustedBundle:               trustedBundle,
+		UsePSP:                      r.usePSP,
+		MultiTenant:                 r.multiTenant,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

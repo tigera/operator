@@ -533,35 +533,32 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// Query the tunnel server certificate used by Voltron to serve mTLS connections from managed clusters.
 		tunnelSecretName := managementCluster.Spec.TLS.SecretName
-		if r.multiTenant {
-			// For multi-tenant clusters, ensure that we have a CA that can be used to sign the tunnel server cert within this tenant's namespace.
-			// This certificate will also be presented by Voltron to prove its identity to managed clusters.
-			tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, helper.TruthNamespace())
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, logc)
-				return reconcile.Result{}, err
-			}
-			if tunnelCASecret == nil {
-				tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(tunnelSecretName, helper.TruthNamespace(), "tigera-voltron", []string{tenant.Spec.ID})
-				if err != nil {
-					r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, logc)
-					return reconcile.Result{}, err
-				}
-			}
+		// For multi-tenant clusters, ensure that we have a CA that can be used to sign the tunnel server cert within this tenant's namespace.
+		// For single-tenant cluster, ensure that we have a CA that can be used to sign the tunnel server cert in operator namespace.
+		// This certificate will also be presented by Voltron to prove its identity to managed clusters.
+		tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, helper.TruthNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, logc)
+			return reconcile.Result{}, err
+		}
 
-			// We use the CA as the server cert.
-			tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
-		} else {
-			// For single-tenant clusters, query the secret directly. This will have already been created by the apiserver controller.
-			tunnelServerCert, err = certificateManager.GetKeyPair(r.client, tunnelSecretName, helper.TruthNamespace(), []string{"voltron"})
-			if tunnelServerCert == nil {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret %s/%s to be available", helper.TruthNamespace(), tunnelSecretName), nil, logc)
+		// Single tenant MCM clusters will use "voltron" as a server name to establish mTLS connection
+		serverName := "voltron"
+		if r.multiTenant {
+			// Multi-tenant MCM clusters will use the tenat ID as a server name to establish mTLS connection
+			serverName = tenant.Spec.ID
+		}
+
+		if tunnelCASecret == nil {
+			tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(tunnelSecretName, helper.TruthNamespace(), "tigera-voltron", []string{serverName})
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, logc)
 				return reconcile.Result{}, err
-			} else if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s/%s ", helper.TruthNamespace(), tunnelSecretName), err, logc)
-				return reconcile.Result{}, nil
 			}
 		}
+
+		// We use the CA as the server cert.
+		tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)

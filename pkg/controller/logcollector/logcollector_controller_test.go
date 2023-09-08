@@ -179,8 +179,8 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node).ToNot(BeNil())
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentFluentd.Image,
-					components.ComponentFluentd.Version)))
+					components.ComponentTigeraFluentd.Image,
+					components.ComponentTigeraFluentd.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -218,7 +218,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node).ToNot(BeNil())
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentFluentd.Image,
+					components.ComponentTigeraFluentd.Image,
 					"sha256:fluentdhash")))
 
 			ds.Name = "fluentd-node-windows"
@@ -228,7 +228,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node).ToNot(BeNil())
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentFluentdWindows.Image,
+					components.ComponentTigeraFluentdWindows.Image,
 					"sha256:fluentdwindowshash")))
 		})
 

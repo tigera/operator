@@ -974,6 +974,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
+				Variant:              operatorv1.TigeraSecureEnterprise,
 			}
 			managementClusterConnection = &operatorv1.ManagementClusterConnection{}
 			cfg = &render.ManagedClusterLogStorageConfiguration{
@@ -986,11 +987,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []resourceTestObj{
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
-					{render.ESGatewayServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
-						svc := resource.(*corev1.Service)
-						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
-					}},
 					{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
 						svc := resource.(*corev1.Service)
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
@@ -998,6 +994,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}},
 					{"tigera-linseed", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-linseed", "tigera-fluentd", &rbacv1.RoleBinding{}, nil},
+					{render.ESGatewayServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
+						svc := resource.(*corev1.Service)
+						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
+					}},
 				}
 				component := render.NewManagedClusterLogStorage(cfg)
 				createResources, deleteResources := component.Objects()

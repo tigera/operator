@@ -68,6 +68,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			OSType:          rmeta.OSTypeLinux,
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
+				Variant:            operatorv1.TigeraSecureEnterprise,
 			},
 			FluentdKeyPair: metricsSecret,
 			TrustedBundle:  certificateManager.CreateTrustedBundle(),
@@ -831,6 +832,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			KubernetesProvider:      operatorv1.ProviderEKS,
 			ControlPlaneTolerations: []corev1.Toleration{t},
+			Variant:                 operatorv1.TigeraSecureEnterprise,
 		}
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()

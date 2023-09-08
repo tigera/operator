@@ -93,7 +93,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 
 		BeforeEach(func() {
-			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"})
+			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/", Variant: operatorv1.TigeraSecureEnterprise})
 		})
 
 		It("should render all resources for a managed cluster", func() {

@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
@@ -201,6 +202,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	mapper, err := apiutil.NewDynamicRESTMapper(cfg)
+	if err != nil {
+		log.Error(err, "Failed to create dynamic rest mapper.")
+		os.Exit(1)
+	}
+
 	sigHandler := ctrl.SetupSignalHandler()
 	active.WaitUntilActive(cs, c, sigHandler, setupLog)
 	log.Info("Active operator: proceeding")
@@ -233,6 +240,7 @@ func main() {
 				&v3.NetworkPolicy{}:       {Label: policySelector},
 				&v3.GlobalNetworkPolicy{}: {Label: policySelector},
 			},
+			Mapper: mapper,
 		}),
 	})
 	if err != nil {

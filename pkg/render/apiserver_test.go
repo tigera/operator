@@ -66,7 +66,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		managementCluster  = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 		replicas           int32
 		cfg                *render.APIServerConfiguration
-		tunnelKeyPair      certificatemanagement.KeyPairInterface
 		trustedBundle      certificatemanagement.TrustedBundle
 		dnsNames           []string
 		cli                client.Client
@@ -92,10 +91,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 
-		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
-		Expect(err).NotTo(HaveOccurred())
-
-		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 		trustedBundle = certificatemanagement.CreateTrustedBundle()
 		replicas = 2
 
@@ -721,7 +716,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
 		cfg.ManagementCluster = managementCluster
-		cfg.TunnelCASecret = tunnelKeyPair
+		//cfg.TunnelCASecret = tunnelKeyPair
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -773,7 +768,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating the newly created tunnel secret")
 		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).ToNot(HaveOccurred())
-		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
 		validateTunnelSecret(tunnelSecret)
@@ -789,8 +783,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
-			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -798,7 +790,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
 		cfg.ManagementCluster = managementCluster
-		cfg.TunnelCASecret = tunnelKeyPair
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -848,8 +839,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
-			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -857,7 +846,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with signed ca bundles enabled", func() {
 		cfg.ManagementCluster = managementCluster
-		cfg.TunnelCASecret = tunnelKeyPair
+		//cfg.TunnelCASecret = tunnelKeyPair
 		cfg.ManagementCluster.Spec.TLS = &operatorv1.TLS{
 			SecretName: render.ManagerTLSSecretName,
 		}

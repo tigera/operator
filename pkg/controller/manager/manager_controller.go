@@ -653,7 +653,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, !r.multiTenant, true),
 			},
 			TrustedBundle: bundleMaker,
 		}),

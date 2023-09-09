@@ -16,6 +16,9 @@ package manager
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 
 	kerror "k8s.io/apimachinery/pkg/api/errors"
@@ -900,6 +903,60 @@ var _ = Describe("Manager controller tests", func() {
 			})
 		})
 
+		Context("MCM reconciliation", func() {
+			It("Should reconcile MCM setup for a management cluster", func() {
+				managementCluster := &operatorv1.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+				}
+				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+				err := c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: render.ManagerNamespace,
+					},
+				}
+				clusterConnection := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+				}
+				clusterConnectionInManagerNs := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: render.ManagerNamespace,
+					},
+				}
+
+				err = test.GetResource(c, &deployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				err = test.GetResource(c, &clusterConnection)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				assertSANs(&clusterConnection, "voltron")
+
+				err = test.GetResource(c, &clusterConnectionInManagerNs)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				assertSANs(&clusterConnectionInManagerNs, "voltron")
+			})
+		})
 		Context("Multi-tenant/namespaced reconciliation", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
@@ -925,6 +982,13 @@ var _ = Describe("Manager controller tests", func() {
 					Spec: operatorv1.TenantSpec{ID: "tenant-b"},
 				}
 				Expect(c.Create(ctx, tenantB)).NotTo(HaveOccurred())
+
+				managementCluster := &operatorv1.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+				}
+				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
 
 				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
 				Expect(err).NotTo(HaveOccurred())
@@ -968,11 +1032,25 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: tenantANamespace,
 					},
 				}
+				tenantAClusterConnection := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: tenantANamespace,
+					},
+				}
 
 				tenantBDeployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tigera-manager",
+						Namespace: tenantBNamespace,
+					},
+				}
+				tenantBClusterConnection := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
 						Namespace: tenantBNamespace,
 					},
 				}
@@ -994,6 +1072,10 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &tenantADeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
+				err = test.GetResource(c, &tenantAClusterConnection)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				assertSANs(&tenantAClusterConnection, "tenant-a")
+
 				err = test.GetResource(c, &tenantBDeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 
@@ -1004,9 +1086,31 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &tenantADeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
+				err = test.GetResource(c, &tenantBClusterConnection)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				assertSANs(&tenantBClusterConnection, "tenant-b")
+
 				err = test.GetResource(c, &tenantBDeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 			})
 		})
 	})
 })
+
+func assertSANs(secret *corev1.Secret, expectedSAN string) {
+	var cert *x509.Certificate
+
+	certPEM := secret.Data[corev1.TLSCertKey]
+	keyPEM := secret.Data[corev1.TLSPrivateKeyKey]
+	_, err := tls.X509KeyPair(certPEM, keyPEM)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	block, _ := pem.Decode(certPEM)
+	Expect(err).ShouldNot(HaveOccurred())
+	Expect(block).To(Not(BeNil()))
+
+	cert, err = x509.ParseCertificate(block.Bytes)
+	Expect(err).ShouldNot(HaveOccurred())
+
+	Expect(cert.DNSNames).To(Equal([]string{expectedSAN}))
+}

@@ -98,7 +98,7 @@ func (c component) Objects() (objsToCreate, objsToDelete []client.Object) {
 			}
 			needsCSRRoleAndBinding = true
 		} else {
-			if keyPairCreator.renderInTruthNamespace && (!keyPair.BYO() || keyPair.GetName() == certificatemanagement.CASecretName || keyPair.GetName() == certificatemanagement.TenantCASecretName) {
+			if keyPairCreator.renderInTruthNamespace && (!keyPair.BYO() || keyPair.GetName() == certificatemanagement.CASecretName || keyPair.GetName() == certificatemanagement.TenantCASecretName || keyPair.GetCommonName() == "tigera-voltron") {
 				objsToCreate = append(objsToCreate, keyPair.Secret(c.cfg.TruthNamespace))
 			}
 			if keyPairCreator.renderInAppNamespace {

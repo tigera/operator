@@ -964,6 +964,43 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 	})
 
+	Context("Managed cluster OSS", func() {
+		var cfg *render.ManagedClusterLogStorageConfiguration
+
+		BeforeEach(func() {
+			replicas := int32(1)
+			installation := &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
+				Variant:              operatorv1.Calico,
+			}
+			cfg = &render.ManagedClusterLogStorageConfiguration{
+				Installation:  installation,
+				ClusterDomain: "cluster.local",
+			}
+		})
+
+		Context("Initial creation", func() {
+			It("creates Managed cluster logstorage components", func() {
+				expectedCreateResources := []resourceTestObj{
+					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
+					{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
+						svc := resource.(*corev1.Service)
+						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
+					}},
+					{"tigera-linseed", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-linseed", "tigera-fluentd", &rbacv1.RoleBinding{}, nil},
+				}
+				component := render.NewManagedClusterLogStorage(cfg)
+				createResources, deleteResources := component.Objects()
+				compareResources(createResources, expectedCreateResources)
+				compareResources(deleteResources, []resourceTestObj{})
+			})
+		})
+	})
+
 	Context("Managed cluster", func() {
 		var cfg *render.ManagedClusterLogStorageConfiguration
 		var managementClusterConnection *operatorv1.ManagementClusterConnection

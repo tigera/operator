@@ -309,13 +309,6 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
-	} else {
-		objs = append(objs, CreateNamespace(ElasticsearchNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
-		objs = append(objs, linseedServiceAccount())
-		role, binding := linseedExternalRoleAndBinding()
-		objs = append(objs, role)
-		objs = append(objs, binding)
-		objs = append(objs, c.linseedExternalService())
 	}
 	objs = append(objs, c.daemonset())
 
@@ -1256,71 +1249,6 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 				},
 			},
 			Egress: egressRules,
-		},
-	}
-}
-
-func linseedServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      LinseedServiceAccountName,
-			Namespace: ElasticsearchNamespace,
-		},
-	}
-}
-
-// In managed clusters, we need to provision a role and binding for linseed to provide permissions
-// to create configmaps.
-func linseedExternalRoleAndBinding() (*rbacv1.ClusterRole, *rbacv1.RoleBinding) {
-	// Create a ClusterRole to provide configmap permissions. However, we'll only bind this to
-	// specific namespaces using RoleBindings so that we only have permissions in our namespaces.
-	role := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-linseed",
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "update", "get", "list"},
-			},
-		},
-	}
-
-	// Bind the permission to the tigera-fluentd namespace. Other controllers may also bind
-	// this cluster role to their own namespace if they require linseed access tokens.
-	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-linseed",
-			Namespace: "tigera-fluentd",
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "tigera-linseed",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "tigera-linseed",
-				Namespace: ElasticsearchNamespace,
-			},
-		},
-	}
-
-	return role, binding
-}
-
-func (c *fluentdComponent) linseedExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      LinseedServiceName,
-			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, c.cfg.ClusterDomain),
 		},
 	}
 }

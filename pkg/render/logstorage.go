@@ -2062,10 +2062,13 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	role, binding := m.linseedExternalRoleAndBinding()
 	toCreate = append(toCreate,
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged),
-		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
 		role, binding,
 	)
+
+	if m.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		toCreate = append(toCreate, m.elasticsearchExternalService())
+	}
 	return toCreate, nil
 }
 

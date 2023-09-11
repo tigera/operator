@@ -60,10 +60,6 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new ManagementClusterConnection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started. This controller is meant only for enterprise users.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		// No need to start this controller.
-		return nil
-	}
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
@@ -76,22 +72,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		log.Error(err, "Failed to establish a connection to k8s")
-		return err
+	if opts.EnterpriseCRDExists {
+		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			log.Error(err, "Failed to establish a connection to k8s")
+			return err
+		}
+
+		// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, nil)
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+
+		go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+			{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
+			{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
+		})
 	}
 
-	// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, nil)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
-		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
-	})
-
-	return add(mgr, controller)
+	return add(mgr, controller, opts.EnterpriseCRDExists)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -117,15 +115,10 @@ func newReconciler(
 }
 
 // add adds a new controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, c controller.Controller) error {
-	// Watch for changes to primary resource ManagementCluster
-	err := c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
-	}
+func add(mgr manager.Manager, c controller.Controller, enterpriseCRDExists bool) error {
 
 	// Watch for changes to primary resource ManagementClusterConnection
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	err := c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 	}
@@ -135,13 +128,20 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
-	// Watch for changes to the secrets associated with the PacketCapture APIs.
-	if err = utils.AddSecretsWatch(c, render.PacketCaptureServerCert, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert, err)
-	}
-	// Watch for changes to the secrets associated with Prometheus.
-	if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusTLSSecretName, err)
+	if enterpriseCRDExists {
+		// Watch for changes to primary resource ManagementCluster
+		err := c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
+		}
+		// Watch for changes to the secrets associated with the PacketCapture APIs.
+		if err = utils.AddSecretsWatch(c, render.PacketCaptureServerCert, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert, err)
+		}
+		// Watch for changes to the secrets associated with Prometheus.
+		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusTLSSecretName, err)
+		}
 	}
 
 	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
@@ -192,10 +192,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.Client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-		return reconcile.Result{}, err
+	var managementCluster *operatorv1.ManagementCluster
+	if variant == operatorv1.TigeraSecureEnterprise {
+		managementCluster, err = utils.GetManagementCluster(ctx, r.Client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Fetch the managementClusterConnection.
@@ -278,7 +281,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	for _, secretName := range []string{render.PacketCaptureServerCert, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)} {
+	var certs []string
+	if variant == operatorv1.TigeraSecureEnterprise {
+		certs = []string{render.PacketCaptureServerCert, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+	} else {
+		certs = []string{render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+	}
+	for _, secretName := range certs {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
@@ -291,42 +300,44 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle.AddCertificates(secret)
 	}
 
-	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	includeV3NetworkPolicy := false
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
-		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
-		// and tolerate errors arising from the Tier not being created.
-		if !k8serrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
-			return reconcile.Result{}, err
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if variant == operatorv1.TigeraSecureEnterprise {
+		if !r.tierWatchReady.IsReady() {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-	} else {
-		includeV3NetworkPolicy = true
 
-		// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
-		// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
-		// License presence and sufficiency.
-		if networkPolicyRequiresEgressAccessControl(managementClusterConnection, log) {
-			license, err := utils.FetchLicenseKey(ctx, r.Client)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
+			// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
+			// and tolerate errors arising from the Tier not being created.
+			if !k8serrors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
+
+			// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
+			// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
+			// License presence and sufficiency.
+			if networkPolicyRequiresEgressAccessControl(managementClusterConnection, log) {
+				license, err := utils.FetchLicenseKey(ctx, r.Client)
+				if err != nil {
+					if k8serrors.IsNotFound(err) {
+						r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+						return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+					}
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 				}
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			}
 
-			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
+					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				}
 			}
 		}
 	}

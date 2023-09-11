@@ -795,3 +795,149 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 	})
 })
+
+var _ = Describe("LogCollector controller tests (OSS)", func() {
+	var c client.Client
+	var ctx context.Context
+	var r ReconcileLogCollector
+	var scheme *runtime.Scheme
+	var mockStatus *status.MockStatus
+
+	BeforeEach(func() {
+		// The schema contains all objects that should be known to the fake client when the test runs.
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+		// Create a client that will have a crud interface of k8s objects.
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		ctx = context.Background()
+
+		// Create an object we can use throughout the test to do the compliance reconcile loops.
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("AddDaemonsets", mock.Anything).Return()
+		mockStatus.On("AddDeployments", mock.Anything).Return()
+		mockStatus.On("AddStatefulSets", mock.Anything).Return()
+		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+		mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", operatorv1.InvalidConfigurationError, "Additional log sources can be configured only in calico enterprise.", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("SetMetaData", mock.Anything).Return()
+
+		// Create an object we can use throughout the test to do the compliance reconcile loops.
+		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
+		r = ReconcileLogCollector{
+			client:   c,
+			scheme:   scheme,
+			provider: operatorv1.ProviderNone,
+			status:   mockStatus,
+		}
+
+		// We start off with a 'standard' installation, with nothing special
+		Expect(c.Create(
+			ctx,
+			&operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.Calico,
+					Registry: "some.registry.org/",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.Calico,
+					Computed: &operatorv1.InstallationSpec{
+						Registry: "my-reg",
+						// The test is provider agnostic.
+						KubernetesProvider: operatorv1.ProviderNone,
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+		// Create resources LogCollector depends on
+		Expect(c.Create(ctx, &operatorv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+		})).NotTo(HaveOccurred())
+
+		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+
+		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+
+		kibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ElasticsearchEksLogForwarderUserSecret,
+				Namespace: "tigera-operator",
+			},
+		})).NotTo(HaveOccurred())
+
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.LinseedServiceName})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		// Apply the logcollector CR to the fake cluster.
+		Expect(c.Create(ctx, &operatorv1.LogCollector{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		})).NotTo(HaveOccurred())
+	})
+
+	Context("image reconciliation", func() {
+		It("should use builtin images", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "fluentd-node",
+					Namespace: render.LogCollectorNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			node := ds.Spec.Template.Spec.Containers[0]
+			Expect(node).ToNot(BeNil())
+			Expect(node.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCalicoFluentd.Image,
+					components.ComponentCalicoFluentd.Version)))
+		})
+	})
+	Context("should throw error when additional log collectors are configured", func() {
+		BeforeEach(func() {
+			Expect(c.Delete(ctx, &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.LogCollectorSpec{
+					AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
+						S3: &operatorv1.S3StoreSpec{
+							BucketName: "s3Bucket",
+							Region:     "s3Region",
+							BucketPath: "s3Path",
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+		})
+		It("should return error when configuring additional log collectors", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+		})
+	})
+})

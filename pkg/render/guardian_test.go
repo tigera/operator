@@ -42,7 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-var _ = Describe("Rendering tests", func() {
+var _ = Describe("Guardian Rendering tests", func() {
 	var cfg *render.GuardianConfiguration
 	var g render.Component
 	var resources []client.Object
@@ -84,6 +84,90 @@ var _ = Describe("Rendering tests", func() {
 		}
 	}
 
+	Context("Guardian component OSS", func() {
+		renderGuardian := func(i operatorv1.InstallationSpec) {
+			cfg = createGuardianConfig(i, "127.0.0.1:1234", false)
+			g = render.Guardian(cfg)
+			Expect(g.ResolveImages(nil)).To(BeNil())
+			resources, _ = g.Objects()
+		}
+
+		BeforeEach(func() {
+			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/", Variant: operatorv1.Calico})
+		})
+
+		It("should render all resources for a managed OSS cluster", func() {
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: render.GuardianNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: "pull-secret", ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+				{name: render.GuardianServiceAccountName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: render.GuardianClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: render.GuardianClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
+				{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
+				{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+				{name: "tigera-ca-bundle", ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
+				{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			}
+			Expect(len(resources)).To(Equal(len(expectedResources)))
+			for i, expectedRes := range expectedResources {
+				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
+
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+			Expect(deployment.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+				&corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				}))
+			Expect(deployment.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+				&corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			))
+
+			// Check the namespace.
+			ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)
+			Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+			Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			crb := rtest.GetResource(resources, render.ManagerClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.Subjects).To(Equal([]rbacv1.Subject{{
+				Kind:      "ServiceAccount",
+				Name:      render.ManagerServiceAccount,
+				Namespace: render.ManagerNamespace,
+			}}))
+		})
+
+		It("should render controlPlaneTolerations", func() {
+			t := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+			renderGuardian(operatorv1.InstallationSpec{
+				ControlPlaneTolerations: []corev1.Toleration{t},
+			})
+			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
+		})
+	})
 	Context("Guardian component", func() {
 		renderGuardian := func(i operatorv1.InstallationSpec) {
 			cfg = createGuardianConfig(i, "127.0.0.1:1234", false)
@@ -93,7 +177,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 
 		BeforeEach(func() {
-			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"})
+			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/", Variant: operatorv1.TigeraSecureEnterprise})
 		})
 
 		It("should render all resources for a managed cluster", func() {

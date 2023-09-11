@@ -368,6 +368,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
 						Name: "tigera-ca-bundle",
@@ -403,6 +404,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
+					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -617,6 +619,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 					{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
@@ -654,6 +657,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
+					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -939,6 +943,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{
 						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
@@ -974,6 +979,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
+					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1152,6 +1158,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{
 						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
@@ -1182,6 +1189,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
 					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
@@ -1296,6 +1304,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{
 						Name: "tigera-ca-bundle",
 						VolumeSource: corev1.VolumeSource{
@@ -1326,6 +1335,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
+					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 				}
@@ -1561,6 +1571,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 					{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 					{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
@@ -1600,6 +1611,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
+					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1705,6 +1717,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 					{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 					{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{
@@ -1736,6 +1749,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 					{MountPath: "/var/run/calico", Name: "var-run-calico"},
 					{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 					{MountPath: "/var/run/nodeagent", Name: "policysync"},
 					{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
@@ -1806,6 +1820,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 					{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
 					{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+					{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 					{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/cni/bin"}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/multus/cni/net.d"}}},

@@ -103,7 +103,11 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	} else {
+		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -131,11 +135,16 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerServiceAccount(ManagerNamespace),
 		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
 		managerClusterRoleBinding([]string{ManagerNamespace}),
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs,
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
+	}
 
 	if c.cfg.UsePSP {
 		objs = append(objs, c.podSecurityPolicy())

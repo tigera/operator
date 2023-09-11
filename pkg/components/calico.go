@@ -112,9 +112,21 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoFluentd = component{
+		Version:  "master",
+		Image:    "calico/fluentd",
+		Registry: "",
+	}
+
 	ComponentCalicoCSIRegistrarFIPS = component{
 		Version:  "master-fips",
 		Image:    "calico/node-driver-registrar",
+		Registry: "",
+	}
+
+	ComponentCalicoGuardian = component{
+		Version:  "master",
+		Image:    "tigera/guardian",
 		Registry: "",
 	}
 	ComponentOperatorInit = component{
@@ -139,6 +151,8 @@ var (
 		ComponentCalicoCSI,
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalicoFluentd,
 		ComponentCalicoCSIRegistrarFIPS,
+		ComponentCalicoGuardian,
 	}
 )

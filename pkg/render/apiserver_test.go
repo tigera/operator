@@ -857,6 +857,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(dep).ToNot(BeNil())
 
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement("--managementClusterCAType=Public"))
+		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement(fmt.Sprintf("--tunnelSecretName=%s", render.ManagerTLSSecretName)))
 	})
 
 	It("should add an init container if certificate management is enabled", func() {

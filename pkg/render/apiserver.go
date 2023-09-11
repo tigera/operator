@@ -1058,6 +1058,7 @@ func (c *apiServerComponent) startUpArgs() []string {
 		}
 		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
 			args = append(args, "--managementClusterCAType=Public")
+			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
 

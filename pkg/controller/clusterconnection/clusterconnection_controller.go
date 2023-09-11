@@ -281,7 +281,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	var certs = []string{}
+	var certs []string
 	if variant == operatorv1.TigeraSecureEnterprise {
 		certs = []string{render.PacketCaptureServerCert, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
 	} else {

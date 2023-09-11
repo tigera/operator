@@ -37,6 +37,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -889,6 +890,12 @@ var _ = Describe("LogCollector controller tests (OSS)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
+		Expect(c.Create(ctx, &crdv1.FelixConfiguration{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+			},
+		})).NotTo(HaveOccurred())
+
 		// Apply the logcollector CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -917,6 +924,21 @@ var _ = Describe("LogCollector controller tests (OSS)", func() {
 					components.ComponentCalicoFluentd.Version)))
 		})
 	})
+
+	Context("should enabled flow logs felix configs", func() {
+		It("should set the proper flow logs felix configs", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			fc := &crdv1.FelixConfiguration{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, fc)).NotTo(HaveOccurred())
+			Expect(*fc.Spec.FlowLogsFileEnabled).Should(BeTrue())
+			Expect(*fc.Spec.FlowLogsFileIncludePolicies).Should(BeTrue())
+			Expect(*fc.Spec.FlowLogsFileIncludeService).Should(BeTrue())
+			Expect(*fc.Spec.FlowLogsEnableHostEndpoint).Should(BeTrue())
+			Expect(*fc.Spec.FlowLogsEnableNetworkSets).Should(BeTrue())
+		})
+	})
+
 	Context("should throw error when additional log collectors are configured", func() {
 		BeforeEach(func() {
 			Expect(c.Delete(ctx, &operatorv1.LogCollector{

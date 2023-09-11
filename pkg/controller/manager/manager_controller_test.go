@@ -903,8 +903,10 @@ var _ = Describe("Manager controller tests", func() {
 			})
 		})
 
-		Context("MCM reconciliation", func() {
-			It("Should reconcile MCM setup for a management cluster", func() {
+		Context("Multi-cluster reconciliation", func() {
+			It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
+				// Create the ManagementCluster CR needed to configure
+				// a management cluster for a multi-cluster setup
 				managementCluster := &operatorv1.ManagementCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "tigera-secure",
@@ -912,6 +914,8 @@ var _ = Describe("Manager controller tests", func() {
 				}
 				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
 
+				// Create the Manager CR needed to jumpstart the reconciliation
+				// for the manager
 				err := c.Create(ctx, &operatorv1.Manager{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tigera-secure",
@@ -920,6 +924,7 @@ var _ = Describe("Manager controller tests", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
+				// Reconcile Manager
 				_, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -945,13 +950,18 @@ var _ = Describe("Manager controller tests", func() {
 					},
 				}
 
+				// Ensure a deployment was created for the manager
 				err = test.GetResource(c, &deployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
+				// Ensure the secret was created in tigera-operator namespace
+				// and that it configures voltron as a Subject Alternate Name
 				err = test.GetResource(c, &clusterConnection)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				assertSANs(&clusterConnection, "voltron")
 
+				// Ensure the secret was created in tigera-manager namespace
+				// and that it configures voltron as a Subject Alternate Name
 				err = test.GetResource(c, &clusterConnectionInManagerNs)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				assertSANs(&clusterConnectionInManagerNs, "voltron")
@@ -1072,6 +1082,8 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &tenantADeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
+				// Ensure the secret was created in tenant namespace
+				// and that it configures the tenant ID as a Subject Alternate Name
 				err = test.GetResource(c, &tenantAClusterConnection)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				assertSANs(&tenantAClusterConnection, "tenant-a")
@@ -1086,6 +1098,8 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &tenantADeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
+				// Ensure the secret was created in tenant namespace
+				// and that it configures the tenant ID as a Subject Alternate Name
 				err = test.GetResource(c, &tenantBClusterConnection)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				assertSANs(&tenantBClusterConnection, "tenant-b")

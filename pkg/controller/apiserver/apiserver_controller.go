@@ -274,6 +274,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query enterprise-only data.
+	var tunnelCAKeyPair certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
@@ -296,6 +297,26 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		if managementCluster != nil && !r.multiTenant {
+			// The secret that contains the CA x509 certificate to create client certificates for the managed cluster
+			// is created by the Manager controller in tigera-operator namespace. We will read this secret and make
+			// sure it is available in the same namespace as the API server (tigera-system)
+			// This secret is only created for a management cluster in a multi-cluster setup for a single tenant.
+			// Other cluster types do not require this secret. (Standalone configuration do not need it and multi-tenant
+			// configuration create secrets inside the tenant namespaces)
+			tunnelSecretName := managementCluster.Spec.TLS.SecretName
+			tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			if tunnelCASecret == nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 		}
 
 		if r.amazonCRDExists {
@@ -373,6 +394,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ServiceAccounts: []string{render.APIServerServiceAccountName(variant)},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelCAKeyPair, false, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

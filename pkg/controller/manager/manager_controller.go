@@ -504,6 +504,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var linseedVoltronServerCert certificatemanagement.KeyPairInterface
 	var tunnelServerCert certificatemanagement.KeyPairInterface
+	var tunnelSecretPassthrough render.Component
 
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
@@ -559,6 +560,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// We use the CA as the server cert.
 		tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
+		tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret)
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
@@ -653,11 +655,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, !r.multiTenant, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
 			},
 			TrustedBundle: bundleMaker,
 		}),
 	}
+
+	if tunnelSecretPassthrough != nil {
+		components = append(components, tunnelSecretPassthrough)
+	}
+
 	for _, component := range components {
 		if err := componentHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)

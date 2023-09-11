@@ -77,13 +77,13 @@ var (
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version:  "master-amd64",
+		Version:  "master",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}
 
 	ComponentCalicoAPIServerFIPS = component{
-		Version:  "master-amd64-fips",
+		Version:  "master-fips",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}

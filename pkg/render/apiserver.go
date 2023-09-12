@@ -115,7 +115,6 @@ type APIServerConfiguration struct {
 	TLSKeyPair                  certificatemanagement.KeyPairInterface
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
-	TunnelCASecret              certificatemanagement.KeyPairInterface
 	TrustedBundle               certificatemanagement.TrustedBundle
 	MultiTenant                 bool
 
@@ -896,9 +895,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	annotations := map[string]string{
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
 	}
-	if c.cfg.ManagementCluster != nil {
-		annotations[c.cfg.TunnelCASecret.HashAnnotationKey()] = c.cfg.TunnelCASecret.HashAnnotationValue()
-	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -983,9 +979,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if c.cfg.ManagementCluster != nil {
-			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount(c.SupportedOSType()))
-		}
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
@@ -1059,15 +1052,13 @@ func (c *apiServerComponent) startUpArgs() []string {
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		args = append(args,
-			"--enable-managed-clusters-create-api=true",
-			fmt.Sprintf("--set-managed-clusters-ca-cert=%s", c.cfg.TunnelCASecret.VolumeMountCertificateFilePath()),
-			fmt.Sprintf("--set-managed-clusters-ca-key=%s", c.cfg.TunnelCASecret.VolumeMountKeyFilePath()))
+		args = append(args, "--enable-managed-clusters-create-api=true")
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
 		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
 			args = append(args, "--managementClusterCAType=Public")
+			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
 
@@ -1159,18 +1150,6 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 		if c.cfg.TrustedBundle != nil {
 			volumes = append(volumes, c.cfg.TrustedBundle.Volume())
-		}
-
-		if c.cfg.ManagementCluster != nil {
-			volumes = append(volumes, corev1.Volume{
-				// Append volume for tunnel CA certificate
-				Name: VoltronTunnelSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: VoltronTunnelSecretName,
-					},
-				},
-			})
 		}
 	}
 

@@ -176,7 +176,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			cm.log.V(2).Info("No existing CA secret")
 		}
 
-		if len(caSecret.Data) == 0 ||
+		if caSecret == nil || len(caSecret.Data) == 0 ||
 			len(caSecret.Data[corev1.TLSPrivateKeyKey]) == 0 ||
 			len(caSecret.Data[corev1.TLSCertKey]) == 0 {
 

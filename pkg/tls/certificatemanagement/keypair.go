@@ -158,15 +158,6 @@ func (k *KeyPair) GetIssuer() CertificateInterface {
 	return k.Issuer
 }
 
-func (k *KeyPair) GetCommonName() string {
-	cert, err := ParseCertificate(k.CertificatePEM)
-	if err != nil {
-		return ""
-	}
-
-	return cert.Issuer.CommonName
-}
-
 // NewKeyPair returns a KeyPair, which wraps a Secret object that contains a private key and a certificate. Whether certificate
 // management is configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
 func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) KeyPairInterface {

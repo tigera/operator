@@ -221,15 +221,6 @@ func (c *certificate) GetIssuer() CertificateInterface {
 	return c.issuer
 }
 
-func (c *certificate) GetCommonName() string {
-	cert, err := ParseCertificate(c.pem)
-	if err != nil {
-		return ""
-	}
-
-	return cert.Issuer.CommonName
-}
-
 // certFiles is copied from the x509 package, but re-ordered, since in practice this should run containerized
 // and stop at the first entry. More at: https://go.dev/src/crypto/x509/root_linux.go for the source.
 //

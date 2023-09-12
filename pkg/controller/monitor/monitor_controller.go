@@ -60,7 +60,7 @@ const ResourceName = "monitor"
 var log = logf.Log.WithName("controller_monitor")
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.MonitorCRDExists {
 		return nil
 	}
 
@@ -91,10 +91,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
-	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	if opts.EnterpriseCRDExists {
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
 
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
+		go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
+	}
 
 	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
 
@@ -111,12 +113,18 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		tierWatchReady:  tierWatchReady,
 		clusterDomain:   opts.ClusterDomain,
 		usePSP:          opts.UsePSP,
+		isEnterprise:    opts.EnterpriseCRDExists,
 	}
 
-	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
+	namespacedNames = []types.NamespacedName{
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
-	})
+	}
+
+	if r.isEnterprise {
+		namespacedNames = append(namespacedNames, types.NamespacedName{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)})
+	}
+
+	r.status.AddStatefulSets(namespacedNames)
 
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -182,6 +190,7 @@ type ReconcileMonitor struct {
 	tierWatchReady  *utils.ReadyFlag
 	clusterDomain   string
 	usePSP          bool
+	isEnterprise    bool
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -310,7 +319,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-	if !r.tierWatchReady.IsReady() {
+	if r.isEnterprise && !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
@@ -332,12 +341,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
@@ -345,17 +348,30 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	monitorCfg := &monitor.Config{
-		Installation:             install,
-		PullSecrets:              pullSecrets,
-		AlertmanagerConfigSecret: alertmanagerConfigSecret,
-		KeyValidatorConfig:       keyValidatorConfig,
-		ServerTLSSecret:          serverTLSSecret,
-		ClientTLSSecret:          clientTLSSecret,
-		ClusterDomain:            r.clusterDomain,
-		TrustedCertBundle:        trustedBundle,
-		Openshift:                r.provider == operatorv1.ProviderOpenShift,
-		KubeControllerPort:       kubeControllersMetricsPort,
-		UsePSP:                   r.usePSP,
+		Installation:       install,
+		PullSecrets:        pullSecrets,
+		KeyValidatorConfig: keyValidatorConfig,
+		ServerTLSSecret:    serverTLSSecret,
+		ClientTLSSecret:    clientTLSSecret,
+		ClusterDomain:      r.clusterDomain,
+		TrustedCertBundle:  trustedBundle,
+		Openshift:          r.provider == operatorv1.ProviderOpenShift,
+		KubeControllerPort: kubeControllersMetricsPort,
+		UsePSP:             r.usePSP,
+		PrometheusOnly:     !r.isEnterprise,
+	}
+
+	// Add in alertmanager secret for Enterprise only
+	var createInOperatorNamespace bool
+	if r.isEnterprise {
+		alertmanagerConfigSecret, createInOpNs, err := r.readAlertmanagerConfigSecret(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		monitorCfg.AlertmanagerConfigSecret = alertmanagerConfigSecret
+		createInOperatorNamespace = createInOpNs
 	}
 
 	// Render prometheus component

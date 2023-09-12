@@ -1401,6 +1401,10 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		// TODO: Need to check if it is OK to have these values always enabled for prometheus metrics
+		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
+		{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -1613,9 +1617,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []corev1.EnvVar{
-			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
-			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
 			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},

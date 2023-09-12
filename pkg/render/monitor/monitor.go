@@ -129,6 +129,7 @@ type Config struct {
 	Openshift                bool
 	KubeControllerPort       int
 	UsePSP                   bool
+	PrometheusOnly           bool
 }
 
 type monitorComponent struct {
@@ -200,18 +201,23 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusClusterRole(),
 		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
-		mc.alertmanagerService(),
-		mc.alertmanager(),
 		mc.prometheusServiceService(),
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
-		mc.prometheusRule(),
 		mc.serviceMonitorCalicoNode(),
-		mc.serviceMonitorElasticsearch(),
-		mc.serviceMonitorFluentd(),
-		mc.serviceMonitorQueryServer(),
-		mc.serviceMonitorCalicoKubeControllers(),
 	)
+
+	if !mc.cfg.PrometheusOnly {
+		toCreate = append(toCreate,
+			mc.alertmanagerService(),
+			mc.alertmanager(),
+			mc.prometheusRule(),
+			mc.serviceMonitorElasticsearch(),
+			mc.serviceMonitorFluentd(),
+			mc.serviceMonitorQueryServer(),
+			mc.serviceMonitorCalicoKubeControllers(),
+		)
+	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredSecrets(common.TigeraPrometheusNamespace)...)...)
@@ -735,6 +741,30 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 }
 
 func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMonitor {
+	endpoints = []monitoringv1.Endpoint{
+		{
+			HonorLabels:   true,
+			Interval:      "5s",
+			Port:          "calico-metrics-port",
+			ScrapeTimeout: "5s",
+			Scheme:        "https",
+			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+		},
+	}
+
+	if !mc.cfg.PrometheusOnly {
+		endpoints = append(endpoints,
+			monitoringv1.Endpoint{
+				HonorLabels:   true,
+				Interval:      "5s",
+				Port:          "calico-bgp-metrics-port",
+				ScrapeTimeout: "5s",
+				Scheme:        "https",
+				TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+			},
+		)
+	}
+
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -745,24 +775,7 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
 			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"calico-system"}},
-			Endpoints: []monitoringv1.Endpoint{
-				{
-					HonorLabels:   true,
-					Interval:      "5s",
-					Port:          "calico-metrics-port",
-					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
-				},
-				{
-					HonorLabels:   true,
-					Interval:      "5s",
-					Port:          "calico-bgp-metrics-port",
-					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
-				},
-			},
+			Endpoints:         endpoints,
 		},
 	}
 }

@@ -387,6 +387,24 @@ type FelixConfigurationSpec struct {
 	// `[fd00:83a6::12]:5353`.Note that Felix (calico-node) will need RBAC permission to read the details of
 	// each service specified by a `k8s-service:...` form. [Default: "k8s-service:kube-dns"].
 	DNSTrustedServers *[]string `json:"dnsTrustedServers,omitempty"`
+
+	// FlowLogsFileEnabled controls whether flow logs is enabled. [Default: false]
+	FlowLogsFileEnabled *bool `json:"flowLogsFileEnabled,omitempty"`
+
+	// FlowLogsFileIncludeService controls whether service information is enabled in the flow logs. [Default: false]
+	FlowLogsFileIncludeService *bool `json:"flowLogsFileIncludeService,omitempty"`
+
+	// FlowLogsFileIncludePolicies controls whether policy information is enabled in the flow logs. [Default: false]
+	FlowLogsFileIncludePolicies *bool `json:"flowLogsFileIncludePolicies,omitempty"`
+
+	// FlowLogsEnableHostEndpoint enables flow logs reporting for host endpoints. [Default: false]
+	FlowLogsEnableHostEndpoint *bool `json:"flowLogsEnableHostEndpoint,omitempty"`
+
+	// FlowLogsEnableNetworkSets enables flow logs reporting for global network sets. [Default: false]
+	FlowLogsEnableNetworkSets *bool `json:"flowLogsEnableNetworkSets,omitempty"`
+
+	// FlowLogsFileIncludeLabels controls whether labels are reported in the flow logs. [Default: false]
+	FlowLogsFileIncludeLabels *bool `json:"flowLogsFileIncludeLabels,omitempty"`
 }
 
 type RouteTableRange struct {

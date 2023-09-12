@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 )
 
 func NewReconcilerWithShims(
@@ -63,7 +62,7 @@ func NewReconcilerWithShims(
 	return r, nil
 }
 
-var _ = Describe("LogStorageManagedCluster controller", func() {
+var _ = Describe("LogStorageManagedCluster controller (Calico Enterprise)", func() {
 	var (
 		cli     client.Client
 		scheme  *runtime.Scheme
@@ -114,7 +113,7 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					svc := &corev1.Service{}
 					Expect(
-						cli.Get(ctx, client.ObjectKey{Name: esgateway.ServiceName, Namespace: render.ElasticsearchNamespace}, svc),
+						cli.Get(ctx, client.ObjectKey{Name: render.LinseedServiceName, Namespace: render.ElasticsearchNamespace}, svc),
 					).ShouldNot(HaveOccurred())
 
 					Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
@@ -142,5 +141,64 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 				})
 			})
 		})
+	})
+
+})
+
+var _ = Describe("LogStorageManagedCluster controller (Calico)", func() {
+	var (
+		cli     client.Client
+		scheme  *runtime.Scheme
+		ctx     context.Context
+		install *operatorv1.Installation
+	)
+
+	BeforeEach(func() {
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+		ctx = context.Background()
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		var replicas int32 = 2
+		install = &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+			},
+			Status: operatorv1.InstallationStatus{
+				Variant:  operatorv1.Calico,
+				Computed: &operatorv1.InstallationSpec{},
+			},
+			Spec: operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.Calico,
+			},
+		}
+		Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
+		Expect(cli.Create(ctx, &operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}})).NotTo(HaveOccurred())
+	})
+
+	Context("ExternalService is correctly setup", func() {
+		DescribeTable("tests that the ExternalService is setup with the default service name", func(clusterDomain, expectedSvcName string) {
+			r, err := NewReconcilerWithShims(cli, scheme, operatorv1.ProviderNone, clusterDomain)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			svc := &corev1.Service{}
+			Expect(
+				cli.Get(ctx, client.ObjectKey{Name: render.LinseedServiceName, Namespace: render.ElasticsearchNamespace}, svc),
+			).ShouldNot(HaveOccurred())
+
+			Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
+			Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
+		},
+			Entry("default cluster domain", dns.DefaultClusterDomain, "tigera-guardian.tigera-guardian.svc.cluster.local"),
+			Entry("custom cluster domain", "custom-domain.internal", "tigera-guardian.tigera-guardian.svc.custom-domain.internal"),
+		)
 	})
 })

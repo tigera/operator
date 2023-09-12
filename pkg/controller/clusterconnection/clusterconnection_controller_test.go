@@ -48,7 +48,7 @@ import (
 	"github.com/tigera/operator/test"
 )
 
-var _ = Describe("ManagementClusterConnection controller tests", func() {
+var _ = Describe("ManagementClusterConnection controller tests(Calico Enterprise)", func() {
 	var c client.Client
 	var ctx context.Context
 	var cfg *operatorv1.ManagementClusterConnection
@@ -509,6 +509,141 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 			Expect(c.Delete(ctx, ts)).NotTo(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("ManagementClusterConnection controller tests(Calico)", func() {
+	var c client.Client
+	var ctx context.Context
+	var cfg *operatorv1.ManagementClusterConnection
+	var r reconcile.Reconciler
+	var scheme *runtime.Scheme
+	var dpl *appsv1.Deployment
+	var mockStatus *status.MockStatus
+	ready := &utils.ReadyFlag{}
+	ready.MarkAsReady()
+
+	BeforeEach(func() {
+		// Create a Kubernetes client.
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		err := operatorv1.SchemeBuilder.AddToScheme(scheme)
+		Expect(err).NotTo(HaveOccurred())
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		ctx = context.Background()
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("Run").Return()
+
+		mockStatus.On("AddDaemonsets", mock.Anything)
+		mockStatus.On("AddDeployments", mock.Anything)
+		mockStatus.On("AddStatefulSets", mock.Anything)
+		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("ClearDegraded", mock.Anything)
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("SetMetaData", mock.Anything).Return()
+
+		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
+		dpl = &appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.GuardianDeploymentName,
+				Namespace: render.GuardianNamespace,
+			},
+		}
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+		secret, err := certificateManager.GetOrCreateKeyPair(c, render.GuardianSecretName, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		queryServerSecret, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = c.Create(ctx, secret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, pcSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, promSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, queryServerSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+
+		By("applying the required prerequisites")
+		// Create a ManagementClusterConnection in the k8s client.
+		cfg = &operatorv1.ManagementClusterConnection{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Generation: 3},
+			Spec: operatorv1.ManagementClusterConnectionSpec{
+				ManagementClusterAddr: "127.0.0.1:12345",
+			},
+		}
+		err = c.Create(ctx, cfg)
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(
+			ctx,
+			&operatorv1.Installation{
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.Calico,
+					Computed: &operatorv1.InstallationSpec{
+						Registry:           "my-reg",
+						KubernetesProvider: operatorv1.ProviderNone,
+					},
+				},
+			})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Context("default config", func() {
+		It("should create a default ManagementClusterConnection", func() {
+			By("reconciling with the required prerequisites")
+			err := c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
+			Expect(err).To(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ToNot(HaveOccurred())
+			err = c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
+			// Verifying that there is a deployment is enough for the purpose of this test. More detailed testing will be done
+			// in the render package.
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dpl.Labels["k8s-app"]).To(Equal(render.GuardianName))
+		})
+	})
+
+	Context("image reconciliation", func() {
+		It("should use builtin images", func() {
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.GuardianDeploymentName,
+					Namespace: render.GuardianNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
+			Expect(dexC).ToNot(BeNil())
+			Expect(dexC.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCalicoGuardian.Image,
+					components.ComponentCalicoGuardian.Version)))
 		})
 	})
 })

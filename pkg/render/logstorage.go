@@ -2062,10 +2062,10 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	role, binding := m.linseedExternalRoleAndBinding()
 	toCreate = append(toCreate,
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged),
-		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
 		role, binding,
 	)
+
 	return toCreate, nil
 }
 
@@ -2082,20 +2082,6 @@ func (m *managedClusterLogStorage) linseedExternalService() *corev1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      LinseedServiceName,
-			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, m.cfg.ClusterDomain),
-		},
-	}
-}
-
-func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ESGatewayServiceName,
 			Namespace: ElasticsearchNamespace,
 		},
 		Spec: corev1.ServiceSpec{

@@ -55,8 +55,6 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 			fallthrough
 		case "ApplicationLayer":
 			fallthrough
-		case "Monitor":
-			fallthrough
 		case "ManagementCluster":
 			fallthrough
 		case "EgressGateway":
@@ -81,6 +79,27 @@ func RequiresAmazonController(cfg *rest.Config) (bool, error) {
 	}
 	for _, r := range resources.APIResources {
 		if r.Kind == "AmazonCloudIntegration" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// RequiresMonitorController determines if the configures requires we start the
+// monitor controller which will manage Prometheus.
+func RequiresMonitorController(cfg *rest.Config) (bool, error) {
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return false, err
+	}
+
+	// Use the discovery client to determine if the amazoncloudintegration APIs exist.
+	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
+	if err != nil {
+		return false, err
+	}
+	for _, r := range resources.APIResources {
+		if r.Kind == "Monitor" {
 			return true, nil
 		}
 	}

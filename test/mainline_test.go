@@ -63,7 +63,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var cancel context.CancelFunc
 	var operatorDone chan struct{}
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
 		cleanupResources(c)
 		verifyCRDsExist(c)
 		ns := &corev1.Namespace{
@@ -187,7 +187,7 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
 		verifyCRDsExist(c)
 	})
 	AfterEach(func() {
@@ -226,6 +226,13 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 	})
 })
 
+var _ = Describe("Mainline component function tests - multi-tenant", func() {
+	It("should set up all controllers correctly in multi-tenant mode", func() {
+		_, _, cancel, _ := setupManager(ManageCRDsDisable, true)
+		cancel()
+	})
+})
+
 func getTigeraStatus(client client.Client, name string) (*operator.TigeraStatus, error) {
 	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	err := client.Get(context.TODO(), types.NamespacedName{Name: name}, ts)
@@ -258,7 +265,7 @@ func newNonCachingClient(cache cache.Cache, config *rest.Config, options client.
 	return client.New(config, options)
 }
 
-func setupManager(manageCRDs bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -302,6 +309,7 @@ func setupManager(manageCRDs bool) (client.Client, context.Context, context.Canc
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		UsePSP:              usePSP,
+		MultiTenant:         multiTenant,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), ctx, cancel, mgr

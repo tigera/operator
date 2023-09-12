@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 
 const (
 	defaultCalicoRegistry     = "docker.io"
-	defaultEnterpriseRegistry = "gcr.io/unique-caldron-775/cnx"
+	defaultEnterpriseRegistry = "quay.io"
 
 	eeVersionsTpl     = "enterprise.go.tpl"
 	osVersionsTpl     = "calico.go.tpl"

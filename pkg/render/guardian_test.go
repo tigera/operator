@@ -84,7 +84,7 @@ var _ = Describe("Guardian Rendering tests", func() {
 		}
 	}
 
-	Context("Guardian component OSS", func() {
+	Context("Guardian component (Calico)", func() {
 		renderGuardian := func(i operatorv1.InstallationSpec) {
 			cfg = createGuardianConfig(i, "127.0.0.1:1234", false)
 			g = render.Guardian(cfg)
@@ -96,7 +96,7 @@ var _ = Describe("Guardian Rendering tests", func() {
 			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/", Variant: operatorv1.Calico})
 		})
 
-		It("should render all resources for a managed OSS cluster", func() {
+		It("should render all resources for a managed Calico cluster", func() {
 			expectedResources := []struct {
 				name    string
 				ns      string
@@ -168,7 +168,8 @@ var _ = Describe("Guardian Rendering tests", func() {
 			Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
 		})
 	})
-	Context("Guardian component", func() {
+
+	Context("Guardian component (Calico Enterprise)", func() {
 		renderGuardian := func(i operatorv1.InstallationSpec) {
 			cfg = createGuardianConfig(i, "127.0.0.1:1234", false)
 			g = render.Guardian(cfg)

@@ -964,7 +964,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 	})
 
-	Context("Managed cluster OSS", func() {
+	Context("Managed cluster (Calico)", func() {
 		var cfg *render.ManagedClusterLogStorageConfiguration
 
 		BeforeEach(func() {
@@ -1001,7 +1001,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 	})
 
-	Context("Managed cluster", func() {
+	Context("Managed cluster (Calico Enterprise)", func() {
 		var cfg *render.ManagedClusterLogStorageConfiguration
 		var managementClusterConnection *operatorv1.ManagementClusterConnection
 
@@ -1031,11 +1031,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}},
 					{"tigera-linseed", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-linseed", "tigera-fluentd", &rbacv1.RoleBinding{}, nil},
-					{render.ESGatewayServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
-						svc := resource.(*corev1.Service)
-						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
-					}},
 				}
 				component := render.NewManagedClusterLogStorage(cfg)
 				createResources, deleteResources := component.Objects()

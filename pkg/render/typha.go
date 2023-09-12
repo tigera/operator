@@ -326,24 +326,12 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"licensekeys",
 					"remoteclusterconfigurations",
-					"stagedglobalnetworkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"stagednetworkpolicies",
-					"tiers",
 					"packetcaptures",
 					"deeppacketinspections",
 					"externalnetworks",
 					"egressgatewaypolicies",
 				},
 				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// Tigera Secure creates some tiers on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"tiers",
-				},
-				Verbs: []string{"create"},
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)

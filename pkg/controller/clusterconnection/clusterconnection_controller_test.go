@@ -48,7 +48,7 @@ import (
 	"github.com/tigera/operator/test"
 )
 
-var _ = Describe("ManagementClusterConnection controller tests", func() {
+var _ = Describe("ManagementClusterConnection controller tests(Calico Enterprise)", func() {
 	var c client.Client
 	var ctx context.Context
 	var cfg *operatorv1.ManagementClusterConnection
@@ -513,7 +513,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	})
 })
 
-var _ = Describe("ManagementClusterConnection controller tests(OSS)", func() {
+var _ = Describe("ManagementClusterConnection controller tests(Calico)", func() {
 	var c client.Client
 	var ctx context.Context
 	var cfg *operatorv1.ManagementClusterConnection

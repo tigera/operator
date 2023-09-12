@@ -128,12 +128,11 @@ type SplunkCredential struct {
 }
 
 func Fluentd(cfg *FluentdConfiguration) Component {
-	fluentd := &fluentdComponent{
+	return &fluentdComponent{
 		cfg:          cfg,
 		probeTimeout: 10,
 		probePeriod:  60,
 	}
-	return fluentd
 }
 
 type EksCloudwatchLogConfig struct {
@@ -183,7 +182,10 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	if c.cfg.OSType == rmeta.OSTypeWindows && c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		if c.cfg.Installation.Variant == operatorv1.Calico {
+			return fmt.Errorf("Calico does not support windows fluentd")
+		}
 		var err error
 		c.image, err = components.GetReference(components.ComponentTigeraFluentdWindows, reg, path, prefix, is)
 		return err
@@ -261,7 +263,10 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs, c.allowTigeraPolicy())
+	} else {
+		toDelete = append(toDelete, c.allowTigeraPolicy())
 	}
+
 	objs = append(objs, c.metricsService())
 
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
@@ -280,7 +285,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Filters != nil {
 		objs = append(objs, c.filtersConfigMap())
 	}
-	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux && c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
 		if c.cfg.UsePSP {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
@@ -626,9 +631,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, linseedNS)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
-		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},
+		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},

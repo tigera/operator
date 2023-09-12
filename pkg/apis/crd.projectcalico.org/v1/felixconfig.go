@@ -402,6 +402,9 @@ type FelixConfigurationSpec struct {
 
 	// FlowLogsEnableNetworkSets enables flow logs reporting for global network sets. [Default: false]
 	FlowLogsEnableNetworkSets *bool `json:"flowLogsEnableNetworkSets,omitempty"`
+
+	// FlowLogsFileIncludeLabels controls whether labels are reported in the flow logs. [Default: false]
+	FlowLogsFileIncludeLabels *bool `json:"flowLogsFileIncludeLabels,omitempty"`
 }
 
 type RouteTableRange struct {

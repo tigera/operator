@@ -128,6 +128,11 @@ func add(mgr manager.Manager, c controller.Controller, enterpriseCRDExists bool)
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
+	// Watch for changes to the secrets associated with Prometheus.
+	if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusTLSSecretName, err)
+	}
+
 	if enterpriseCRDExists {
 		// Watch for changes to primary resource ManagementCluster
 		err := c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
@@ -137,10 +142,6 @@ func add(mgr manager.Manager, c controller.Controller, enterpriseCRDExists bool)
 		// Watch for changes to the secrets associated with the PacketCapture APIs.
 		if err = utils.AddSecretsWatch(c, render.PacketCaptureServerCert, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert, err)
-		}
-		// Watch for changes to the secrets associated with Prometheus.
-		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusTLSSecretName, err)
 		}
 	}
 

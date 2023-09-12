@@ -49,7 +49,7 @@ import (
 	"github.com/tigera/operator/test"
 )
 
-var _ = Describe("LogCollector controller tests", func() {
+var _ = Describe("LogCollector controller tests(Calico Enterprise)", func() {
 	var c client.Client
 	var ctx context.Context
 	var r ReconcileLogCollector
@@ -764,7 +764,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			logCollector := operatorv1.LogCollector{Spec: operatorv1.LogCollectorSpec{AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
 				Syslog: &operatorv1.SyslogStoreSpec{},
 			}}}
-			modifiedFields := fillDefaults(&logCollector)
+			modifiedFields := fillDefaults(&logCollector, operatorv1.TigeraSecureEnterprise)
 			expectedFields := []string{"CollectProcessPath", "AdditionalStores.Syslog.LogTypes", "AdditionalStores.Syslog.Encryption"}
 			expectedLogTypes := []operatorv1.SyslogLogType{
 				operatorv1.SyslogLogAudit,
@@ -786,7 +786,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			logCollector.Spec.CollectProcessPath = &processPath
 			logCollector.Spec.AdditionalStores.Syslog.LogTypes = []operatorv1.SyslogLogType{operatorv1.SyslogLogAudit}
 			logCollector.Spec.AdditionalStores.Syslog.Encryption = operatorv1.EncryptionNone
-			modifiedFields := fillDefaults(&logCollector)
+			modifiedFields := fillDefaults(&logCollector, operatorv1.TigeraSecureEnterprise)
 			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathDisable))
 			expectedLogTypes := []operatorv1.SyslogLogType{
 				operatorv1.SyslogLogAudit,
@@ -797,7 +797,7 @@ var _ = Describe("LogCollector controller tests", func() {
 	})
 })
 
-var _ = Describe("LogCollector controller tests (OSS)", func() {
+var _ = Describe("LogCollector controller tests (Calico)", func() {
 	var c client.Client
 	var ctx context.Context
 	var r ReconcileLogCollector
@@ -925,7 +925,14 @@ var _ = Describe("LogCollector controller tests (OSS)", func() {
 		})
 	})
 
-	Context("should enabled flow logs felix configs", func() {
+	Context("should test fillDefaults", func() {
+		It("should not modify any fields", func() {
+			modifiedFields := fillDefaults(&operatorv1.LogCollector{}, operatorv1.Calico)
+			Expect(len(modifiedFields)).To(Equal(0))
+		})
+	})
+
+	Context("should enable flow logs felix configs", func() {
 		It("should set the proper flow logs felix configs", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -936,6 +943,7 @@ var _ = Describe("LogCollector controller tests (OSS)", func() {
 			Expect(*fc.Spec.FlowLogsFileIncludeService).Should(BeTrue())
 			Expect(*fc.Spec.FlowLogsEnableHostEndpoint).Should(BeTrue())
 			Expect(*fc.Spec.FlowLogsEnableNetworkSets).Should(BeTrue())
+			Expect(*fc.Spec.FlowLogsFileIncludeLabels).Should(BeTrue())
 		})
 	})
 

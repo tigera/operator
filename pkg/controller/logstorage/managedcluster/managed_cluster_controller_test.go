@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 )
 
 func NewReconcilerWithShims(
@@ -63,7 +62,7 @@ func NewReconcilerWithShims(
 	return r, nil
 }
 
-var _ = Describe("LogStorageManagedCluster controller", func() {
+var _ = Describe("LogStorageManagedCluster controller (Calico Enterprise)", func() {
 	var (
 		cli     client.Client
 		scheme  *runtime.Scheme
@@ -114,7 +113,7 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					svc := &corev1.Service{}
 					Expect(
-						cli.Get(ctx, client.ObjectKey{Name: esgateway.ServiceName, Namespace: render.ElasticsearchNamespace}, svc),
+						cli.Get(ctx, client.ObjectKey{Name: render.LinseedServiceName, Namespace: render.ElasticsearchNamespace}, svc),
 					).ShouldNot(HaveOccurred())
 
 					Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
@@ -146,7 +145,7 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 
 })
 
-var _ = Describe("LogStorageManagedCluster controller OSS", func() {
+var _ = Describe("LogStorageManagedCluster controller (Calico)", func() {
 	var (
 		cli     client.Client
 		scheme  *runtime.Scheme
@@ -172,7 +171,7 @@ var _ = Describe("LogStorageManagedCluster controller OSS", func() {
 				Name: "default",
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.Calico,
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{

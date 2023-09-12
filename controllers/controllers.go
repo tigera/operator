@@ -141,7 +141,7 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 		Log:    ctrl.Log.WithName("controllers").WithName("Windows"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr, options); err != nil {
-		return fmt.Errorf("failed to create controller %s: %v", "Windows", err)
+		return fmt.Errorf("failed to create controller Windows: %v", err)
 	}
 	// +kubebuilder:scaffold:builder
 	return nil

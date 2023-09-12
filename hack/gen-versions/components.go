@@ -41,6 +41,8 @@ var defaultImages = map[string]string{
 	"coreos-prometheus":          "unused/image",
 	"coreos-alertmanager":        "unused/image",
 	"guardian":                   "tigera/guardian",
+	"cnx-node":                   "tigera/cnx-node",
+	"cnx-node-windows":           "tigera/cnx-node-windows",
 	"tigera-cni":                 "tigera/cni",
 	"tigera-cni-windows":         "tigera/cni-windows",
 	"key-cert-provisioner":       "tigera/key-cert-provisioner",

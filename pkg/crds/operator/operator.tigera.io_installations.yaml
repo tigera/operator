@@ -1461,12 +1461,12 @@ spec:
                     description: 'WindowsDataplane is used to select the dataplane
                       used for Windows nodes. In particular, it causes the operator
                       to add required mounts and environment variables for the particular
-                      dataplane. If not specified, HNS mode is used. If disabled,
-                      the operator will not render the Calico Windows nodes daemonset.
-                      Default: HNS'
+                      dataplane. If not specified, it is disabled and the operator
+                      will not render the Calico Windows nodes daemonset. Default:
+                      Disabled'
                     enum:
                     - HNS
-                    - disabled
+                    - Disabled
                     type: string
                 type: object
               calicoNodeDaemonSet:
@@ -4073,8 +4073,9 @@ spec:
                     type: object
                 type: object
               calicoWindowsUpgradeDaemonSet:
-                description: CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
-                  DaemonSet.
+                description: Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated
+                  and will be removed from the API in the future. CalicoWindowsUpgradeDaemonSet
+                  configures the calico-windows-upgrade DaemonSet.
                 properties:
                   metadata:
                     description: Metadata is a subset of a Kubernetes object's metadata
@@ -8740,13 +8741,15 @@ spec:
                 properties:
                   cniBinDir:
                     description: CNIBinDir is the path to the CNI binaries directory
-                      on Windows, it must match what is on ContainerD on the Windows
-                      nodes.
+                      on Windows, it must match what is used as 'bin_dir' under [plugins]
+                      [plugins."io.containerd.grpc.v1.cri"] [plugins."io.containerd.grpc.v1.cri".cni]
+                      on the containerd 'config.toml' file on the Windows nodes.
                     type: string
-                  cniConfDir:
-                    description: CNIConfDir is the path to the CNI configuration directory
-                      on Windows, it must match what is on ContainerD on the Windows
-                      nodes.
+                  cniConfigDir:
+                    description: CNIConfigDir is the path to the CNI configuration
+                      directory on Windows, it must match what is used as 'conf_dir'
+                      under [plugins] [plugins."io.containerd.grpc.v1.cri"] [plugins."io.containerd.grpc.v1.cri".cni]
+                      on the containerd 'config.toml' file on the Windows nodes.
                     type: string
                   cniLogDir:
                     description: CNILogDir is the path to the Calico CNI logs directory
@@ -8759,6 +8762,7 @@ spec:
                   vxlanMACPrefix:
                     description: VXLANMACPrefix is the prefix used when generating
                       MAC addresses for virtual NICs
+                    pattern: ^[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}$
                     type: string
                 type: object
             type: object
@@ -10303,12 +10307,12 @@ spec:
                         description: 'WindowsDataplane is used to select the dataplane
                           used for Windows nodes. In particular, it causes the operator
                           to add required mounts and environment variables for the
-                          particular dataplane. If not specified, HNS mode is used.
-                          If disabled, the operator will not render the Calico Windows
-                          nodes daemonset. Default: HNS'
+                          particular dataplane. If not specified, it is disabled and
+                          the operator will not render the Calico Windows nodes daemonset.
+                          Default: Disabled'
                         enum:
                         - HNS
-                        - disabled
+                        - Disabled
                         type: string
                     type: object
                   calicoNodeDaemonSet:
@@ -13117,8 +13121,9 @@ spec:
                         type: object
                     type: object
                   calicoWindowsUpgradeDaemonSet:
-                    description: CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
-                      DaemonSet.
+                    description: Deprecated. The CalicoWindowsUpgradeDaemonSet is
+                      deprecated and will be removed from the API in the future. CalicoWindowsUpgradeDaemonSet
+                      configures the calico-windows-upgrade DaemonSet.
                     properties:
                       metadata:
                         description: Metadata is a subset of a Kubernetes object's
@@ -18124,13 +18129,15 @@ spec:
                     properties:
                       cniBinDir:
                         description: CNIBinDir is the path to the CNI binaries directory
-                          on Windows, it must match what is on ContainerD on the Windows
-                          nodes.
+                          on Windows, it must match what is used as 'bin_dir' under
+                          [plugins] [plugins."io.containerd.grpc.v1.cri"] [plugins."io.containerd.grpc.v1.cri".cni]
+                          on the containerd 'config.toml' file on the Windows nodes.
                         type: string
-                      cniConfDir:
-                        description: CNIConfDir is the path to the CNI configuration
-                          directory on Windows, it must match what is on ContainerD
-                          on the Windows nodes.
+                      cniConfigDir:
+                        description: CNIConfigDir is the path to the CNI configuration
+                          directory on Windows, it must match what is used as 'conf_dir'
+                          under [plugins] [plugins."io.containerd.grpc.v1.cri"] [plugins."io.containerd.grpc.v1.cri".cni]
+                          on the containerd 'config.toml' file on the Windows nodes.
                         type: string
                       cniLogDir:
                         description: CNILogDir is the path to the Calico CNI logs
@@ -18143,6 +18150,7 @@ spec:
                       vxlanMACPrefix:
                         description: VXLANMACPrefix is the prefix used when generating
                           MAC addresses for virtual NICs
+                        pattern: ^[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}$
                         type: string
                     type: object
                 type: object

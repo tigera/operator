@@ -176,6 +176,11 @@ var _ = Describe("Defaulting logic tests", func() {
 						LogFileMaxCount:   &logFileMaxCount,
 					},
 				},
+				WindowsNodes: &operator.WindowsNodeSpec{
+					CNIBinDir:    "/opt/cni/bin",
+					CNIConfigDir: "/etc/cni/net.d",
+					CNILogDir:    "/var/log/calico/cni",
+				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -257,6 +262,11 @@ var _ = Describe("Defaulting logic tests", func() {
 						LogFileMaxAgeDays: &logFileMaxAgeDays,
 						LogFileMaxCount:   &logFileMaxCount,
 					},
+				},
+				WindowsNodes: &operator.WindowsNodeSpec{
+					CNIBinDir:    "/opt/cni/bin",
+					CNIConfigDir: "/etc/cni/net.d",
+					CNILogDir:    "/var/log/calico/cni",
 				},
 			},
 		}

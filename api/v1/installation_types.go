@@ -171,6 +171,7 @@ type InstallationSpec struct {
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
+	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
 
@@ -267,6 +268,9 @@ type ComponentName string
 
 const (
 	ComponentNameNode            ComponentName = "Node"
+	ComponentNameNodeWindows     ComponentName = "NodeWindows"
+	ComponentNameFelixWindows    ComponentName = "FelixWindows"
+	ComponentNameConfdWindows    ComponentName = "ConfdWindows"
 	ComponentNameTypha           ComponentName = "Typha"
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
 )
@@ -391,10 +395,11 @@ const (
 	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
 
+// +kubebuilder:validation:Enum=HNS;Disabled
 type WindowsDataplaneOption string
 
 const (
-	WindowsDataplaneDisabled WindowsDataplaneOption = "disabled"
+	WindowsDataplaneDisabled WindowsDataplaneOption = "Disabled"
 	WindowsDataplaneHNS      WindowsDataplaneOption = "HNS"
 )
 
@@ -410,10 +415,9 @@ type CalicoNetworkSpec struct {
 
 	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
 	// causes the operator to add required mounts and environment variables for the particular dataplane.
-	// If not specified, HNS mode is used. If disabled, the operator will not render the Calico Windows nodes daemonset.
-	// Default: HNS
+	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
+	// Default: Disabled
 	// +optional
-	// +kubebuilder:validation:Enum=HNS;disabled
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
@@ -792,13 +796,21 @@ func IsFIPSModeEnabledString(mode *FIPSMode) string {
 }
 
 type WindowsNodeSpec struct {
-	// CNIBinDir is the path to the CNI binaries directory on Windows, it must match what is on ContainerD on the Windows nodes.
+	// CNIBinDir is the path to the CNI binaries directory on Windows, it must match what is used as 'bin_dir' under
+	// [plugins]
+	//   [plugins."io.containerd.grpc.v1.cri"]
+	//     [plugins."io.containerd.grpc.v1.cri".cni]
+	// on the containerd 'config.toml' file on the Windows nodes.
 	// +optional
 	CNIBinDir string `json:"cniBinDir,omitempty"`
 
-	// CNIConfDir is the path to the CNI configuration directory on Windows, it must match what is on ContainerD on the Windows nodes.
+	// CNIConfigDir is the path to the CNI configuration directory on Windows, it must match what is used as 'conf_dir' under
+	// [plugins]
+	//   [plugins."io.containerd.grpc.v1.cri"]
+	//     [plugins."io.containerd.grpc.v1.cri".cni]
+	// on the containerd 'config.toml' file on the Windows nodes.
 	// +optional
-	CNIConfDir string `json:"cniConfDir,omitempty"`
+	CNIConfigDir string `json:"cniConfigDir,omitempty"`
 
 	// CNILogDir is the path to the Calico CNI logs directory on Windows.
 	// +optional
@@ -806,6 +818,7 @@ type WindowsNodeSpec struct {
 
 	// VXLANMACPrefix is the prefix used when generating MAC addresses for virtual NICs
 	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}$`
 	VXLANMACPrefix string `json:"vxlanMACPrefix,omitempty"`
 
 	// VXLANAdapter is the Network Adapter used for VXLAN, leave blank for primary NIC

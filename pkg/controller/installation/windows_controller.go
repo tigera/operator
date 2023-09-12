@@ -270,7 +270,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	// Mark CR found so we can report converter problems via tigerastatus
@@ -547,7 +546,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 				PrometheusServerTLS:     nodePrometheusTLS,
 				NodeReporterMetricsPort: nodeReporterMetricsPort,
 				VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
-				Terminating:             terminating,
 			}
 			components = append(components, render.Windows(&windowsCfg))
 		}
@@ -595,8 +593,5 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	reqLogger.V(1).Info("Finished reconciling windows installation")
-	if terminating {
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-	}
 	return reconcile.Result{}, nil
 }

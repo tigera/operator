@@ -20,7 +20,6 @@ const (
 	NodeDaemonSetName             = "calico-node"
 	KubeControllersDeploymentName = "calico-kube-controllers"
 	WindowsDaemonSetName          = "calico-node-windows"
-	WindowsKubeProxyDaemonSetName = "kube-proxy-windows"
 
 	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"

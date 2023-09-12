@@ -851,9 +851,9 @@ func mergeWindowsNodes(cfg, override *operatorv1.WindowsNodeSpec) *operatorv1.Wi
 		out.CNIBinDir = override.CNIBinDir
 	}
 
-	switch compareFields(out.CNIConfDir, override.CNIConfDir) {
+	switch compareFields(out.CNIConfigDir, override.CNIConfigDir) {
 	case BOnlySet, Different:
-		out.CNIConfDir = override.CNIConfDir
+		out.CNIConfigDir = override.CNIConfigDir
 	}
 
 	switch compareFields(out.CNILogDir, override.CNILogDir) {

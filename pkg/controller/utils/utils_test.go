@@ -224,7 +224,7 @@ var _ = Describe("AddPeriodicReconcile", func() {
 	})
 })
 
-var _ = Describe("GetK8sServiceEndPoint", func() {
+var _ = Describe("GetK8sServiceEndpoint", func() {
 	var (
 		c      client.Client
 		ctx    context.Context

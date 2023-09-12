@@ -371,7 +371,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
-			mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 			// Create the indexer and informer used by the typhaAutoscaler
 			nlw := test.NewNodeListWatch(cs)

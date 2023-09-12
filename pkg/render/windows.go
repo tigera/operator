@@ -60,7 +60,6 @@ type WindowsConfiguration struct {
 	NodeReporterMetricsPort int
 	AmazonCloudIntegration  *operatorv1.AmazonCloudIntegration
 	VXLANVNI                int
-	Terminating             bool
 }
 
 type windowsComponent struct {
@@ -102,19 +101,11 @@ func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		c.windowsServiceAccount(),
-		c.windowsRole(),
-		c.windowsRoleBinding(),
+		c.windowsClusterRole(),
+		c.windowsClusterRoleBinding(),
 		c.cniPluginServiceAccount(),
-		c.cniPluginRole(),
-		c.cniPluginRoleBinding(),
-	}
-
-	// These are objects to keep even when we're terminating
-	objsToKeep := []client.Object{}
-
-	if c.cfg.Terminating {
-		objsToKeep = objs
-		objs = []client.Object{}
+		c.cniPluginClusterRole(),
+		c.cniPluginClusterRoleBinding(),
 	}
 
 	// Clean up old windows upgrader daemonset if present
@@ -151,9 +142,6 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, c.windowsDaemonset(cniConfig))
 
-	if c.cfg.Terminating {
-		return objsToKeep, append(objs, objsToDelete...)
-	}
 	return objs, objsToDelete
 }
 
@@ -172,8 +160,8 @@ func (c *windowsComponent) windowsServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// RoleBinding creates a clusterrolebinding giving the windows node service account the required permissions to operate.
-func (c *windowsComponent) windowsRoleBinding() *rbacv1.ClusterRoleBinding {
+// windowsClusterRoleBinding creates a clusterrolebinding giving the windows node service account the required permissions to operate.
+func (c *windowsComponent) windowsClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -222,8 +210,8 @@ func (c *windowsComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleB
 	return crb
 }
 
-// windowsRole creates the clusterrole containing policy rules that allow the windows node daemonset to operate normally.
-func (c *windowsComponent) windowsRole() *rbacv1.ClusterRole {
+// windowsClusterRole creates the clusterrole containing policy rules that allow the windows node daemonset to operate normally.
+func (c *windowsComponent) windowsClusterRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -430,8 +418,8 @@ func (c *windowsComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// cniPluginRoleBinding creates a rolebinding giving the Windows Calico CNI plugin service account the required permissions to operate.
-func (c *windowsComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
+// cniPluginClusterRoleBinding creates a rolebinding giving the Windows Calico CNI plugin service account the required permissions to operate.
+func (c *windowsComponent) cniPluginClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -453,8 +441,8 @@ func (c *windowsComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 	return crb
 }
 
-// cniPluginRole creates the role containing policy rules that allow the Windows Calico CNI plugin to operate normally.
-func (c *windowsComponent) cniPluginRole() *rbacv1.ClusterRole {
+// cniPluginClusterRole creates the role containing policy rules that allow the Windows Calico CNI plugin to operate normally.
+func (c *windowsComponent) cniPluginClusterRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -576,11 +564,11 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 		return []corev1.EnvVar{}
 	}
 
-	_, cniNetDir, _ := c.cniDirectories()
+	cniNetDir := c.cfg.Installation.WindowsNodes.CNIConfigDir
 
 	// cniNetDir is used in the cni config file, and will have the "c:" prefix added to it.
-	cniNetDir = strings.TrimLeft(cniNetDir, "c:")
-	cniNetDir = strings.TrimLeft(cniNetDir, "C:")
+	cniNetDir = strings.TrimPrefix(cniNetDir, "c:")
+	cniNetDir = strings.TrimPrefix(cniNetDir, "C:")
 
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
@@ -690,10 +678,13 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 		}
 	}
 
-	_, cniNetDir, _ := c.cniDirectories()
+	cniNetDir := c.cfg.Installation.WindowsNodes.CNIConfigDir
+	cniNetDir = strings.TrimPrefix(cniNetDir, "c:")
+	cniNetDir = strings.TrimPrefix(cniNetDir, "C:")
 	kubernetes := map[string]interface{}{
 		"kubeconfig": filepath.ToSlash(filepath.Join("c:", cniNetDir, "calico-kubeconfig")),
 	}
+
 	if apiRoot != "" {
 		kubernetes["k8s_api_root"] = apiRoot
 	}
@@ -731,37 +722,6 @@ func (c *windowsComponent) createCalicoPluginConfig() map[string]interface{} {
 	return calicoPluginConfig
 }
 
-// cniDirectories returns the CNI binary, network config and log directories and the CNI conf filename for the configured platform.
-// FIXME: populate with known default for other providers
-func (c *windowsComponent) cniDirectories() (string, string, string) {
-	var cniBinDir, cniNetDir, cniLogDir string
-	switch c.cfg.Installation.KubernetesProvider {
-	case operatorv1.ProviderAKS:
-		cniBinDir = "/k/azurecni/bin"
-		cniNetDir = "/k/azurecni/netconf "
-		cniLogDir = "/var/log/calico/cni"
-	default:
-		// Default locations to match vanilla Kubernetes.
-		cniBinDir = "/opt/cni/bin"
-		cniNetDir = "/etc/cni/net.d"
-		cniLogDir = "/var/log/calico/cni"
-	}
-
-	// Use configuration values if present
-	if c.cfg.Installation.WindowsNodes != nil {
-		if c.cfg.Installation.WindowsNodes.CNIBinDir != "" {
-			cniBinDir = c.cfg.Installation.WindowsNodes.CNIBinDir
-		}
-		if c.cfg.Installation.WindowsNodes.CNIConfDir != "" {
-			cniNetDir = c.cfg.Installation.WindowsNodes.CNIConfDir
-		}
-		if c.cfg.Installation.WindowsNodes.CNILogDir != "" {
-			cniLogDir = c.cfg.Installation.WindowsNodes.CNILogDir
-		}
-	}
-	return cniBinDir, cniNetDir, cniLogDir
-}
-
 // windowsVolumes creates the node's volumes.
 func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 	fileOrCreate := corev1.HostPathFileOrCreate
@@ -780,10 +740,9 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 	// If needed for this configuration, then include the CNI volumes.
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
-		cniBinDir, cniNetDir, cniLogDir := c.cniDirectories()
-		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir}}})
-		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniNetDir}}})
-		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir, Type: &dirOrCreate}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: c.cfg.Installation.WindowsNodes.CNIBinDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: c.cfg.Installation.WindowsNodes.CNIConfigDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: c.cfg.Installation.WindowsNodes.CNILogDir, Type: &dirOrCreate}}})
 	}
 
 	// Override with Tigera-specific config.
@@ -819,9 +778,12 @@ func (c *windowsComponent) uninstallEnvVars() []corev1.EnvVar {
 func (c *windowsComponent) uninstallContainer() corev1.Container {
 	// Determine environment to pass to the uninstall-calico init container.
 	uninstallEnv := c.uninstallEnvVars()
-	uninstallVolumeMounts := []corev1.VolumeMount{
-		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+	uninstallVolumeMounts := []corev1.VolumeMount{}
+
+	// Only mount CNI volumes if using Calico CNI
+	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+		uninstallVolumeMounts = append(uninstallVolumeMounts, corev1.VolumeMount{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"})
+		uninstallVolumeMounts = append(uninstallVolumeMounts, corev1.VolumeMount{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"})
 	}
 
 	return corev1.Container{
@@ -860,7 +822,7 @@ func (c *windowsComponent) nodeContainer() corev1.Container {
 		Image:           c.nodeImage,
 		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/node-service.ps1"},
 		WorkingDir:      "$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/",
-		Resources:       c.windowsResources(),
+		Resources:       c.nodeWindowsResources(),
 		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
 		Env:             c.windowsEnvVars(),
 		VolumeMounts:    c.windowsVolumeMounts(),
@@ -877,7 +839,7 @@ func (c *windowsComponent) felixContainer() corev1.Container {
 		Image:           c.nodeImage,
 		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/felix-service.ps1"},
 		WorkingDir:      "$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/",
-		Resources:       c.windowsResources(),
+		Resources:       c.felixWindowsResources(),
 		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
 		Env:             c.windowsEnvVars(),
 		VolumeMounts:    c.windowsVolumeMounts(),
@@ -894,7 +856,7 @@ func (c *windowsComponent) confdContainer() corev1.Container {
 		Image:           c.nodeImage,
 		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/confd/confd-service.ps1"},
 		WorkingDir:      "$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/",
-		Resources:       c.windowsResources(),
+		Resources:       c.confdWindowsResources(),
 		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
 		Env:             c.windowsEnvVars(),
 		VolumeMounts:    c.windowsVolumeMounts(),
@@ -922,6 +884,8 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	if bgpEnabled(c.cfg.Installation) {
 		clusterType = clusterType + ",bgp"
 	}
+
+	clusterType = clusterType + ",windows"
 
 	vxlanAdapter := ""
 	if c.cfg.Installation.WindowsNodes != nil && c.cfg.Installation.WindowsNodes.VXLANAdapter != "" {
@@ -1248,9 +1212,19 @@ func (c *windowsComponent) windowsLifecycle() *corev1.Lifecycle {
 	return lc
 }
 
-// windowsResources creates the node's resource requirements.
-func (c *windowsComponent) windowsResources() corev1.ResourceRequirements {
-	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameNode)
+// nodeWindowsResources creates the windows node's resource requirements.
+func (c *windowsComponent) nodeWindowsResources() corev1.ResourceRequirements {
+	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameNodeWindows)
+}
+
+// felixWindowsResources creates the node's resource requirements.
+func (c *windowsComponent) felixWindowsResources() corev1.ResourceRequirements {
+	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameFelixWindows)
+}
+
+// confdWindowsResources creates the node's resource requirements.
+func (c *windowsComponent) confdWindowsResources() corev1.ResourceRequirements {
+	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameConfdWindows)
 }
 
 // windowsDaemonset creates the windows node daemonset.
@@ -1374,4 +1348,27 @@ func getWindowsBackend(installation *operatorv1.InstallationSpec) string {
 		// BGP is enabled.
 		return "windows-bgp"
 	}
+}
+
+// DefaultWindowsCNIDirectories returns the CNI binary, network config and log directories and the CNI conf filename for the configured platform.
+// FIXME: populate with known default for other providers
+func DefaultWindowsCNIDirectories(installation operatorv1.InstallationSpec) (string, string, string) {
+	var cniBinDir, cniNetDir, cniLogDir string
+	switch installation.KubernetesProvider {
+	case operatorv1.ProviderAKS:
+		cniBinDir = "/k/azurecni/bin"
+		cniNetDir = "/k/azurecni/netconf"
+		cniLogDir = "/var/log/calico/cni"
+	case operatorv1.ProviderEKS:
+		cniBinDir = "/Program Files/Amazon/EKS/cni"
+		cniNetDir = "/Program Files/Amazon/EKS/cni/config"
+		cniLogDir = "/var/log/calico/cni"
+	default:
+		// Default locations to match vanilla Kubernetes.
+		cniBinDir = "/opt/cni/bin"
+		cniNetDir = "/etc/cni/net.d"
+		cniLogDir = "/var/log/calico/cni"
+	}
+
+	return cniBinDir, cniNetDir, cniLogDir
 }

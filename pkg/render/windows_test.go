@@ -82,6 +82,11 @@ var _ = Describe("Windows rendering tests", func() {
 					LogFileMaxCount:   &logFileMaxCount,
 				},
 			},
+			WindowsNodes: &operatorv1.WindowsNodeSpec{
+				CNIBinDir:    "/opt/cni/bin",
+				CNIConfigDir: "/etc/cni/net.d",
+				CNILogDir:    "/var/log/calico/cni",
+			},
 		}
 		defaultInstance.CalicoNetwork.IPPools = append(defaultInstance.CalicoNetwork.IPPools, operatorv1.IPPool{CIDR: "192.168.1.0/16", Encapsulation: operatorv1.EncapsulationVXLAN})
 		defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: &ff}
@@ -434,9 +439,9 @@ var _ = Describe("Windows rendering tests", func() {
 
 				// Set CLUSTER_TYPE
 				if enableBGP {
-					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"})
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp,windows"})
 				} else {
-					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator"})
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,windows"})
 				}
 
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
@@ -920,9 +925,9 @@ var _ = Describe("Windows rendering tests", func() {
 
 				// Set CLUSTER_TYPE
 				if enableBGP {
-					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"})
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp,windows"})
 				} else {
-					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator"})
+					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,windows"})
 				}
 
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
@@ -1194,7 +1199,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs,windows"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{
@@ -1347,6 +1352,11 @@ var _ = Describe("Windows rendering tests", func() {
 			KubernetesProvider: operatorv1.ProviderEKS,
 			CNI:                &operatorv1.CNISpec{Type: operatorv1.PluginAmazonVPC},
 			ServiceCIDRs:       []string{"10.96.0.0/12"},
+			WindowsNodes: &operatorv1.WindowsNodeSpec{
+				CNIBinDir:    "/opt/cni/bin",
+				CNIConfigDir: "/etc/cni/net.d",
+				CNILogDir:    "/var/log/calico/cni",
+			},
 		}
 		cfg.Installation = amazonVPCInstalllation
 
@@ -1387,7 +1397,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs,windows"},
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
 			{Name: "NO_DEFAULT_POOLS", Value: "true"},
@@ -1488,6 +1498,11 @@ var _ = Describe("Windows rendering tests", func() {
 				CNI: &operatorv1.CNISpec{
 					Type: cni,
 					IPAM: &operatorv1.IPAMSpec{Type: ipam},
+				},
+				WindowsNodes: &operatorv1.WindowsNodeSpec{
+					CNIBinDir:    "/opt/cni/bin",
+					CNIConfigDir: "/etc/cni/net.d",
+					CNILogDir:    "/var/log/calico/cni",
 				},
 			}
 			cfg.Installation = installlation
@@ -1638,7 +1653,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp,windows"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1791,7 +1806,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp,windows"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1948,7 +1963,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "windows-bgp"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp,windows"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -2492,7 +2507,15 @@ var _ = Describe("Windows rendering tests", func() {
 
 		defaultInstance.ComponentResources = []operatorv1.ComponentResource{
 			{
-				ComponentName:        operatorv1.ComponentNameNode,
+				ComponentName:        operatorv1.ComponentNameNodeWindows,
+				ResourceRequirements: rr,
+			},
+			{
+				ComponentName:        operatorv1.ComponentNameFelixWindows,
+				ResourceRequirements: rr,
+			},
+			{
+				ComponentName:        operatorv1.ComponentNameConfdWindows,
 				ResourceRequirements: rr,
 			},
 		}
@@ -2509,6 +2532,8 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(felixContainer.Resources).To(Equal(*rr))
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
 		Expect(nodeContainer.Resources).To(Equal(*rr))
+		confdContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd")
+		Expect(confdContainer.Resources).To(Equal(*rr))
 	})
 
 	It("should render when configured to use cloud routes with host-local", func() {
@@ -2653,7 +2678,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
 			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,operator"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,windows"},
 			{Name: "USE_POD_CIDR", Value: "true"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},

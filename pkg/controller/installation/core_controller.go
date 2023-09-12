@@ -198,7 +198,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		usePSP:               opts.UsePSP,
 		tierWatchReady:       &utils.ReadyFlag{},
-		clientset:            cs,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -384,7 +383,6 @@ type ReconcileInstallation struct {
 	manageCRDs           bool
 	usePSP               bool
 	tierWatchReady       *utils.ReadyFlag
-	clientset            kubernetes.Interface
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -562,6 +560,24 @@ func fillDefaults(instance *operator.Installation) error {
 			winDataplane = operator.WindowsDataplaneHNS
 		}
 		instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplane
+	}
+
+	// Populate CNI bin, config and log dirs with defaults per provider
+	// if not explicitly configured
+	if instance.Spec.WindowsNodes == nil {
+		instance.Spec.WindowsNodes = &operator.WindowsNodeSpec{}
+	}
+
+	defaultCNIBinDir, defaultCNIConfigDir, defaultCNILogDir := render.DefaultWindowsCNIDirectories(instance.Spec)
+
+	if instance.Spec.WindowsNodes.CNIBinDir == "" {
+		instance.Spec.WindowsNodes.CNIBinDir = defaultCNIBinDir
+	}
+	if instance.Spec.WindowsNodes.CNIConfigDir == "" {
+		instance.Spec.WindowsNodes.CNIConfigDir = defaultCNIConfigDir
+	}
+	if instance.Spec.WindowsNodes.CNILogDir == "" {
+		instance.Spec.WindowsNodes.CNILogDir = defaultCNILogDir
 	}
 
 	// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".
@@ -1407,7 +1423,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-
 	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)
 

@@ -181,6 +181,11 @@ var _ = Describe("Rendering tests", func() {
 					LogFileMaxCount:   &logFileMaxCount,
 				},
 			},
+			WindowsNodes: &operatorv1.WindowsNodeSpec{
+				CNIBinDir:    "/opt/cni/bin",
+				CNIConfigDir: "/etc/cni/net.d",
+				CNILogDir:    "/var/log/calico/cni",
+			},
 		}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())

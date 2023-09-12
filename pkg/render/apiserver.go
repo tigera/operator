@@ -196,12 +196,18 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
-	if c.cfg.ManagementCluster != nil && c.cfg.MultiTenant {
-		// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
-		// per-tenant guardian certificates when creating ManagedClusters.
-		globalObjects = append(globalObjects, c.secretsClusterRole()...)
+	if c.cfg.ManagementCluster != nil {
+		if c.cfg.MultiTenant {
+			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
+			// per-tenant guardian certificates when creating ManagedClusters.
+			globalObjects = append(globalObjects, c.secretsClusterRole()...)
+		} else {
+			globalObjects = append(globalObjects, c.secretsRole()...)
+		}
 	} else {
-		objsToDelete = append(objsToDelete, c.secretsClusterRole()...)
+		if c.cfg.MultiTenant {
+			objsToDelete = append(objsToDelete, c.secretsClusterRole()...)
+		}
 	}
 
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
@@ -687,6 +693,52 @@ func (c *apiServerComponent) secretsClusterRole() []client.Object {
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
+				Name:     name,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				},
+			},
+		},
+	}
+}
+
+// secretsRole provides the tigera API server with the ability to read secrets for tigera-system.
+func (c *apiServerComponent) secretsRole() []client.Object {
+	name := "tigera-extension-apiserver-secrets-access"
+
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	return []client.Object{
+		// Return the cluster role itself.
+		&rbacv1.Role{
+			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			},
+			Rules: rules,
+		},
+
+		// And a binding to attach it to the API server.
+		&rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "Role",
 				Name:     name,
 				APIGroup: "rbac.authorization.k8s.io",
 			},

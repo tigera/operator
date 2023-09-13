@@ -39,14 +39,12 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -594,41 +592,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					}
 				}
 			}
-		}
-	} else {
-		// patch and get the felix configuration
-		_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-			patchRequired := false
-			if fc.Spec.FlowLogsFileEnabled == nil || !(*fc.Spec.FlowLogsFileEnabled) {
-				fc.Spec.FlowLogsFileEnabled = ptr.BoolToPtr(true)
-				patchRequired = true
-			}
-
-			if fc.Spec.FlowLogsFileIncludeService == nil || !(*fc.Spec.FlowLogsFileIncludeService) {
-				fc.Spec.FlowLogsFileIncludeService = ptr.BoolToPtr(true)
-				patchRequired = true
-			}
-
-			if fc.Spec.FlowLogsFileIncludePolicies == nil || !(*fc.Spec.FlowLogsFileIncludePolicies) {
-				fc.Spec.FlowLogsFileIncludePolicies = ptr.BoolToPtr(true)
-				patchRequired = true
-			}
-
-			if fc.Spec.FlowLogsEnableHostEndpoint == nil || !(*fc.Spec.FlowLogsEnableHostEndpoint) {
-				fc.Spec.FlowLogsEnableHostEndpoint = ptr.BoolToPtr(true)
-				patchRequired = true
-			}
-
-			if fc.Spec.FlowLogsEnableNetworkSets == nil || !(*fc.Spec.FlowLogsEnableNetworkSets) {
-				fc.Spec.FlowLogsEnableNetworkSets = ptr.BoolToPtr(true)
-				patchRequired = true
-			}
-			return patchRequired // proceed with this patch
-		})
-		if err != nil {
-			reqLogger.Error(err, "Error patching felix configuration")
-			r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
-			return reconcile.Result{}, err
 		}
 	}
 

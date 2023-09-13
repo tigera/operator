@@ -19,10 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/common"
-
-	"k8s.io/apiserver/pkg/authentication/serviceaccount"
-
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -33,10 +29,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -312,13 +310,20 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	if l.cfg.KeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
 	}
-	if l.cfg.TokenKeyPair != nil && l.cfg.TokenKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
-	}
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+
 	if l.cfg.TokenKeyPair != nil {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+		)
+		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
+		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+		if l.cfg.TokenKeyPair.UseCertificateManagement() {
+			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
+		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
 	podTemplate := &corev1.PodTemplateSpec{

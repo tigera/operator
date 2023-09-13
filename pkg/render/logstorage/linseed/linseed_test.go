@@ -468,22 +468,41 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 func expectedVolumes(useCSR bool) []corev1.Volume {
 	var volumes []corev1.Volume
 	if useCSR {
-		volumes = append(volumes, corev1.Volume{
-			Name: render.TigeraLinseedSecret,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		})
-	} else {
-		volumes = append(volumes, corev1.Volume{
-			Name: render.TigeraLinseedSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  render.TigeraLinseedSecret,
-					DefaultMode: ptr.Int32ToPtr(420),
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: render.TigeraLinseedSecret,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
-		})
+			corev1.Volume{
+				Name: "tigera-secure-linseed-token-tls",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
+	} else {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: render.TigeraLinseedSecret,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  render.TigeraLinseedSecret,
+						DefaultMode: ptr.Int32ToPtr(420),
+					},
+				},
+			},
+			corev1.Volume{
+				Name: "tigera-secure-linseed-token-tls",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  "tigera-secure-linseed-token-tls",
+						DefaultMode: ptr.Int32ToPtr(420),
+					},
+				},
+			},
+		)
 	}
 
 	volumes = append(volumes, corev1.Volume{
@@ -652,6 +671,14 @@ func expectedContainers() []corev1.Container {
 					Name:  "ELASTIC_CA",
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
+				{
+					Name:  "TOKEN_CONTROLLER_ENABLED",
+					Value: "true",
+				},
+				{
+					Name:  "LINSEED_TOKEN_KEY",
+					Value: "/tigera-secure-linseed-token-tls/tls.key",
+				},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -662,6 +689,11 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:      render.TigeraLinseedSecret,
 					MountPath: "/tigera-secure-linseed-cert",
+					ReadOnly:  true,
+				},
+				{
+					Name:      "tigera-secure-linseed-token-tls",
+					MountPath: "/tigera-secure-linseed-token-tls",
 					ReadOnly:  true,
 				},
 			},

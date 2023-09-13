@@ -95,6 +95,7 @@ type NodeConfiguration struct {
 	// Optional fields.
 	AmazonCloudIntegration  *operatorv1.AmazonCloudIntegration
 	LogCollector            *operatorv1.LogCollector
+	MonitorResource         *operatorv1.Monitor
 	MigrateNamespaces       bool
 	NodeAppArmorProfile     string
 	BirdTemplates           map[string]string
@@ -205,6 +206,8 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
+		objs = append(objs, c.nodeMetricsService())
+	} else if c.cfg.MonitorResource != nil {
 		objs = append(objs, c.nodeMetricsService())
 	}
 
@@ -1608,6 +1611,31 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		// IPv6 Auto-detection is disabled.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.Calico {
+		extraNodeEnv := []corev1.EnvVar{}
+		if c.cfg.LogCollector != nil {
+			extraNodeEnv = append(extraNodeEnv, []corev1.EnvVar{
+				{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+				{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+				{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+				{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
+				{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+				{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+				{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
+			}...)
+		}
+		if c.cfg.MonitorResource != nil {
+			if c.cfg.PrometheusServerTLS != nil {
+				extraNodeEnv = append(extraNodeEnv, []corev1.EnvVar{
+					{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountCertificateFilePath()},
+					{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountKeyFilePath()},
+					{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+				}...)
+			}
+		}
+		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

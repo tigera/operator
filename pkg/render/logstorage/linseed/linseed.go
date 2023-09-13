@@ -268,15 +268,6 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
 	)
 
-	if l.cfg.ManagementCluster {
-		envVars = append(envVars,
-			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
-			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
-		)
-		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
-		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
-	}
-
 	if l.cfg.Tenant != nil {
 		// If a tenant was provided, set the expected tenant ID.
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
@@ -286,13 +277,20 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	if l.cfg.KeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
 	}
-	if l.cfg.TokenKeyPair != nil && l.cfg.TokenKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
-	}
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+
 	if l.cfg.TokenKeyPair != nil {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+		)
+		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
+		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+		if l.cfg.TokenKeyPair.UseCertificateManagement() {
+			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
+		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
 	podTemplate := &corev1.PodTemplateSpec{

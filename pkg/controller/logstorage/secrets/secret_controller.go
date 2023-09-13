@@ -56,11 +56,12 @@ var log = logf.Log.WithName("controller_logstorage_secrets")
 // SecretSubController is a sub controller for managing secrets related to Elasticsearch and log storage components.
 // It provisions secrets and the trusted bundle into the requisite namespace(s) for other controllers to consume.
 type SecretSubController struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	clusterDomain string
-	multiTenant   bool
+	client            client.Client
+	scheme            *runtime.Scheme
+	status            status.StatusManager
+	clusterDomain     string
+	multiTenant       bool
+	managementCluster *operatorv1.ManagementCluster
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -224,6 +225,12 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// Secrets only need to be provisioned into management or standalone clusters.
 	if managementClusterConnection != nil {
 		return reconcile.Result{}, nil
+	}
+
+	r.managementCluster, err = utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// In a multi-tenant system, secrets are organized in the following way:
@@ -436,13 +443,15 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper 
 	}
 	collection.keypairs = append(collection.keypairs, linseedKeyPair)
 
-	// Create a key pair for Linseed to use for tokens.
-	linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{render.TigeraLinseedTokenSecret})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
-		return nil, err
+	if r.managementCluster != nil {
+		// Create a key pair for Linseed to use for tokens.
+		linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{render.TigeraLinseedTokenSecret})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+			return nil, err
+		}
+		collection.keypairs = append(collection.keypairs, linseedTokenKP)
 	}
-	collection.keypairs = append(collection.keypairs, linseedTokenKP)
 
 	return collection, nil
 }

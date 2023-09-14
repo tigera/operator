@@ -932,21 +932,6 @@ var _ = Describe("LogCollector controller tests (Calico)", func() {
 		})
 	})
 
-	Context("should enable flow logs felix configs", func() {
-		It("should set the proper flow logs felix configs", func() {
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			fc := &crdv1.FelixConfiguration{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, fc)).NotTo(HaveOccurred())
-			Expect(*fc.Spec.FlowLogsFileEnabled).Should(BeTrue())
-			Expect(*fc.Spec.FlowLogsFileIncludePolicies).Should(BeTrue())
-			Expect(*fc.Spec.FlowLogsFileIncludeService).Should(BeTrue())
-			Expect(*fc.Spec.FlowLogsEnableHostEndpoint).Should(BeTrue())
-			Expect(*fc.Spec.FlowLogsEnableNetworkSets).Should(BeTrue())
-			Expect(*fc.Spec.FlowLogsFileIncludeLabels).Should(BeTrue())
-		})
-	})
-
 	Context("should throw error when additional log collectors are configured", func() {
 		BeforeEach(func() {
 			Expect(c.Delete(ctx, &operatorv1.LogCollector{

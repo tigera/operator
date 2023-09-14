@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -45,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 )
 
 var _ = Describe("monitor rendering tests", func() {
@@ -101,52 +103,98 @@ var _ = Describe("monitor rendering tests", func() {
 		}
 	})
 
-	It("Should render Prometheus resources", func() {
+	It("Should render Prometheus resources for Calico", func() {
+		cfg.Installation.Variant = operatorv1.Calico
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
 
 		// should render correct resources
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{"tigera-prometheus", "", "", "v1", "Namespace"},
-			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
-			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
-			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
-			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
-			{"calico-prometheus-operator", "tigera-prometheus", "", "v1", "ServiceAccount"},
-			{"calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{"calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
-			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"calico-node-prometheus", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
-			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
-			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
-			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
-			{"tigera-prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{"tigera-prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
-			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"tigera-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"calico-kube-controllers-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"tigera-prometheus", "", "policy", "v1beta1", "PodSecurityPolicy"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-role", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-role-binding", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "prometheus", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&monitoringv1.Prometheus{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-prometheus", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-http-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-monitor", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitorsKind", APIVersion: "monitoring.coreos.com/v1"}},
+			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 		}
 
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 
-		for i, expectedRes := range expectedResources {
-			obj := toCreate[i]
-			rtest.CompareResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		rtest.ExpectResources(toCreate, expectedResources)
+		Expect(toDelete).To(HaveLen(6))
+
+		// Check the namespace.
+		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+		// ServiceMonitor
+		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
+		Expect(ok).To(BeTrue())
+		Expect(servicemonitorObj.ObjectMeta.Labels).To(HaveLen(1))
+		Expect(servicemonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
+		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(1))
+		Expect(servicemonitorObj.Spec.Selector.MatchLabels["k8s-app"]).To(Equal("calico-node"))
+		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
+		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("calico-system"))
+		Expect(servicemonitorObj.Spec.Endpoints).To(HaveLen(1))
+		Expect(servicemonitorObj.Spec.Endpoints[0].HonorLabels).To(BeTrue())
+		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+	})
+
+	It("Should render Prometheus resources for Calico Enterprise", func() {
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+
+		// should render correct resources
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-role", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-role-binding", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "alertmanager-calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "prometheus", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&monitoringv1.Prometheus{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-prometheus", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&monitoringv1.Alertmanager{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-http-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&monitoringv1.PrometheusRule{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-dp-rate", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-monitor", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "elasticsearch-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitorsKind", APIVersion: "monitoring.coreos.com/v1"}},
+			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 		}
 
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
+
+		rtest.ExpectResources(toCreate, expectedResources)
 		Expect(toDelete).To(HaveLen(2))
 
 		// Check the namespace.
@@ -156,6 +204,7 @@ var _ = Describe("monitor rendering tests", func() {
 	})
 
 	It("Should render Prometheus resource Specs correctly", func() {
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, _ := component.Objects()
@@ -539,6 +588,7 @@ var _ = Describe("monitor rendering tests", func() {
 
 	It("should render properly when PSP is not supported by the cluster", func() {
 		cfg.UsePSP = false
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -564,52 +614,43 @@ var _ = Describe("monitor rendering tests", func() {
 			dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg
 		cfg.ServerTLSSecret = prometheusKeyPair
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
 		component := monitor.Monitor(cfg)
 
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
 
 		// should render correct resources
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{"tigera-prometheus", "", "", "v1", "Namespace"},
-			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
-			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
-			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
-			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
-			{"calico-prometheus-operator", "tigera-prometheus", "", "v1", "ServiceAccount"},
-			{"calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{"calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
-			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"calico-node-prometheus", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
-			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
-			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
-			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
-			{"tigera-prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{"tigera-prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
-			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"tigera-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"calico-kube-controllers-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"tigera-prometheus", "", "policy", "v1beta1", "PodSecurityPolicy"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-role", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-role-binding", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "alertmanager-calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "prometheus", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&monitoringv1.Prometheus{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-prometheus", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&monitoringv1.Alertmanager{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-http-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&monitoringv1.PrometheusRule{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-dp-rate", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-monitor", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "elasticsearch-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"}},
+			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 		}
 
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 
-		for i, expectedRes := range expectedResources {
-			obj := toCreate[i]
-			rtest.CompareResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-
+		rtest.ExpectResources(toCreate, expectedResources)
 		Expect(toDelete).To(HaveLen(2))
 
 		// Prometheus
@@ -743,6 +784,7 @@ var _ = Describe("monitor rendering tests", func() {
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
 				cfg.KubeControllerPort = 9094
+				cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
 
 				component := monitor.MonitorPolicy(cfg)
 				resourcesToCreate, _ := component.Objects()

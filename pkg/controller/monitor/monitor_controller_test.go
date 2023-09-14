@@ -45,7 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
-var _ = Describe("Monitor controller tests", func() {
+var _ = Describe("Monitor controller tests Calico Enterprise", func() {
 	var cli client.Client
 	var ctx context.Context
 	var mockStatus *status.MockStatus
@@ -503,6 +503,116 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+	})
+})
+
+var _ = Describe("Monitor controller tests Calico", func() {
+	var cli client.Client
+	var ctx context.Context
+	var mockStatus *status.MockStatus
+	var r ReconcileMonitor
+	var scheme *runtime.Scheme
+	var installation *operatorv1.Installation
+
+	BeforeEach(func() {
+		// The schema contains all objects that should be known to the fake client when the test runs.
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+		// Create a client that will have a crud interface of k8s objects.
+		ctx = context.Background()
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		// Create an object we can use throughout the test to do the monitor reconcile loops.
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("AddDaemonsets", mock.Anything)
+		mockStatus.On("AddDeployments", mock.Anything).Return()
+		mockStatus.On("AddStatefulSets", mock.Anything)
+		mockStatus.On("ClearDegraded")
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("RemoveDeployments", mock.Anything)
+		mockStatus.On("RemoveCertificateSigningRequests", common.TigeraPrometheusNamespace)
+		mockStatus.On("SetMetaData", mock.Anything).Return()
+
+		// Create an object we can use throughout the test to do the monitor reconcile loops.
+		r = ReconcileMonitor{
+			client:          cli,
+			scheme:          scheme,
+			provider:        operatorv1.ProviderNone,
+			status:          mockStatus,
+			prometheusReady: &utils.ReadyFlag{},
+			tierWatchReady:  &utils.ReadyFlag{},
+		}
+
+		// We start off with a 'standard' installation, with nothing special
+		installation = &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Generation: 2,
+			},
+			Status: operatorv1.InstallationStatus{
+				Variant:  operatorv1.TigeraSecureEnterprise,
+				Computed: &operatorv1.InstallationSpec{},
+			},
+			Spec: operatorv1.InstallationSpec{
+				Variant:  operatorv1.Calico,
+				Registry: "some.registry.org/",
+			},
+		}
+		Expect(cli.Create(ctx, installation)).To(BeNil())
+
+		// Apply the Monitor CR to the fake cluster.
+		Expect(cli.Create(ctx, &operatorv1.Monitor{
+			TypeMeta:   metav1.TypeMeta{Kind: "Monitor", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		// Create a certificate manager and provision the CA to unblock the controller. Generally this would be done by
+		// the cluster CA controller and is a prerequisite for the monitor controller to function.
+		cm, err := certificatemanager.Create(cli, &installation.Spec, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		// Mark that watches were successful.
+		r.prometheusReady.MarkAsReady()
+		r.tierWatchReady.MarkAsReady()
+	})
+	Context("controller reconciliation", func() {
+		var (
+			am = &monitoringv1.Alertmanager{}
+			p  = &monitoringv1.Prometheus{}
+			pr = &monitoringv1.PrometheusRule{}
+			sm = &monitoringv1.ServiceMonitor{}
+		)
+
+		BeforeEach(func() {
+			// Prometheus related objects should not exist.
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+		})
+
+		It("should create Prometheus related resources", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Prometheus related objects should be rendered after reconciliation.
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 		})
 	})
 })

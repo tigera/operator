@@ -748,6 +748,142 @@ var _ = Describe("Node rendering tests", func() {
 				}
 			})
 
+			It("should render flow logs env vars if logCollector is not nil for Calico", func() {
+				defaultInstance.Variant = operatorv1.Calico
+				cfg.NodeReporterMetricsPort = 9081
+
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				// The DaemonSet should have the correct configuration.
+				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
+
+				expectedNodeEnv := []corev1.EnvVar{
+					// Default envvars.
+					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+					{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+					{Name: "CALICO_MANAGE_CNI", Value: "true"},
+					{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+					{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
+					{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+					{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+					{Name: "FELIX_HEALTHENABLED", Value: "true"},
+					{Name: "FELIX_HEALTHPORT", Value: "9099"},
+					{
+						Name: "NODENAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+						},
+					},
+					{
+						Name: "NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+						},
+					},
+					{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+					{Name: "FIPS_MODE_ENABLED", Value: "false"},
+				}
+				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
+				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
+
+				cfg.LogCollector = &operatorv1.LogCollector{}
+				component = render.Node(&cfg)
+				resources, _ = component.Objects()
+				// The DaemonSet should have the correct configuration.
+				ds = rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+				expectedNodeEnv = []corev1.EnvVar{
+					// Default envvars.
+					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+					{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+					{Name: "CALICO_MANAGE_CNI", Value: "true"},
+					{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+					{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
+					{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+					{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+					{Name: "FELIX_HEALTHENABLED", Value: "true"},
+					{Name: "FELIX_HEALTHPORT", Value: "9099"},
+					{
+						Name: "NODENAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+						},
+					},
+					{
+						Name: "NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+						},
+					},
+					{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+					{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+					{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+					{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+					{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
+					{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+					{Name: "FIPS_MODE_ENABLED", Value: "false"},
+				}
+				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
+				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
+			})
+
+			It("should render prometheus env vars if Monitor is not nil for Calico", func() {
+				defaultInstance.Variant = operatorv1.Calico
+				cfg.NodeReporterMetricsPort = 9081
+
+				cfg.MonitorResource = &operatorv1.Monitor{}
+				component := render.Node(&cfg)
+				resources, _ := component.Objects()
+				// The DaemonSet should have the correct configuration.
+				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+				expectedNodeEnv := []corev1.EnvVar{
+					// Default envvars.
+					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+					{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+					{Name: "CALICO_MANAGE_CNI", Value: "true"},
+					{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+					{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
+					{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+					{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+					{Name: "FELIX_HEALTHENABLED", Value: "true"},
+					{Name: "FELIX_HEALTHPORT", Value: "9099"},
+					{
+						Name: "NODENAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+						},
+					},
+					{
+						Name: "NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+						},
+					},
+					{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+					{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+					{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", cfg.NodeReporterMetricsPort)},
+					{Name: "FIPS_MODE_ENABLED", Value: "false"},
+				}
+				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
+				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
+			})
+
 			It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
 				expectedResources := []struct {
 					name    string

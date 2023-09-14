@@ -51,10 +51,6 @@ type LogStorageManagedClusterController struct {
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		return nil
-	}
-
 	// Create the reconciler
 	r := &LogStorageManagedClusterController{
 		client:        mgr.GetClient(),
@@ -70,24 +66,25 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-managedcluster-controller failed to watch LogStorage resource: %w", err)
+	if opts.EnterpriseCRDExists {
+		if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-managedcluster-controller failed to watch LogStorage resource: %w", err)
+		}
+		if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-managedcluster-controller failed to watch ManagementCluster resource: %w", err)
+		}
+		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("log-storage-managedcluster-controller failed to watch Secret resource: %w", err)
+		}
+		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
+			return fmt.Errorf("log-storage-managedcluster-controller failed to watch Secret resource: %w", err)
+		}
 	}
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch Network resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-managedcluster-controller failed to watch ManagementCluster resource: %w", err)
-	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch ManagementClusterConnection resource: %w", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-managedcluster-controller failed to watch Secret resource: %w", err)
-	}
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-managedcluster-controller failed to watch Secret resource: %w", err)
 	}
 
 	return nil
@@ -115,26 +112,24 @@ func (r *LogStorageManagedClusterController) Reconcile(ctx context.Context, requ
 		}
 		return reconcile.Result{}, err
 	}
-	if variant != operatorv1.TigeraSecureEnterprise {
-		return reconcile.Result{}, nil
-	}
+	if variant == operatorv1.TigeraSecureEnterprise {
+		managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if managementCluster != nil {
+			// ManagementCluster is not supported on a managed cluster. Return an error.
+			return reconcile.Result{}, fmt.Errorf("ManagementCluster is not supported on a managed cluster")
+		}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if managementCluster != nil {
-		// ManagementCluster is not supported on a managed cluster. Return an error.
-		return reconcile.Result{}, fmt.Errorf("ManagementCluster is not supported on a managed cluster")
-	}
-
-	exists, err := utils.LogStorageExists(ctx, r.client)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if exists {
-		// LogStorage is not supported on a managed cluster. Return an error.
-		return reconcile.Result{}, fmt.Errorf("LogStorage is not supported on a managed cluster")
+		exists, err := utils.LogStorageExists(ctx, r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if exists {
+			// LogStorage is not supported on a managed cluster. Return an error.
+			return reconcile.Result{}, fmt.Errorf("LogStorage is not supported on a managed cluster")
+		}
 	}
 
 	// Create the component and install it.

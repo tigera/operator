@@ -90,7 +90,6 @@ const (
 	ESGatewayServiceName            = "tigera-secure-es-gateway-http"
 	ElasticsearchDefaultPort        = 9200
 	ElasticsearchInternalPort       = 9300
-	ElasticsearchOperatorUserSecret = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret    = "tigera-secure-es-elastic-user"
 	ElasticsearchLinseedUserSecret  = "tigera-ee-linseed-elasticsearch-user-secret"
 	ElasticsearchPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-access"

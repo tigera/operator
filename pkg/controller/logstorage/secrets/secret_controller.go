@@ -542,7 +542,7 @@ func (c *elasticKeyPairCollection) component(bundle certificatemanagement.Truste
 		Namespace:      render.ElasticsearchNamespace,
 		TruthNamespace: common.OperatorNamespace(),
 		ServiceAccounts: []string{
-			render.ElasticsearchName,
+			render.ElasticsearchObjectName,
 		},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			// We do not want to delete the elastic keypair secret from the tigera-elasticsearch namespace when CertificateManagement is
@@ -556,7 +556,7 @@ func (c *elasticKeyPairCollection) component(bundle certificatemanagement.Truste
 func (c *elasticKeyPairCollection) kibanaComponent(bundle certificatemanagement.TrustedBundle) render.Component {
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       render.KibanaNamespace,
-		ServiceAccounts: []string{render.KibanaName},
+		ServiceAccounts: []string{render.KibanaObjectName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
 			// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation

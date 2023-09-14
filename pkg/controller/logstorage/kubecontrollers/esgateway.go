@@ -73,7 +73,10 @@ func (r *ESKubeControllersController) createESGateway(
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return err
 	}
-	gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, helper.InstallNamespace(), r.clusterDomain)
+	gatewayDNSNames := append(
+		dns.GetServiceDNSNames(render.ElasticsearchServiceName, helper.InstallNamespace(), r.clusterDomain),
+		dns.GetServiceDNSNames(esgateway.ServiceName, helper.InstallNamespace(), r.clusterDomain)...,
+	)
 	gatewayKeyPair, err := cm.GetKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace(), gatewayDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceNotFound, "Error getting TLS certificate", err, log)

@@ -552,20 +552,21 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 
 	// Default Windows dataplane is disabled, unless provider is AKS
+	winDataplaneDisabled := operator.WindowsDataplaneDisabled
+	winDataplaneHNS := operator.WindowsDataplaneHNS
 	if instance.Spec.CalicoNetwork.WindowsDataplane == nil {
-		winDataplane := operator.WindowsDataplaneDisabled
 		if instance.Spec.KubernetesProvider == operator.ProviderAKS {
 			// On AKS, we had the windows upgrade daemonset, which is replaced by the
 			// calico-node-windows daemonset, so default to HNS dataplane in this case.
-			winDataplane = operator.WindowsDataplaneHNS
+			instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplaneHNS
+		} else {
+			instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplaneDisabled
 		}
-		instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplane
 	}
 
 	// If Windows is enabled, populate CNI bin, config and log dirs with defaults
 	// per provider if not explicitly configured
-	winDataplaneDisabled := operator.WindowsDataplaneDisabled
-	if instance.Spec.CalicoNetwork.WindowsDataplane != &winDataplaneDisabled {
+	if *instance.Spec.CalicoNetwork.WindowsDataplane != winDataplaneDisabled {
 		if instance.Spec.WindowsNodes == nil {
 			instance.Spec.WindowsNodes = &operator.WindowsNodeSpec{}
 		}

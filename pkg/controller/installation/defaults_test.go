@@ -109,7 +109,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpIptables := operator.LinuxDataplaneIptables
-		winDataplane := operator.WindowsDataplaneDisabled
+		winDataplaneDisabled := operator.WindowsDataplaneDisabled
 		nonPrivileged := operator.NonPrivilegedEnabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
@@ -130,7 +130,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpIptables, // Actually the default but BPF would make other values invalid.
-					WindowsDataplane: &winDataplane,
+					WindowsDataplane: &winDataplaneDisabled,
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",
@@ -176,11 +176,6 @@ var _ = Describe("Defaulting logic tests", func() {
 						LogFileMaxCount:   &logFileMaxCount,
 					},
 				},
-				WindowsNodes: &operator.WindowsNodeSpec{
-					CNIBinDir:    "/opt/cni/bin",
-					CNIConfigDir: "/etc/cni/net.d",
-					CNILogDir:    "/var/log/calico/cni",
-				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -205,7 +200,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpBPF := operator.LinuxDataplaneBPF
-		winDataplane := operator.WindowsDataplaneDisabled
+		winDataplaneDisabled := operator.WindowsDataplaneDisabled
 		hpEnabled := operator.HostPortsEnabled
 		npDisabled := operator.NonPrivilegedDisabled
 		instance := &operator.Installation{
@@ -227,7 +222,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpBPF, // Actually the default but BPF would make other values invalid.
-					WindowsDataplane: &winDataplane,
+					WindowsDataplane: &winDataplaneDisabled,
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",
@@ -262,11 +257,6 @@ var _ = Describe("Defaulting logic tests", func() {
 						LogFileMaxAgeDays: &logFileMaxAgeDays,
 						LogFileMaxCount:   &logFileMaxCount,
 					},
-				},
-				WindowsNodes: &operator.WindowsNodeSpec{
-					CNIBinDir:    "/opt/cni/bin",
-					CNIConfigDir: "/etc/cni/net.d",
-					CNILogDir:    "/var/log/calico/cni",
 				},
 			},
 		}

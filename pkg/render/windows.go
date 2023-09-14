@@ -23,7 +23,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,9 +38,8 @@ import (
 )
 
 const (
-	WindowsNodeObjectName      = "calico-node-windows"
-	WindowsNodeMetricsService  = "calico-node-metrics-windows"
-	WindowsCNIPluginObjectName = "calico-cni-plugin-windows"
+	WindowsNodeObjectName     = "calico-node-windows"
+	WindowsNodeMetricsService = "calico-node-metrics-windows"
 )
 
 func Windows(
@@ -99,15 +97,6 @@ func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{
-		c.windowsServiceAccount(),
-		c.windowsClusterRole(),
-		c.windowsClusterRoleBinding(),
-		c.cniPluginServiceAccount(),
-		c.cniPluginClusterRole(),
-		c.cniPluginClusterRoleBinding(),
-	}
-
 	// Clean up old windows upgrader daemonset if present
 	objsToDelete := []client.Object{
 		&corev1.ServiceAccount{
@@ -126,9 +115,7 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
-		objs = append(objs, c.clusterAdminClusterRoleBinding())
-	}
+	objs := []client.Object{}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
@@ -147,346 +134,6 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *windowsComponent) Ready() bool {
 	return true
-}
-
-// windowsServiceAccount creates the windows node's service account.
-func (c *windowsComponent) windowsServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      WindowsNodeObjectName,
-			Namespace: common.CalicoNamespace,
-		},
-	}
-}
-
-// windowsClusterRoleBinding creates a clusterrolebinding giving the windows node service account the required permissions to operate.
-func (c *windowsComponent) windowsClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	crb := &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   WindowsNodeObjectName,
-			Labels: map[string]string{},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     WindowsNodeObjectName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      WindowsNodeObjectName,
-				Namespace: common.CalicoNamespace,
-			},
-		},
-	}
-	return crb
-}
-
-// clusterAdminClusterRoleBinding returns a ClusterRoleBinding for DockerEE to give
-// the cluster-admin role to calico-node-windows, this is needed for calico-node-windows to be
-// able to use hostNetwork in Docker Enterprise.
-func (c *windowsComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	crb := &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-cluster-admin",
-			Labels: map[string]string{},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "cluster-admin",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      WindowsNodeObjectName,
-				Namespace: common.CalicoNamespace,
-			},
-		},
-	}
-	return crb
-}
-
-// windowsClusterRole creates the clusterrole containing policy rules that allow the windows node daemonset to operate normally.
-func (c *windowsComponent) windowsClusterRole() *rbacv1.ClusterRole {
-	role := &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   WindowsNodeObjectName,
-			Labels: map[string]string{},
-		},
-
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Calico uses endpoint slices for service-based network policy rules.
-				APIGroups: []string{"discovery.k8s.io"},
-				Resources: []string{"endpointslices"},
-				Verbs:     []string{"list", "watch"},
-			},
-			{
-				// The CNI plugin needs to get pods, nodes, namespaces.
-				APIGroups: []string{""},
-				Resources: []string{"pods", "nodes", "namespaces"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// Used to discover Typha endpoints and service IPs for advertisement.
-				APIGroups: []string{""},
-				Resources: []string{"endpoints", "services"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
-				// Some information is stored on the node status.
-				APIGroups: []string{""},
-				Resources: []string{"nodes/status"},
-				Verbs:     []string{"patch", "update"},
-			},
-			{
-				// For enforcing network policies.
-				APIGroups: []string{"networking.k8s.io"},
-				Resources: []string{"networkpolicies"},
-				Verbs:     []string{"watch", "list"},
-			},
-			{
-				// Metadata from these are used in conjunction with network policy.
-				APIGroups: []string{""},
-				Resources: []string{"pods", "namespaces", "serviceaccounts"},
-				Verbs:     []string{"watch", "list"},
-			},
-			{
-				// Calico patches the allocated IP onto the pod.
-				APIGroups: []string{""},
-				Resources: []string{"pods/status"},
-				Verbs:     []string{"patch"},
-			},
-			{
-				// Used for creating service account tokens to be used by the CNI plugin.
-				APIGroups:     []string{""},
-				Resources:     []string{"serviceaccounts/token"},
-				ResourceNames: []string{WindowsCNIPluginObjectName},
-				Verbs:         []string{"create"},
-			},
-			{
-				// Calico needs to query configmaps for pool auto-detection on kubeadm.
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// For monitoring Calico-specific configuration.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"bgpfilters",
-					"bgpconfigurations",
-					"bgppeers",
-					"bgpfilters",
-					"blockaffinities",
-					"clusterinformations",
-					"felixconfigurations",
-					"globalnetworkpolicies",
-					"stagedglobalnetworkpolicies",
-					"globalnetworksets",
-					"hostendpoints",
-					"ipamblocks",
-					"ippools",
-					"ipreservations",
-					"networkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"stagednetworkpolicies",
-					"networksets",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// calico/node monitors for caliconodestatus objects and writes its status back into the object.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"caliconodestatuses",
-				},
-				Verbs: []string{"get", "list", "watch", "update"},
-			},
-			{
-				// For migration code in calico/node startup only. Remove when the migration
-				// code is removed from node.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"globalbgpconfigs",
-					"globalfelixconfigs",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// Calico creates some configuration on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"clusterinformations",
-					"felixconfigurations",
-					"ippools",
-				},
-				Verbs: []string{"create", "update"},
-			},
-			{
-				// Calico monitors nodes for some networking configuration.
-				APIGroups: []string{""},
-				Resources: []string{"nodes"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				// Most IPAM resources need full CRUD permissions so we can allocate and
-				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"blockaffinities",
-					"ipamblocks",
-					"ipamhandles",
-					"ipamconfigs",
-				},
-				Verbs: []string{"get", "list", "create", "update", "delete"},
-			},
-			{
-				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// confd (and in some cases, felix) watches block affinities for route aggregation.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"blockaffinities"},
-				Verbs:     []string{"watch"},
-			},
-		},
-	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		extraRules := []rbacv1.PolicyRule{
-			{
-				// Tigera Secure needs to be able to read licenses, tiers, and config.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"externalnetworks",
-					"licensekeys",
-					"remoteclusterconfigurations",
-					"stagedglobalnetworkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"stagednetworkpolicies",
-					"tiers",
-					"packetcaptures",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// Tigera Secure creates some tiers on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"tiers",
-				},
-				Verbs: []string{"create"},
-			},
-			{
-				// Tigera Secure updates status for packet captures.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"packetcaptures",
-				},
-				Verbs: []string{"update"},
-			},
-		}
-		role.Rules = append(role.Rules, extraRules...)
-	}
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{PSSPrivileged},
-		})
-	}
-	return role
-}
-
-// cniPluginServiceAccount creates the Windows Calico CNI plugin's service account.
-func (c *windowsComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      WindowsCNIPluginObjectName,
-			Namespace: common.CalicoNamespace,
-		},
-	}
-}
-
-// cniPluginClusterRoleBinding creates a rolebinding giving the Windows Calico CNI plugin service account the required permissions to operate.
-func (c *windowsComponent) cniPluginClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	crb := &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: WindowsCNIPluginObjectName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     WindowsCNIPluginObjectName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      WindowsCNIPluginObjectName,
-				Namespace: common.CalicoNamespace,
-			},
-		},
-	}
-	return crb
-}
-
-// cniPluginClusterRole creates the role containing policy rules that allow the Windows Calico CNI plugin to operate normally.
-func (c *windowsComponent) cniPluginClusterRole() *rbacv1.ClusterRole {
-	role := &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: WindowsCNIPluginObjectName,
-		},
-
-		Rules: []rbacv1.PolicyRule{
-			{
-				// The CNI plugin needs to get pods, nodes, namespaces.
-				APIGroups: []string{""},
-				Resources: []string{"pods", "nodes", "namespaces"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// Calico patches the allocated IP onto the pod.
-				APIGroups: []string{""},
-				Resources: []string{"pods/status"},
-				Verbs:     []string{"patch"},
-			},
-			{
-				// Most IPAM resources need full CRUD permissions so we can allocate and
-				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"blockaffinities",
-					"ipamblocks",
-					"ipamhandles",
-					"ipamconfigs",
-					"clusterinformations",
-					"ippools",
-					"ipreservations",
-				},
-				Verbs: []string{"get", "list", "create", "update", "delete"},
-			},
-			{
-				// Some information is stored on the node status.
-				APIGroups: []string{""},
-				Resources: []string{"nodes/status"},
-				Verbs:     []string{"patch", "update"},
-			},
-		},
-	}
-
-	return role
 }
 
 // nodeMetricsService creates a Service which exposes two endpoints on calico/node for
@@ -952,75 +599,6 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	}
 	windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "KUBE_NETWORK", Value: kubeNetwork})
 
-	// If there are no IP pools specified, then configure no default IP pools.
-	if c.cfg.Installation.CalicoNetwork == nil || len(c.cfg.Installation.CalicoNetwork.IPPools) == 0 {
-		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
-	} else {
-		// Configure IPv4 pool
-		if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
-			windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
-
-			switch v4pool.Encapsulation {
-			case operatorv1.EncapsulationIPIPCrossSubnet:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationIPIP:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-			case operatorv1.EncapsulationVXLAN:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
-			case operatorv1.EncapsulationVXLANCrossSubnet:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationNone:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
-			default:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-			}
-
-			if v4pool.BlockSize != nil {
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v4pool.BlockSize)})
-			}
-			if v4pool.NATOutgoing == operatorv1.NATOutgoingDisabled {
-				// Default for IPv4 NAT Outgoing is enabled so it is only necessary to
-				// set when it is being disabled.
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
-			}
-			if v4pool.NodeSelector != "" {
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
-			}
-			if v4pool.DisableBGPExport != nil {
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v4pool.DisableBGPExport)})
-			}
-		}
-
-		// Configure IPv6 pool.
-		if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
-			windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
-
-			switch v6pool.Encapsulation {
-			case operatorv1.EncapsulationVXLAN:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Always"})
-			case operatorv1.EncapsulationVXLANCrossSubnet:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationNone:
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Never"})
-			}
-
-			if v6pool.BlockSize != nil {
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
-			}
-			if v6pool.NATOutgoing == operatorv1.NATOutgoingEnabled {
-				// Default for IPv6 NAT Outgoing is disabled so it is only necessary to
-				// set when it is being enabled.
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "true"})
-			}
-			if v6pool.NodeSelector != "" {
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
-			}
-			if v6pool.DisableBGPExport != nil {
-				windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v6pool.DisableBGPExport)})
-			}
-		}
-	}
-
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
 	// MTU of 1460.
 	mtu := getMTU(c.cfg.Installation)
@@ -1296,7 +874,7 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
-					ServiceAccountName:            WindowsNodeObjectName,
+					ServiceAccountName:            CalicoNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
 					InitContainers:                initContainers,

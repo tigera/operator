@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -46,7 +45,7 @@ var _ = Describe("Windows rendering tests", func() {
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	one := intstr.FromInt(1)
-	defaultNumExpectedResources := 8
+	defaultNumExpectedResources := 2
 	const defaultClusterDomain = "svc.cluster.local"
 	var defaultMode int32 = 420
 	var cfg render.WindowsConfiguration
@@ -149,12 +148,6 @@ var _ = Describe("Windows rendering tests", func() {
 					version string
 					kind    string
 				}{
-					{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-					{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-					{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-					{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-					{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-					{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
@@ -262,8 +255,6 @@ var _ = Describe("Windows rendering tests", func() {
 				}
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(numContainers))
 				for _, container := range ds.Spec.Template.Spec.Containers {
-					rtest.ExpectEnv(container.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
-
 					// Windows node image override results in correct image.
 					Expect(container.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 					Expect(container.SecurityContext.Capabilities).To(BeNil())
@@ -284,7 +275,6 @@ var _ = Describe("Windows rendering tests", func() {
 				}
 
 				felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
-				rtest.ExpectEnv(felixContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 				// Windows node image override results in correct image.
 				Expect(felixContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
@@ -305,7 +295,6 @@ var _ = Describe("Windows rendering tests", func() {
 				Expect(felixContainer.SecurityContext.SeccompProfile).To(BeNil())
 
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
-				rtest.ExpectEnv(nodeContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 				// Windows node image override results in correct image.
 				Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
@@ -327,7 +316,6 @@ var _ = Describe("Windows rendering tests", func() {
 
 				if enableBGP {
 					confdContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd")
-					rtest.ExpectEnv(confdContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 					// Windows node image override results in correct image.
 					Expect(confdContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
@@ -412,6 +400,11 @@ var _ = Describe("Windows rendering tests", func() {
 							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 						},
 					},
+
+					{Name: "IP", Value: "autodetect"},
+					{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+					{Name: "IP6", Value: "none"},
+					{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 					{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
@@ -443,8 +436,6 @@ var _ = Describe("Windows rendering tests", func() {
 				} else {
 					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,windows"})
 				}
-
-				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
 
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
@@ -700,12 +691,6 @@ var _ = Describe("Windows rendering tests", func() {
 					version string
 					kind    string
 				}{
-					{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-					{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-					{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-					{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-					{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-					{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 					{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -736,7 +721,6 @@ var _ = Describe("Windows rendering tests", func() {
 				}
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(numContainers))
 				for _, container := range ds.Spec.Template.Spec.Containers {
-					rtest.ExpectEnv(container.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 					// Windows node image override results in correct image.
 					Expect(container.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
@@ -758,7 +742,6 @@ var _ = Describe("Windows rendering tests", func() {
 				}
 
 				felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
-				rtest.ExpectEnv(felixContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 				// Windows node image override results in correct image.
 				Expect(felixContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
@@ -779,7 +762,6 @@ var _ = Describe("Windows rendering tests", func() {
 				Expect(felixContainer.SecurityContext.SeccompProfile).To(BeNil())
 
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
-				rtest.ExpectEnv(nodeContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 				// Windows node image override results in correct image.
 				Expect(nodeContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
@@ -801,7 +783,6 @@ var _ = Describe("Windows rendering tests", func() {
 
 				if enableBGP {
 					confdContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd")
-					rtest.ExpectEnv(confdContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 					// Windows node image override results in correct image.
 					Expect(confdContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
@@ -886,6 +867,10 @@ var _ = Describe("Windows rendering tests", func() {
 							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 						},
 					},
+					{Name: "IP", Value: "autodetect"},
+					{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+					{Name: "IP6", Value: "none"},
+					{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 					{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
@@ -929,8 +914,6 @@ var _ = Describe("Windows rendering tests", func() {
 				} else {
 					expectedNodeEnv = append(expectedNodeEnv, corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,windows"})
 				}
-
-				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
 
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
@@ -1067,12 +1050,6 @@ var _ = Describe("Windows rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -1173,8 +1150,6 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(2))
 
 		for _, container := range ds.Spec.Template.Spec.Containers {
-			rtest.ExpectEnv(container.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
-
 			// Windows image override results in correct image.
 			Expect(container.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 		}
@@ -1214,6 +1189,10 @@ var _ = Describe("Windows rendering tests", func() {
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 				},
 			},
+			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
@@ -1229,7 +1208,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
-		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
 
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
@@ -1366,9 +1344,6 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources - 1))
 
 		// Should render the correct resources.
-		Expect(rtest.GetResource(resources, "calico-node-windows", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
-		Expect(rtest.GetResource(resources, "calico-node-windows", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
-		Expect(rtest.GetResource(resources, "calico-node-windows", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
 		dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
@@ -1400,7 +1375,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs,windows"},
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
-			{Name: "NO_DEFAULT_POOLS", Value: "true"},
 			{Name: "CALICO_MANAGE_CNI", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
@@ -1532,7 +1506,6 @@ var _ = Describe("Windows rendering tests", func() {
 			// Verify env
 			expectedEnvs := []corev1.EnvVar{
 				corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
-				corev1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				corev1.EnvVar{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			}
 			for _, expected := range expectedEnvs {
@@ -1555,12 +1528,6 @@ var _ = Describe("Windows rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -1578,15 +1545,6 @@ var _ = Describe("Windows rendering tests", func() {
 			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
-
-		//calico-node-windows clusterRole should have openshift securitycontextconstraints PolicyRule
-		nodeRole := rtest.GetResource(resources, "calico-node-windows", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"privileged"},
-		}))
 
 		// The DaemonSet should have the correct configuration.
 		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -1669,6 +1627,10 @@ var _ = Describe("Windows rendering tests", func() {
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 				},
 			},
+			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
@@ -1687,7 +1649,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 
-		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ConsistOf(expectedNodeEnv))
@@ -1703,12 +1664,6 @@ var _ = Describe("Windows rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1729,15 +1684,6 @@ var _ = Describe("Windows rendering tests", func() {
 			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
-
-		//calico-node-windows clusterRole should have openshift securitycontextconstraints PolicyRule
-		nodeRole := rtest.GetResource(resources, "calico-node-windows", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"privileged"},
-		}))
 
 		// The DaemonSet should have the correct configuration.
 		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -1822,6 +1768,10 @@ var _ = Describe("Windows rendering tests", func() {
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 				},
 			},
+			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
@@ -1853,7 +1803,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
-		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ConsistOf(expectedNodeEnv))
@@ -1869,12 +1818,6 @@ var _ = Describe("Windows rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1979,6 +1922,10 @@ var _ = Describe("Windows rendering tests", func() {
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 				},
 			},
+			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
@@ -2010,7 +1957,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
-		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
@@ -2136,217 +2082,6 @@ var _ = Describe("Windows rendering tests", func() {
 			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "cidr=10.0.1.0/24,10.0.2.0/24")
 		})
 	})
-
-	trueValue := true
-	falseValue := false
-	DescribeTable("test IP Pool configuration",
-		func(pool operatorv1.IPPool, expect map[string]string) {
-			// Provider does not matter for IPPool configuration
-			defaultInstance.CalicoNetwork.IPPools = []operatorv1.IPPool{pool}
-			component := render.Windows(&cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
-
-			dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
-			Expect(dsResource).ToNot(BeNil())
-
-			// The DaemonSet should have the correct configuration.
-			ds := dsResource.(*appsv1.DaemonSet)
-			nodeEnvs := ds.Spec.Template.Spec.Containers[0].Env
-
-			for _, envVar := range []string{
-				"CALICO_IPV4POOL_CIDR",
-				"CALICO_IPV4POOL_IPIP",
-				"CALICO_IPV4POOL_VXLAN",
-				"CALICO_IPV4POOL_NAT_OUTGOING",
-				"CALICO_IPV4POOL_NODE_SELECTOR",
-				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT",
-				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT",
-			} {
-				v, ok := expect[envVar]
-				if ok {
-					Expect(nodeEnvs).To(ContainElement(corev1.EnvVar{Name: envVar, Value: v}))
-				} else {
-					found := false
-					for _, ev := range nodeEnvs {
-						if ev.Name == envVar {
-							found = true
-							break
-						}
-					}
-					Expect(found).To(BeFalse(), "Expected EnvVars %v to not have %s", nodeEnvs, envVar)
-				}
-			}
-		},
-		Entry("Default pool",
-			operatorv1.IPPool{
-				CIDR: "192.168.0.0/16",
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR": "192.168.0.0/16",
-				"CALICO_IPV4POOL_IPIP": "Always",
-			}),
-		Entry("Pool with nat outgoing disabled",
-			operatorv1.IPPool{
-				CIDR:        "172.16.0.0/24",
-				NATOutgoing: "Disabled",
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR":         "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP":         "Always",
-				"CALICO_IPV4POOL_NAT_OUTGOING": "false",
-			}),
-		Entry("Pool with nat outgoing enabled",
-			operatorv1.IPPool{
-				CIDR:        "172.16.0.0/24",
-				NATOutgoing: "Enabled",
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR": "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP": "Always",
-				// Enabled is the default so we don't set
-				// NAT_OUTGOING if it is enabled.
-			}),
-		Entry("Pool with VXLAN enabled (IPv6)",
-			operatorv1.IPPool{
-				CIDR:          "fc00::/48",
-				Encapsulation: operatorv1.EncapsulationVXLAN,
-			},
-			map[string]string{
-				"CALICO_IPV6POOL_CIDR":  "fc00::/48",
-				"CALICO_IPV6POOL_VXLAN": "Always",
-			}),
-		Entry("Pool with VXLAN cross subnet enabled (IPv6)",
-			operatorv1.IPPool{
-				CIDR:          "fc00::/48",
-				Encapsulation: operatorv1.EncapsulationVXLANCrossSubnet,
-			},
-			map[string]string{
-				"CALICO_IPV6POOL_CIDR":  "fc00::/48",
-				"CALICO_IPV6POOL_VXLAN": "CrossSubnet",
-			}),
-		Entry("Pool with nat outgoing disabled (IPv6)",
-			operatorv1.IPPool{
-				CIDR:        "fc00::/48",
-				NATOutgoing: "Disabled",
-			},
-			map[string]string{
-				"CALICO_IPV6POOL_CIDR": "fc00::/48",
-				// Disabled is the default so we don't set
-				// NAT_OUTGOING if it is disabled.
-			}),
-		Entry("Pool with nat outgoing enabled (IPv6)",
-			operatorv1.IPPool{
-				CIDR:        "fc00::/48",
-				NATOutgoing: "Enabled",
-			},
-			map[string]string{
-				"CALICO_IPV6POOL_CIDR":         "fc00::/48",
-				"CALICO_IPV6POOL_NAT_OUTGOING": "true",
-			}),
-		Entry("Pool with CrossSubnet",
-			operatorv1.IPPool{
-				CIDR:          "172.16.0.0/24",
-				Encapsulation: operatorv1.EncapsulationIPIPCrossSubnet,
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR": "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP": "CrossSubnet",
-			}),
-		Entry("Pool with VXLAN",
-			operatorv1.IPPool{
-				CIDR:          "172.16.0.0/24",
-				Encapsulation: operatorv1.EncapsulationVXLAN,
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR":  "172.16.0.0/24",
-				"CALICO_IPV4POOL_VXLAN": "Always",
-			}),
-		Entry("Pool with VXLANCrossSubnet",
-			operatorv1.IPPool{
-				CIDR:          "172.16.0.0/24",
-				Encapsulation: operatorv1.EncapsulationVXLANCrossSubnet,
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR":  "172.16.0.0/24",
-				"CALICO_IPV4POOL_VXLAN": "CrossSubnet",
-			}),
-		Entry("Pool with no encapsulation",
-			operatorv1.IPPool{
-				CIDR:          "172.16.0.0/24",
-				Encapsulation: operatorv1.EncapsulationNone,
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR": "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP": "Never",
-			}),
-		Entry("Pool with node selector",
-			operatorv1.IPPool{
-				CIDR:         "172.16.0.0/24",
-				NodeSelector: "has(thiskey)",
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR":          "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP":          "Always",
-				"CALICO_IPV4POOL_NODE_SELECTOR": "has(thiskey)",
-			}),
-		Entry("Pool with v4 disable BGP export set to true",
-			operatorv1.IPPool{
-				CIDR:             "172.16.0.0/24",
-				DisableBGPExport: &trueValue,
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP":               "Always",
-				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "true",
-			}),
-		Entry("Pool with v4 disable BGP export set to false",
-			operatorv1.IPPool{
-				CIDR:             "172.16.0.0/24",
-				DisableBGPExport: &falseValue,
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP":               "Always",
-				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "false",
-			}),
-		Entry("Pool with v6 disable BGP export set to true",
-			operatorv1.IPPool{
-				CIDR:             "fc00::/48",
-				DisableBGPExport: &trueValue,
-			},
-			map[string]string{
-				"CALICO_IPV6POOL_CIDR":               "fc00::/48",
-				"CALICO_IPV6POOL_IPIP":               "Always",
-				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT": "true",
-			}),
-		Entry("Pool with v6 disable BGP export set to false",
-			operatorv1.IPPool{
-				CIDR:             "fc00::/48",
-				DisableBGPExport: &falseValue,
-			},
-			map[string]string{
-				"CALICO_IPV6POOL_CIDR":               "fc00::/48",
-				"CALICO_IPV6POOL_IPIP":               "Always",
-				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT": "false",
-			}),
-		Entry("Pool with all fields set",
-			operatorv1.IPPool{
-				CIDR:             "172.16.0.0/24",
-				Encapsulation:    operatorv1.EncapsulationVXLAN,
-				NATOutgoing:      "Disabled",
-				NodeSelector:     "has(thiskey)",
-				DisableBGPExport: &trueValue,
-			},
-			map[string]string{
-				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
-				"CALICO_IPV4POOL_VXLAN":              "Always",
-				"CALICO_IPV4POOL_NAT_OUTGOING":       "false",
-				"CALICO_IPV4POOL_NODE_SELECTOR":      "has(thiskey)",
-				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "true",
-			}),
-	)
 
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
 		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
@@ -2544,12 +2279,6 @@ var _ = Describe("Windows rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "calico-node-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-node-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-cni-plugin-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-cni-plugin-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -2651,9 +2380,7 @@ var _ = Describe("Windows rendering tests", func() {
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*appsv1.DaemonSet)
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
-		rtest.ExpectEnv(nodeContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
-		rtest.ExpectEnv(felixContainer.Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 		cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 		rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
@@ -2695,6 +2422,10 @@ var _ = Describe("Windows rendering tests", func() {
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 				},
 			},
+			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "$env:CONTAINER_SANDBOX_MOUNT_POINT" + certificatemanagement.TrustedCertBundleMountPath},
@@ -2709,7 +2440,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
 			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
-		expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, true, false)
 		Expect(nodeContainer.Env).To(ConsistOf(expectedNodeEnv))
 		Expect(felixContainer.Env).To(ConsistOf(expectedNodeEnv))
 

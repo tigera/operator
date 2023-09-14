@@ -562,22 +562,25 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplane
 	}
 
-	// Populate CNI bin, config and log dirs with defaults per provider
-	// if not explicitly configured
-	if instance.Spec.WindowsNodes == nil {
-		instance.Spec.WindowsNodes = &operator.WindowsNodeSpec{}
-	}
+	// If Windows is enabled, populate CNI bin, config and log dirs with defaults
+	// per provider if not explicitly configured
+	winDataplaneDisabled := operator.WindowsDataplaneDisabled
+	if instance.Spec.CalicoNetwork.WindowsDataplane != &winDataplaneDisabled {
+		if instance.Spec.WindowsNodes == nil {
+			instance.Spec.WindowsNodes = &operator.WindowsNodeSpec{}
+		}
 
-	defaultCNIBinDir, defaultCNIConfigDir, defaultCNILogDir := render.DefaultWindowsCNIDirectories(instance.Spec)
+		defaultCNIBinDir, defaultCNIConfigDir, defaultCNILogDir := render.DefaultWindowsCNIDirectories(instance.Spec)
 
-	if instance.Spec.WindowsNodes.CNIBinDir == "" {
-		instance.Spec.WindowsNodes.CNIBinDir = defaultCNIBinDir
-	}
-	if instance.Spec.WindowsNodes.CNIConfigDir == "" {
-		instance.Spec.WindowsNodes.CNIConfigDir = defaultCNIConfigDir
-	}
-	if instance.Spec.WindowsNodes.CNILogDir == "" {
-		instance.Spec.WindowsNodes.CNILogDir = defaultCNILogDir
+		if instance.Spec.WindowsNodes.CNIBinDir == "" {
+			instance.Spec.WindowsNodes.CNIBinDir = defaultCNIBinDir
+		}
+		if instance.Spec.WindowsNodes.CNIConfigDir == "" {
+			instance.Spec.WindowsNodes.CNIConfigDir = defaultCNIConfigDir
+		}
+		if instance.Spec.WindowsNodes.CNILogDir == "" {
+			instance.Spec.WindowsNodes.CNILogDir = defaultCNILogDir
+		}
 	}
 
 	// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".

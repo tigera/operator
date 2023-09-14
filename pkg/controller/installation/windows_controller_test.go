@@ -128,6 +128,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					Variant:               operator.TigeraSecureEnterprise,
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
+					WindowsNodes:          &operator.WindowsNodeSpec{},
 				},
 			}
 			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.autoDetectedProvider)).NotTo(HaveOccurred())
@@ -556,6 +557,7 @@ var _ = Describe("windows-controller installation tests", func() {
 							CalicoNetwork: &operator.CalicoNetworkSpec{
 								WindowsDataplane: &dpHNS,
 							},
+							WindowsNodes: &operator.WindowsNodeSpec{},
 						},
 						Status: operator.InstallationStatus{
 							Variant: operator.TigeraSecureEnterprise,

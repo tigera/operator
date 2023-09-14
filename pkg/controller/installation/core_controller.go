@@ -65,7 +65,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -169,14 +168,13 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
-	// The typhaAutoscaler and calicoWindowsUpgrader need a clientset.
+	// The typhaAutoscaler needs a clientset.
 	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
 
-	// Create the SharedIndexInformer used by the typhaAutoscaler and
-	// calicoWindowsUpgrader.
+	// Create the SharedIndexInformer used by the typhaAutoscaler
 	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
 	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
@@ -185,29 +183,24 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(cs, nodeIndexInformer, typhaListWatch, statusManager)
 
-	// Create a Calico Windows upgrader.
-	calicoWindowsUpgrader := windows.NewCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexInformer, statusManager)
-
 	r := &ReconcileInstallation{
-		config:                mgr.GetConfig(),
-		client:                mgr.GetClient(),
-		scheme:                mgr.GetScheme(),
-		watches:               make(map[runtime.Object]struct{}),
-		autoDetectedProvider:  opts.DetectedProvider,
-		status:                statusManager,
-		typhaAutoscaler:       typhaScaler,
-		calicoWindowsUpgrader: calicoWindowsUpgrader,
-		namespaceMigration:    nm,
-		amazonCRDExists:       opts.AmazonCRDExists,
-		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
-		clusterDomain:         opts.ClusterDomain,
-		manageCRDs:            opts.ManageCRDs,
-		usePSP:                opts.UsePSP,
-		tierWatchReady:        &utils.ReadyFlag{},
+		config:               mgr.GetConfig(),
+		client:               mgr.GetClient(),
+		scheme:               mgr.GetScheme(),
+		watches:              make(map[runtime.Object]struct{}),
+		autoDetectedProvider: opts.DetectedProvider,
+		status:               statusManager,
+		typhaAutoscaler:      typhaScaler,
+		namespaceMigration:   nm,
+		amazonCRDExists:      opts.AmazonCRDExists,
+		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
+		clusterDomain:        opts.ClusterDomain,
+		manageCRDs:           opts.ManageCRDs,
+		usePSP:               opts.UsePSP,
+		tierWatchReady:       &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
-	r.calicoWindowsUpgrader.Start(opts.ShutdownContext)
 	return r, nil
 }
 
@@ -375,22 +368,21 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config                *rest.Config
-	client                client.Client
-	scheme                *runtime.Scheme
-	watches               map[runtime.Object]struct{}
-	autoDetectedProvider  operator.Provider
-	status                status.StatusManager
-	typhaAutoscaler       *typhaAutoscaler
-	calicoWindowsUpgrader windows.CalicoWindowsUpgrader
-	namespaceMigration    migration.NamespaceMigration
-	enterpriseCRDsExist   bool
-	amazonCRDExists       bool
-	migrationChecked      bool
-	clusterDomain         string
-	manageCRDs            bool
-	usePSP                bool
-	tierWatchReady        *utils.ReadyFlag
+	config               *rest.Config
+	client               client.Client
+	scheme               *runtime.Scheme
+	watches              map[runtime.Object]struct{}
+	autoDetectedProvider operator.Provider
+	status               status.StatusManager
+	typhaAutoscaler      *typhaAutoscaler
+	namespaceMigration   migration.NamespaceMigration
+	enterpriseCRDsExist  bool
+	amazonCRDExists      bool
+	migrationChecked     bool
+	clusterDomain        string
+	manageCRDs           bool
+	usePSP               bool
+	tierWatchReady       *utils.ReadyFlag
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -557,6 +549,38 @@ func fillDefaults(instance *operator.Installation) error {
 	if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
 		dpIptables := operator.LinuxDataplaneIptables
 		instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
+	}
+
+	// Default Windows dataplane is disabled, unless provider is AKS
+	if instance.Spec.CalicoNetwork.WindowsDataplane == nil {
+		winDataplane := operator.WindowsDataplaneDisabled
+		if instance.Spec.KubernetesProvider == operator.ProviderAKS {
+			// On AKS, we had the windows upgrade daemonset, which is replaced by the
+			// calico-node-windows daemonset, so default to HNS dataplane in this case.
+			winDataplane = operator.WindowsDataplaneHNS
+		}
+		instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplane
+	}
+
+	// If Windows is enabled, populate CNI bin, config and log dirs with defaults
+	// per provider if not explicitly configured
+	winDataplaneDisabled := operator.WindowsDataplaneDisabled
+	if instance.Spec.CalicoNetwork.WindowsDataplane != &winDataplaneDisabled {
+		if instance.Spec.WindowsNodes == nil {
+			instance.Spec.WindowsNodes = &operator.WindowsNodeSpec{}
+		}
+
+		defaultCNIBinDir, defaultCNIConfigDir, defaultCNILogDir := render.DefaultWindowsCNIDirectories(instance.Spec)
+
+		if instance.Spec.WindowsNodes.CNIBinDir == "" {
+			instance.Spec.WindowsNodes.CNIBinDir = defaultCNIBinDir
+		}
+		if instance.Spec.WindowsNodes.CNIConfigDir == "" {
+			instance.Spec.WindowsNodes.CNIConfigDir = defaultCNIConfigDir
+		}
+		if instance.Spec.WindowsNodes.CNILogDir == "" {
+			instance.Spec.WindowsNodes.CNILogDir = defaultCNILogDir
+		}
 	}
 
 	// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".
@@ -925,10 +949,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
-
-	// Update calicoWindowsUpgrader with the installation it needs to
-	// process Calico Windows upgrades.
-	r.calicoWindowsUpgrader.UpdateConfig(&instance.Spec)
 
 	// now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
@@ -1368,12 +1388,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
-	windowsCfg := render.WindowsConfig{
-		Installation: &instance.Spec,
-		Terminating:  terminating,
-	}
-	components = append(components, render.Windows(&windowsCfg))
-
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
@@ -1451,12 +1465,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Auto-detection will still be used for Calico, but the operator won't know
 		// what the value is.
 		reqLogger.V(1).Info("Unable to determine MTU - no explicit config, and /var/lib/calico is not mounted")
-	}
-
-	// Check whether the calicoWindowsUpgrader is degraded. If so, requeue
-	// a reconcile.
-	if r.calicoWindowsUpgrader.IsDegraded() {
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// We have successfully reconciled the Calico installation.
@@ -1651,6 +1659,11 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	}
 	if fc.Spec.HealthPort == nil {
 		fc.Spec.HealthPort = &felixHealthPort
+		updated = true
+	}
+	vxlanVNI := 4096
+	if fc.Spec.VXLANVNI == nil {
+		fc.Spec.VXLANVNI = &vxlanVNI
 		updated = true
 	}
 

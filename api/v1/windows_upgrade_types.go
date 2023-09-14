@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,6 +77,7 @@ type CalicoWindowsUpgradeDaemonSetPodTemplateSpec struct {
 	Spec *CalicoWindowsUpgradeDaemonSetPodSpec `json:"spec,omitempty"`
 }
 
+// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 // CalicoWindowsUpgradeDaemonSet is the configuration for the calico-windows-upgrade DaemonSet.
 type CalicoWindowsUpgradeDaemonSet struct {
 	// Metadata is a subset of a Kubernetes object's metadata that is added to the Deployment.

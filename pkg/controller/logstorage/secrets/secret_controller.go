@@ -56,12 +56,11 @@ var log = logf.Log.WithName("controller_logstorage_secrets")
 // SecretSubController is a sub controller for managing secrets related to Elasticsearch and log storage components.
 // It provisions secrets and the trusted bundle into the requisite namespace(s) for other controllers to consume.
 type SecretSubController struct {
-	client            client.Client
-	scheme            *runtime.Scheme
-	status            status.StatusManager
-	clusterDomain     string
-	multiTenant       bool
-	managementCluster *operatorv1.ManagementCluster
+	client        client.Client
+	scheme        *runtime.Scheme
+	status        status.StatusManager
+	clusterDomain string
+	multiTenant   bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -227,7 +226,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	r.managementCluster, err = utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -315,7 +314,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.Info("Rendering secrets for Tigera ES components")
 
 	// Create secrets for Tigera components.
-	keyPairs, err := r.generateNamespacedSecrets(reqLogger, helper, appCM)
+	keyPairs, err := r.generateNamespacedSecrets(reqLogger, helper, appCM, managementCluster)
 	if err != nil {
 		// Status manager is handled already, so we can just return
 		return reconcile.Result{}, err
@@ -403,7 +402,7 @@ func (r *SecretSubController) generateClusterSecrets(log logr.Logger, kibana boo
 }
 
 // generateNamespacedSecrets creates keypairs for components that are provisioned per-tenant in a multi-tenant system.
-func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper octrl.NamespaceHelper, cm certificatemanager.CertificateManager) (*keyPairCollection, error) {
+func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper octrl.NamespaceHelper, cm certificatemanager.CertificateManager, managementCluster *operatorv1.ManagementCluster) (*keyPairCollection, error) {
 	// Start by collecting upstream certificates that we need to trust, before generating keypairs.
 	collection, err := r.collectUpstreamCerts(log, helper, cm)
 	if err != nil {
@@ -443,7 +442,7 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper 
 	}
 	collection.keypairs = append(collection.keypairs, linseedKeyPair)
 
-	if r.managementCluster != nil {
+	if managementCluster != nil {
 		// Create a key pair for Linseed to use for tokens.
 		linseedTokenKP, err := cm.GetOrCreateKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{render.TigeraLinseedTokenSecret})
 		if err != nil {

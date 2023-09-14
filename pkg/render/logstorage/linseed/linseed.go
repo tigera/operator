@@ -19,6 +19,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/common"
+
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -185,6 +189,27 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
+	if l.cfg.Tenant != nil {
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{render.LinseedServiceName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+				},
+			},
+		}...)
+	}
+
 	if l.cfg.UsePSP {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -272,6 +297,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
 			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: common.OperatorNamespace()},
 		)
 		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
 		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))

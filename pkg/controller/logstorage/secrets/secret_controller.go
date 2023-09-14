@@ -419,9 +419,12 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper 
 		}
 		collection.keypairs = append(collection.keypairs, metricsServerKeyPair)
 
-		// ES gateway keypair.
-		gatewayDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, helper.InstallNamespace(), r.clusterDomain)
-		gatewayDNSNames = append(gatewayDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, helper.InstallNamespace(), r.clusterDomain)...)
+		// For legacy reasons, es-gateway is sitting behind two services: tigera-secure-es-http (where originally ES resided)
+		// and tigera-secure-es-gateway-http.
+		gatewayDNSNames := append(
+			dns.GetServiceDNSNames(render.ElasticsearchServiceName, helper.InstallNamespace(), r.clusterDomain),
+			dns.GetServiceDNSNames(esgateway.ServiceName, helper.InstallNamespace(), r.clusterDomain)...,
+		)
 		gatewayKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace(), gatewayDNSNames)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)

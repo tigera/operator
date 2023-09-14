@@ -267,6 +267,11 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraNodeWindows = component{
+		Version: "master",
+		Image:   "tigera/cnx-node-windows",
+	}
+
 	ComponentTigeraTypha = component{
 		Version:  "master",
 		Image:    "tigera/typha",
@@ -285,6 +290,11 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraCNIWindows = component{
+		Version: "master",
+		Image:   "tigera/cni-windows",
+	}
+
 	ComponentCloudControllers = component{
 		Version:  "master",
 		Image:    "tigera/cloud-controllers",
@@ -294,12 +304,6 @@ var (
 	ComponentElasticsearchMetrics = component{
 		Version:  "master",
 		Image:    "tigera/elasticsearch-metrics",
-		Registry: "",
-	}
-
-	ComponentTigeraWindowsUpgrade = component{
-		Version:  "master",
-		Image:    "tigera/calico-windows-upgrade",
 		Registry: "",
 	}
 
@@ -357,14 +361,15 @@ var (
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
+		ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentTigeraCNIFIPS,
+		ComponentTigeraCNIWindows,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
-		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,

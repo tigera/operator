@@ -1549,15 +1549,23 @@ func calicoDirectoryExists() bool {
 	return err == nil
 }
 
-// GetOrCreateTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
+func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager) (*render.TyphaNodeTLS, error) {
+	return getOrCreateTyphaNodeTLSConfig(cli, certificateManager, certificateManager.GetOrCreateKeyPair)
+}
+
+func GetTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager) (*render.TyphaNodeTLS, error) {
+	return getOrCreateTyphaNodeTLSConfig(cli, certificateManager, certificateManager.GetKeyPair)
+}
+
+// getOrCreateTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
 // Typha and Felix configuration. It returns the validated resources or error
 // if there was one.
-func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager) (*render.TyphaNodeTLS, error) {
+func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager, createKeyPairFunc func(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)) (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
 	var errMsgs []string
-	getKeyPair := func(secretName, commonName string) (keyPair certificatemanagement.KeyPairInterface, cn string, uriSAN string) {
-		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, secretName, common.OperatorNamespace(), []string{commonName})
+	getOrCreateKeyPair := func(secretName, commonName string) (keyPair certificatemanagement.KeyPairInterface, cn string, uriSAN string) {
+		keyPair, err := createKeyPairFunc(cli, secretName, common.OperatorNamespace(), []string{commonName})
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		} else {
@@ -1582,8 +1590,8 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		}
 		return
 	}
-	node, nodeCommonName, nodeURISAN := getKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
-	typha, typhaCommonName, typhaURISAN := getKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
+	node, nodeCommonName, nodeURISAN := getOrCreateKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
+	typha, typhaCommonName, typhaURISAN := getOrCreateKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
 	var trustedBundle certificatemanagement.TrustedBundle
 	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
 	if err != nil {

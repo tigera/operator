@@ -129,6 +129,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 					WindowsNodes:          &operator.WindowsNodeSpec{},
+					ServiceCIDRs:          []string{"10.96.0.0/12"},
 				},
 			}
 			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.autoDetectedProvider)).NotTo(HaveOccurred())
@@ -197,6 +198,9 @@ var _ = Describe("windows-controller installation tests", func() {
 							BlockSize:     &twentySix,
 						},
 					},
+				}
+				cr.Status = operator.InstallationStatus{
+					Variant: operator.Calico,
 				}
 				Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.autoDetectedProvider)).NotTo(HaveOccurred())
 
@@ -271,23 +275,6 @@ var _ = Describe("windows-controller installation tests", func() {
 				// The calico-node-windows daemonset should be rendered
 				Expect(test.GetResource(c, &dsWin)).To(BeNil())
 				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
-				Expect(degradedMsg).To(ConsistOf([]string{}))
-				Expect(degradedErr).To(ConsistOf([]string{}))
-			})
-
-			It("should not render the Windows daemonset when there are no Windows nodes", func() {
-				hns := operator.WindowsDataplaneHNS
-				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
-
-				// Create the installation resource
-				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// The calico-node-windows daemonset should not be rendered
-				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
-				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
 				Expect(degradedMsg).To(ConsistOf([]string{}))
 				Expect(degradedErr).To(ConsistOf([]string{}))
 			})
@@ -407,11 +394,29 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(degradedErr).To(ConsistOf([]string{"VXLANVNI not specified in FelixConfigurationSpec"}))
 			})
 
-			It("should render the Windows daemonset in a degraded state with no ServiceCIDRs, no configmap and unsupported encapsulation with all messages", func() {
+			It("should not render the Windows daemonset with no ServiceCIDRs", func() {
 				// Create the Windows node
 				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
 
 				cr.Spec.ServiceCIDRs = []string{}
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
+				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "IPIP"
+
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).Should(HaveOccurred())
+				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico for Windows"))
+			})
+
+			It("should render the Windows daemonset in a degraded state with no configmap and unsupported encapsulation with all messages", func() {
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
 				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
 				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "IPIP"
 
@@ -428,11 +433,9 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(test.GetResource(c, &dsWin)).To(BeNil())
 				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
 				Expect(degradedMsg).To(ConsistOf([]string{
-					"Calico for Windows requires at least one Kubernetes service CIDR to be configured in InstallationSpec.ServiceCIDRs",
 					"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for the Calico Windows daemonset configuration",
 					"Encapsulation not supported by Calico for Windows"}))
 				Expect(degradedErr).To(ConsistOf([]string{
-					"InstallationSpec.ServiceCIDRs must be configured for Calico for Windows",
 					"Services endpoint configmap 'kubernetes-services-endpoint' must be configured for Calico for Windows",
 					"IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"}))
 			})
@@ -547,7 +550,10 @@ var _ = Describe("windows-controller installation tests", func() {
 					// We start off with a 'standard' installation, with nothing special
 
 					// Create installation CR with defaults and WindowsDataplaneHNS
-					dpHNS := operator.WindowsDataplaneHNS
+					winDp := operator.WindowsDataplaneDisabled
+					if enableWindows {
+						winDp = operator.WindowsDataplaneHNS
+					}
 					instance := &operator.Installation{
 						ObjectMeta: metav1.ObjectMeta{Name: "default"},
 						Spec: operator.InstallationSpec{
@@ -555,9 +561,10 @@ var _ = Describe("windows-controller installation tests", func() {
 							Registry:              "some.registry.org/",
 							CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
 							CalicoNetwork: &operator.CalicoNetworkSpec{
-								WindowsDataplane: &dpHNS,
+								WindowsDataplane: &winDp,
 							},
 							WindowsNodes: &operator.WindowsNodeSpec{},
+							ServiceCIDRs: []string{"10.96.0.0/12"},
 						},
 						Status: operator.InstallationStatus{
 							Variant: operator.TigeraSecureEnterprise,

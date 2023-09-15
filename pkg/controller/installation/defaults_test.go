@@ -29,6 +29,7 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -534,6 +535,11 @@ var _ = Describe("Defaulting logic tests", func() {
 			if provider == operator.ProviderAKS {
 				winDataplane = operator.WindowsDataplaneHNS
 				instance.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
+				// Populate the k8s service endpoint (required for windows)
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+					Host: "1.2.3.4",
+					Port: "6443",
+				}
 			}
 			bgpDisabled := operator.BGPDisabled
 			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{

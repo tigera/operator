@@ -417,8 +417,6 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "KUBE_NETWORK", Value: "Calico.*"},
 					{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 					{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-					{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-					{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 				}
 
 				// Set CALICO_NETWORKING_BACKEND
@@ -883,8 +881,6 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "KUBE_NETWORK", Value: "Calico.*"},
 					{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 					{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-					{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-					{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 
 					// Tigera-specific envvars
 					{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -1205,8 +1201,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBE_NETWORK", Value: "vpc.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
@@ -1405,8 +1399,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBE_NETWORK", Value: "vpc.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
@@ -1645,8 +1637,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBE_NETWORK", Value: "Calico.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
@@ -1800,8 +1790,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBE_NETWORK", Value: "Calico.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
@@ -1954,8 +1942,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBE_NETWORK", Value: "Calico.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
@@ -2437,8 +2423,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "KUBE_NETWORK", Value: "Calico.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
-			{Name: "KUBERNETES_SERVICE_CIDRS", Value: "10.96.0.0/12"},
-			{Name: "KUBERNETES_DNS_SERVERS", Value: "10.96.0.10"},
 		}
 		Expect(nodeContainer.Env).To(ConsistOf(expectedNodeEnv))
 		Expect(felixContainer.Env).To(ConsistOf(expectedNodeEnv))

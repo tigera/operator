@@ -26,6 +26,7 @@ import (
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 
@@ -441,8 +442,20 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	}
 
 	if common.WindowsEnabled(instance.Spec) {
-		if len(instance.Spec.ServiceCIDRs) == 0 {
-			return fmt.Errorf("Installation spec.ServiceCIDRs must be provided when using Calico for Windows")
+		if k8sapi.Endpoint.Host == "" || k8sapi.Endpoint.Port == "" {
+			return fmt.Errorf("Services endpoint configmap '%s' does not have all required information for Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName)
+		}
+		if instance.Spec.CNI.Type == operatorv1.PluginCalico {
+			if len(instance.Spec.ServiceCIDRs) == 0 {
+				return fmt.Errorf("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows")
+			}
+			if instance.Spec.CalicoNetwork != nil {
+				if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
+					if v4pool.Encapsulation != operatorv1.EncapsulationVXLAN && v4pool.Encapsulation != operatorv1.EncapsulationNone {
+						return fmt.Errorf("IPv4 IPPool encapsulation %s is not supported by Calico for Windows", v4pool.Encapsulation)
+					}
+				}
+			}
 		}
 	} else {
 		if instance.Spec.WindowsNodes != nil {

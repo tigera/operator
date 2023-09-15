@@ -223,7 +223,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Don't render calico-node-windows if it's disabled in the installation
 	if !common.WindowsEnabled(instance.Spec) {
-		reqLogger.Info("Calico Windows daemonset is disabled in the operator installation")
+		reqLogger.V(1).Info("Calico Windows daemonset is disabled in the operator installation")
 		return reconcile.Result{}, nil
 	}
 
@@ -231,19 +231,8 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	r.status.OnCRFound()
 	// FIXME: add logic to merge Installation status metadata
 
-	// Changes for updating Installation status conditions.
-	if request.Name == InstallationName && request.Namespace == "" {
-		ts := &operatorv1.TigeraStatus{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: InstallationName}, ts)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		instance.Status.Conditions = status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions)
-		if err := r.client.Status().Update(ctx, instance); err != nil {
-			logw.WithValues("reason", err).Info("Failed to create Installation status conditions.")
-			return reconcile.Result{}, err
-		}
-	}
+	// FIXME: add logic to update Installation status conditions that doesn't conflict with
+	// core_controller
 
 	instanceStatus := instance.Status
 
@@ -274,13 +263,11 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// A status is needed at this point for operator scorecard tests.
-	// status.variant is written later but for some tests the reconciliation
-	// does not get to that point.
+	// We rely on the core controller for defaulting, so wait until it has done so before continuing
 	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
 		err := fmt.Errorf("InstallationStatus is empty")
 		r.status.SetDegraded(operator.ResourceUpdateError, "InstallationStatus is empty", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{}, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace())
@@ -346,74 +333,49 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error getting TLS certificate", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 		}
-		if nodePrometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
-		}
-		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if prometheusClientCert != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
-		}
 	}
 
 	var component render.Component
 
-	if len(instance.Spec.ServiceCIDRs) == 0 {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Calico for Windows requires at least one Kubernetes service CIDR to be configured in InstallationSpec.ServiceCIDRs", fmt.Errorf("InstallationSpec.ServiceCIDRs must be configured for Calico for Windows"), reqLogger)
+	// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
+	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+	if r.autoDetectedProvider == operator.ProviderOpenShift {
+		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+	} else if r.autoDetectedProvider == operator.ProviderRKE2 {
+		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
 	}
-	if k8sapi.Endpoint.Host == "" || k8sapi.Endpoint.Port == "" {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for the Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName), fmt.Errorf("Services endpoint configmap '%s' must be configured for Calico for Windows", render.K8sSvcEndpointConfigMapName), reqLogger)
+
+	kubeDNSService := &corev1.Service{}
+	err = r.client.Get(ctx, kubeDNSServiceName, kubeDNSService)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("%s service not found", kubeDNSServiceName.Name), err, reqLogger)
+		} else {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error querying %s service", kubeDNSServiceName.Name), err, reqLogger)
+		}
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 	}
-	if instance.Spec.CalicoNetwork != nil {
-		if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
-			if v4pool.Encapsulation != operatorv1.EncapsulationVXLAN && v4pool.Encapsulation != operatorv1.EncapsulationNone {
-				r.status.SetDegraded(operatorv1.ResourceValidationError, "Encapsulation not supported by Calico for Windows", fmt.Errorf("IPv4 IPPool encapsulation %s is not supported by Calico for Windows", v4pool.Encapsulation), reqLogger)
-			}
-		}
+	kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
-		// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
-		kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
-		if r.autoDetectedProvider == operator.ProviderOpenShift {
-			kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
-		} else if r.autoDetectedProvider == operator.ProviderRKE2 {
-			kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
-		}
-
-		kubeDNSService := &corev1.Service{}
-		err = r.client.Get(ctx, kubeDNSServiceName, kubeDNSService)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("%s service not found", kubeDNSServiceName.Name), err, reqLogger)
-			} else {
-				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error querying %s service", kubeDNSServiceName.Name), err, reqLogger)
-			}
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
-		}
-		kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
-
-		// felixConfiguration.Spec.VXLANVNI is defaulted by fillDefaults() in the core controller, so if it isn't set, requeue to wait until it is
-		if felixConfiguration.Spec.VXLANVNI == nil {
-			err = fmt.Errorf("VXLANVNI not specified in FelixConfigurationSpec")
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading VXLANVNI from FelixConfiguration", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
-		}
-
-		windowsCfg := render.WindowsConfiguration{
-			K8sServiceEp:            k8sapi.Endpoint,
-			K8sDNSServers:           kubeDNSIPs,
-			Installation:            &instance.Spec,
-			ClusterDomain:           r.clusterDomain,
-			TLS:                     typhaNodeTLS,
-			AmazonCloudIntegration:  aci,
-			PrometheusServerTLS:     nodePrometheusTLS,
-			NodeReporterMetricsPort: nodeReporterMetricsPort,
-			VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
-		}
-		component = render.Windows(&windowsCfg)
+	// felixConfiguration.Spec.VXLANVNI is defaulted by fillDefaults() in the core controller, so if it isn't set, requeue to wait until it is
+	if felixConfiguration.Spec.VXLANVNI == nil {
+		err = fmt.Errorf("VXLANVNI not specified in FelixConfigurationSpec")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading VXLANVNI from FelixConfiguration", err, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 	}
+
+	windowsCfg := render.WindowsConfiguration{
+		K8sServiceEp:            k8sapi.Endpoint,
+		K8sDNSServers:           kubeDNSIPs,
+		Installation:            &instance.Spec,
+		ClusterDomain:           r.clusterDomain,
+		TLS:                     typhaNodeTLS,
+		AmazonCloudIntegration:  aci,
+		PrometheusServerTLS:     nodePrometheusTLS,
+		NodeReporterMetricsPort: nodeReporterMetricsPort,
+		VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
+	}
+	component = render.Windows(&windowsCfg)
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

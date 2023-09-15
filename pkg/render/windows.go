@@ -564,8 +564,6 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
-		{Name: "KUBERNETES_DNS_SERVERS", Value: strings.Join(c.cfg.K8sDNSServers, ",")},
-		{Name: "KUBERNETES_SERVICE_CIDRS", Value: strings.Join(c.cfg.Installation.ServiceCIDRs, ",")},
 		{Name: "VXLAN_VNI", Value: fmt.Sprintf("%d", c.cfg.VXLANVNI)},
 		{Name: "VXLAN_ADAPTER", Value: vxlanAdapter},
 	}

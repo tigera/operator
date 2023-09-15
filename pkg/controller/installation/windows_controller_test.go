@@ -130,6 +130,18 @@ var _ = Describe("windows-controller installation tests", func() {
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 					WindowsNodes:          &operator.WindowsNodeSpec{},
 					ServiceCIDRs:          []string{"10.96.0.0/12"},
+					// Add a VXLAN IP pool, which is supported by Calico for Windows
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						IPPools: []operator.IPPool{
+							{
+								CIDR:          "192.168.0.0/16",
+								Encapsulation: "VXLAN",
+								NATOutgoing:   "Enabled",
+								NodeSelector:  "all()",
+								BlockSize:     &twentySix,
+							},
+						},
+					},
 				},
 			}
 			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.autoDetectedProvider)).NotTo(HaveOccurred())
@@ -187,18 +199,6 @@ var _ = Describe("windows-controller installation tests", func() {
 				// Delete the windows node if it exists
 				_ = c.Delete(ctx, winNode)
 
-				// Add a VXLAN IP pool, which is supported by Calico for Windows
-				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
-					IPPools: []operator.IPPool{
-						{
-							CIDR:          "192.168.0.0/16",
-							Encapsulation: "VXLAN",
-							NATOutgoing:   "Enabled",
-							NodeSelector:  "all()",
-							BlockSize:     &twentySix,
-						},
-					},
-				}
 				cr.Status = operator.InstallationStatus{
 					Variant: operator.Calico,
 				}
@@ -252,7 +252,7 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(degradedErr).To(ConsistOf([]string{}))
 			})
 
-			It("should render the Windows daemonset when configuration is complete and valid and there are Windows nodes", func() {
+			It("should render the Windows daemonset when configuration is complete and valid", func() {
 				hns := operator.WindowsDataplaneHNS
 				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
 
@@ -279,7 +279,7 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(degradedErr).To(ConsistOf([]string{}))
 			})
 
-			It("should render the Windows daemonset in a degraded state when the kubernetes-service-endpoint configmap is incomplete", func() {
+			It("should not render the Windows daemonset when the kubernetes-service-endpoint configmap is incomplete", func() {
 				hns := operator.WindowsDataplaneHNS
 				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
 
@@ -295,16 +295,17 @@ var _ = Describe("windows-controller installation tests", func() {
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
+				Expect(err).Should(HaveOccurred())
+				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
 
 				// The calico-node-windows daemonset should be rendered, but in a degraded state
-				Expect(test.GetResource(c, &dsWin)).To(BeNil())
-				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
-				Expect(degradedMsg).To(ConsistOf([]string{"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for the Calico Windows daemonset configuration"}))
-				Expect(degradedErr).To(ConsistOf([]string{"Services endpoint configmap 'kubernetes-services-endpoint' must be configured for Calico for Windows"}))
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{"Invalid Installation provided"}))
+				Expect(degradedErr).To(ConsistOf([]string{"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"}))
 			})
 
-			It("should render the Windows daemonset in a degraded state when the encapsulation is VXLANCrossSubnet (not supported)", func() {
+			It("should not render the Windows daemonset when the encapsulation is VXLANCrossSubnet (not supported)", func() {
 				// Create the Windows node
 				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
 
@@ -318,12 +319,13 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
+				Expect(err).Should(HaveOccurred())
+				Expect(err.Error()).To(Equal("IPv4 IPPool encapsulation VXLANCrossSubnet is not supported by Calico for Windows"))
 
 				// The calico-node-windows daemonset should be rendered, but in a degraded state
-				Expect(test.GetResource(c, &dsWin)).To(BeNil())
-				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
-				Expect(degradedMsg).To(ConsistOf([]string{"Encapsulation not supported by Calico for Windows"}))
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{"Invalid Installation provided"}))
 				Expect(degradedErr).To(ConsistOf([]string{"IPv4 IPPool encapsulation VXLANCrossSubnet is not supported by Calico for Windows"}))
 			})
 
@@ -399,8 +401,6 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
 
 				cr.Spec.ServiceCIDRs = []string{}
-				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
-				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "IPIP"
 
 				hns := operator.WindowsDataplaneHNS
 				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
@@ -410,34 +410,10 @@ var _ = Describe("windows-controller installation tests", func() {
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico for Windows"))
-			})
+				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
 
-			It("should render the Windows daemonset in a degraded state with no configmap and unsupported encapsulation with all messages", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
-				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
-				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "IPIP"
-
-				hns := operator.WindowsDataplaneHNS
-				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
-
-				// Create the installation resource
-				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// The calico-node-windows daemonset should be rendered, but in a degraded state
-				Expect(test.GetResource(c, &dsWin)).To(BeNil())
-				Expect(dsWin.Spec.Template.Spec.Containers).To(HaveLen(3))
-				Expect(degradedMsg).To(ConsistOf([]string{
-					"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for the Calico Windows daemonset configuration",
-					"Encapsulation not supported by Calico for Windows"}))
-				Expect(degradedErr).To(ConsistOf([]string{
-					"Services endpoint configmap 'kubernetes-services-endpoint' must be configured for Calico for Windows",
-					"IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"}))
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
 			})
 		})
 	})
@@ -512,6 +488,12 @@ var _ = Describe("windows-controller installation tests", func() {
 						}
 
 						Expect(c.Create(ctx, node)).ToNot(HaveOccurred())
+
+						// Populate the k8s service endpoint (required for windows)
+						k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+							Host: "1.2.3.4",
+							Port: "6443",
+						}
 					}
 
 					// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -562,6 +544,15 @@ var _ = Describe("windows-controller installation tests", func() {
 							CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
 							CalicoNetwork: &operator.CalicoNetworkSpec{
 								WindowsDataplane: &winDp,
+								IPPools: []operator.IPPool{
+									{
+										CIDR:          "192.168.0.0/16",
+										Encapsulation: "VXLAN",
+										NATOutgoing:   "Enabled",
+										NodeSelector:  "all()",
+										BlockSize:     &twentySix,
+									},
+								},
 							},
 							WindowsNodes: &operator.WindowsNodeSpec{},
 							ServiceCIDRs: []string{"10.96.0.0/12"},

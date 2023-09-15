@@ -98,8 +98,6 @@ type KubeControllersConfiguration struct {
 
 	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
 	BindingNamespaces []string
-
-	Tenant *operatorv1.Tenant
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -171,12 +169,8 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 		kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
 	}
 
-	enabledControllers := []string{}
-	if cfg.Tenant == nil {
-		// We only need kube-controllers to manage elasticsearch configuration if we are not running within a tenant,
-		// as per-tenant ES users and roles are created by the operator itself.
-		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
-	}
+	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}
+
 	if cfg.ManagementCluster != nil {
 		enabledControllers = append(enabledControllers, "managedcluster")
 	}
@@ -534,7 +528,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}
 
-	if c.kubeControllerName == EsKubeController && c.cfg.Tenant == nil {
+	if c.kubeControllerName == EsKubeController {
 		container = relasticsearch.DecorateEnvironment(
 			container,
 			render.ElasticsearchNamespace,

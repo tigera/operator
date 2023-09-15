@@ -230,7 +230,6 @@ var _ = Describe("DPI rendering tests", func() {
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-			corev1.EnvVar{Name: "CLUSTER_NAME", Value: "clusterTestName"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/deep-packet-inspection-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/deep-packet-inspection-tls/tls.key"},
 			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},

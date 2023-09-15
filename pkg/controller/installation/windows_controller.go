@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 
 	"time"
@@ -32,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
@@ -147,63 +145,18 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	// Watch for changes to KubeControllersConfiguration.
-	err = c.Watch(&source.Kind{Type: &crdv1.KubeControllersConfiguration{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("tigera-windows-controller failed to watch KubeControllersConfiguration resource: %w", err)
-	}
-
 	// Watch for changes to FelixConfiguration.
 	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
-	// Watch for changes to BGPConfiguration.
-	err = c.Watch(&source.Kind{Type: &crdv1.BGPConfiguration{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("tigera-windows-controller failed to watch BGPConfiguration resource: %w", err)
-	}
-
 	if ri.enterpriseCRDsExist {
-		// Watch for changes to primary resource ManagementCluster
-		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-windows-controller failed to watch primary resource: %v", err)
+		if err = utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, common.CalicoNamespace); err != nil {
+			return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), err)
 		}
-
-		// Watch for changes to primary resource ManagementClusterConnection
-		err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-windows-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
-		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
-		}
-
-		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
-		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace); err != nil {
-			return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
-		}
-
-		// watch for change to primary resource LogCollector
-		err = c.Watch(&source.Kind{Type: &operator.LogCollector{}}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-windows-controller failed to watch primary resource: %v", err)
-		}
-
-		if ri.manageCRDs {
-			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
-				return fmt.Errorf("tigera-windows-controller failed to watch CRD resource: %v", err)
-			}
-		}
-	} else {
-		if ri.manageCRDs {
-			if err = addCRDWatches(c, operator.Calico); err != nil {
-				return fmt.Errorf("tigera-windows-controller failed to watch CRD resource: %v", err)
-			}
+		if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), err)
 		}
 	}
 
@@ -227,7 +180,6 @@ type ReconcileWindows struct {
 	enterpriseCRDsExist  bool
 	amazonCRDExists      bool
 	clusterDomain        string
-	manageCRDs           bool
 }
 
 // newWindowsReconciler returns a new reconcile.Reconciler
@@ -244,7 +196,6 @@ func newWindowsReconciler(mgr manager.Manager, opts options.AddOptions) (*Reconc
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
-		manageCRDs:           opts.ManageCRDs,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -270,12 +221,14 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+	// Don't render calico-node-windows if it's disabled in the installation
+	if !common.WindowsEnabled(instance.Spec) {
+		reqLogger.Info("Calico Windows daemonset is disabled in the operator installation")
+		return reconcile.Result{}, nil
+	}
 
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
-	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&instance.ObjectMeta)
 
 	// Changes for updating Installation status conditions.
 	if request.Name == InstallationName && request.Namespace == "" {
@@ -298,15 +251,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	// Validate the configuration.
 	if err := validateCustomResource(instance); err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
-	// be stored in the 'overlay' resource.
-	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -333,56 +277,18 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	// status.variant is written later but for some tests the reconciliation
 	// does not get to that point.
 	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
-		instance.Status = operatorv1.InstallationStatus{}
-		if err := r.client.Status().Update(ctx, instance); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write default status", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+		err := fmt.Errorf("InstallationStatus is empty")
+		r.status.SetDegraded(operator.ResourceUpdateError, "InstallationStatus is empty", err, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 	}
 
-	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
-	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
-	if !r.enterpriseCRDsExist && instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
-		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := utils.RequiresTigeraSecure(r.config)
-		if b {
-			logw.Info("Rebooting to enable TigeraSecure controllers")
-			os.Exit(0)
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.InternalServerError, "Error discovering Tigera Secure availability", err, reqLogger)
-		} else {
-			r.status.SetDegraded(operatorv1.InternalServerError, "Cannot deploy Tigera Secure", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
-		}
-
-		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
-		// this controller to fail.
-		reqLogger.Info("Scheduling a retry in 30 seconds")
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
-	// The operator supports running without the AmazonCloudIntegration when it's CRD is not installed.
-	// If, when this controller was started, the CRD didn't exist, but it does now, then reboot.
-	if !r.amazonCRDExists {
-		amazonCRDRequired, err := utils.RequiresAmazonController(r.config)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Error discovering AmazonCloudIntegration CRD", err, reqLogger)
-			reqLogger.Info("Scheduling a retry in 30 seconds")
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-		}
-		if amazonCRDRequired {
-			logw.Info("Rebooting to enable AWS controllers")
-			os.Exit(0)
-		}
-	}
-
-	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	typhaNodeTLS, err := GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
+	typhaNodeTLS, err := GetTyphaNodeTLSConfig(r.client, certificateManager)
 	if err != nil {
 		logw.Error(err, "Error with Typha/Felix secrets")
 		r.status.SetDegraded(operatorv1.CertificateError, "Error with Typha/Felix secrets", err, reqLogger)
@@ -433,10 +339,11 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 
-		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
+		// The key pair is created by the core controller, so if it isn't set, requeue to wait until it is
+		nodePrometheusTLS, err = certificateManager.GetKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error getting TLS certificate", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 		}
 		if nodePrometheusTLS != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
@@ -451,104 +358,60 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// Secure calico kube controller metrics.
-	var kubeControllerTLS certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-		// Create or Get TLS certificates for kube controller.
-		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(
-			r.client,
-			kubecontrollers.KubeControllerPrometheusTLSSecret,
-			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.clusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate kube controllers metric", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	var component render.Component
 
-		// Add prometheus client certificate to Trusted bundle.
-		kubecontrollerprometheusTLS, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
-			return reconcile.Result{}, err
-		} else if kubecontrollerprometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
-		}
+	if len(instance.Spec.ServiceCIDRs) == 0 {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Calico for Windows requires at least one Kubernetes service CIDR to be configured in InstallationSpec.ServiceCIDRs", fmt.Errorf("InstallationSpec.ServiceCIDRs must be configured for Calico for Windows"), reqLogger)
 	}
-
-	components := []render.Component{}
-
-	// Fetch any existing default BGPConfiguration object.
-	bgpConfiguration := &crdv1.BGPConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
-	if err != nil && !apierrors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
-		return reconcile.Result{}, err
+	if k8sapi.Endpoint.Host == "" || k8sapi.Endpoint.Port == "" {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for the Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName), fmt.Errorf("Services endpoint configmap '%s' must be configured for Calico for Windows", render.K8sSvcEndpointConfigMapName), reqLogger)
 	}
+	if instance.Spec.CalicoNetwork != nil {
+		if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
+			if v4pool.Encapsulation != operatorv1.EncapsulationVXLAN && v4pool.Encapsulation != operatorv1.EncapsulationNone {
+				r.status.SetDegraded(operatorv1.ResourceValidationError, "Encapsulation not supported by Calico for Windows", fmt.Errorf("IPv4 IPPool encapsulation %s is not supported by Calico for Windows", v4pool.Encapsulation), reqLogger)
+			}
+		}
 
-	var hasWindowsNodes bool
-	// Don't render calico-node-windows if it's disabled in the installation
-	if instance.Spec.CalicoNetwork != nil && (instance.Spec.CalicoNetwork.WindowsDataplane == nil || *instance.Spec.CalicoNetwork.WindowsDataplane == operatorv1.WindowsDataplaneDisabled) {
-		reqLogger.Info("Calico Windows daemonset is disabled in the operator installation")
-	} else {
-		// Build a configuration for rendering calico-node-windows, but only if there are Windows nodes in the cluster
-		hasWindowsNodes, err = common.HasWindowsNodes(r.client)
+		// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
+		kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+		if r.autoDetectedProvider == operator.ProviderOpenShift {
+			kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+		} else if r.autoDetectedProvider == operator.ProviderRKE2 {
+			kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
+		}
+
+		kubeDNSService := &corev1.Service{}
+		err = r.client.Get(ctx, kubeDNSServiceName, kubeDNSService)
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to detect if there are Windows nodes present", err, reqLogger)
+			if apierrors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("%s service not found", kubeDNSServiceName.Name), err, reqLogger)
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error querying %s service", kubeDNSServiceName.Name), err, reqLogger)
+			}
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 		}
-		if hasWindowsNodes {
-			if len(instance.Spec.ServiceCIDRs) == 0 {
-				r.status.SetDegraded(operatorv1.ResourceValidationError, "Calico for Windows requires at least one Kubernetes service CIDR to be configured in InstallationSpec.ServiceCIDRs", fmt.Errorf("InstallationSpec.ServiceCIDRs must be configured for Calico for Windows"), reqLogger)
-			}
-			if k8sapi.Endpoint.Host == "" || k8sapi.Endpoint.Port == "" {
-				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Services endpoint configmap '%s' does not have all required information for the Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName), fmt.Errorf("Services endpoint configmap '%s' must be configured for Calico for Windows", render.K8sSvcEndpointConfigMapName), reqLogger)
-			}
-			if instance.Spec.CalicoNetwork != nil {
-				if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
-					if v4pool.Encapsulation != operatorv1.EncapsulationVXLAN && v4pool.Encapsulation != operatorv1.EncapsulationNone {
-						r.status.SetDegraded(operatorv1.ResourceValidationError, "Encapsulation not supported by Calico for Windows", fmt.Errorf("IPv4 IPPool encapsulation %s is not supported by Calico for Windows", v4pool.Encapsulation), reqLogger)
-					}
-				}
-			}
+		kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
-			// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
-			kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
-			if r.autoDetectedProvider == operator.ProviderOpenShift {
-				kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
-			} else if r.autoDetectedProvider == operator.ProviderRKE2 {
-				kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
-			}
-
-			kubeDNSService := &corev1.Service{}
-			err = r.client.Get(ctx, kubeDNSServiceName, kubeDNSService)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("%s service not found", kubeDNSServiceName.Name), err, reqLogger)
-				} else {
-					r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error querying %s service", kubeDNSServiceName.Name), err, reqLogger)
-				}
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, err
-			}
-			kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
-
-			if felixConfiguration.Spec.VXLANVNI == nil {
-				err = fmt.Errorf("VXLANVNI not specified in FelixConfigurationSpec")
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading VXLANVNI from FelixConfiguration", err, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, err
-			}
-
-			windowsCfg := render.WindowsConfiguration{
-				K8sServiceEp:            k8sapi.Endpoint,
-				K8sDNSServers:           kubeDNSIPs,
-				Installation:            &instance.Spec,
-				ClusterDomain:           r.clusterDomain,
-				TLS:                     typhaNodeTLS,
-				AmazonCloudIntegration:  aci,
-				PrometheusServerTLS:     nodePrometheusTLS,
-				NodeReporterMetricsPort: nodeReporterMetricsPort,
-				VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
-			}
-			components = append(components, render.Windows(&windowsCfg))
+		// felixConfiguration.Spec.VXLANVNI is defaulted by fillDefaults() in the core controller, so if it isn't set, requeue to wait until it is
+		if felixConfiguration.Spec.VXLANVNI == nil {
+			err = fmt.Errorf("VXLANVNI not specified in FelixConfigurationSpec")
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading VXLANVNI from FelixConfiguration", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
 		}
+
+		windowsCfg := render.WindowsConfiguration{
+			K8sServiceEp:            k8sapi.Endpoint,
+			K8sDNSServers:           kubeDNSIPs,
+			Installation:            &instance.Spec,
+			ClusterDomain:           r.clusterDomain,
+			TLS:                     typhaNodeTLS,
+			AmazonCloudIntegration:  aci,
+			PrometheusServerTLS:     nodePrometheusTLS,
+			NodeReporterMetricsPort: nodeReporterMetricsPort,
+			VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
+		}
+		component = render.Windows(&windowsCfg)
 	}
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
@@ -562,22 +425,16 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	if err = imageset.ResolveImages(imageSet, components...); err != nil {
+	if err = imageset.ResolveImages(imageSet, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for components", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Create a component handler to create or update the rendered components.
 	handler := utils.NewComponentHandler(logw, r.client, r.scheme, instance)
-	for _, component := range components {
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
-	if hasWindowsNodes {
-		r.status.AddDaemonsets([]types.NamespacedName{{Name: common.WindowsDaemonSetName, Namespace: common.CalicoNamespace}})
+	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.

@@ -736,6 +736,7 @@ var _ = Describe("Installation validation tests", func() {
 						},
 					},
 				},
+				ServiceCIDRs: []string{"10.96.0.0/12"},
 				CNI: &operator.CNISpec{
 					Type: operator.PluginCalico,
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginHostLocal},

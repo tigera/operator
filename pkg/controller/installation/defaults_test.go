@@ -533,6 +533,7 @@ var _ = Describe("Defaulting logic tests", func() {
 			winDataplane := operator.WindowsDataplaneDisabled
 			if provider == operator.ProviderAKS {
 				winDataplane = operator.WindowsDataplaneHNS
+				instance.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
 			}
 			bgpDisabled := operator.BGPDisabled
 			Expect(instance.Spec.CalicoNetwork).To(Equal(&operator.CalicoNetworkSpec{

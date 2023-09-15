@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
@@ -438,6 +439,17 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			return fmt.Errorf("Installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")
 		}
 	}
+
+	if common.WindowsEnabled(instance.Spec) {
+		if len(instance.Spec.ServiceCIDRs) == 0 {
+			return fmt.Errorf("Installation spec.ServiceCIDRs must be provided when using Calico for Windows")
+		}
+	} else {
+		if instance.Spec.WindowsNodes != nil {
+			return fmt.Errorf("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled")
+		}
+	}
+
 	return nil
 }
 

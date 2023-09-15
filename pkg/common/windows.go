@@ -21,6 +21,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 const (
@@ -35,4 +37,11 @@ func HasWindowsNodes(c client.Client) (bool, error) {
 	}
 
 	return len(nodes.Items) > 0, nil
+}
+
+// WindowsEnabled returns true if the given Installation enables Windows, false otherwise.
+func WindowsEnabled(installation operatorv1.InstallationSpec) bool {
+	return installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.WindowsDataplane != nil &&
+		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneDisabled
 }

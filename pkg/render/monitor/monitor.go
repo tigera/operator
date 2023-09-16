@@ -190,7 +190,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.PullSecrets...)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
 
 	toCreate = append(toCreate,
 		mc.prometheusOperatorServiceAccount(),
@@ -200,18 +199,23 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusClusterRole(),
 		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
-		mc.alertmanagerService(),
-		mc.alertmanager(),
 		mc.prometheusServiceService(),
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
-		mc.prometheusRule(),
 		mc.serviceMonitorCalicoNode(),
-		mc.serviceMonitorElasticsearch(),
 		mc.serviceMonitorFluentd(),
 		mc.serviceMonitorQueryServer(),
 		mc.serviceMonitorCalicoKubeControllers(),
 	)
+	if mc.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
+		toCreate = append(toCreate,
+			mc.alertmanagerService(),
+			mc.alertmanager(),
+			mc.prometheusRule(),
+			mc.serviceMonitorElasticsearch(),
+		)
+	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredSecrets(common.TigeraPrometheusNamespace)...)...)
@@ -229,6 +233,14 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		// Remove the tigera-prometheus-api deployment that was part of release-v1.23, but has been removed since.
 		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-api", Namespace: common.TigeraPrometheusNamespace}},
 	)
+	if mc.cfg.Installation.Variant == operatorv1.Calico {
+		toDelete = append(toDelete,
+			mc.alertmanagerService(),
+			mc.alertmanager(),
+			mc.prometheusRule(),
+			mc.serviceMonitorElasticsearch(),
+		)
+	}
 
 	return toCreate, toDelete
 }
@@ -735,6 +747,28 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 }
 
 func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMonitor {
+	endPoints := []monitoringv1.Endpoint{
+		{
+			HonorLabels:   true,
+			Interval:      "5s",
+			Port:          "calico-metrics-port",
+			ScrapeTimeout: "5s",
+			Scheme:        "https",
+			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+		},
+	}
+	if mc.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		endPoints = append(endPoints, monitoringv1.Endpoint{
+			HonorLabels:   true,
+			Interval:      "5s",
+			Port:          "calico-bgp-metrics-port",
+			ScrapeTimeout: "5s",
+			Scheme:        "https",
+			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+		},
+		)
+	}
+
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -745,24 +779,7 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
 			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"calico-system"}},
-			Endpoints: []monitoringv1.Endpoint{
-				{
-					HonorLabels:   true,
-					Interval:      "5s",
-					Port:          "calico-metrics-port",
-					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
-				},
-				{
-					HonorLabels:   true,
-					Interval:      "5s",
-					Port:          "calico-bgp-metrics-port",
-					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
-				},
-			},
+			Endpoints:         endPoints,
 		},
 	}
 }

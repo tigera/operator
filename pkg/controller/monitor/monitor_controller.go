@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	rauth "github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -60,12 +61,11 @@ const ResourceName = "monitor"
 var log = logf.Log.WithName("controller_monitor")
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		return nil
-	}
-
 	prometheusReady := &utils.ReadyFlag{}
-	tierWatchReady := &utils.ReadyFlag{}
+	var tierWatchReady *utils.ReadyFlag
+	if opts.EnterpriseCRDExists {
+		tierWatchReady = &utils.ReadyFlag{}
+	}
 
 	// Create the reconciler
 	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
@@ -82,23 +82,66 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	policyNames := []types.NamespacedName{
-		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
+	if opts.EnterpriseCRDExists {
+		policyNames := []types.NamespacedName{
+			{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
+			{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
+			{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
+			{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+			{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+			{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		}
+
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+
+		go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
+
+		err := controller.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
+		}
 	}
-
-	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
 
 	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
 
-	return add(mgr, controller)
+	// watch for primary resource changes
+	if err = controller.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
+	}
+
+	if err = utils.AddNetworkWatch(controller); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch Installation resource: %w", err)
+	}
+
+	if err = imageset.AddImageSetWatch(controller); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
+	}
+
+	// ManagementClusterConnection (in addition to Installation/Network) is used as input to determine whether network policy should be reconciled.
+	err = controller.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
+	}
+
+	for _, secret := range []string{
+		certificatemanagement.CASecretName,
+		esmetrics.ElasticsearchMetricsServerTLSSecret,
+		monitor.PrometheusTLSSecretName,
+		render.FluentdPrometheusTLSSecretName,
+		render.NodePrometheusTLSServerSecret,
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
+	} {
+		if err = utils.AddSecretsWatch(controller, secret, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
+		}
+	}
+
+	// Watch for changes to TigeraStatus.
+	if err = utils.AddTigeraStatusWatch(controller, ResourceName); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch monitor Tigerastatus: %w", err)
+	}
+	return nil
 }
 
 func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
@@ -113,61 +156,14 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		usePSP:          opts.UsePSP,
 	}
 
-	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
-	})
+	namespacedName := []types.NamespacedName{{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)}}
+	if opts.EnterpriseCRDExists {
+		namespacedName = append(namespacedName, types.NamespacedName{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)})
+	}
+	r.status.AddStatefulSets(namespacedName)
 
 	r.status.Run(opts.ShutdownContext)
 	return r
-}
-
-func add(mgr manager.Manager, c controller.Controller) error {
-	var err error
-
-	// watch for primary resource changes
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
-	}
-
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch Installation resource: %w", err)
-	}
-
-	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
-	}
-
-	// ManagementClusterConnection (in addition to Installation/Network) is used as input to determine whether network policy should be reconciled.
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
-	}
-
-	for _, secret := range []string{
-		certificatemanagement.CASecretName,
-		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName,
-		render.NodePrometheusTLSServerSecret,
-		kubecontrollers.KubeControllerPrometheusTLSSecret,
-	} {
-		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
-		}
-	}
-
-	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
-	}
-
-	// Watch for changes to TigeraStatus.
-	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch monitor Tigerastatus: %w", err)
-	}
-
-	return nil
 }
 
 // blank assignment to verify that ReconcileMonitor implements reconcile.Reconciler
@@ -275,13 +271,16 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	trustedBundle := certificateManager.CreateTrustedBundle()
-	for _, certificateName := range []string{
-		esmetrics.ElasticsearchMetricsServerTLSSecret,
+	certificateNames := []string{
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		render.ProjectCalicoAPIServerTLSSecretName(install.Variant),
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
-	} {
+	}
+	if variant == operatorv1.TigeraSecureEnterprise {
+		certificateNames = append(certificateNames, esmetrics.ElasticsearchMetricsServerTLSSecret)
+	}
+	for _, certificateName := range certificateNames {
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)
@@ -290,52 +289,55 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
-	certificateManager.AddToStatusManager(r.status, common.TigeraPrometheusNamespace)
 
-	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authenticationCR status: %s", authenticationCR.Status.State), err, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to process the authentication CR.", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	var alertmanagerConfigSecret *corev1.Secret
+	var keyValidatorConfig rauth.KeyValidatorConfig
+	createInOperatorNamespace := false
 	includeV3NetworkPolicy := false
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
-		// License becomes available (in managed clusters). Therefore, if we fail to query the Tier, we exclude NetworkPolicy
-		// from reconciliation and tolerate errors arising from the Tier not being created.
-		if !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+	if variant == operatorv1.TigeraSecureEnterprise {
+		certificateManager.AddToStatusManager(r.status, common.TigeraPrometheusNamespace)
+
+		// Fetch the Authentication spec. If present, we use to configure user authentication.
+		authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	} else {
-		includeV3NetworkPolicy = true
-	}
+		if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authenticationCR status: %s", authenticationCR.Status.State), err, reqLogger)
+			return reconcile.Result{}, nil
+		}
 
-	// Create a component handler to manage the rendered component.
-	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to process the authentication CR.", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 
-	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
-		return reconcile.Result{}, err
+		// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+		if !r.tierWatchReady.IsReady() {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
+			// License becomes available (in managed clusters). Therefore, if we fail to query the Tier, we exclude NetworkPolicy
+			// from reconciliation and tolerate errors arising from the Tier not being created.
+			if !errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
+		}
+
+		alertmanagerConfigSecret, createInOperatorNamespace, err = r.readAlertmanagerConfigSecret(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
@@ -343,6 +345,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// Create a component handler to manage the rendered component.
+	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	monitorCfg := &monitor.Config{
 		Installation:             install,

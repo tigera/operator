@@ -95,6 +95,7 @@ type NodeConfiguration struct {
 	// Optional fields.
 	AmazonCloudIntegration  *operatorv1.AmazonCloudIntegration
 	LogCollector            *operatorv1.LogCollector
+	MonitorResource         *operatorv1.Monitor
 	MigrateNamespaces       bool
 	NodeAppArmorProfile     string
 	BirdTemplates           map[string]string
@@ -205,6 +206,8 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
+		objs = append(objs, c.nodeMetricsService())
+	} else if c.cfg.MonitorResource != nil {
 		objs = append(objs, c.nodeMetricsService())
 	}
 
@@ -436,6 +439,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"networksets",
+					"tiers",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -464,6 +468,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"clusterinformations",
 					"felixconfigurations",
 					"ippools",
+					"tiers",
 				},
 				Verbs: []string{"create", "update"},
 			},
@@ -1055,15 +1060,12 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir}}})
 	}
 
-	// Override with Tigera-specific config.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		// Add volume for calico logs.
-		calicoLogVol := corev1.Volume{
-			Name:         "var-log-calico",
-			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
-		}
-		volumes = append(volumes, calicoLogVol)
+	// Add volume for calico logs.
+	calicoLogVol := corev1.Volume{
+		Name:         "var-log-calico",
+		VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
 	}
+	volumes = append(volumes, calicoLogVol)
 
 	// Create and append flexvolume
 	if c.cfg.Installation.FlexVolumePath != "None" {
@@ -1302,12 +1304,10 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		extraNodeMounts := []corev1.VolumeMount{
-			{MountPath: "/var/log/calico", Name: "var-log-calico"},
-		}
-		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
-	} else if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+
+	nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"})
+
+	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		cniLogMount := corev1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false}
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
@@ -1611,6 +1611,36 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		// IPv6 Auto-detection is disabled.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
+	}
+
+	// We are checking for the logCollector and Monitor resource in Calico but not in Calico Enterprise
+	// because, in Calico logCollector may or may not be present whereas in the Calico Enterprise it is always
+	// expected.
+	if c.cfg.Installation.Variant == operatorv1.Calico {
+		extraNodeEnv := []corev1.EnvVar{}
+		if c.cfg.LogCollector != nil {
+			extraNodeEnv = append(extraNodeEnv, []corev1.EnvVar{
+				{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+				{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+				{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+				{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
+				{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+			}...)
+		}
+		if c.cfg.MonitorResource != nil {
+			extraNodeEnv = append(extraNodeEnv, []corev1.EnvVar{
+				{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+				{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
+			}...)
+			if c.cfg.PrometheusServerTLS != nil {
+				extraNodeEnv = append(extraNodeEnv, []corev1.EnvVar{
+					{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountCertificateFilePath()},
+					{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountKeyFilePath()},
+					{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+				}...)
+			}
+		}
+		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

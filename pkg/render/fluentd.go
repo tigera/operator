@@ -17,7 +17,6 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
-	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -81,12 +80,13 @@ const (
 	SyslogCAConfigMapName                    = "syslog-ca"
 
 	// Constants for Linseed token volume mounting in managed clusters.
-	LinseedTokenVolumeName = "linseed-token"
-	LinseedTokenKey        = "token"
-	LinseedTokenSubPath    = "token"
-	LinseedTokenSecret     = "%s-tigera-linseed-token"
-	LinseedVolumeMountPath = "/var/run/secrets/tigera.io/linseed/"
-	LinseedTokenPath       = "/var/run/secrets/tigera.io/linseed/token"
+	LinseedTokenVolumeName    = "linseed-token"
+	LinseedTokenKey           = "token"
+	LinseedTokenSubPath       = "token"
+	LinseedTokenSecret        = "%s-tigera-linseed-token"
+	LinseedVolumeMountPath    = "/var/run/secrets/tigera.io/linseed/"
+	LinseedTokenPath          = "/var/run/secrets/tigera.io/linseed/token"
+	LinseedServiceAccountName = "tigera-linseed"
 
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
@@ -183,15 +183,19 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	if c.cfg.OSType == rmeta.OSTypeWindows {
+		if c.cfg.Installation.Variant == operatorv1.Calico {
+			return fmt.Errorf("Calico does not support windows fluentd")
+		}
 		var err error
-		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, is)
+		c.image, err = components.GetReference(components.ComponentTigeraFluentdWindows, reg, path, prefix, is)
 		return err
 	}
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
-	if err != nil {
-		return err
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.image, err = components.GetReference(components.ComponentTigeraFluentd, reg, path, prefix, is)
+	} else {
+		c.image, err = components.GetReference(components.ComponentCalicoFluentd, reg, path, prefix, is)
 	}
 	return err
 }
@@ -256,8 +260,13 @@ func (c *fluentdComponent) path(path string) string {
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
 	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
-	objs = append(objs, c.allowTigeraPolicy())
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs, c.allowTigeraPolicy())
+	} else {
+		toDelete = append(toDelete, c.allowTigeraPolicy())
+	}
+
 	objs = append(objs, c.metricsService())
 
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
@@ -302,7 +311,10 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs, c.fluentdServiceAccount())
-	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
+	}
 	objs = append(objs, c.daemonset())
 
 	return objs, toDelete
@@ -623,12 +635,14 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
-		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
 
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		envs = append(envs, corev1.EnvVar{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")})
+	}
 	if c.cfg.Tenant != nil {
 		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
@@ -778,24 +792,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "FLUENTD_DNS_FILTERS", Value: "true"})
 		}
 	}
-
-	envs = append(envs,
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.FlowShards())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-	)
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
@@ -963,31 +959,35 @@ func (c *fluentdComponent) fluentdClusterRoleBinding() *rbacv1.ClusterRoleBindin
 }
 
 func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
+	linseedRule := rbacv1.PolicyRule{
+		// Add write access to Linseed APIs.
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{
+			"flowlogs",
+		},
+		Verbs: []string{"create"},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		linseedRule.Resources = append(linseedRule.Resources, []string{
+			"kube_auditlogs",
+			"ee_auditlogs",
+			"dnslogs",
+			"l7logs",
+			"events",
+			"bgplogs",
+			"waflogs",
+			"runtimereports",
+		}...)
+	}
+
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: c.fluentdName(),
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Add write access to Linseed APIs.
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{
-					"flowlogs",
-					"kube_auditlogs",
-					"ee_auditlogs",
-					"dnslogs",
-					"l7logs",
-					"events",
-					"bgplogs",
-					"waflogs",
-					"runtimereports",
-				},
-				Verbs: []string{"create"},
-			},
-		},
+		Rules: []rbacv1.PolicyRule{linseedRule},
 	}
-
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{

@@ -309,6 +309,18 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
 	}
 
+	// watch for change to primary resource LogCollector
+	err = c.Watch(&source.Kind{Type: &operator.LogCollector{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+	}
+
+	// watch for change to primary resource monitor
+	err = c.Watch(&source.Kind{Type: &operator.Monitor{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+	}
+
 	if r.enterpriseCRDsExist {
 		// Watch for changes to primary resource ManagementCluster
 		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
@@ -324,12 +336,6 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 
 		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusTLSSecretName, common.OperatorNamespace(), err)
-		}
-
-		// watch for change to primary resource LogCollector
-		err = c.Watch(&source.Kind{Type: &operator.LogCollector{}}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
 		if r.manageCRDs {
@@ -997,19 +1003,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	logCollector, err := utils.GetLogCollector(ctx, r.client)
+	if logCollector != nil {
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Error reading LogCollector", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	monitorResource, err := utils.GetMonitor(ctx, r.client)
+	if monitorResource != nil {
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Error reading Monitor Resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
-	var logCollector *operator.LogCollector
 	includeV3NetworkPolicy := false
 	if r.enterpriseCRDsExist {
-		logCollector, err = utils.GetLogCollector(ctx, r.client)
-		if logCollector != nil {
-			if err != nil {
-				r.status.SetDegraded(operator.ResourceReadError, "Error reading LogCollector", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -1141,35 +1154,35 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeReporterMetricsPort := defaultNodeReporterPort
 	var nodePrometheusTLS certificatemanagement.KeyPairInterface
 	calicoVersion := components.CalicoRelease
+
+	// Determine the port to use for nodeReporter metrics.
+	if felixConfiguration.Spec.PrometheusReporterPort != nil {
+		nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
+	}
+
+	if nodeReporterMetricsPort == 0 {
+		err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
+		r.status.SetDegraded(operator.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if nodePrometheusTLS != nil {
+		typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
+	}
+	prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operator.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if prometheusClientCert != nil {
+		typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
+	}
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-
-		// Determine the port to use for nodeReporter metrics.
-		if felixConfiguration.Spec.PrometheusReporterPort != nil {
-			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
-		}
-
-		if nodeReporterMetricsPort == 0 {
-			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
-			r.status.SetDegraded(operator.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if nodePrometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
-		}
-		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operator.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if prometheusClientCert != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
-		}
 
 		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
 		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
@@ -1328,6 +1341,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation:            &instance.Spec,
 		AmazonCloudIntegration:  aci,
 		LogCollector:            logCollector,
+		MonitorResource:         monitorResource,
 		BirdTemplates:           birdTemplates,
 		TLS:                     typhaNodeTLS,
 		ClusterDomain:           r.clusterDomain,

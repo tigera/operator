@@ -269,6 +269,18 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return logCollector, nil
 }
 
+func GetMonitor(ctx context.Context, cli client.Client) (*operatorv1.Monitor, error) {
+	monitor := &operatorv1.Monitor{}
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, monitor)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return monitor, err
+}
+
 // FetchLicenseKey returns the license if it has been installed. It's useful
 // to prevent rollout of TSEE components that might require it.
 // It will return an error if the license is not installed/cannot be read

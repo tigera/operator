@@ -312,6 +312,7 @@ var (
 	ComponentTigeraNodeWindows = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -339,6 +340,7 @@ var (
 	ComponentTigeraCNIWindows = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "cloud-controllers" }}
@@ -413,11 +415,11 @@ var (
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
-		ComponentTigeraNodeWindows,
+		//ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentTigeraCNIFIPS,
-		ComponentTigeraCNIWindows,
+		//ComponentTigeraCNIWindows,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

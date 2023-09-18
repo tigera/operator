@@ -573,6 +573,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
+	// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
+	// makes tests fail, this needs to be looked at.
 	typhaNodeTLS, err := installation.GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with Typha/Felix secrets", err, reqLogger)

@@ -32,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
@@ -611,9 +610,6 @@ func (c keyPairCollection) component(bundle certificatemanagement.TrustedBundle,
 			linseed.ServiceAccountName,
 			esgateway.ServiceAccountName,
 			esmetrics.ElasticsearchMetricsName,
-			render.IntrusionDetectionName,
-			dpi.DeepPacketInspectionName,
-			render.AnomalyDetectorsName,
 		},
 		KeyPairOptions: kpos,
 		TrustedBundle:  bundle,

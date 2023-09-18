@@ -293,12 +293,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	if l.cfg.ManagementCluster {
 		envVars = append(envVars,
-			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
-			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
 			corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: common.OperatorNamespace()},
 		)
-		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
-		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
 	}
 
 	if l.cfg.Tenant != nil {

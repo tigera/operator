@@ -37,8 +37,8 @@ var (
 {{- end }}
 {{ with index .Components "calico/cni-windows" }}
 	ComponentCalicoCNIWindows = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
@@ -72,8 +72,8 @@ var (
 {{- end }}
 {{ with index .Components  "calico/node-windows" }}
 	ComponentCalicoNodeWindows = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}

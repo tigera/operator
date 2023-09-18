@@ -39,6 +39,7 @@ var (
 	ComponentCalicoCNIWindows = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "calico/kube-controllers" }}
@@ -73,6 +74,7 @@ var (
 	ComponentCalicoNodeWindows = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}

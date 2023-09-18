@@ -240,7 +240,6 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
 		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
-		{Name: "CLUSTER_NAME", Value: d.cfg.ESClusterConfig.ClusterName()},
 		{Name: "LINSEED_CLIENT_CERT", Value: d.cfg.DPICertSecret.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_CLIENT_KEY", Value: d.cfg.DPICertSecret.VolumeMountKeyFilePath()},
 		{Name: "LINSEED_TOKEN", Value: render.GetLinseedTokenPath(d.cfg.ManagedCluster)},

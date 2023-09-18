@@ -35,8 +35,9 @@ var (
 	}
 
 	ComponentCalicoCNIWindows = component{
-		Version: "master",
-		Image:   "calico/cni-windows",
+		Version:  "master",
+		Image:    "calico/cni-windows",
+		Registry: "",
 	}
 
 	ComponentCalicoKubeControllers = component{
@@ -64,8 +65,9 @@ var (
 	}
 
 	ComponentCalicoNodeWindows = component{
-		Version: "master",
-		Image:   "calico/node-windows",
+		Version:  "master",
+		Image:    "calico/node-windows",
+		Registry: "",
 	}
 
 	ComponentCalicoTypha = component{

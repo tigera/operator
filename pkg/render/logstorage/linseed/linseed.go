@@ -185,6 +185,11 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	if l.cfg.Tenant != nil {

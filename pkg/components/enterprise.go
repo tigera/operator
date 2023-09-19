@@ -268,8 +268,9 @@ var (
 	}
 
 	ComponentTigeraNodeWindows = component{
-		Version: "master",
-		Image:   "tigera/cnx-node-windows",
+		Version:  "master",
+		Image:    "tigera/cnx-node-windows",
+		Registry: "",
 	}
 
 	ComponentTigeraTypha = component{
@@ -291,8 +292,9 @@ var (
 	}
 
 	ComponentTigeraCNIWindows = component{
-		Version: "master",
-		Image:   "tigera/cni-windows",
+		Version:  "master",
+		Image:    "tigera/cni-windows",
+		Registry: "",
 	}
 
 	ComponentCloudControllers = component{
@@ -361,11 +363,9 @@ var (
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
-		ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentTigeraCNIFIPS,
-		ComponentTigeraCNIWindows,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

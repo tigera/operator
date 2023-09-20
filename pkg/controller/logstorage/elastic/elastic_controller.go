@@ -17,6 +17,7 @@ package elastic
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"net/url"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
@@ -38,11 +39,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
-	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/render/logstorage/linseed"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -151,10 +147,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.KibanaNamespace},
-		{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: esmetrics.ElasticsearchMetricsPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
-		{Name: linseed.PolicyName, Namespace: render.ElasticsearchNamespace},
 	})
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
@@ -186,14 +178,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Establish watches for secrets in the tigera-operator namespace.
 	for _, secretName := range []string{
-		render.TigeraElasticsearchGatewaySecret,
 		render.TigeraKibanaCertSecret,
 		render.OIDCSecretName,
 		render.DexObjectName,
-		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.TigeraLinseedSecret,
 		certificatemanagement.CASecretName,
 		monitor.PrometheusClientTLSSecretName,
+		relasticsearch.PublicCertSecret,
 		render.ElasticsearchAdminUserSecret,
 		render.ElasticsearchCuratorUserSecret,
 		render.TigeraElasticsearchInternalCertSecret,
@@ -240,12 +230,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Watch services that this controller cares about.
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
-	}
-	if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
-	}
-	if err := utils.AddServiceWatch(c, render.LinseedServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
 	}
 

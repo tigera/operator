@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -126,7 +127,9 @@ var _ = Describe("windows-controller installation tests", func() {
 				status:               mockStatus,
 				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,
+				ipamConfigWatchReady: &utils.ReadyFlag{},
 			}
+			r.ipamConfigWatchReady.MarkAsReady()
 
 			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
@@ -434,13 +437,13 @@ var _ = Describe("windows-controller installation tests", func() {
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration"))
+				Expect(err.Error()).To(Equal("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration when using Calico IPAM on Windows"))
 
 				// The calico-node-windows daemonset should not be rendered
 				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
 				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
-				Expect(degradedMsg).To(ConsistOf([]string{"StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration"}))
-				Expect(degradedErr).To(ConsistOf([]string{"StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration"}))
+				Expect(degradedMsg).To(ConsistOf([]string{"Invalid StrictAffinity, it must be set to 'true' when using Calico IPAM on Windows"}))
+				Expect(degradedErr).To(ConsistOf([]string{"StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration when using Calico IPAM on Windows"}))
 			})
 
 			It("should not render the Windows daemonset with no ServiceCIDRs", func() {
@@ -577,7 +580,9 @@ var _ = Describe("windows-controller installation tests", func() {
 						status:               mockStatus,
 						amazonCRDExists:      true,
 						enterpriseCRDsExist:  true,
+						ipamConfigWatchReady: &utils.ReadyFlag{},
 					}
+					r.ipamConfigWatchReady.MarkAsReady()
 
 					certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 					Expect(err).NotTo(HaveOccurred())

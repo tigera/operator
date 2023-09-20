@@ -23,7 +23,9 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -152,10 +154,11 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to IPAMConfiguration.
-	err = c.Watch(&source.Kind{Type: &apiv3.IPAMConfiguration{}}, &handler.EnqueueRequestForObject{})
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		return fmt.Errorf("tigera-windows-controller failed to watch IPAMConfiguration resource: %w", err)
+		return fmt.Errorf("tigera-windows-controller failed to establish a connection to k8s: %w", err)
 	}
+	go utils.WaitToAddResourceWatch(c, k8sClient, logw, ri.ipamConfigWatchReady, []client.Object{&apiv3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: apiv3.KindIPAMConfiguration}}})
 
 	if ri.enterpriseCRDsExist {
 		if err = utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, common.CalicoNamespace); err != nil {
@@ -186,6 +189,7 @@ type ReconcileWindows struct {
 	enterpriseCRDsExist  bool
 	amazonCRDExists      bool
 	clusterDomain        string
+	ipamConfigWatchReady *utils.ReadyFlag
 }
 
 // newWindowsReconciler returns a new reconcile.Reconciler
@@ -202,6 +206,7 @@ func newWindowsReconciler(mgr manager.Manager, opts options.AddOptions) (*Reconc
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
+		ipamConfigWatchReady: &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -303,17 +308,23 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Fetch and validate default IPAMConfiguration
-	ipamConfiguration := &apiv3.IPAMConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, ipamConfiguration)
-	if err != nil && !apierrors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read IPAMConfiguration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if !ipamConfiguration.Spec.StrictAffinity {
-		err := fmt.Errorf("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration")
-		r.status.SetDegraded(operatorv1.ResourceReadError, "StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration", err, reqLogger)
-		return reconcile.Result{}, err
+	// Fetch and validate default IPAMConfiguration for StrictAffinity when using Calico IPAM
+	if instance.Spec.CNI.Type == operatorv1.PluginCalico && instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico {
+		if !r.ipamConfigWatchReady.IsReady() {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for IPAMConfiguration watch to be established", nil, logw)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		ipamConfiguration := &apiv3.IPAMConfiguration{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, ipamConfiguration)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read IPAMConfiguration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if !ipamConfiguration.Spec.StrictAffinity {
+			err := fmt.Errorf("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration when using Calico CNI on Windows")
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Invalid StrictAffinity, it must be set to 'true' when using Calico CNI on Windows", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	var aci *operatorv1.AmazonCloudIntegration

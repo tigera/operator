@@ -17,6 +17,8 @@ package esmetrics
 import (
 	"context"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -50,6 +52,7 @@ func NewESMetricsControllerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 	multiTenant bool,
+	readyFlag *utils.ReadyFlag,
 ) (*ESMetricsSubController, error) {
 
 	opts := options.AddOptions{
@@ -60,11 +63,12 @@ func NewESMetricsControllerWithShims(
 	}
 
 	r := &ESMetricsSubController{
-		client:        cli,
-		scheme:        scheme,
-		status:        status,
-		clusterDomain: opts.ClusterDomain,
-		multiTenant:   opts.MultiTenant,
+		client:         cli,
+		scheme:         scheme,
+		status:         status,
+		clusterDomain:  opts.ClusterDomain,
+		multiTenant:    opts.MultiTenant,
+		tierWatchReady: readyFlag,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -77,6 +81,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 		scheme     *runtime.Scheme
 		ctx        context.Context
 		r          *ESMetricsSubController
+		readyFlag  *utils.ReadyFlag
 	)
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
@@ -98,8 +103,15 @@ var _ = Describe("LogStorage Linseed controller", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("ClearDegraded")
 
+		readyFlag = &utils.ReadyFlag{}
+		readyFlag.MarkAsReady()
+
+		// Create the allow-tigera Tier, since the controller blocks on its existence.
+		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}}
+		Expect(cli.Create(ctx, tier)).ShouldNot(HaveOccurred())
+
 		var err error
-		r, err = NewESMetricsControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
+		r, err = NewESMetricsControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false, readyFlag)
 		Expect(err).ShouldNot(HaveOccurred())
 	})
 

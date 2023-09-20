@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -107,7 +107,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
@@ -136,7 +136,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_IPV4POOL_CIDR",
@@ -157,7 +157,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name: "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network",
+				Value: `{"type": "calico", "name": "calico",
 				         "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
@@ -179,7 +179,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			v4pool1.Spec.CIDR = "1.168.0/24"
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1).Build()
@@ -190,7 +190,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			// Set env var that would cause us to pick pool
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
@@ -208,7 +208,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv6":"true"}}`,
 			}}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, v6pool1, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
@@ -229,7 +229,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: fmt.Sprintf(`{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", %s}}`, assigns),
+				Value: fmt.Sprintf(`{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", %s}}`, assigns),
 			}}
 			pools := []runtime.Object{}
 			for i, c := range cidrs {

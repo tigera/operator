@@ -149,6 +149,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
 	}
 
+	// Watch for changes to primary resource ManagementCluster
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %w", err)
+	}
+
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
 	}
@@ -290,6 +296,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	isManagedCluster := managementClusterConnection != nil
+
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	isManagementCluster := managementCluster != nil
 
 	if err := r.fillDefaults(ctx, instance); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Unable to set defaults on IntrusionDetection", err, reqLogger)
@@ -605,6 +619,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		PullSecrets:        pullSecrets,
 		Openshift:          r.provider == operatorv1.ProviderOpenShift,
 		ManagedCluster:     isManagedCluster,
+		ManagementCluster:  isManagementCluster,
 		HasNoLicense:       hasNoLicense,
 		HasNoDPIResource:   hasNoDPIResource,
 		ESClusterConfig:    esClusterConfig,

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -38,10 +40,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	apps "k8s.io/api/apps/v1"
@@ -151,10 +150,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.KibanaNamespace},
-		{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: esmetrics.ElasticsearchMetricsPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
-		{Name: linseed.PolicyName, Namespace: render.ElasticsearchNamespace},
 	})
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.

@@ -8,7 +8,7 @@ import (
 )
 
 const cniTemplate = `{
-	"name": "k8s-pod-network",
+	"name": "calico",
 	"cniVersion": "0.3.1",
 	"plugins": [
 	  {

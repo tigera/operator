@@ -44,7 +44,7 @@ func calicoDefaultConfig() []runtime.Object {
 				"calico_backend":     "bird",
 				"veth_mtu":           "1440",
 				"cni_network_config": `{
-  "name": "k8s-pod-network",
+  "name": "calico",
   "cniVersion": "0.3.1",
   "plugins": [
     {

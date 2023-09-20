@@ -34,7 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
-	operator "github.com/tigera/operator/api/v1"
+	apiv3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -74,7 +74,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to primary resource Installation
-	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to watch primary resource: %w", err)
 	}
@@ -84,7 +84,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("tigera-windows-controller failed to watch calico Tigerastatus: %w", err)
 	}
 
-	if ri.autoDetectedProvider == operator.ProviderOpenShift {
+	if ri.autoDetectedProvider == operatorv1.ProviderOpenShift {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
@@ -109,7 +109,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Only watch AmazonCloudIntegration if the CRD is available
 	if ri.amazonCRDExists {
-		err = c.Watch(&source.Kind{Type: &operator.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			logw.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
 			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %w", err)
@@ -138,7 +138,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		}
 		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &operator.Installation{},
+			OwnerType:    &operatorv1.Installation{},
 		}, pred)
 		if err != nil {
 			return fmt.Errorf("tigera-windows-controller failed to watch %s: %w", t, err)
@@ -149,6 +149,12 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to watch FelixConfiguration resource: %w", err)
+	}
+
+	// Watch for changes to IPAMConfiguration.
+	err = c.Watch(&source.Kind{Type: &apiv3.IPAMConfiguration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-windows-controller failed to watch IPAMConfiguration resource: %w", err)
 	}
 
 	if ri.enterpriseCRDsExist {
@@ -266,7 +272,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	// We rely on the core controller for defaulting, so wait until it has done so before continuing
 	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
 		err := fmt.Errorf("InstallationStatus is empty")
-		r.status.SetDegraded(operator.ResourceUpdateError, "InstallationStatus is empty", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "InstallationStatus is empty", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -297,13 +303,26 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Fetch and validate default IPAMConfiguration
+	ipamConfiguration := &apiv3.IPAMConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, ipamConfiguration)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read IPAMConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if !ipamConfiguration.Spec.StrictAffinity {
+		err := fmt.Errorf("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	var aci *operatorv1.AmazonCloudIntegration
 	if r.amazonCRDExists {
 		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
 		if apierrors.IsNotFound(err) {
 			aci = nil
 		} else if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -339,9 +358,9 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
 	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
-	if r.autoDetectedProvider == operator.ProviderOpenShift {
+	if r.autoDetectedProvider == operatorv1.ProviderOpenShift {
 		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
-	} else if r.autoDetectedProvider == operator.ProviderRKE2 {
+	} else if r.autoDetectedProvider == operatorv1.ProviderRKE2 {
 		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
 	}
 

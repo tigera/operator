@@ -156,7 +156,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "host-local"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -174,7 +174,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -246,7 +246,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
 			}}
 
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
@@ -279,7 +279,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
 			}}
 
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
@@ -309,7 +309,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
 			}}
 
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
@@ -349,7 +349,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
 			}}
 
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
@@ -381,7 +381,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
 			}}
 
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
@@ -430,7 +430,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -467,7 +467,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -507,7 +507,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}, "container_settings": {"allow_ip_forwarding": true}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "host-local"}, "container_settings": {"allow_ip_forwarding": true}}`,
 			}}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
@@ -520,7 +520,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}, "container_settings": {"allow_ip_forwarding": false}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "host-local"}, "container_settings": {"allow_ip_forwarding": false}}`,
 			}}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
@@ -533,7 +533,7 @@ var _ = Describe("Convert network tests", func() {
 				ds := emptyNodeSpec()
 				ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 					Name:  "CNI_NETWORK_CONFIG",
-					Value: fmt.Sprintf(`{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "%s"}}`, ipam),
+					Value: fmt.Sprintf(`{"type": "calico", "name": "calico", "ipam": {"type": "%s"}}`, ipam),
 				}}
 				ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 					Name:  "CALICO_NETWORKING_BACKEND",
@@ -550,7 +550,7 @@ var _ = Describe("Convert network tests", func() {
 			ds := emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "unknown"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "unknown"}}`,
 			}}
 			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name:  "CALICO_NETWORKING_BACKEND",
@@ -566,7 +566,7 @@ var _ = Describe("Convert network tests", func() {
 					ds := emptyNodeSpec()
 					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 						Name:  "CNI_NETWORK_CONFIG",
-						Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}}`,
+						Value: `{"type": "calico", "name": "calico", "ipam": {"type": "host-local"}}`,
 					}}
 					ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 						Name:  "CALICO_NETWORKING_BACKEND",
@@ -598,7 +598,7 @@ var _ = Describe("Convert network tests", func() {
 					_, err := Convert(ctx, c)
 					Expect(err).NotTo(HaveOccurred())
 				},
-				Entry("name in conflist", `{"name": "k8s-pod-network",
+				Entry("name in conflist", `{"name": "calico",
 	"plugins": [
 	  {
 		"type": "calico",
@@ -609,7 +609,7 @@ var _ = Describe("Convert network tests", func() {
 	  }
 	]
   }`),
-				Entry("name in single conf", `{"name": "k8s-pod-network",
+				Entry("name in single conf", `{"name": "calico",
 		"type": "calico",
 		"datastore_type": "kubernetes",
 		"nodename": "__KUBERNETES_NODE_NAME__",
@@ -675,7 +675,7 @@ var _ = Describe("Convert network tests", func() {
 					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 						Name: "CNI_NETWORK_CONFIG",
 						Value: fmt.Sprintf(`{
-	"name": "k8s-pod-network",
+	"name": "calico",
 	"cniVersion": "0.3.1",
 	"plugins": [
 	  {
@@ -717,7 +717,7 @@ var _ = Describe("Convert network tests", func() {
 					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 						Name: "CNI_NETWORK_CONFIG",
 						Value: fmt.Sprintf(`{
-	"name": "k8s-pod-network",
+	"name": "calico",
 	"cniVersion": "0.3.1",
 	"plugins": [
 	  {
@@ -761,7 +761,7 @@ var _ = Describe("Convert network tests", func() {
 					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 						Name: "CNI_NETWORK_CONFIG",
 						Value: `{
-"name": "k8s-pod-network",
+"name": "calico",
 "cniVersion": "0.3.1",
 "plugins": [
   {
@@ -801,7 +801,7 @@ var _ = Describe("Convert network tests", func() {
 					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 						Name: "CNI_NETWORK_CONFIG",
 						Value: `{
-"name": "k8s-pod-network",
+"name": "calico",
 "cniVersion": "0.3.1",
 "plugins": [
   {
@@ -847,7 +847,7 @@ var _ = Describe("Convert network tests", func() {
 				ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 					Name: "CNI_NETWORK_CONFIG",
 					Value: fmt.Sprintf(`{
-"name": "k8s-pod-network",
+"name": "calico",
 "cniVersion": "0.3.1",
 "plugins": [
   {
@@ -928,7 +928,7 @@ var _ = Describe("Convert network tests", func() {
 		ds := emptyNodeSpec()
 		ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 			Name:  "CNI_NETWORK_CONFIG",
-			Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+			Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
 		}}
 
 		ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
@@ -973,7 +973,7 @@ var _ = Describe("Convert network tests", func() {
 			ds = emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"true"}}`,
 			}}
 		})
 
@@ -1076,7 +1076,7 @@ var _ = Describe("Convert network tests", func() {
 			ds = emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+				Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
 			}}
 
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,

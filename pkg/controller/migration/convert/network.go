@@ -198,11 +198,11 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	}
 
-	if c.cni.ConfigName != "k8s-pod-network" {
+	if c.cni.ConfigName != "calico" {
 		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("only 'k8s-pod-network' is supported as CNI name, found %s", c.cni.ConfigName),
+			err:       fmt.Sprintf("only 'calico' is supported as CNI name, found %s", c.cni.ConfigName),
 			component: ComponentCNIConfig,
-			fix:       "set CNI config name to 'k8s-pod-network'",
+			fix:       "set CNI config name to 'calico'",
 		}
 	}
 

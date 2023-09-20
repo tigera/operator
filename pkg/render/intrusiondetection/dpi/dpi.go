@@ -38,13 +38,14 @@ import (
 )
 
 const (
-	DeepPacketInspectionNamespace  = "tigera-dpi"
-	DeepPacketInspectionName       = "tigera-dpi"
-	DeepPacketInspectionPolicyName = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
-	DefaultMemoryLimit             = "1Gi"
-	DefaultMemoryRequest           = "100Mi"
-	DefaultCPULimit                = "1"
-	DefaultCPURequest              = "100m"
+	DeepPacketInspectionNamespace       = "tigera-dpi"
+	DeepPacketInspectionName            = "tigera-dpi"
+	DeepPacketInspectionPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DefaultMemoryLimit                  = "1Gi"
+	DefaultMemoryRequest                = "100Mi"
+	DefaultCPULimit                     = "1"
+	DefaultCPURequest                   = "100m"
+	DeepPacketInspectionLinseedRBACName = "tigera-dpi-linseed-permissions"
 )
 
 type DPIConfig struct {
@@ -105,15 +106,6 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiClusterRoleBinding(),
 			d.dpiDaemonset(),
 		)
-		// We need to delete these permissions to be present inside a management
-		// cluster to allow any DPI components running inside the managed cluster
-		// to write data.
-		if !d.cfg.ManagementCluster {
-			toDelete = append(toDelete,
-				d.dpiLinseedAccessClusterRole(),
-				d.dpiLinseedAccessClusterRoleBinding(),
-			)
-		}
 	} else {
 		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace)...)...)
@@ -124,12 +116,6 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiClusterRoleBinding(),
 			d.dpiDaemonset(),
 		)
-		// We also want these permissions present for a standalone
-		// cluster that has DPI resource configured
-		if !d.cfg.ManagementCluster && !d.cfg.ManagedCluster {
-			toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
-			toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
-		}
 	}
 	// We always want to create these permissions when a management
 	// cluster is configured to allow any DPI running inside a
@@ -137,6 +123,18 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	if d.cfg.ManagementCluster {
 		toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
 		toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
+	} else if !d.cfg.ManagedCluster && !d.cfg.HasNoDPIResource && !d.cfg.HasNoLicense {
+		// We want to create these permissions when a standalone
+		// cluster is configured to run DPI
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
+	} else {
+		// We want to remove these permissions when a standalone
+		// cluster is no longer configured to run DPI
+		toDelete = append(toDelete,
+			d.dpiLinseedAccessClusterRole(),
+			d.dpiLinseedAccessClusterRoleBinding(),
+		)
 	}
 	if d.cfg.ManagedCluster {
 		// For managed clusters, we must create a role binding to allow Linseed to
@@ -348,13 +346,13 @@ func (d *dpiComponent) dpiLinseedAccessClusterRoleBinding() *rbacv1.ClusterRoleB
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   fmt.Sprintf("%s-extra", DeepPacketInspectionNamespace),
+			Name:   DeepPacketInspectionLinseedRBACName,
 			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     fmt.Sprintf("%s-extra", DeepPacketInspectionNamespace),
+			Name:     DeepPacketInspectionLinseedRBACName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -413,7 +411,7 @@ func (d *dpiComponent) dpiLinseedAccessClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("%s-extra", DeepPacketInspectionName),
+			Name: DeepPacketInspectionLinseedRBACName,
 		},
 
 		Rules: []rbacv1.PolicyRule{

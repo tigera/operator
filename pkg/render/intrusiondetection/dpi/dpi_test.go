@@ -15,8 +15,6 @@
 package dpi_test
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -123,7 +121,7 @@ var (
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName),
+			Name:     dpi.DeepPacketInspectionLinseedRBACName,
 		},
 	}
 
@@ -245,8 +243,8 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -290,8 +288,8 @@ var _ = Describe("DPI rendering tests", func() {
 
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -303,10 +301,10 @@ var _ = Describe("DPI rendering tests", func() {
 		dpiNs := rtest.GetResource(resources, dpi.DeepPacketInspectionNamespace, "", "", "v1", "Namespace").(*corev1.Namespace)
 		Expect(dpiNs).ShouldNot(BeNil())
 
-		dpiExtraClusterRole := rtest.GetResource(resources, fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		dpiExtraClusterRole := rtest.GetResource(resources, dpi.DeepPacketInspectionLinseedRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(dpiExtraClusterRole.Rules).Should(ContainElements(expectedExtraClusterRoleRules))
 
-		dpiExtraClusterRoleBinding := rtest.GetResource(resources, fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		dpiExtraClusterRoleBinding := rtest.GetResource(resources, dpi.DeepPacketInspectionLinseedRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(dpiExtraClusterRoleBinding.RoleRef).Should(Equal(expectedExtraCRB.RoleRef))
 		Expect(dpiExtraClusterRoleBinding.Subjects).Should(BeEquivalentTo(expectedExtraCRB.Subjects))
 	})
@@ -341,8 +339,8 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -375,8 +373,8 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-linseed", ns: "tigera-dpi", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 
@@ -400,8 +398,8 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: fmt.Sprintf("%s-extra", dpi.DeepPacketInspectionName), ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-linseed", ns: "tigera-dpi", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 

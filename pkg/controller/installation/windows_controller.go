@@ -321,8 +321,8 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 		if !ipamConfiguration.Spec.StrictAffinity {
-			err := fmt.Errorf("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration when using Calico CNI on Windows")
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Invalid StrictAffinity, it must be set to 'true' when using Calico CNI on Windows", err, reqLogger)
+			err := fmt.Errorf("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration when using Calico IPAM on Windows")
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Invalid StrictAffinity, it must be set to 'true' when using Calico IPAM on Windows", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}

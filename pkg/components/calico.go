@@ -125,7 +125,7 @@ var (
 	}
 
 	ComponentCalicoGuardian = component{
-		Version:  "master",
+		Version:  "os-flowlog",
 		Image:    "tigera/guardian",
 		Registry: "",
 	}

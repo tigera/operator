@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -176,34 +178,71 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
 			return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
 		} else if nodeLocalDNSExists {
+
 			// Discover the kube-dns Service cluster IP address - node-local-dns is not supported on OpenShift which is the only platform without
-			// kube-dns. Thus, the name "kube-dns" can be static.
-			kubeDNSService := &corev1.Service{}
-			err = r.client.Get(ctx, types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}, kubeDNSService)
+			// kube-dns.
+
+			instance := &operatorv1.Installation{}
+			if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+				if errors.IsNotFound(err) {
+					reqLogger.Info("Installation config not found")
+				}
+				reqLogger.Error(err, "An error occurred when querying the Installation resource")
+			}
+
+			// Default kubernetes dns service is named "kube-dns", but RKE2 uses a different name for the default
+			// dns service i.e. "rke2-coredns-rke2-coredns".
+			dnsServicsName := "kube-dns"
+			if instance.Spec.KubernetesProvider == operatorv1.ProviderRKE2 {
+				dnsServicsName = "rke2-coredns-rke2-coredns"
+			}
+
+			kubeDNSService, err := GetDNSServiceByName(dnsServicsName, ctx, r.client)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					r.status.SetDegraded(operatorv1.ResourceNotFound, "kube-dns service not found", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("%s service not found", dnsServicsName), err, reqLogger)
 				} else {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying kube-dns service", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error querying %s service", dnsServicsName), err, reqLogger)
 				}
 				return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
 			}
-			kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
-			for _, IP := range kubeDNSIPs {
-				var builder strings.Builder
-				builder.WriteString(IP)
-				if net.ParseIP(IP).To4() != nil {
-					builder.WriteString("/32")
-					tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
-				} else {
-					builder.WriteString("/128")
-					tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
+			var kubeDNSIPs []string
+			kubeDNSIPs = kubeDNSService.Spec.ClusterIPs
+
+			if len(kubeDNSIPs) > 0 {
+				for _, IP := range kubeDNSIPs {
+					var builder strings.Builder
+					builder.WriteString(IP)
+					if net.ParseIP(IP).To4() != nil {
+						builder.WriteString("/32")
+						tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
+					} else {
+						builder.WriteString("/128")
+						tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
+					}
+
 				}
-
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError,
+					"DNS service IP address is not found",
+					errors.NewNotFound(schema.GroupResource{Resource: string(corev1.ResourceServices),
+						Group: corev1.GroupName}, ""),
+					reqLogger)
 			}
+
 		}
 	}
 
 	return &tiersConfig, nil
+}
+
+func GetDNSServiceByName(dnsServiceName string, ctx context.Context, client client.Client) (*corev1.Service, error) {
+	kubeDNSService := &corev1.Service{}
+
+	err := client.Get(ctx, types.NamespacedName{Name: dnsServiceName, Namespace: "kube-system"}, kubeDNSService)
+	if err != nil {
+		return nil, err
+	}
+	return kubeDNSService, nil
 }

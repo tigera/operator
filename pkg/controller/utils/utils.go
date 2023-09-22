@@ -645,3 +645,13 @@ func AddNodeLocalDNSWatch(c controller.Controller) error {
 	}
 	return c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }
+
+func GetDNSServiceByName(dnsServiceName string, ctx context.Context, client client.Client) (*corev1.Service, error) {
+	kubeDNSService := &corev1.Service{}
+
+	err := client.Get(ctx, types.NamespacedName{Name: dnsServiceName, Namespace: "kube-system"}, kubeDNSService)
+	if err != nil {
+		return nil, err
+	}
+	return kubeDNSService, nil
+}

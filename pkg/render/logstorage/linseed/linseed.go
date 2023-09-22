@@ -185,6 +185,8 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
 		},
+		// These permissions are necessary to allow the management cluster to monitor secrets that we want to propagate
+		// through to the managed cluster for identity verification such as the Voltron Linseed public certificate
 		{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},

@@ -2117,7 +2117,8 @@ func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Servic
 // to get configmaps and manipulate secrets
 func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.ClusterRole, []*rbacv1.RoleBinding) {
 	// Create separate ClusterRoles for necessary configmap and secret operations, then bind them to the namespaces
-	// where they are required
+	// where they are required so that we're only granting exactly which permissions we need in the namespaces in which
+	// they're required
 	secretsRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: TigeraLinseedSecretsClusterRole,
@@ -2131,6 +2132,8 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 		},
 	}
 
+	// These permissions are necessary so that we can fetch the operator namespace of the managed cluster from the
+	// management cluster so that we're copying secrets into the right place in a multi-tenant environment.
 	configMapsRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-linseed-configmaps",

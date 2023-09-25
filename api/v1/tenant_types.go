@@ -24,6 +24,25 @@ type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
 	// +required
 	ID string `json:"id,omitempty"`
+
+	// DataRetention defines the how to store a tenant's data
+	DataRetention []DataRetention `json:"dataRetention"`
+}
+
+// DataRetention defines the amount of time for tenant's
+// data to be stored based on predefined tiers
+type DataRetention struct {
+	// PolicyName identifies the ILM policy used
+	// store data in Elastic
+	PolicyName string `json:"policyName"`
+
+	// IndexName defines the name of the index
+	// that will be used to store data (this name
+	// excludes the numerical identifier suffix)
+	IndexName string `json:"indexName"`
+
+	// +kubebuilder:validation:Enum=alerts;audit;bgp;compliance_benchmarks;compliance_reports;compliance_snapshots;dns;flow;l7;runtime;threat_feeds_domain_name;thread_feeds_ip_set;waf
+	Type string `json:"type"`
 }
 
 type TenantStatus struct{}

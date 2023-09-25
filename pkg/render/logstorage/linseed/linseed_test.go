@@ -298,6 +298,13 @@ var _ = Describe("Linseed rendering tests", func() {
 				},
 				Spec: operatorv1.TenantSpec{
 					ID: "test-tenant",
+					DataRetention: []operatorv1.DataRetention{
+						{
+							PolicyName: "calico_standard",
+							IndexName:  "calico_flowlogs_standard",
+							Type:       "flow",
+						},
+					},
 				},
 			}
 			kp, tokenKP, bundle := getTLS(installation)
@@ -353,6 +360,8 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", cfg.Tenant.Namespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_FLOW_INDEX_NAME", Value: "calico_flowlogs_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_FLOW_POLICY_NAME", Value: "calico_standard"}))
 		})
 	})
 })

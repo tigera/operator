@@ -582,11 +582,12 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	// TODO: In multi-tenant mode, and probably single-tenant as well, ILM programming should be handled by someone other than the operator.
-	// Either out of band, or by Linseed.
-	if err := r.applyILMPolicies(ls, reqLogger, ctx); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
-		return reconcile.Result{}, err
+	// In multi-tenant mode, ILM programming is created out of band
+	if !r.multiTenant {
+		if err := r.applyILMPolicies(ls, reqLogger, ctx); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	if kibanaEnabled && esLicenseType == render.ElasticsearchLicenseTypeBasic {

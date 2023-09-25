@@ -24,6 +24,9 @@ type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
 	// +required
 	ID string `json:"id,omitempty"`
+	// DataRetention will define the amount of time that
+	// data for a tenant will be stored
+	DataRetention *Retention `json:"dataRetention,omitempty"`
 }
 
 type TenantStatus struct{}

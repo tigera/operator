@@ -24,6 +24,31 @@ type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
 	// +required
 	ID string `json:"id,omitempty"`
+	// DataRetention defines the amount of time for tenant's
+	// data to be stored based on predefined tiers: free,
+	// standard, pro or custom
+	DataRetention *DataRetention `json:"dataRetention,omitempty"`
+}
+
+const (
+	// Free tier defines a minimum retention tier of 1 day
+	Free RetentionTier = "free"
+	// Standard tier defines the standard retention tier of 7 days
+	Standard RetentionTier = "standard"
+	// Pro tier defines an advance retention tier of 30 days
+	Pro RetentionTier = "pro"
+	// Custom tier defines a custom retention tier
+	Custom RetentionTier = "custom"
+)
+
+// RetentionTier defines a data tier that can be
+// configured for each tenant
+type RetentionTier string
+
+// DataRetention defines the amount of time for tenant's
+// data to be stored based on predefined tiers
+type DataRetention struct {
+	Tier *RetentionTier `json:"tier,omitempty"`
 }
 
 type TenantStatus struct{}

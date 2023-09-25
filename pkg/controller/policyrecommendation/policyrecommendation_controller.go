@@ -103,12 +103,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	// Watch for changes to primary resource PolicyRecommendationScope
-	err = policyRecController.Watch(&source.Kind{Type: &v3.PolicyRecommendationScope{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("policy-recommendation-controller failed to watch policy recommendation scope resource: %w", err)
-	}
-
 	if err = utils.AddNetworkWatch(policyRecController); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch Network resource: %w", err)
 	}

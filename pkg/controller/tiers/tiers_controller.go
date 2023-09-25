@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"net"
 
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -178,8 +181,11 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		} else if nodeLocalDNSExists {
 			// Discover the kube-dns Service cluster IP address - node-local-dns is not supported on OpenShift which is the only platform without
 			// kube-dns. Thus, the name "kube-dns" can be static.
-			kubeDNSService := &corev1.Service{}
-			err = r.client.Get(ctx, types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}, kubeDNSService)
+			//kubeDNSService := &corev1.Service{}
+			kubeDNSServices := &corev1.ServiceList{}
+
+			err = r.client.List(ctx, kubeDNSServices, &client.ListOptions{LabelSelector: labels.SelectorFromSet(map[string]string{"k8s-app": "kube-dns"})})
+			//err = r.client.Get(ctx, types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}, kubeDNSService)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					r.status.SetDegraded(operatorv1.ResourceNotFound, "kube-dns service not found", err, reqLogger)
@@ -188,20 +194,37 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 				}
 				return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
 			}
-			kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
-			for _, IP := range kubeDNSIPs {
-				var builder strings.Builder
-				builder.WriteString(IP)
-				if net.ParseIP(IP).To4() != nil {
-					builder.WriteString("/32")
-					tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
+			var kubeDNSIPs []string
+			for _, service := range kubeDNSServices.Items {
+				if strings.Contains(service.Name, "upstream") {
+					continue
 				} else {
-					builder.WriteString("/128")
-					tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
+					kubeDNSIPs = service.Spec.ClusterIPs
 				}
-
 			}
+
+			if len(kubeDNSIPs) > 0 {
+				for _, IP := range kubeDNSIPs {
+					var builder strings.Builder
+					builder.WriteString(IP)
+					if net.ParseIP(IP).To4() != nil {
+						builder.WriteString("/32")
+						tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
+					} else {
+						builder.WriteString("/128")
+						tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
+					}
+
+				}
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError,
+					"dns service is not found",
+					errors.NewNotFound(schema.GroupResource{Resource: string(corev1.ResourceServices),
+						Group: corev1.GroupName}, "k8s-app=kube-dns"),
+					reqLogger)
+			}
+
 		}
 	}
 

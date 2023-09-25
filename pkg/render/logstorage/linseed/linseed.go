@@ -244,6 +244,8 @@ func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 
 func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
+		{Name: "BACKEND", Value: "elastic-single-index"},
+
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
 

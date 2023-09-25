@@ -37,8 +37,9 @@ components:
     image: tigera/es-proxy
     version: master
   linseed:
-    image: tigera/linseed
-    version: master
+    registry: gcr.io/unique-caldron-775/
+    image: casey/linseed
+    version: latest
   es-gateway:
     image: tigera/es-gateway
     version: master

@@ -281,6 +281,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_CA", Value: l.cfg.TrustedBundle.MountPath()},
 	}
 
+	if l.cfg.Tenant != nil && l.cfg.Tenant.Spec.DataRetention != nil {
+		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_DATA_TIER", Value: l.cfg.Tenant.Spec.DataRetention.Tier})
+	}
+
 	volumes := []corev1.Volume{
 		l.cfg.KeyPair.Volume(),
 		l.cfg.TrustedBundle.Volume(),

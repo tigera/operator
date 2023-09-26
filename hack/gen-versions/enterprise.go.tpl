@@ -310,8 +310,9 @@ var (
 {{- end }}
 {{ with index .Components "cnx-node-windows" }}
 	ComponentTigeraNodeWindows = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -337,8 +338,9 @@ var (
 {{- end }}
 {{ with index .Components "tigera-cni-windows" }}
 	ComponentTigeraCNIWindows = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "cloud-controllers" }}
@@ -413,11 +415,9 @@ var (
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
-		ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
 		ComponentTigeraCNIFIPS,
-		ComponentTigeraCNIWindows,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

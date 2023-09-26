@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -107,6 +108,16 @@ var _ = Describe("windows-controller installation tests", func() {
 					Spec: crdv1.FelixConfigurationSpec{VXLANVNI: &vni},
 				})).ToNot(HaveOccurred())
 
+			// Create default IPAMConfiguration with StrictAffinity
+			Expect(c.Create(ctx,
+				&v3.IPAMConfiguration{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "default",
+					},
+					Spec: v3.IPAMConfigurationSpec{StrictAffinity: true},
+				})).ToNot(HaveOccurred())
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileWindows{
 				config:               nil, // there is no fake for config
@@ -116,7 +127,9 @@ var _ = Describe("windows-controller installation tests", func() {
 				status:               mockStatus,
 				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,
+				ipamConfigWatchReady: &utils.ReadyFlag{},
 			}
+			r.ipamConfigWatchReady.MarkAsReady()
 
 			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
@@ -125,7 +138,7 @@ var _ = Describe("windows-controller installation tests", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:               operator.TigeraSecureEnterprise,
+					Variant:               operator.Calico,
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 					WindowsNodes:          &operator.WindowsNodeSpec{},
@@ -396,6 +409,43 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(degradedErr).To(ConsistOf([]string{"VXLANVNI not specified in FelixConfigurationSpec"}))
 			})
 
+			It("should not render the Windows daemonset when IPAMConfiguration StrictAffinity is not true", func() {
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				// Delete existing default IPAMConfiguration and recreate with StrictAffinity false
+				Expect(c.Delete(ctx,
+					&v3.IPAMConfiguration{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+					})).ToNot(HaveOccurred())
+				Expect(c.Create(ctx,
+					&v3.IPAMConfiguration{
+						TypeMeta: metav1.TypeMeta{},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+						Spec: v3.IPAMConfigurationSpec{StrictAffinity: false},
+					})).ToNot(HaveOccurred())
+
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration when using Calico IPAM on Windows"))
+
+				// The calico-node-windows daemonset should not be rendered
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{"Invalid StrictAffinity, it must be set to 'true' when using Calico IPAM on Windows"}))
+				Expect(degradedErr).To(ConsistOf([]string{"StrictAffinity is false, it must be set to 'true' in the default IPAMConfiguration when using Calico IPAM on Windows"}))
+			})
+
 			It("should not render the Windows daemonset with no ServiceCIDRs", func() {
 				// Create the Windows node
 				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
@@ -470,6 +520,16 @@ var _ = Describe("windows-controller installation tests", func() {
 							Spec: crdv1.FelixConfigurationSpec{VXLANVNI: &vni},
 						})).ToNot(HaveOccurred())
 
+					// Create default IPAMConfiguration with StrictAffinity
+					Expect(c.Create(ctx,
+						&v3.IPAMConfiguration{
+							TypeMeta: metav1.TypeMeta{},
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "default",
+							},
+							Spec: v3.IPAMConfigurationSpec{StrictAffinity: true},
+						})).ToNot(HaveOccurred())
+
 					if enableWindows {
 						// Create a Windows node so that the calico-node-windows daemonset is rendered
 						node := &corev1.Node{
@@ -520,7 +580,9 @@ var _ = Describe("windows-controller installation tests", func() {
 						status:               mockStatus,
 						amazonCRDExists:      true,
 						enterpriseCRDsExist:  true,
+						ipamConfigWatchReady: &utils.ReadyFlag{},
 					}
+					r.ipamConfigWatchReady.MarkAsReady()
 
 					certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 					Expect(err).NotTo(HaveOccurred())
@@ -539,7 +601,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					instance := &operator.Installation{
 						ObjectMeta: metav1.ObjectMeta{Name: "default"},
 						Spec: operator.InstallationSpec{
-							Variant:               operator.TigeraSecureEnterprise,
+							Variant:               operator.Calico,
 							Registry:              "some.registry.org/",
 							CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
 							CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -558,7 +620,7 @@ var _ = Describe("windows-controller installation tests", func() {
 							ServiceCIDRs: []string{"10.96.0.0/12"},
 						},
 						Status: operator.InstallationStatus{
-							Variant: operator.TigeraSecureEnterprise,
+							Variant: operator.Calico,
 							Computed: &operator.InstallationSpec{
 								Registry: "my-reg",
 								// The test is provider agnostic.
@@ -591,27 +653,27 @@ var _ = Describe("windows-controller installation tests", func() {
 						Expect(nodeWin).ToNot(BeNil())
 						Expect(nodeWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s:%s",
-								components.ComponentTigeraNodeWindows.Image,
-								components.ComponentTigeraNodeWindows.Version)))
+								components.ComponentCalicoNodeWindows.Image,
+								components.ComponentCalicoNodeWindows.Version)))
 						felixWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "felix")
 						Expect(felixWin).ToNot(BeNil())
 						Expect(felixWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s:%s",
-								components.ComponentTigeraNodeWindows.Image,
-								components.ComponentTigeraNodeWindows.Version)))
+								components.ComponentCalicoNodeWindows.Image,
+								components.ComponentCalicoNodeWindows.Version)))
 						confdWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "confd")
 						Expect(confdWin).ToNot(BeNil())
 						Expect(confdWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s:%s",
-								components.ComponentTigeraNodeWindows.Image,
-								components.ComponentTigeraNodeWindows.Version)))
+								components.ComponentCalicoNodeWindows.Image,
+								components.ComponentCalicoNodeWindows.Version)))
 						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 						cniWin := test.GetContainer(dsWin.Spec.Template.Spec.InitContainers, "install-cni")
 						Expect(cniWin).ToNot(BeNil())
 						Expect(cniWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s:%s",
-								components.ComponentTigeraCNIWindows.Image,
-								components.ComponentTigeraCNIWindows.Version)))
+								components.ComponentCalicoCNIWindows.Image,
+								components.ComponentCalicoCNIWindows.Version)))
 					} else {
 						dsWin := appsv1.DaemonSet{
 							TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -625,24 +687,24 @@ var _ = Describe("windows-controller installation tests", func() {
 				})
 				It("should use images from imageset", func() {
 					imageSet := &operator.ImageSet{
-						ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+						ObjectMeta: metav1.ObjectMeta{Name: "calico-" + components.CalicoRelease},
 						Spec: operator.ImageSetSpec{
 							Images: []operator.Image{
-								{Image: "tigera/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
-								{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
-								{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
-								{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
-								{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
+								{Image: "calico/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
+								{Image: "calico/typha", Digest: "sha256:tigeratyphahash"},
+								{Image: "calico/node", Digest: "sha256:tigeracnxnodehash"},
+								{Image: "calico/cni", Digest: "sha256:tigeracnihash"},
+								{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 								{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-								{Image: "tigera/csi", Digest: "sha256:calicocsihash"},
-								{Image: "tigera/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
+								{Image: "calico/csi", Digest: "sha256:calicocsihash"},
+								{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 							},
 						},
 					}
 					if enableWindows {
 						imageSet.Spec.Images = append(imageSet.Spec.Images, []operator.Image{
-							{Image: "tigera/cnx-node-windows", Digest: "sha256:tigeracnxnodewindowshash"},
-							{Image: "tigera/cni-windows", Digest: "sha256:tigeracniwindowshash"},
+							{Image: "calico/node-windows", Digest: "sha256:tigeracnxnodewindowshash"},
+							{Image: "calico/cni-windows", Digest: "sha256:tigeracniwindowshash"},
 						}...)
 					}
 					Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
@@ -664,26 +726,26 @@ var _ = Describe("windows-controller installation tests", func() {
 						Expect(nodeWin).ToNot(BeNil())
 						Expect(nodeWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
-								components.ComponentTigeraNodeWindows.Image,
+								components.ComponentCalicoNodeWindows.Image,
 								"sha256:tigeracnxnodewindowshash")))
 						felixWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "felix")
 						Expect(felixWin).ToNot(BeNil())
 						Expect(felixWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
-								components.ComponentTigeraNodeWindows.Image,
+								components.ComponentCalicoNodeWindows.Image,
 								"sha256:tigeracnxnodewindowshash")))
 						confdWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "confd")
 						Expect(confdWin).ToNot(BeNil())
 						Expect(confdWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
-								components.ComponentTigeraNodeWindows.Image,
+								components.ComponentCalicoNodeWindows.Image,
 								"sha256:tigeracnxnodewindowshash")))
 						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 						cniWin := test.GetContainer(dsWin.Spec.Template.Spec.InitContainers, "install-cni")
 						Expect(cniWin).ToNot(BeNil())
 						Expect(cniWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
-								components.ComponentTigeraCNIWindows.Image,
+								components.ComponentCalicoCNIWindows.Image,
 								"sha256:tigeracniwindowshash")))
 					} else {
 						dsWin := appsv1.DaemonSet{

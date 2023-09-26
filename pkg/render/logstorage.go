@@ -70,6 +70,10 @@ const (
 	// The secret contains server key and certificate.
 	TigeraLinseedSecret = "tigera-secure-linseed-cert"
 
+	// TigeraLinseedSecretsClusterRole is the name of the ClusterRole used to make RoleBindings in namespaces where Linseed
+	// needs to be able to manipulate secrets
+	TigeraLinseedSecretsClusterRole = "tigera-linseed-secrets"
+
 	// TigeraLinseedTokenSecret is the name of the secret that holds the access token signing key for Linseed.
 	TigeraLinseedTokenSecret = "tigera-secure-linseed-token-tls"
 
@@ -2058,13 +2062,18 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	// ManagedClusters simply need the namespace, role, and binding created so that Linseed in the management cluster has permissions
 	// to create token secrets in the managed cluster.
 	toCreate := []client.Object{}
-	role, binding := m.linseedExternalRoleAndBinding()
+	roles, bindings := m.linseedExternalRolesAndBindings()
 	toCreate = append(toCreate,
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged),
 		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
-		role, binding,
 	)
+	for _, r := range roles {
+		toCreate = append(toCreate, r)
+	}
+	for _, b := range bindings {
+		toCreate = append(toCreate, b)
+	}
 	return toCreate, nil
 }
 
@@ -2104,14 +2113,15 @@ func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Servic
 	}
 }
 
-// In managed clusters, we need to provision a role and binding for linseed to provide permissions
-// to create configmaps.
-func (m managedClusterLogStorage) linseedExternalRoleAndBinding() (*rbacv1.ClusterRole, *rbacv1.RoleBinding) {
-	// Create a ClusterRole to provide configmap permissions. However, we'll only bind this to
-	// specific namespaces using RoleBindings so that we only have permissions in our namespaces.
-	role := &rbacv1.ClusterRole{
+// In managed clusters we need to provision roles and bindings for linseed to provide permissions
+// to get configmaps and manipulate secrets
+func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.ClusterRole, []*rbacv1.RoleBinding) {
+	// Create separate ClusterRoles for necessary configmap and secret operations, then bind them to the namespaces
+	// where they are required so that we're only granting exactly which permissions we need in the namespaces in which
+	// they're required
+	secretsRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-linseed",
+			Name: TigeraLinseedSecretsClusterRole,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -2122,17 +2132,32 @@ func (m managedClusterLogStorage) linseedExternalRoleAndBinding() (*rbacv1.Clust
 		},
 	}
 
-	// Bind the permission to the tigera-fluentd namespace. Other controllers may also bind
+	// These permissions are necessary so that we can fetch the operator namespace of the managed cluster from the
+	// management cluster so that we're copying secrets into the right place in a multi-tenant environment.
+	configMapsRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-linseed-configmaps",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get"},
+			},
+		},
+	}
+
+	// Bind the secrets permission to the tigera-fluentd namespace. Other controllers may also bind
 	// this cluster role to their own namespace if they require linseed access tokens.
-	binding := &rbacv1.RoleBinding{
+	secretBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-linseed",
-			Namespace: "tigera-fluentd",
+			Namespace: fluentdName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "tigera-linseed",
+			Name:     TigeraLinseedSecretsClusterRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -2143,5 +2168,25 @@ func (m managedClusterLogStorage) linseedExternalRoleAndBinding() (*rbacv1.Clust
 		},
 	}
 
-	return role, binding
+	// Bind the configmaps permission to the calico-system namespace.
+	configMapBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: CSRLabelCalicoSystem,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-linseed-configmaps",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
+
+	return []*rbacv1.ClusterRole{secretsRole, configMapsRole}, []*rbacv1.RoleBinding{secretBinding, configMapBinding}
 }

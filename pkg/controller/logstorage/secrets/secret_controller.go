@@ -195,8 +195,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// TODO: Do we need to handle managed clusters differently? Should this controller run at all?
-
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage to be ready", nil, reqLogger)

@@ -473,6 +473,30 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(result).Should(Equal(successResult))
 	})
+
+	It("should not take any action in managed cluster", func() {
+		// Create a LogStorage instance with a default configuration.
+		ls := &operatorv1.LogStorage{}
+		ls.Name = "tigera-secure"
+		ls.Status.State = operatorv1.TigeraStatusReady
+		CreateLogStorage(cli, ls)
+
+		// Create a ManagementClusterConnection object
+		mcc := &operatorv1.ManagementClusterConnection{}
+		mcc.Name = "tigera-secure"
+		Expect(cli.Create(ctx, mcc)).ShouldNot(HaveOccurred())
+
+		// Run the reconciler.
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		Expect(err).ShouldNot(HaveOccurred())
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Query all secrets, the returned list should only contain the CA secret created in BeforeEach
+		var secrets corev1.SecretList
+		Expect(cli.List(ctx, &secrets)).ShouldNot(HaveOccurred())
+		Expect(len(secrets.Items)).To(Equal(1))
+	})
 })
 
 // CreateLogStorage creates a LogStorage object with the given parameters after filling in defaults,

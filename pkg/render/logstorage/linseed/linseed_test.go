@@ -286,6 +286,9 @@ var _ = Describe("Linseed rendering tests", func() {
 				},
 				Spec: operatorv1.TenantSpec{
 					ID: "test-tenant",
+					DataRetention: &operatorv1.DataRetention{
+						Tier: "standard",
+					},
 				},
 			}
 			kp, tokenKP, bundle := getTLS(installation)
@@ -330,7 +333,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(cr.Rules).To(ContainElements(expectedRules))
 		})
 
-		It("should render MANAGEMENT_OPERATOR_NS environment variable", func() {
+		It("should render multi-tenancy environment variables", func() {
 			cfg.ManagementCluster = true
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
@@ -338,6 +341,8 @@ var _ = Describe("Linseed rendering tests", func() {
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_DATA_TIER", Value: tenant.Spec.DataRetention.Tier}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: tenant.Spec.ID}))
 		})
 	})
 })

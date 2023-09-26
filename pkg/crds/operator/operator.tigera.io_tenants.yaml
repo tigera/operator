@@ -32,6 +32,23 @@ spec:
             type: object
           spec:
             properties:
+              dataRetention:
+                description: 'DataRetention defines the amount of time for tenant''s
+                  data to be stored based on predefined tiers: free, standard, pro
+                  or custom'
+                properties:
+                  tier:
+                    default: standard
+                    description: Tier is an enum which identifies the data tier
+                    enum:
+                    - free
+                    - standard
+                    - pro
+                    - custom
+                    type: string
+                required:
+                - tier
+                type: object
               id:
                 description: ID is the unique identifier for this tenant.
                 type: string

@@ -112,6 +112,18 @@ var _ = Describe("Linseed rendering tests", func() {
 			compareResources(createResources, expectedResources, false)
 		})
 
+		It("should render Secrets RBAC permissions as part of ClusterRole", func() {
+			component := Linseed(cfg)
+			createResources, _ := component.Objects()
+			cr := rtest.GetResource(createResources, ClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			secretsRules := rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "list", "watch"},
+			}
+			Expect(cr.Rules).To(ContainElement(secretsRules))
+		})
+
 		It("should render properly when PSP is not supported by the cluster", func() {
 			cfg.UsePSP = false
 			component := Linseed(cfg)
@@ -441,6 +453,11 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}))
 	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)

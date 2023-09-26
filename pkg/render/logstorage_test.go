@@ -996,8 +996,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
 					}},
-					{"tigera-linseed", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-linseed-secrets", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-linseed-configmaps", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-linseed", "tigera-fluentd", &rbacv1.RoleBinding{}, nil},
+					{"tigera-linseed", "calico-system", &rbacv1.RoleBinding{}, nil},
 				}
 				component := render.NewManagedClusterLogStorage(cfg)
 				createResources, deleteResources := component.Objects()

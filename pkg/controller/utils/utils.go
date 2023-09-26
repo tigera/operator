@@ -645,3 +645,24 @@ func AddNodeLocalDNSWatch(c controller.Controller) error {
 	}
 	return c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }
+
+func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operatorv1.Provider) ([]string, error) {
+	// Discover the DNS Service's cluster IP address:
+	// Default kubernetes dns service is named "kube-dns", but RKE2 is using a different name for the default
+	// dns service i.e. "rke2-coredns-rke2-coredns".
+	dnsServiceName := "kube-dns"
+	if provider == operatorv1.ProviderRKE2 {
+		dnsServiceName = "rke2-coredns-rke2-coredns"
+	}
+
+	kubeDNSService := &corev1.Service{}
+
+	err := client.Get(ctx, types.NamespacedName{Name: dnsServiceName, Namespace: "kube-system"}, kubeDNSService)
+	if err != nil {
+		return nil, err
+	}
+
+	kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
+
+	return kubeDNSIPs, nil
+}

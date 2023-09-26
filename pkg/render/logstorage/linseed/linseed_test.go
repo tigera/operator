@@ -117,9 +117,10 @@ var _ = Describe("Linseed rendering tests", func() {
 			createResources, _ := component.Objects()
 			cr := rtest.GetResource(createResources, ClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			secretsRules := rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "list", "watch"},
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				Verbs:         []string{"get", "list", "watch"},
+				ResourceNames: []string{fmt.Sprintf("%s/%s", cfg.Namespace, render.VoltronLinseedPublicCert)},
 			}
 			Expect(cr.Rules).To(ContainElement(secretsRules))
 		})
@@ -455,9 +456,10 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Verbs:     []string{"list", "watch"},
 		},
 		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get", "list", "watch"},
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get", "list", "watch"},
+			ResourceNames: []string{fmt.Sprintf("%s/%s", render.ElasticsearchNamespace, render.VoltronLinseedPublicCert)},
 		},
 	}))
 	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)

@@ -98,7 +98,7 @@ func (c component) Objects() (objsToCreate, objsToDelete []client.Object) {
 			}
 			needsCSRRoleAndBinding = true
 		} else {
-			if keyPairCreator.renderInTruthNamespace && (!keyPair.BYO() || keyPair.GetName() == certificatemanagement.CASecretName) {
+			if keyPairCreator.renderInTruthNamespace && (!keyPair.BYO() || keyPair.GetName() == certificatemanagement.CASecretName || keyPair.GetName() == certificatemanagement.TenantCASecretName) {
 				objsToCreate = append(objsToCreate, keyPair.Secret(c.cfg.TruthNamespace))
 			}
 			if keyPairCreator.renderInAppNamespace {

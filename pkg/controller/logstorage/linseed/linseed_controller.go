@@ -311,13 +311,16 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.TruthNamespace(), render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	tokenKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{render.TigeraLinseedTokenSecret})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed token secret", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if tokenKeyPair == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.TruthNamespace(), render.TigeraLinseedTokenSecret), err, reqLogger)
-		return reconcile.Result{}, nil
+	var tokenKeyPair certificatemanagement.KeyPairInterface
+	if managementCluster != nil {
+		tokenKeyPair, err = cm.GetKeyPair(r.client, render.TigeraLinseedTokenSecret, helper.TruthNamespace(), []string{render.TigeraLinseedTokenSecret})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed token secret", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if tokenKeyPair == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed key pair (%s/%s) to exist", helper.TruthNamespace(), render.TigeraLinseedTokenSecret), err, reqLogger)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	// Query the trusted bundle from the namespace.

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	. "github.com/onsi/ginkgo"
@@ -149,7 +151,7 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
-			var replicas int32 = 1
+			replicas = 1
 			installation.ControlPlaneReplicas = &replicas
 
 			component := Linseed(cfg)
@@ -161,7 +163,6 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
-			var replicas int32 = 2
 			installation.ControlPlaneReplicas = &replicas
 
 			component := Linseed(cfg)
@@ -261,6 +262,82 @@ var _ = Describe("Linseed rendering tests", func() {
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
+		})
+	})
+
+	Context("multi-tenant rendering", func() {
+		var installation *operatorv1.InstallationSpec
+		var tenant *operatorv1.Tenant
+		var replicas int32
+		var cfg *Config
+		clusterDomain := "cluster.local"
+		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
+
+		BeforeEach(func() {
+			replicas = 2
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
+			}
+			tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-tenant",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "test-tenant",
+				},
+			}
+			kp, tokenKP, bundle := getTLS(installation)
+			cfg = &Config{
+				Installation: installation,
+				PullSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
+				TrustedBundle:   bundle,
+				ClusterDomain:   clusterDomain,
+				ESClusterConfig: esClusterConfig,
+				Namespace:       "tenant-test-tenant",
+				Tenant:          tenant,
+			}
+		})
+
+		It("should render impersonation permissions as part of tigera-linseed ClusterRole", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			cr := rtest.GetResource(resources, ClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{render.LinseedServiceName},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
+		})
+
+		It("should render MANAGEMENT_OPERATOR_NS environment variable", func() {
+			cfg.ManagementCluster = true
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
 		})
 	})
 })
@@ -391,22 +468,41 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 func expectedVolumes(useCSR bool) []corev1.Volume {
 	var volumes []corev1.Volume
 	if useCSR {
-		volumes = append(volumes, corev1.Volume{
-			Name: render.TigeraLinseedSecret,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		})
-	} else {
-		volumes = append(volumes, corev1.Volume{
-			Name: render.TigeraLinseedSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  render.TigeraLinseedSecret,
-					DefaultMode: ptr.Int32ToPtr(420),
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: render.TigeraLinseedSecret,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
-		})
+			corev1.Volume{
+				Name: "tigera-secure-linseed-token-tls",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
+	} else {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: render.TigeraLinseedSecret,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  render.TigeraLinseedSecret,
+						DefaultMode: ptr.Int32ToPtr(420),
+					},
+				},
+			},
+			corev1.Volume{
+				Name: "tigera-secure-linseed-token-tls",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  "tigera-secure-linseed-token-tls",
+						DefaultMode: ptr.Int32ToPtr(420),
+					},
+				},
+			},
+		)
 	}
 
 	volumes = append(volumes, corev1.Volume{
@@ -575,6 +671,14 @@ func expectedContainers() []corev1.Container {
 					Name:  "ELASTIC_CA",
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
+				{
+					Name:  "TOKEN_CONTROLLER_ENABLED",
+					Value: "true",
+				},
+				{
+					Name:  "LINSEED_TOKEN_KEY",
+					Value: "/tigera-secure-linseed-token-tls/tls.key",
+				},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -585,6 +689,11 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:      render.TigeraLinseedSecret,
 					MountPath: "/tigera-secure-linseed-cert",
+					ReadOnly:  true,
+				},
+				{
+					Name:      "tigera-secure-linseed-token-tls",
+					MountPath: "/tigera-secure-linseed-token-tls",
 					ReadOnly:  true,
 				},
 			},

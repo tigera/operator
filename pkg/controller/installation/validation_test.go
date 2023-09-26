@@ -26,6 +26,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 var _ = Describe("Installation validation tests", func() {
@@ -736,11 +737,17 @@ var _ = Describe("Installation validation tests", func() {
 						},
 					},
 				},
+				ServiceCIDRs: []string{"10.96.0.0/12"},
 				CNI: &operator.CNISpec{
 					Type: operator.PluginCalico,
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginHostLocal},
 				},
 			},
+		}
+		// Populate the k8s service endpoint (required for windows)
+		k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+			Host: "1.2.3.4",
+			Port: "6443",
 		}
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 		err := validateCustomResource(instance)
@@ -772,6 +779,39 @@ var _ = Describe("Installation validation tests", func() {
 			var invalidMinReadySeconds int32 = -1
 			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{
 				Spec: &operator.CalicoNodeDaemonSetSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("validate CalicoNodeWindowsDaemonSet", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CalicoNodeWindowsDaemonSet = &operator.CalicoNodeWindowsDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CalicoNodeWindowsDaemonSet = &operator.CalicoNodeWindowsDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CalicoNodeWindowsDaemonSet = &operator.CalicoNodeWindowsDaemonSet{
+				Spec: &operator.CalicoNodeWindowsDaemonSetSpec{
 					MinReadySeconds: &invalidMinReadySeconds,
 				},
 			}
@@ -845,37 +885,97 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
-
-	Describe("validate CalicoWindowsUpgradeDaemonSet", func() {
-		It("should return nil when it is empty", func() {
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{}
-			err := validateCustomResource(instance)
-			Expect(err).NotTo(HaveOccurred())
+	Describe("validate Windows configuration", func() {
+		BeforeEach(func() {
+			winDpHNS := operator.WindowsDataplaneHNS
+			instance.Spec.CalicoNetwork =
+				&operator.CalicoNetworkSpec{
+					WindowsDataplane: &winDpHNS,
+				}
+			instance.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
+			var twentyEight int32 = 28
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "192.168.0.0/16",
+					BlockSize:     &twentyEight,
+					Encapsulation: operator.EncapsulationVXLAN,
+					NATOutgoing:   operator.NATOutgoingEnabled,
+					NodeSelector:  "all()",
+				},
+			}
+			var disabled operator.BGPOption = operator.BGPDisabled
+			instance.Spec.CalicoNetwork.BGP = &disabled
+			k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+				Host: "1.2.3.4",
+				Port: "6443",
+			}
 		})
+		Context("Windows disabled", func() {
+			It("should return an error if WindowsNodes is configured but WindowsDataplane is disabled", func() {
+				winDpDisabled := operator.WindowsDataplaneDisabled
+				instance.Spec.CalicoNetwork.WindowsDataplane = &winDpDisabled
+				instance.Spec.WindowsNodes = &operator.WindowsNodeSpec{}
 
-		It("should return an error if it is invalid", func() {
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
-				Metadata: &operator.Metadata{
-					Labels: map[string]string{
-						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
-						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
-					},
-					Annotations: map[string]string{
-						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
-					},
-				},
-			}
-			err := validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled"))
 
-			var invalidMinReadySeconds int32 = -1
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
-				Spec: &operator.CalicoWindowsUpgradeDaemonSetSpec{
-					MinReadySeconds: &invalidMinReadySeconds,
-				},
-			}
-			err = validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
+			})
+		})
+		Context("Calico CNI", func() {
+			BeforeEach(func() {
+				instance.Spec.CNI = &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				}
+			})
+			It("should return an error if the k8s service endpoint configmap is not configured correctly", func() {
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+			})
+			It("should return an error if instance.Spec.ServiceCIDRs is not configured", func() {
+				instance.Spec.ServiceCIDRs = []string{}
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
+			})
+			It("should return an error if IP pool encapsulation is IPIP", func() {
+				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationIPIP
+				var enabled operator.BGPOption = operator.BGPEnabled
+				instance.Spec.CalicoNetwork.BGP = &enabled
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"))
+			})
+			It("should return an error if IP pool encapsulation is VXLANCrossSubnet", func() {
+				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLANCrossSubnet
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("IPv4 IPPool encapsulation VXLANCrossSubnet is not supported by Calico for Windows"))
+			})
+		})
+		Context("AzureVNET CNI (to validate any non-Calico)", func() {
+			BeforeEach(func() {
+				instance.Spec.CNI = &operator.CNISpec{
+					Type: operator.PluginAzureVNET,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginAzureVNET},
+				}
+				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationNone
+			})
+			It("should return an error if the k8s service endpoint configmap is not configured correctly", func() {
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+			})
+			It("should not return an error if instance.Spec.ServiceCIDRs is not configured", func() {
+				instance.Spec.ServiceCIDRs = []string{}
+				err := validateCustomResource(instance)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 		})
 	})
 })

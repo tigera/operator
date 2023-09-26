@@ -63,12 +63,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version:  "7.17.11",
+		Version:  "7.17.13",
 		Registry: "",
 	}
 
 	ComponentEckKibana = component{
-		Version:  "7.17.11",
+		Version:  "7.17.13",
 		Registry: "",
 	}
 
@@ -267,6 +267,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraNodeWindows = component{
+		Version:  "master",
+		Image:    "tigera/cnx-node-windows",
+		Registry: "",
+	}
+
 	ComponentTigeraTypha = component{
 		Version:  "master",
 		Image:    "tigera/typha",
@@ -285,6 +291,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraCNIWindows = component{
+		Version:  "master",
+		Image:    "tigera/cni-windows",
+		Registry: "",
+	}
+
 	ComponentCloudControllers = component{
 		Version:  "master",
 		Image:    "tigera/cloud-controllers",
@@ -294,12 +306,6 @@ var (
 	ComponentElasticsearchMetrics = component{
 		Version:  "master",
 		Image:    "tigera/elasticsearch-metrics",
-		Registry: "",
-	}
-
-	ComponentTigeraWindowsUpgrade = component{
-		Version:  "master",
-		Image:    "tigera/calico-windows-upgrade",
 		Registry: "",
 	}
 
@@ -364,7 +370,6 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
-		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,

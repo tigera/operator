@@ -166,14 +166,13 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	// use that. Otherwise, generate a new one.
 	linseedUser := utils.LinseedUser(tenantID)
 	basicCreds := corev1.Secret{}
-	credentialSecrets := []client.Object{}
+	var credentialSecrets []client.Object
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
 	if err := r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
 		// Create the secret to provision into the cluster.
-		basicCreds = corev1.Secret{}
 		basicCreds.Name = render.ElasticsearchLinseedUserSecret
 		basicCreds.Namespace = helper.TruthNamespace()
 		basicCreds.StringData = map[string]string{"username": linseedUser.Username, "password": crypto.GeneratePassword(16)}
@@ -224,7 +223,7 @@ func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string
 		password = string(secret.Data["password"])
 	}
 	if password == "" {
-		return fmt.Errorf("Unable to find password in secret")
+		return fmt.Errorf("unable to find password in secret")
 	}
 
 	// Create the user in ES.

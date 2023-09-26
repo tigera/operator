@@ -37,6 +37,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
@@ -202,6 +203,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	mapper, err := apiutil.NewDynamicRESTMapper(cfg)
+	if err != nil {
+		log.Error(err, "Failed to create dynamic rest mapper.")
+		os.Exit(1)
+	}
+
 	sigHandler := ctrl.SetupSignalHandler()
 	active.WaitUntilActive(cs, c, sigHandler, setupLog)
 	log.Info("Active operator: proceeding")
@@ -234,6 +241,11 @@ func main() {
 				&v3.NetworkPolicy{}:       {Label: policySelector},
 				&v3.GlobalNetworkPolicy{}: {Label: policySelector},
 			},
+			// This commit https://github.com/kubernetes-sigs/controller-runtime/commit/b38c4a526b4cf9ffbcaebd0fe9363d9d64182dd2
+			// introduced a bug where if the cache builder is used and the Mapper is nil, it defaults it to the DiscoverRESTMapper
+			// even though the managers default mapper is the DynamicRESTMapper. To get around this issue, we explicitly
+			// set the mapper to the DynamicRESTMapper.
+			Mapper: mapper,
 		}),
 	})
 	if err != nil {

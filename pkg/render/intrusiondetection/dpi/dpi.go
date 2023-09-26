@@ -38,13 +38,14 @@ import (
 )
 
 const (
-	DeepPacketInspectionNamespace  = "tigera-dpi"
-	DeepPacketInspectionName       = "tigera-dpi"
-	DeepPacketInspectionPolicyName = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
-	DefaultMemoryLimit             = "1Gi"
-	DefaultMemoryRequest           = "100Mi"
-	DefaultCPULimit                = "1"
-	DefaultCPURequest              = "100m"
+	DeepPacketInspectionNamespace       = "tigera-dpi"
+	DeepPacketInspectionName            = "tigera-dpi"
+	DeepPacketInspectionPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DefaultMemoryLimit                  = "1Gi"
+	DefaultMemoryRequest                = "100Mi"
+	DefaultCPULimit                     = "1"
+	DefaultCPURequest                   = "100m"
+	DeepPacketInspectionLinseedRBACName = "tigera-dpi-linseed-permissions"
 )
 
 type DPIConfig struct {
@@ -54,6 +55,7 @@ type DPIConfig struct {
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	ManagedCluster     bool
+	ManagementCluster  bool
 	HasNoLicense       bool
 	HasNoDPIResource   bool
 	ESClusterConfig    *relasticsearch.ClusterConfig
@@ -113,6 +115,25 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiClusterRole(),
 			d.dpiClusterRoleBinding(),
 			d.dpiDaemonset(),
+		)
+	}
+	if d.cfg.ManagementCluster {
+		// We always want to create these permissions when a management
+		// cluster is configured, to allow any DPI running inside a
+		// managed cluster to write data
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
+	} else if !d.cfg.ManagedCluster && !d.cfg.HasNoDPIResource && !d.cfg.HasNoLicense {
+		// We want to create these permissions when a standalone
+		// cluster is configured to run DPI
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
+	} else {
+		// We want to remove these permissions when a standalone
+		// cluster is no longer configured, to run DPI or for managed clusters
+		toDelete = append(toDelete,
+			d.dpiLinseedAccessClusterRole(),
+			d.dpiLinseedAccessClusterRoleBinding(),
 		)
 	}
 	if d.cfg.ManagedCluster {
@@ -240,7 +261,6 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
 		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
-		{Name: "CLUSTER_NAME", Value: d.cfg.ESClusterConfig.ClusterName()},
 		{Name: "LINSEED_CLIENT_CERT", Value: d.cfg.DPICertSecret.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_CLIENT_KEY", Value: d.cfg.DPICertSecret.VolumeMountKeyFilePath()},
 		{Name: "LINSEED_TOKEN", Value: render.GetLinseedTokenPath(d.cfg.ManagedCluster)},
@@ -322,6 +342,28 @@ func (d *dpiComponent) dpiClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 }
 
+func (d *dpiComponent) dpiLinseedAccessClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   DeepPacketInspectionLinseedRBACName,
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     DeepPacketInspectionLinseedRBACName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      DeepPacketInspectionName,
+				Namespace: DeepPacketInspectionNamespace,
+			},
+		},
+	}
+}
+
 func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -351,12 +393,6 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"endpoints", "services"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
-			{
-				// Add write access to Linseed APIs.
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"events"},
-				Verbs:     []string{"create"},
-			},
 		},
 	}
 	if d.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
@@ -369,6 +405,24 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 		})
 	}
 	return role
+}
+
+func (d *dpiComponent) dpiLinseedAccessClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: DeepPacketInspectionLinseedRBACName,
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				// Add write access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"events"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
 }
 
 func (d *dpiComponent) dpiAnnotations() map[string]string {

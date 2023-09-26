@@ -207,9 +207,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 
 			{Name: render.TigeraLinseedSecret, Namespace: common.OperatorNamespace()},
 			{Name: render.TigeraLinseedSecret, Namespace: render.ElasticsearchNamespace},
-
-			{Name: render.TigeraLinseedTokenSecret, Namespace: common.OperatorNamespace()},
-			{Name: render.TigeraLinseedTokenSecret, Namespace: render.ElasticsearchNamespace},
 		}
 		ExpectSecrets(ctx, cli, expected)
 	})

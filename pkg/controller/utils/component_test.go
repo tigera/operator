@@ -1845,3 +1845,7 @@ func (mc *mockClient) Scheme() *runtime.Scheme {
 func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
 	panic("RESTMapper not implemented in mockClient")
 }
+
+func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
+	panic("SubResource not implemented in mockClient")
+}

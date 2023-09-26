@@ -29,10 +29,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -185,6 +187,27 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
+	if l.cfg.Tenant != nil {
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{render.LinseedServiceName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+				},
+			},
+		}...)
+	}
+
 	if l.cfg.UsePSP {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -270,11 +293,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	if l.cfg.ManagementCluster {
 		envVars = append(envVars,
-			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
-			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: common.OperatorNamespace()},
 		)
-		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
-		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
 	}
 
 	if l.cfg.Tenant != nil {
@@ -286,13 +306,20 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	if l.cfg.KeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
 	}
-	if l.cfg.TokenKeyPair != nil && l.cfg.TokenKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
-	}
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+
 	if l.cfg.TokenKeyPair != nil {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+		)
+		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
+		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+		if l.cfg.TokenKeyPair.UseCertificateManagement() {
+			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
+		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
 	podTemplate := &corev1.PodTemplateSpec{

@@ -454,6 +454,11 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}))
 	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(ClusterRoleName))

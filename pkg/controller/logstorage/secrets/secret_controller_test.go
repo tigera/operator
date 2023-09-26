@@ -484,7 +484,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		ls.Status.State = operatorv1.TigeraStatusReady
 		CreateLogStorage(cli, ls)
 
-		// Create a ManagementCluster object
+		// Create a ManagementClusterConnection object
 		mcc := &operatorv1.ManagementClusterConnection{}
 		mcc.Name = "tigera-secure"
 		Expect(cli.Create(ctx, mcc)).ShouldNot(HaveOccurred())

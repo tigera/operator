@@ -662,7 +662,5 @@ func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operat
 		return nil, err
 	}
 
-	kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
-
-	return kubeDNSIPs, nil
+	return kubeDNSService.Spec.ClusterIPs, nil
 }

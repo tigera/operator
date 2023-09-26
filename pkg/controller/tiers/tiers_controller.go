@@ -178,7 +178,7 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 			dnsServiceIPs, err := utils.GetDNSServiceIPs(ctx, r.client, r.provider)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
-					r.status.SetDegraded(operatorv1.ResourceNotFound, "DNS service is not found", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceNotFound, "Unable to find DNS service", err, reqLogger)
 				} else {
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying DNS service", err, reqLogger)
 				}

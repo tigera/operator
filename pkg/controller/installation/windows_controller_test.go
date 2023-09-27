@@ -30,9 +30,9 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -221,10 +221,17 @@ var _ = Describe("windows-controller installation tests", func() {
 				cr.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
 
 				// Create the service endpoint configmap for k8s API (required for Calico for Windows)
-				k8sapi.Endpoint = k8sapi.ServiceEndpoint{
-					Host: "1.2.3.4",
-					Port: "6443",
+				endPointCM := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.K8sSvcEndpointConfigMapName,
+						Namespace: common.OperatorNamespace(),
+					},
+					Data: map[string]string{
+						"KUBERNETES_SERVICE_HOST": "1.2.3.4",
+						"KUBERNETES_SERVICE_PORT": "6443",
+					},
 				}
+				Expect(c.Create(ctx, endPointCM)).ToNot(HaveOccurred())
 
 			})
 
@@ -292,6 +299,36 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(degradedErr).To(ConsistOf([]string{}))
 			})
 
+			It("should not render the Windows daemonset when the kubernetes-service-endpoint configmap does not exist", func() {
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
+				// Create the Windows node
+				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
+
+				// Create the installation resource
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				// Delete the configmap
+				endPointCM := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.K8sSvcEndpointConfigMapName,
+						Namespace: common.OperatorNamespace(),
+					},
+				}
+				Expect(c.Delete(ctx, endPointCM)).ToNot(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).Should(HaveOccurred())
+				Expect(err.Error()).To(Equal("configmaps \"kubernetes-services-endpoint\" not found"))
+
+				// The calico-node-windows daemonset should be rendered, but in a degraded state
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{"Error reading services endpoint configmap"}))
+				Expect(degradedErr).To(ConsistOf([]string{"configmaps \"kubernetes-services-endpoint\" not found"}))
+			})
+
 			It("should not render the Windows daemonset when the kubernetes-service-endpoint configmap is incomplete", func() {
 				hns := operator.WindowsDataplaneHNS
 				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
@@ -303,9 +340,16 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 				// Have a configmap with no port
-				k8sapi.Endpoint = k8sapi.ServiceEndpoint{
-					Host: "1.2.3.4",
+				endPointCM := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.K8sSvcEndpointConfigMapName,
+						Namespace: common.OperatorNamespace(),
+					},
+					Data: map[string]string{
+						"KUBERNETES_SERVICE_HOST": "1.2.3.4",
+					},
 				}
+				Expect(c.Update(ctx, endPointCM)).ToNot(HaveOccurred())
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())
@@ -549,11 +593,18 @@ var _ = Describe("windows-controller installation tests", func() {
 
 						Expect(c.Create(ctx, node)).ToNot(HaveOccurred())
 
-						// Populate the k8s service endpoint (required for windows)
-						k8sapi.Endpoint = k8sapi.ServiceEndpoint{
-							Host: "1.2.3.4",
-							Port: "6443",
+						// Create the k8s service endpoint configmap (required for windows)
+						endPointCM := &corev1.ConfigMap{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.K8sSvcEndpointConfigMapName,
+								Namespace: common.OperatorNamespace(),
+							},
+							Data: map[string]string{
+								"KUBERNETES_SERVICE_HOST": "1.2.3.4",
+								"KUBERNETES_SERVICE_PORT": "6443",
+							},
 						}
+						Expect(c.Create(ctx, endPointCM)).ToNot(HaveOccurred())
 					}
 
 					// Create an object we can use throughout the test to do the compliance reconcile loops.

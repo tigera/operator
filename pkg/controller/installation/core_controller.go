@@ -1111,7 +1111,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	err = utils.GetK8sServiceEndPoint(r.client)
+	err = utils.PopulateK8sServiceEndPoint(r.client)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err

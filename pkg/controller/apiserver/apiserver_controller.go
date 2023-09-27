@@ -360,7 +360,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
-	err = utils.GetK8sServiceEndPoint(r.client)
+	err = utils.PopulateK8sServiceEndPoint(r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err

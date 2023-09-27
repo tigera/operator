@@ -188,7 +188,8 @@ func LinseedUser(tenant string) *User {
 					Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
 					Indices: []RoleIndex{
 						{
-							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant)},
+							// Include both single-index and multi-index name formats.
+							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant), "calico_*"},
 							Privileges: []string{"create_index", "write", "manage", "read"},
 						},
 					},

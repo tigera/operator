@@ -120,9 +120,9 @@ var (
 	}
 
 	ComponentLinseed = component{
-		Version:  "master",
-		Image:    "tigera/linseed",
-		Registry: "",
+		Version:  "latest",
+		Image:    "casey/linseed",
+		Registry: "gcr.io/unique-caldron-775/",
 	}
 
 	ComponentFluentd = component{

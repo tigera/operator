@@ -60,8 +60,6 @@ func init() {
 // PolicyRecommendationConfiguration contains all the config information needed to render the component.
 type PolicyRecommendationConfiguration struct {
 	ClusterDomain                  string
-	ESClusterConfig                *relasticsearch.ClusterConfig
-	ESSecrets                      []*corev1.Secret
 	Installation                   *operatorv1.InstallationSpec
 	ManagedCluster                 bool
 	Openshift                      bool
@@ -119,7 +117,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(pr.cfg.Namespace, pr.cfg.PullSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(pr.cfg.Namespace, pr.cfg.ESSecrets...)...)...)
+
 	// The deployment is created on management/standalone clusters only
 	objs = append(objs,
 		pr.allowTigeraPolicyForPolicyRecommendation(),
@@ -279,18 +277,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		initContainers = append(initContainers, pr.cfg.PolicyRecommendationCertSecret.InitContainer(PolicyRecommendationNamespace))
 	}
 
-	container := relasticsearch.ContainerDecorateIndexCreator(
-		relasticsearch.ContainerDecorate(
-			controllerContainer,
-			pr.cfg.ESClusterConfig.ClusterName(),
-			ElasticsearchPolicyRecommendationUserSecret,
-			pr.cfg.ClusterDomain,
-			rmeta.OSTypeLinux,
-		),
-		pr.cfg.ESClusterConfig.Replicas(),
-		pr.cfg.ESClusterConfig.Shards())
-
-	podTemplateSpec := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplateSpec := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        PolicyRecommendationName,
 			Namespace:   pr.cfg.Namespace,
@@ -301,13 +288,11 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			NodeSelector:       pr.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: PolicyRecommendationName,
 			ImagePullSecrets:   secret.GetReferenceList(pr.cfg.PullSecrets),
-			Containers: []corev1.Container{
-				container,
-			},
-			InitContainers: initContainers,
-			Volumes:        volumes,
+			Containers:         []corev1.Container{controllerContainer},
+			InitContainers:     initContainers,
+			Volumes:            volumes,
 		},
-	}, pr.cfg.ESClusterConfig, pr.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

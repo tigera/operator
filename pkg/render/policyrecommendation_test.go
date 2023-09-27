@@ -36,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -74,7 +73,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		// desired configuration.
 		cfg = &render.PolicyRecommendationConfiguration{
 			ClusterDomain:                  dns.DefaultClusterDomain,
-			ESClusterConfig:                relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
 			TrustedBundle:                  bundle,
 			Installation:                   &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			ManagedCluster:                 notManagedCluster,
@@ -117,7 +115,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		prc := rtest.GetResource(resources, render.PolicyRecommendationName, render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(prc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(prc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
 			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/policy-recommendation-tls/tls.crt"},
@@ -194,7 +191,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 		}
-		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
 		component := render.PolicyRecommendation(cfg)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -210,7 +206,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
-		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
 		component := render.PolicyRecommendation(cfg)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -229,7 +224,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		cfg.PolicyRecommendationCertSecret = policyRecommendationCertSecret
 
-		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
 		component := render.PolicyRecommendation(cfg)
 		resources, _ := component.Objects()
 

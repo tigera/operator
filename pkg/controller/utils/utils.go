@@ -328,10 +328,8 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 	return secret, nil
 }
 
-// GetK8sServiceEndPoint reads the kubernetes-service-endpoint configmap and pushes
-// KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT to calico-node daemonset, typha
-// apiserver deployments
-func GetK8sServiceEndPoint(client client.Client) error {
+// GetK8sServiceEndPoint returns the kubernetes-service-endpoint configmap
+func GetK8sServiceEndPoint(client client.Client) (*corev1.ConfigMap, error) {
 	cmName := render.K8sSvcEndpointConfigMapName
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
@@ -339,30 +337,24 @@ func GetK8sServiceEndPoint(client client.Client) error {
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
-		// If the configmap is unavailable, do not return error
+		return nil, err
+	}
+	return cm, nil
+}
+
+// PopulateK8sServiceEndPoint reads the kubernetes-service-endpoint configmap and pushes
+// KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT to calico-node daemonset, typha
+// apiserver deployments
+func PopulateK8sServiceEndPoint(client client.Client) error {
+	cm, err := GetK8sServiceEndPoint(client)
+	if err != nil {
 		if !kerrors.IsNotFound(err) {
-			return fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
+			// If the configmap is unavailable, do not return an error
+			return fmt.Errorf("Failed to read ConfigMap %q: %s", render.K8sSvcEndpointConfigMapName, err)
 		}
 	} else {
 		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
 		k8sapi.Endpoint.Port = cm.Data["KUBERNETES_SERVICE_PORT"]
-	}
-	return nil
-}
-
-// Return error if the k8s service endpoint configmap is not found
-func K8sServiceEndPointNotFound(client client.Client) error {
-	cmName := render.K8sSvcEndpointConfigMapName
-	cm := &corev1.ConfigMap{}
-	cmNamespacedName := types.NamespacedName{
-		Name:      cmName,
-		Namespace: common.OperatorNamespace(),
-	}
-	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
-		// If the error is something else other than not found, it means the configmap does exist
-		if kerrors.IsNotFound(err) {
-			return err
-		}
 	}
 	return nil
 }

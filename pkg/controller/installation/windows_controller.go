@@ -249,12 +249,13 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	// The k8s service endpoint configmap must populate k8sapi.Endpoint data before valitating the configuration
-	if err := utils.GetK8sServiceEndPoint(r.client); err != nil {
+	// The k8s service endpoint configmap must populate k8sapi.Endpoint data before validating the configuration.
+	if _, err := utils.GetK8sServiceEndPoint(r.client); err != nil {
+		// PopulateK8sServiceEndPoint() does not return an error if the configmap is not found, check for this with GetK8sServiceEndPoint()
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
-	} else if err := utils.K8sServiceEndPointNotFound(r.client); err != nil {
-		// GetK8sServiceEndPoint() return nil if the configmap is not found, check for this with K8sServiceEndPointExists()
+	}
+	if err := utils.PopulateK8sServiceEndPoint(r.client); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}

@@ -635,7 +635,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					}
 					r.ipamConfigWatchReady.MarkAsReady()
 
-					certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace())
+					certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 					Expect(err).NotTo(HaveOccurred())
 					prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 					Expect(err).NotTo(HaveOccurred())

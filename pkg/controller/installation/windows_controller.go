@@ -249,6 +249,16 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	// The k8s service endpoint configmap must populate k8sapi.Endpoint data before valitating the configuration
+	if err := utils.GetK8sServiceEndPoint(r.client); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
+		return reconcile.Result{}, err
+	} else if err := utils.K8sServiceEndPointNotFound(r.client); err != nil {
+		// GetK8sServiceEndPoint() return nil if the configmap is not found, check for this with K8sServiceEndPointExists()
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Validate the configuration.
 	if err := validateCustomResource(instance); err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)
@@ -291,12 +301,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		logw.Error(err, "Error with Typha/Felix secrets")
 		r.status.SetDegraded(operatorv1.CertificateError, "Error with Typha/Felix secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	err = utils.GetK8sServiceEndPoint(r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

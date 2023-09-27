@@ -47,7 +47,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/test"
 )
 
@@ -148,10 +147,6 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPolicyRecommendationUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
-		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchADJobUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
-		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ECKLicenseConfigMapName,

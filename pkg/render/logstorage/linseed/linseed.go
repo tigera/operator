@@ -244,8 +244,6 @@ func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 
 func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
-		{Name: "BACKEND", Value: "elastic-single-index"},
-
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
 		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
 
@@ -308,8 +306,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	}
 
 	if l.cfg.Tenant != nil {
-		// If a tenant was provided, set the expected tenant ID.
+		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
 	}
 
 	var initContainers []corev1.Container

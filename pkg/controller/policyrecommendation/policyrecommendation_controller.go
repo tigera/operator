@@ -130,10 +130,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(policyRecController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("policy-recommendation-controller failed to watch the ConfigMap resource: %w", err)
-	}
-
 	// Watch for changes to primary resource ManagementCluster
 	err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -230,7 +226,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Check if this is a tenant-scoped request.
-	_, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		logc.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -321,16 +317,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
-		return reconcile.Result{}, err
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, logc)
@@ -351,33 +337,18 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	secretsToWatch := []string{
-		render.ElasticsearchPolicyRecommendationUserSecret,
-	}
-	esSecrets, err := utils.ElasticsearchSecrets(ctx, secretsToWatch, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, logc)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, logc)
-		return reconcile.Result{}, err
-	}
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
 
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:   r.clusterDomain,
-		ESClusterConfig: esClusterConfig,
-		ESSecrets:       esSecrets,
-		Installation:    installation,
-		ManagedCluster:  isManagedCluster,
-		PullSecrets:     pullSecrets,
-		Openshift:       r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:          r.usePSP,
-		Namespace:       helper.InstallNamespace(),
+		ClusterDomain:  r.clusterDomain,
+		Installation:   installation,
+		ManagedCluster: isManagedCluster,
+		PullSecrets:    pullSecrets,
+		Openshift:      r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:         r.usePSP,
+		Namespace:      helper.InstallNamespace(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -393,7 +364,11 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	if !isManagedCluster {
-		certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, helper.TruthNamespace())
+		opts := []certificatemanager.Option{
+			certificatemanager.WithLogger(logc),
+			certificatemanager.WithTenant(tenant),
+		}
+		certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, helper.TruthNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 			return reconcile.Result{}, err

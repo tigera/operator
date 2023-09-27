@@ -350,6 +350,23 @@ func GetK8sServiceEndPoint(client client.Client) error {
 	return nil
 }
 
+// Return error if the k8s service endpoint configmap is not found
+func K8sServiceEndPointNotFound(client client.Client) error {
+	cmName := render.K8sSvcEndpointConfigMapName
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      cmName,
+		Namespace: common.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		// If the error is something else other than not found, it means the configmap does exist
+		if kerrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {
 	secrets := []*corev1.Secret{}
 	for _, ps := range i.ImagePullSecrets {

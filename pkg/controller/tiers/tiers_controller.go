@@ -16,35 +16,33 @@ package tiers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
-
-	"github.com/go-logr/logr"
-
-	corev1 "k8s.io/api/core/v1"
-
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/tiers"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/go-logr/logr"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/tiers"
 )
 
 // The Tiers controller reconciles Tiers and NetworkPolicies that are shared across components or do not directly
@@ -135,7 +133,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	// Ensure a license is present that enables this controller to create/manage tiers.
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
@@ -170,38 +168,42 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		DNSEgressCIDRs: tiers.DNSEgressCIDR{},
 	}
 
+	// node-local-dns is not supported on openshift
 	if r.provider != operatorv1.ProviderOpenShift {
 		nodeLocalDNSExists, err := utils.IsNodeLocalDNSAvailable(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
 			return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
 		} else if nodeLocalDNSExists {
-			// Discover the kube-dns Service cluster IP address - node-local-dns is not supported on OpenShift which is the only platform without
-			// kube-dns. Thus, the name "kube-dns" can be static.
-			kubeDNSService := &corev1.Service{}
-			err = r.client.Get(ctx, types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}, kubeDNSService)
+			dnsServiceIPs, err := utils.GetDNSServiceIPs(ctx, r.client, r.provider)
 			if err != nil {
-				if errors.IsNotFound(err) {
-					r.status.SetDegraded(operatorv1.ResourceNotFound, "kube-dns service not found", err, reqLogger)
+				if apierrors.IsNotFound(err) {
+					r.status.SetDegraded(operatorv1.ResourceNotFound, "Unable to find DNS service", err, reqLogger)
 				} else {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying kube-dns service", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying DNS service", err, reqLogger)
 				}
 				return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
 			}
-			kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
-			for _, IP := range kubeDNSIPs {
-				var builder strings.Builder
-				builder.WriteString(IP)
-				if net.ParseIP(IP).To4() != nil {
-					builder.WriteString("/32")
-					tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
-				} else {
-					builder.WriteString("/128")
-					tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
+			if len(dnsServiceIPs) > 0 {
+				for _, IP := range dnsServiceIPs {
+					var builder strings.Builder
+					builder.WriteString(IP)
+					if net.ParseIP(IP).To4() != nil {
+						builder.WriteString("/32")
+						tiersConfig.DNSEgressCIDRs.IPV4 = append(tiersConfig.DNSEgressCIDRs.IPV4, builder.String())
+					} else {
+						builder.WriteString("/128")
+						tiersConfig.DNSEgressCIDRs.IPV6 = append(tiersConfig.DNSEgressCIDRs.IPV6, builder.String())
+					}
 				}
-
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError,
+					"DNS service Spec.ClusterIPs is empty",
+					errors.New("DNS service Spec.ClusterIPs is empty"),
+					reqLogger)
 			}
+
 		}
 	}
 

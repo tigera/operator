@@ -18,13 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	"github.com/go-ldap/ldap"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -35,11 +30,13 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"

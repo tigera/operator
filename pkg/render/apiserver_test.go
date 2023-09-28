@@ -757,8 +757,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "tigera-extension-apiserver-secrets-access", ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "tigera-extension-apiserver-secrets-access", ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: render.APIServerSecretsRBACName, ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.APIServerSecretsRBACName, ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 
 		for _, expectedRes := range expectedResources {
@@ -826,8 +826,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}},
 			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-secrets-access", Namespace: "tigera-system"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-secrets-access", Namespace: "tigera-system"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}},
 		}
 		rtest.ExpectResources(resources, expected)
 

@@ -21,16 +21,13 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
-	//"k8s.io/client-go/kubernetes/fake"
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/components"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/components"
 )
 
 var _ = Describe("imageset tests", func() {

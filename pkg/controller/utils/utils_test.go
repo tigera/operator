@@ -19,23 +19,17 @@ import (
 	"fmt"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-
 	"github.com/go-logr/logr"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
 	"github.com/stretchr/testify/mock"
-
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	opv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +40,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -95,7 +90,6 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		_, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())
 	})
-
 })
 
 var _ = Describe("Tigera License polling test", func() {
@@ -181,7 +175,6 @@ var _ = Describe("Utils APIServer type tests", func() {
 })
 
 var _ = Describe("ValidateResourceNameIsQualified", func() {
-
 	It("returns nil for a compliant kubernetes name.", func() {
 		qualifiedName := "proper-resource-name"
 
@@ -269,7 +262,6 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 
 		Expect(err).To(BeNil())
 	})
-
 })
 
 type fakeClient struct {

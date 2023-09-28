@@ -225,8 +225,6 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("finalises the deletion of the LogStorage CR when marked for deletion and continues without error", func() {
-					mockStatus.On("AddDaemonsets", mock.Anything).Return()
-					mockStatus.On("AddDeployments", mock.Anything).Return()
 					mockStatus.On("AddStatefulSets", mock.Anything).Return()
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 					mockStatus.On("AddCronJobs", mock.Anything)
@@ -315,8 +313,6 @@ var _ = Describe("LogStorage controller", func() {
 
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("Run").Return()
-				mockStatus.On("AddDaemonsets", mock.Anything)
-				mockStatus.On("AddDeployments", mock.Anything)
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 				mockStatus.On("AddCronJobs", mock.Anything)
@@ -1114,8 +1110,6 @@ var _ = Describe("LogStorage controller", func() {
 
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("Run").Return()
-				mockStatus.On("AddDaemonsets", mock.Anything)
-				mockStatus.On("AddDeployments", mock.Anything)
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 				mockStatus.On("AddCronJobs", mock.Anything)

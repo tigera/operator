@@ -285,7 +285,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
-	var tunnelSecretPassthrough render.Component
 	includeV3NetworkPolicy := false
 	if variant == operatorv1.TigeraSecureEnterprise {
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
@@ -306,21 +305,23 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		if managementCluster != nil {
-			// TODO: Does this belong here or in the manager?
-			tunnelCASecret, err := utils.GetSecret(ctx, r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
+		if managementCluster != nil && !r.multiTenant {
+			// The secret that contains the CA x509 certificate to create client certificates for the managed cluster
+			// is created by the Manager controller in tigera-operator namespace. We will read this secret and make
+			// sure it is available in the same namespace as the API server (tigera-system)
+			// This secret is only created for a management cluster in a multi-cluster setup for a single tenant.
+			// Other cluster types do not require this secret. (Standalone configuration do not need it and multi-tenant
+			// configuration create secrets inside the tenant namespaces)
+			tunnelSecretName := managementCluster.Spec.TLS.SecretName
+			tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, common.OperatorNamespace())
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			if tunnelCASecret == nil {
-				tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
-				if err != nil {
-					r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, reqLogger)
-					return reconcile.Result{}, err
-				}
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
+				return reconcile.Result{}, err
 			}
-			tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret)
 			tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 		}
 
@@ -382,7 +383,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		TLSKeyPair:                  tlsSecret,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
-		TunnelCASecret:              tunnelCAKeyPair,
 		TrustedBundle:               trustedBundle,
 		UsePSP:                      r.usePSP,
 		MultiTenant:                 r.multiTenant,
@@ -404,9 +404,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			},
 			TrustedBundle: trustedBundle,
 		}),
-	}
-	if tunnelSecretPassthrough != nil {
-		components = append(components, tunnelSecretPassthrough)
 	}
 
 	var pcPolicy render.Component

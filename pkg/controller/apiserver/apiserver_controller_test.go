@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	kerror "k8s.io/apimachinery/pkg/api/errors"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -685,6 +687,124 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+		Context("Management cluster reconciliation", func() {
+			BeforeEach(func() {
+				// Create the ManagementCluster CR needed to configure
+				// a management cluster for a multi-cluster setup
+				managementCluster := &operatorv1.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+					Spec: operatorv1.ManagementClusterSpec{
+						TLS: &operatorv1.TLS{
+							SecretName: render.VoltronTunnelSecretName,
+						},
+					},
+				}
+				Expect(cli.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+				// Create the APIServer CR needed to jumpstart the reconciliation
+				// for the api server
+				err := cli.Create(ctx, &operatorv1.APIServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
+				// Create the tunnel secret in operator namespace
+				// This will be created by Manager controller in tigera-operator namespace
+				err := cli.Create(ctx, &corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         false,
+				}
+
+				// Reconcile the API server
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-apiserver",
+						Namespace: "tigera-system",
+					},
+				}
+				clusterConnectionInAppNs := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: "tigera-system",
+					},
+				}
+
+				// Ensure a deployment was created for the API server
+				err = test.GetResource(cli, &deployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				// Ensure that the tunnel secret was copied in tigera-system namespace
+				err = test.GetResource(cli, &clusterConnectionInAppNs)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+			})
+
+			It("Should reconcile multi-cluster setup for a management cluster for a multiple tenant", func() {
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         true,
+				}
+
+				// Reconcile the API server
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-apiserver",
+						Namespace: "tigera-system",
+					},
+				}
+				clusterConnectionInAppNs := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: "tigera-system",
+					},
+				}
+
+				// Ensure a deployment was created for the API server
+				err = test.GetResource(cli, &deployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				// Do not expect any secrets to be copied over
+				err = test.GetResource(cli, &clusterConnectionInAppNs)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
+			})
 		})
 	})
 })

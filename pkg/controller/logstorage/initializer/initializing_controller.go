@@ -82,8 +82,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 var _ reconcile.Reconciler = &LogStorageInitializer{}
 
-// LogStorageInitializer initializes a LogStorage object for sub controllers to use
-// by performing validation and defaulting, and marking the resource as available.
+// LogStorageInitializer is responsible for performing validation and defaulting on the LogStorage object,
+// and creating the base namespaces for other controllers to deploy into. It updates the status of the LogStorage
+// object to indicate that it has completed its work to other controllers.
 type LogStorageInitializer struct {
 	client      client.Client
 	scheme      *runtime.Scheme

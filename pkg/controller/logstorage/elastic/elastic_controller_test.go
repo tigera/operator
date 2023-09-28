@@ -17,7 +17,6 @@ package elastic
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -75,7 +74,7 @@ var (
 	storageClassName        = "test-storage-class"
 	kbDNSNames              = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 
-	successResult = reconcile.Result{RequeueAfter: 1 * time.Minute}
+	successResult = reconcile.Result{}
 )
 
 func NewReconcilerWithShims(

@@ -140,7 +140,6 @@ var _ = Describe("Windows rendering tests", func() {
 				defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationNone
 			}
 			Context(fmt.Sprintf("BGP enabled: %v, VXLAN enabled: %v", enableBGP, enableVXLAN), func() {
-
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -160,7 +159,7 @@ var _ = Describe("Windows rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -682,7 +681,6 @@ var _ = Describe("Windows rendering tests", func() {
 				defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationNone
 			}
 			Context(fmt.Sprintf("BGP enabled: %v, VXLAN enabled: %v", enableBGP, enableVXLAN), func() {
-
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -705,7 +703,7 @@ var _ = Describe("Windows rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -1063,7 +1061,7 @@ var _ = Describe("Windows rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -1498,8 +1496,8 @@ var _ = Describe("Windows rendering tests", func() {
 
 			// Verify env
 			expectedEnvs := []corev1.EnvVar{
-				corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
-				corev1.EnvVar{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+				{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
+				{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			}
 			for _, expected := range expectedEnvs {
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(expected))
@@ -1535,7 +1533,7 @@ var _ = Describe("Windows rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -1673,7 +1671,7 @@ var _ = Describe("Windows rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -1826,7 +1824,7 @@ var _ = Describe("Windows rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -2291,7 +2289,7 @@ var _ = Describe("Windows rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -2657,7 +2655,9 @@ func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet) {
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
-				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}}},
+				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"},
+			},
+		},
 		InitialDelaySeconds: 10,
 		FailureThreshold:    6,
 		TimeoutSeconds:      10,
@@ -2668,7 +2668,9 @@ func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet) {
 	expectedReadiness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
-				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}}},
+				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"},
+			},
+		},
 		TimeoutSeconds: 10,
 		PeriodSeconds:  10,
 	}
@@ -2677,7 +2679,9 @@ func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet) {
 	expectedLifecycle := &corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{
 			Exec: &corev1.ExecAction{
-				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}}},
+				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"},
+			},
+		},
 	}
 	ExpectWithOffset(1, rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Lifecycle).To(Equal(expectedLifecycle))
 }

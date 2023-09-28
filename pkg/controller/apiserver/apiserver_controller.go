@@ -17,7 +17,6 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -114,7 +113,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
@@ -497,9 +496,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	r.status.ClearDegraded()
 
 	if !r.status.IsAvailable() {
-		// Schedule a kick to check again in the near future. Hopefully by then
-		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		// Schedule a kick to check again in the near future. Hopefully by then things will be available.
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.

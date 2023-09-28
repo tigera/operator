@@ -697,6 +697,17 @@ var _ = Describe("Manager controller tests", func() {
 			})
 
 			DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("IsAvailable").Return(true)
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("AddDeployments", mock.Anything)
+				mockStatus.On("ClearDegraded")
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+				mockStatus.On("ReadyToMonitor")
+				mockStatus.On("SetMetaData", mock.Anything).Return()
+				r.status = mockStatus
+
 				if !crPresent {
 					Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
 				}

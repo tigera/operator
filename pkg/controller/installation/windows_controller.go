@@ -361,7 +361,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		nodePrometheusTLS, err = certificateManager.GetKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error getting TLS certificate", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -383,7 +383,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error querying %s service", kubeDNSServiceName.Name), err, reqLogger)
 		}
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		return reconcile.Result{}, err
 	}
 	kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
@@ -391,7 +391,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	if felixConfiguration.Spec.VXLANVNI == nil {
 		err = fmt.Errorf("VXLANVNI not specified in FelixConfigurationSpec")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading VXLANVNI from FelixConfiguration", err, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		return reconcile.Result{}, err
 	}
 
 	windowsCfg := render.WindowsConfiguration{

@@ -108,7 +108,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		// Should mount ManagerTLSSecret for non-managed clusters
@@ -292,7 +292,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(len(tenantAResources)).To(Equal(len(tenantAExpectedResources)))
 
 			for i, expectedRes := range tenantAExpectedResources {
-				rtest.CompareResource(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
 			cfg.Namespace = tenantBNamespace
@@ -321,7 +321,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(len(tenantBResources)).To(Equal(len(tenantBExpectedResources)))
 
 			for i, expectedRes := range tenantBExpectedResources {
-				rtest.CompareResource(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 		})
 	})

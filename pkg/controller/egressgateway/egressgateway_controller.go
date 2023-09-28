@@ -115,7 +115,7 @@ func add(_ manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("egressgateway-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("egressgateway-controller failed to watch Tigera network resource: %v", err)
 	}
@@ -251,7 +251,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
@@ -295,7 +295,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 	if installStatus.CalicoVersion != components.EnterpriseRelease {
 		reqLogger.WithValues("version", components.EnterpriseRelease).Info("Waiting for expected version of Calico to be installed")
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
@@ -348,7 +348,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	r.status.ClearDegraded()
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future, hopefully by then things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	return reconcile.Result{}, nil
 }

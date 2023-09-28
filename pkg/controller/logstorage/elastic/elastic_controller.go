@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"time"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -120,8 +119,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch LogStorage resource: %w", err)
 	}
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Network resource: %w", err)
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Installation resource: %w", err)
 	}
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ImageSet: %w", err)
@@ -249,6 +248,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
 	}
 
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime)
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -282,7 +288,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	// Set or remove the finalizer from the LogStorage object as needed.
 	if err = r.handleLogStorageFinalizer(ctx, ls, reqLogger); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating LogStorage finalizer", err, reqLogger)
+		// Note: we don't set degraded status here because handleLogStorageFinalizer() already does that.
 		return reconcile.Result{}, err
 	}
 
@@ -304,14 +310,14 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
@@ -601,7 +607,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-	return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
+	return reconcile.Result{}, nil
 }
 
 // isTerminating returns true if the LogStorage instance is terminating.
@@ -675,12 +681,10 @@ func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLo
 	// ES should be in ready phase when execution reaches here, apply ILM polices
 	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return err
 	}
 
 	if err = esClient.SetILMPolicies(ctx, ls); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch lifecycle policies", err, reqLogger)
 		return err
 	}
 	return nil

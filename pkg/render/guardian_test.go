@@ -124,7 +124,7 @@ var _ = Describe("Rendering tests", func() {
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 			for i, expectedRes := range expectedResources {
-				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

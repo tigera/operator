@@ -137,8 +137,11 @@ func ExpectResource(expected client.Object, resources []client.Object) error {
 	return fmt.Errorf("%T %s/%s not found in:\n\n%s", expected, ns, name, strings.Join(items, "\n"))
 }
 
-// CompareResource checks that the given resource matches the expected name, namespace, group, version, and kind.
-func CompareResource(resource runtime.Object, name, ns, group, version, kind string) {
+// ExpectResourceTypeAndObjectMetadata checks that the given resource matches the expected name, namespace, group, version, and kind.
+// Note that this function often results in tests that are brittle and subject to breakages when resource ordering changes, and are also hard to debug.
+// most tests should use ExpectResources instead, which is more robust and provides better error messages.
+// Use this function only when the order of resources is actually important.
+func ExpectResourceTypeAndObjectMetadata(resource runtime.Object, name, ns, group, version, kind string) {
 	gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
 	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	actualNS := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()

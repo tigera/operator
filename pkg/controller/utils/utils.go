@@ -62,6 +62,9 @@ var (
 	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
 	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+
+	PeriodicReconcileTime = 5 * time.Minute
+	StandardRetry         = 30 * time.Second
 )
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
@@ -82,8 +85,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
-// TODO: Deprecate and delete these functions.
-func AddNetworkWatch(c controller.Controller) error {
+func AddInstallationWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
 
@@ -145,11 +147,8 @@ func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
 	}, &handler.EnqueueRequestForObject{})
 }
 
-func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
-	return c.Watch(
-		&source.Channel{Source: createPeriodicReconcileChannel(period)},
-		&handler.EnqueueRequestForObject{},
-	)
+func AddPeriodicReconcile(c controller.Controller, period time.Duration, handler handler.EventHandler) error {
+	return c.Watch(&source.Channel{Source: createPeriodicReconcileChannel(period)}, handler)
 }
 
 // AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.
@@ -755,4 +754,16 @@ func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operat
 	}
 
 	return kubeDNSService.Spec.ClusterIPs, nil
+}
+
+// GetDNSServiceName returns the name and namespace for the DNS service based on the given provider.
+// This is "kube-dns" for most providers, but varies on OpenShift and RKE2.
+func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
+	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+	if provider == operatorv1.ProviderOpenShift {
+		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+	} else if provider == operatorv1.ProviderRKE2 {
+		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
+	}
+	return kubeDNSServiceName
 }

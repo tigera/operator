@@ -144,7 +144,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
@@ -301,7 +301,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
@@ -387,7 +387,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
@@ -555,7 +555,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 
 			if expectedRes.kind == "GlobalAlertTemplate" {
 				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
@@ -628,7 +628,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(toRemove).To(HaveLen(len(expectedResourcesToRemove)))
 
 		for i, expectedRes := range expectedResourcesToRemove {
-			rtest.CompareResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 

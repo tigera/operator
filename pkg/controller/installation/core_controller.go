@@ -25,7 +25,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
@@ -90,7 +89,6 @@ const (
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	defaultNodeReporterPort = 9081
 	CalicoFinalizer         = "tigera.io/operator-cleanup"
-	reconcilePeriod         = 5 * time.Minute
 )
 
 const InstallationName string = "calico"
@@ -325,6 +323,11 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the internal manager TLS secret in the operator namespace, which included in the bundle for es-kube-controllers.
+		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret: %v", err)
+		}
+
 		if r.manageCRDs {
 			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
@@ -340,7 +343,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
-	err = utils.AddPeriodicReconcile(c, reconcilePeriod)
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
@@ -871,7 +874,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 					r.status.SetDegraded(operator.MigrationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
 					// We should always requeue a convert problem. Don't return error
 					// to make sure we never back off retrying.
-					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+					return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 				}
 				r.status.SetDegraded(operator.MigrationError, "Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
@@ -971,7 +974,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if r.typhaAutoscaler.isDegraded() {
 		if err := r.typhaAutoscaler.triggerRun(); err != nil {
 			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	}
 
@@ -993,7 +996,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
 		// this controller to fail.
 		reqLogger.Info("Scheduling a retry in 30 seconds")
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// The operator supports running without the AmazonCloudIntegration when it's CRD is not installed.
@@ -1003,7 +1006,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceNotFound, "Error discovering AmazonCloudIntegration CRD", err, reqLogger)
 			reqLogger.Info("Scheduling a retry in 30 seconds")
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		if amazonCRDRequired {
 			log.Info("Rebooting to enable AWS controllers")
@@ -1086,6 +1089,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
 			return reconcile.Result{}, nil
 		} else if managerInternalTLSSecret != nil {
+			// It may seem odd to add the manager internal TLS secret to the trusted bundle for Typha / calico-node, but this bundle is also used
+			// for other components in this namespace such as es-kube-controllers, who communicates with Voltron and thus needs to trust this certificate.
 			typhaNodeTLS.TrustedBundle.AddCertificates(managerInternalTLSSecret)
 		}
 	}
@@ -1502,7 +1507,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Write updated status.
@@ -1525,7 +1530,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	if terminating {
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	return reconcile.Result{}, nil
 }

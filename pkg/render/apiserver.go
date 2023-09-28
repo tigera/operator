@@ -61,6 +61,7 @@ const (
 
 	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
 	tigeraAPIServerTLSSecretName = "tigera-apiserver-certs"
+	APIServerSecretsRBACName     = "tigera-extension-apiserver-secrets-access"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -665,8 +666,6 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 // secretsClusterRole provides the tigera API server with the ability to read secrets on the cluster.
 // This is needed in multi-tenant management clusters only, in order to read tenant secrets for signing managed cluster certificates.
 func (c *apiServerComponent) secretsClusterRole() []client.Object {
-	name := "tigera-extension-apiserver-secrets-access"
-
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -680,7 +679,7 @@ func (c *apiServerComponent) secretsClusterRole() []client.Object {
 		&rbacv1.ClusterRole{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
+				Name: APIServerSecretsRBACName,
 			},
 			Rules: rules,
 		},
@@ -689,11 +688,11 @@ func (c *apiServerComponent) secretsClusterRole() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
+				Name: APIServerSecretsRBACName,
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
-				Name:     name,
+				Name:     APIServerSecretsRBACName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 			Subjects: []rbacv1.Subject{
@@ -707,10 +706,8 @@ func (c *apiServerComponent) secretsClusterRole() []client.Object {
 	}
 }
 
-// secretsRole provides the tigera API server with the ability to read secrets for tigera-system.
+// secretsRole provides the tigera API server with the ability to read secrets from the API server's namespace.
 func (c *apiServerComponent) secretsRole() []client.Object {
-	name := "tigera-extension-apiserver-secrets-access"
-
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -720,11 +717,11 @@ func (c *apiServerComponent) secretsRole() []client.Object {
 	}
 
 	return []client.Object{
-		// Return the cluster role itself.
+		// Return the role itself.
 		&rbacv1.Role{
 			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      APIServerSecretsRBACName,
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 			Rules: rules,

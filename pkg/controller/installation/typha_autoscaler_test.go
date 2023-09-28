@@ -22,11 +22,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
-
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	. "github.com/tigera/operator/test"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

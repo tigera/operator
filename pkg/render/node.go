@@ -506,6 +506,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"externalnetworks",
+					"egressgatewaypolicies",
 					"licensekeys",
 					"remoteclusterconfigurations",
 					"stagedglobalnetworkpolicies",

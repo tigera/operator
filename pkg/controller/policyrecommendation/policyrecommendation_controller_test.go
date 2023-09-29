@@ -47,7 +47,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/test"
 )
 
@@ -148,10 +147,6 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPolicyRecommendationUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
-		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchADJobUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
-		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ECKLicenseConfigMapName,
@@ -342,7 +337,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				}
 				Expect(c.Create(ctx, tenantB)).NotTo(HaveOccurred())
 
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation())
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
@@ -351,7 +346,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
 
-				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation())
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
 				Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())

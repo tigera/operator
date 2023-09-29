@@ -66,7 +66,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		managementCluster  = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 		replicas           int32
 		cfg                *render.APIServerConfiguration
-		tunnelKeyPair      certificatemanagement.KeyPairInterface
 		trustedBundle      certificatemanagement.TrustedBundle
 		dnsNames           []string
 		cli                client.Client
@@ -92,10 +91,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 
-		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
-		Expect(err).NotTo(HaveOccurred())
-
-		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 		trustedBundle = certificatemanagement.CreateTrustedBundle()
 		replicas = 2
 
@@ -721,7 +716,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
 		cfg.ManagementCluster = managementCluster
-		cfg.TunnelCASecret = tunnelKeyPair
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -763,6 +757,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: render.APIServerSecretsRBACName, ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.APIServerSecretsRBACName, ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 
 		for _, expectedRes := range expectedResources {
@@ -773,7 +769,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating the newly created tunnel secret")
 		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).ToNot(HaveOccurred())
-		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
 		validateTunnelSecret(tunnelSecret)
@@ -789,8 +784,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
-			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -798,7 +791,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
 		cfg.ManagementCluster = managementCluster
-		cfg.TunnelCASecret = tunnelKeyPair
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -834,6 +826,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}},
 			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}},
 		}
 		rtest.ExpectResources(resources, expected)
 
@@ -848,8 +842,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
-			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -857,7 +849,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with signed ca bundles enabled", func() {
 		cfg.ManagementCluster = managementCluster
-		cfg.TunnelCASecret = tunnelKeyPair
 		cfg.ManagementCluster.Spec.TLS = &operatorv1.TLS{
 			SecretName: render.ManagerTLSSecretName,
 		}
@@ -870,6 +861,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(dep).ToNot(BeNil())
 
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement("--managementClusterCAType=Public"))
+		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement(fmt.Sprintf("--tunnelSecretName=%s", render.ManagerTLSSecretName)))
 	})
 
 	It("should add an init container if certificate management is enabled", func() {

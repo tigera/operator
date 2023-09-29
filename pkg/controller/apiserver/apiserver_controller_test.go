@@ -717,7 +717,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
 				// Create the tunnel secret in operator namespace
-				// This will be created by Manager controller in tigera-operator namespace
+				// In a production cluster, this would be created by Manager controller in tigera-operator namespace
 				err := cli.Create(ctx, &corev1.Secret{
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{

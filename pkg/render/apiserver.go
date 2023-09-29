@@ -201,14 +201,14 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		if c.cfg.MultiTenant {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
 			// per-tenant guardian certificates when creating ManagedClusters.
-			globalObjects = append(globalObjects, c.secretsClusterRole()...)
+			globalObjects = append(globalObjects, c.multiTenantSecretsRBAC()...)
 		} else {
-			globalObjects = append(globalObjects, c.secretsRole()...)
+			globalObjects = append(globalObjects, c.secretsRBAC()...)
 		}
 	} else {
-		if c.cfg.MultiTenant {
-			objsToDelete = append(objsToDelete, c.secretsClusterRole()...)
-		}
+		// If we're not a management cluster, the API server doesn't need permissions to access secrets.
+		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
+		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
 	}
 
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
@@ -663,14 +663,15 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 		}
 }
 
-// secretsClusterRole provides the tigera API server with the ability to read secrets on the cluster.
+// multiTenantSecretsRBAC provides the tigera API server with the ability to read secrets on the cluster.
 // This is needed in multi-tenant management clusters only, in order to read tenant secrets for signing managed cluster certificates.
-func (c *apiServerComponent) secretsClusterRole() []client.Object {
+func (c *apiServerComponent) multiTenantSecretsRBAC() []client.Object {
 	rules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get"},
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{c.tunnelSecretName()},
 		},
 	}
 
@@ -706,13 +707,22 @@ func (c *apiServerComponent) secretsClusterRole() []client.Object {
 	}
 }
 
-// secretsRole provides the tigera API server with the ability to read secrets from the API server's namespace.
-func (c *apiServerComponent) secretsRole() []client.Object {
+func (c *apiServerComponent) tunnelSecretName() string {
+	secretName := VoltronTunnelSecretName
+	if c.cfg.ManagementCluster != nil && c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
+		secretName = c.cfg.ManagementCluster.Spec.TLS.SecretName
+	}
+	return secretName
+}
+
+// secretsRBAC provides the tigera API server with the ability to read secrets from the API server's namespace.
+func (c *apiServerComponent) secretsRBAC() []client.Object {
 	rules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get"},
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{c.tunnelSecretName()},
 		},
 	}
 

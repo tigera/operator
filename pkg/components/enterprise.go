@@ -188,7 +188,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version: "v2.43.1",
+		Version: "v2.47.0",
 	}
 
 	ComponentPrometheus = component{
@@ -202,7 +202,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = component{
-		Version: "v0.25.1",
+		Version: "v0.25.0",
 	}
 
 	ComponentPrometheusAlertmanager = component{

@@ -21,7 +21,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -34,7 +33,7 @@ import (
 
 func (r *ESKubeControllersController) createESGateway(
 	ctx context.Context,
-	helper octrl.NamespaceHelper,
+	helper utils.NamespaceHelper,
 	install *operatorv1.InstallationSpec,
 	variant operatorv1.ProductVariant,
 	pullSecrets []*corev1.Secret,

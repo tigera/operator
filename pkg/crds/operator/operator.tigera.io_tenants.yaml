@@ -32,9 +32,29 @@ spec:
             type: object
           spec:
             properties:
+              defaultDataRetention:
+                description: 'DefaultDataRetention defines the default amount of time
+                  for tenant''s data to be stored based on predefined tiers: free,
+                  standard, pro or custom'
+                properties:
+                  qos:
+                    default: standard
+                    description: QOS is an enum which identifies the values for storing
+                      data
+                    enum:
+                    - free
+                    - standard
+                    - pro
+                    - custom
+                    type: string
+                required:
+                - qos
+                type: object
               id:
                 description: ID is the unique identifier for this tenant.
                 type: string
+            required:
+            - defaultDataRetention
             type: object
           status:
             type: object

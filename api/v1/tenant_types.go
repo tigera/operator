@@ -24,19 +24,19 @@ type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
 	// +required
 	ID string `json:"id,omitempty"`
-	// DataRetention defines the amount of time for tenant's
+	// DefaultDataRetention defines the default amount of time for tenant's
 	// data to be stored based on predefined tiers: free,
 	// standard, pro or custom
-	DataRetention *DataRetention `json:"dataRetention,omitempty"`
+	DefaultDataRetention DataRetention `json:"defaultDataRetention"`
 }
 
 // DataRetention defines the amount of time for tenant's
 // data to be stored based on predefined tiers
 type DataRetention struct {
-	// Tier is an enum which identifies the data tier
+	// QOS is an enum which identifies the values for storing data
 	// +kubebuilder:validation:Enum=free;standard;pro;custom
 	// +kubebuilder:default:=standard
-	Tier string `json:"tier"`
+	QOS string `json:"qos"`
 }
 
 type TenantStatus struct{}

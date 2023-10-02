@@ -430,8 +430,10 @@ static-checks:
 ## Fix static checks
 fix:
 	$(CONTAINERIZED) $(CALICO_BUILD) \
-	sh -c '$(GIT_CONFIG_SSH) \
-	goimports -w $(SRC_FILES)'
+	sh -c '\
+	for x in $(SRC_FILES); do sed -i $$x -e "/import (/,/)/{ /^[ \t]*$$/d}"; done; \
+	$(GIT_CONFIG_SSH) \
+	goimports -w -local github.com/projectcalico/calico/,github.com/tigera/operator $(SRC_FILES)'
 
 .PHONY: format-check
 format-check:

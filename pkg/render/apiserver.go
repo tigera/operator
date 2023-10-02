@@ -1312,6 +1312,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"uisettings",
 				"externalnetworks",
 				"egressgatewaypolicies",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{
 				"get",

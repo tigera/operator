@@ -137,8 +137,8 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		logStorage = nil
 		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
 	}
 
 	// We found the LogStorage instance (and Tenant instance if in multi-tenant mode).

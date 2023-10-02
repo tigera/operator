@@ -70,7 +70,7 @@ func AddClusterCAController(mgr manager.Manager, opts options.AddOptions) error 
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
 	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
+		return fmt.Errorf("cluster-ca-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	return nil

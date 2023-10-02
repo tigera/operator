@@ -90,6 +90,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
 	})
 
+	for _, secretName := range []string{
+		render.PacketCaptureServerCert,
+		monitor.PrometheusTLSSecretName,
+		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
+		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
+	} {
+		if err = utils.AddSecretsWatch(controller, secretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
+		}
+	}
+
 	return add(mgr, controller)
 }
 
@@ -285,7 +296,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		} else if secret == nil {
 			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
 			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			return reconcile.Result{}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
 	}
@@ -317,15 +328,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
 					r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-					return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+					return reconcile.Result{}, nil
 				}
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+				return reconcile.Result{}, err
 			}
 
 			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
-				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+				return reconcile.Result{}, nil
 			}
 		}
 	}

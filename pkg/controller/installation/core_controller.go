@@ -341,7 +341,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
-	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime)
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}

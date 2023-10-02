@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -84,6 +85,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.DexPolicyName, Namespace: render.DexNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace},
 	})
+
+	// Watch for changes to the dex namespace.
+	if err = c.Watch(&source.Kind{Type: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("%s failed to watch dex namespace: %w", controllerName, err)
+	}
 
 	return add(mgr, c)
 }
@@ -229,7 +235,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	if err := r.client.Get(ctx, client.ObjectKey{Name: render.DexObjectName}, &corev1.Namespace{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(oprv1.ResourceNotFound, "Waiting for namespace tigera-dex to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			return reconcile.Result{}, nil
 		} else {
 			r.status.SetDegraded(oprv1.ResourceReadError, "Error querying tigera-dex namespace", err, reqLogger)
 			return reconcile.Result{}, err
@@ -246,7 +252,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(oprv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			return reconcile.Result{}, nil
 		} else {
 			r.status.SetDegraded(oprv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err

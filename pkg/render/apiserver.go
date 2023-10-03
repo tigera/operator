@@ -1312,6 +1312,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"uisettings",
 				"externalnetworks",
 				"egressgatewaypolicies",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{
 				"get",
@@ -1557,6 +1558,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				"globalalerttemplates",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{"get", "watch", "list"},
 		},
@@ -1718,6 +1720,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"globalalerttemplates",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},

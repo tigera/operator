@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/go-logr/logr"
 
@@ -148,8 +147,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, certificatemanagement.CASecretName, err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("%s failed to watch Network resource: %w", controllerName, err)
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("%s failed to watch Installation resource: %w", controllerName, err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -286,7 +285,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		} else if secret == nil {
 			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
 			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
 	}
@@ -294,7 +293,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
@@ -318,15 +317,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
 					r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+					return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 				}
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
 
 			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
 		}
 	}

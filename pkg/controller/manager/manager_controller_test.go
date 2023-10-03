@@ -21,24 +21,11 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	kerror "k8s.io/apimachinery/pkg/api/errors"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -55,6 +42,16 @@ import (
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	kerror "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("Manager controller tests", func() {
@@ -703,6 +700,17 @@ var _ = Describe("Manager controller tests", func() {
 			})
 
 			DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("IsAvailable").Return(true)
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("AddDeployments", mock.Anything)
+				mockStatus.On("ClearDegraded")
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+				mockStatus.On("ReadyToMonitor")
+				mockStatus.On("SetMetaData", mock.Anything).Return()
+				r.status = mockStatus
+
 				if !crPresent {
 					Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
 				}

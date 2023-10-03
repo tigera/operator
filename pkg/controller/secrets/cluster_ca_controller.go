@@ -17,10 +17,8 @@ package secrets
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -28,7 +26,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,6 +66,13 @@ func AddClusterCAController(mgr manager.Manager, opts options.AddOptions) error 
 		return fmt.Errorf("cluster-ca-controller failed to watch CA secret: %w", err)
 	}
 
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime)
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -107,5 +111,5 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
+	return reconcile.Result{}, nil
 }

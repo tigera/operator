@@ -728,7 +728,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 		err = m.client.Status().Update(context.TODO(), &ts)
 		if err != nil {
 			if retry && errors.IsConflict(err) {
-				log.WithValues("reason", err).Info("update to tigera status conflicted, retrying")
+				log.WithValues("reason", err).V(1).Info("update to tigera status conflicted, retrying")
 				m.set(false, conditions...)
 			} else {
 				log.WithValues("reason", err).Info("Failed to update tigera status")

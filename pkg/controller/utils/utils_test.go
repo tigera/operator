@@ -224,7 +224,7 @@ var _ = Describe("AddPeriodicReconcile", func() {
 	})
 })
 
-var _ = Describe("GetK8sServiceEndpoint", func() {
+var _ = Describe("PopulateK8sServiceEndPoint", func() {
 	var (
 		c      client.Client
 		ctx    context.Context
@@ -256,7 +256,7 @@ var _ = Describe("GetK8sServiceEndpoint", func() {
 
 		Expect(c.Create(ctx, cm)).ShouldNot(HaveOccurred())
 
-		err := GetK8sServiceEndPoint(c)
+		err := PopulateK8sServiceEndPoint(c)
 
 		Expect(err).To(BeNil())
 
@@ -265,7 +265,7 @@ var _ = Describe("GetK8sServiceEndpoint", func() {
 	})
 
 	It("does not return error if ConfigMap is not found.", func() {
-		err := GetK8sServiceEndPoint(c)
+		err := PopulateK8sServiceEndPoint(c)
 
 		Expect(err).To(BeNil())
 	})

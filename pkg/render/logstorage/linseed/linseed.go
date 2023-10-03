@@ -188,10 +188,9 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		// These permissions are necessary to allow the management cluster to monitor secrets that we want to propagate
 		// through to the managed cluster for identity verification such as the Voltron Linseed public certificate
 		{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get", "list", "watch"},
-			ResourceNames: []string{fmt.Sprintf("%s/%s", l.cfg.Namespace, render.VoltronLinseedPublicCert)},
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
 
@@ -306,8 +305,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	}
 
 	if l.cfg.Tenant != nil {
-		// If a tenant was provided, set the expected tenant ID.
+		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
 	}
 
 	var initContainers []corev1.Container

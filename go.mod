@@ -25,11 +25,12 @@ require (
 	golang.org/x/crypto v0.6.0
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.26.4
-	k8s.io/apiextensions-apiserver v0.26.4
-	k8s.io/apimachinery v0.26.4
-	k8s.io/client-go v0.26.4
-	k8s.io/kube-aggregator v0.26.4
+	k8s.io/api v0.26.5
+	k8s.io/apiextensions-apiserver v0.26.5
+	k8s.io/apimachinery v0.26.5
+	k8s.io/apiserver v0.26.5
+	k8s.io/client-go v0.26.5
+	k8s.io/kube-aggregator v0.26.5
 	k8s.io/utils v0.0.0-20230313181309-38a27ef9d749
 	sigs.k8s.io/controller-runtime v0.14.6
 	sigs.k8s.io/kind v0.17.0 // Do not remove, not used by code but used by build
@@ -113,8 +114,7 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect
-	k8s.io/apiserver v0.26.4 // indirect
-	k8s.io/component-base v0.26.4 // indirect
+	k8s.io/component-base v0.26.5 // indirect
 	k8s.io/klog v1.0.0 // indirect
 	k8s.io/klog/v2 v2.80.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20230123231816-1cb3ae25d79a // indirect

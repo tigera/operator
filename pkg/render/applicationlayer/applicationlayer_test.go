@@ -71,7 +71,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -303,7 +303,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 

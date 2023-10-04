@@ -1049,7 +1049,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	if c.cfg.MultiTenant {
-		env = append(env, corev1.EnvVar{Name: "MULTITENANT_ENABLED", Value: "true"}) // TODO: This is a temporary flag to enable multi-tenancy for PoC.
+		env = append(env, corev1.EnvVar{Name: "MULTI_TENANT_ENABLED", Value: "true"})
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)

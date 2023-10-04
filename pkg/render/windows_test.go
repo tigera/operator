@@ -657,7 +657,6 @@ var _ = Describe("Windows rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
-		Skip("TODO: TigeraSecureEnterprise currently does not support the Calico Windows daemonset")
 		type testConf struct {
 			EnableBGP   bool
 			EnableVXLAN bool
@@ -1648,7 +1647,6 @@ var _ = Describe("Windows rendering tests", func() {
 	})
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
-		Skip("TODO: TigeraSecureEnterprise currently does not support the Calico Windows daemonset")
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -1801,7 +1799,6 @@ var _ = Describe("Windows rendering tests", func() {
 	})
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on RKE2", func() {
-		Skip("TODO: TigeraSecureEnterprise currently does not support the Calico Windows daemonset")
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -2073,7 +2070,6 @@ var _ = Describe("Windows rendering tests", func() {
 	})
 
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
-		Skip("TODO: TigeraSecureEnterprise currently does not support the Calico Windows daemonset")
 		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 		defaultInstance.NodeMetricsPort = nil
 		cfg.NodeReporterMetricsPort = 9081
@@ -2096,7 +2092,6 @@ var _ = Describe("Windows rendering tests", func() {
 	})
 
 	It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
-		Skip("TODO: TigeraSecureEnterprise currently does not support the Calico Windows daemonset")
 		var nodeMetricsPort int32 = 1234
 		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 		defaultInstance.NodeMetricsPort = &nodeMetricsPort

@@ -17,18 +17,20 @@ package installation
 import (
 	"path/filepath"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	osconfigv1 "github.com/openshift/api/config/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 var _ = Describe("Defaulting logic tests", func() {
@@ -61,6 +63,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
+
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -93,15 +96,15 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		false_ := false
+		var false_ = false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10
-		logFileMaxSize := resource.MustParse("50Mi")
-		logSeverity := operator.LogLevelError
+		var logFileMaxSize = resource.MustParse("50Mi")
+		var logSeverity = operator.LogLevelError
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -186,14 +189,14 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration (BPF)", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		false_ := false
+		var false_ = false
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10
-		logFileMaxSize := resource.MustParse("50Mi")
-		logSeverity := operator.LogLevelError
+		var logFileMaxSize = resource.MustParse("50Mi")
+		var logSeverity = operator.LogLevelError
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone

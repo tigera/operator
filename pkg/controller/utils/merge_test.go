@@ -21,13 +21,15 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
 	diff "github.com/r3labs/diff/v2"
-	opv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	opv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/test"
 )
 
 func intPtr(i int32) *int32 { return &i }
@@ -427,7 +429,7 @@ var _ = Describe("Installation merge tests", func() {
 			Entry("Both set equal", map[string]string{"a": "1"}, map[string]string{"a": "1"}, map[string]string{"a": "1"}),
 			Entry("Both set not matching", map[string]string{"a": "1"}, map[string]string{"b": "2"}, map[string]string{"b": "2"}),
 		)
-		// TODO: Have some test that have different fields set and they merge.
+		//TODO: Have some test that have different fields set and they merge.
 
 		DescribeTable("merge multiple CalicoNetwork fields", func(main, second, expect *opv1.CalicoNetworkSpec) {
 			m := opv1.InstallationSpec{}
@@ -601,7 +603,7 @@ var _ = Describe("Installation merge tests", func() {
 			[]opv1.ComponentResource{_typhaComp}),
 	)
 
-	metadataTests := []TableEntry{
+	var metadataTests = []TableEntry{
 		Entry("Both unset", nil, nil, nil),
 		Entry("Main only set (labels only)", &opv1.Metadata{Labels: map[string]string{"a": "1"}}, nil, &opv1.Metadata{Labels: map[string]string{"a": "1"}}),
 		Entry("Main only set (annots only)", &opv1.Metadata{Annotations: map[string]string{"a": "1"}}, nil, &opv1.Metadata{Annotations: map[string]string{"a": "1"}}),
@@ -652,6 +654,7 @@ var _ = Describe("Installation merge tests", func() {
 					},
 				},
 			}
+
 		})
 
 		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
@@ -945,6 +948,7 @@ var _ = Describe("Installation merge tests", func() {
 					},
 				},
 			}
+
 		})
 
 		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
@@ -1238,6 +1242,7 @@ var _ = Describe("Installation merge tests", func() {
 					},
 				},
 			}
+
 		})
 
 		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {

@@ -17,8 +17,9 @@ package utils
 import (
 	"reflect"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "k8s.io/api/core/v1"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 type CompareResult int

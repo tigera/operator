@@ -22,11 +22,9 @@ import (
 	"github.com/tigera/operator/version"
 )
 
-var (
-	buildVersion            *gv.Version
-	gitDescribeSuffixRegexp = regexp.MustCompile(`-\d+-\w+$`)
-	versionRegexp           = regexp.MustCompile("^" + gv.VersionRegexpRaw + "$")
-)
+var buildVersion *gv.Version
+var gitDescribeSuffixRegexp = regexp.MustCompile(`-\d+-\w+$`)
+var versionRegexp = regexp.MustCompile("^" + gv.VersionRegexpRaw + "$")
 
 func init() {
 	bv, err := versionFromBuildVersion(version.VERSION)

@@ -170,20 +170,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "anomaly_detection_jobs" }}
-	ComponentAnomalyDetectionJobs = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
-{{ with index .Components "anomaly-detection-api" }}
-	ComponentAnomalyDetectionAPI = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = component{
 		Version:  "{{ .Version }}",

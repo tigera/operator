@@ -57,7 +57,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 	if !opts.MultiTenant {
-		// TODO: For now, the operator only creates users in multi-tenant mode.
+		// For now, the operator only creates users in multi-tenant mode. In single-tenant mode,
+		// user creation is handled by es-kube-controllers instead.
 		return nil
 	}
 
@@ -100,6 +101,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-user-controller failed to watch Tenant resource: %w", err)
 		}
+	}
+
+	// Watch for Elasticsearch.
+	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{}}, eventHandler); err != nil {
+		return fmt.Errorf("log-storage-user-controller failed to watch Elasticsearch resource: %w", err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -155,8 +161,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// Wait for Elasticsearch to be installed and available. We don't need to do this in multi-tenant mode because because
-	// we disable kube-controllers ES access in this mode.
+	// Wait for Elasticsearch to be installed and available.
 	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)

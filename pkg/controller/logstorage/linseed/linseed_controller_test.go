@@ -17,7 +17,6 @@ package linseed
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -57,7 +56,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var successResult = reconcile.Result{RequeueAfter: 60 * time.Second}
+var successResult = reconcile.Result{}
 
 func NewLinseedControllerWithShims(
 	cli client.Client,

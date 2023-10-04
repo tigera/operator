@@ -48,11 +48,9 @@ import (
 const (
 	IntrusionDetectionNamespace = "tigera-intrusion-detection"
 	IntrusionDetectionName      = "intrusion-detection-controller"
-	AnomalyDetectorsName        = "anomaly-detectors"
 
 	ElasticsearchIntrusionDetectionUserSecret    = "tigera-ee-intrusion-detection-elasticsearch-access"
 	ElasticsearchIntrusionDetectionJobUserSecret = "tigera-ee-installer-elasticsearch-access"
-	ElasticsearchADJobUserSecret                 = "tigera-ee-ad-job-elasticsearch-access"
 	ElasticsearchPerformanceHotspotsUserSecret   = "tigera-ee-performance-hotspots-elasticsearch-access"
 
 	IntrusionDetectionInstallerJobName     = "intrusion-detection-es-job-installer"
@@ -62,23 +60,16 @@ const (
 
 	ADAPIObjectName                 = "anomaly-detection-api"
 	ADAPIPodSecurityPolicyName      = "anomaly-detection-api"
-	ADAPITLSSecretName              = "anomaly-detection-api-tls"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
-	AnomalyDetectorTLSSecretName    = "anomaly-detector-tls"
 	DPITLSSecretName                = "deep-packet-inspection-tls"
 	ADAPIPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
 
-	ADPersistentVolumeClaimName   = "tigera-anomaly-detection"
-	ADJobPodTemplateBaseName      = "tigera.io.detectors"
-	adDetectorPrefixName          = "tigera.io.detector."
-	adDetectorName                = "anomaly-detectors"
-	ADDetectorPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + adDetectorName
-	ADResourceGroup               = "detectors.tigera.io"
-	ADDetectorsModelResourceName  = "models"
-	ADLogTypeMetaDataResourceName = "metadata"
+	ADPersistentVolumeClaimName = "tigera-anomaly-detection"
+	ADJobPodTemplateBaseName    = "tigera.io.detectors"
+	adDetectorPrefixName        = "tigera.io.detector."
+	adDetectorName              = "anomaly-detectors"
+	ADDetectorPolicyName        = networkpolicy.TigeraComponentPolicyPrefix + adDetectorName
 )
-
-var adAPIReplicas int32 = 1
 
 var adAlgorithms = []string{
 	"dga",
@@ -116,7 +107,6 @@ var IntrusionDetectionInstallerSourceEntityRule = v3.EntityRule{
 
 // Register secret/certs that need Server and Client Key usage
 func init() {
-	certkeyusage.SetCertKeyUsage(AnomalyDetectorTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 	certkeyusage.SetCertKeyUsage(DPITLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 }
 
@@ -139,14 +129,9 @@ type IntrusionDetectionConfiguration struct {
 	ESLicenseType      ElasticsearchLicenseType
 	ManagedCluster     bool
 
-	// PVC fields Spec fields are immutable, set to true when an existing AD PVC
-	// is not found as to avoid update failures.
-	ShouldRenderADPVC            bool
 	HasNoLicense                 bool
 	TrustedCertBundle            certificatemanagement.TrustedBundle
-	ADAPIServerCertSecret        certificatemanagement.KeyPairInterface
 	IntrusionDetectionCertSecret certificatemanagement.KeyPairInterface
-	AnomalyDetectorCertSecret    certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -721,7 +706,6 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 	if c.cfg.ManagedCluster {
 		envVars := []corev1.EnvVar{
 			{Name: "DISABLE_ALERTS", Value: "yes"},
-			{Name: "DISABLE_ANOMALY_DETECTION", Value: "yes"},
 		}
 		container.Env = append(container.Env, envVars...)
 	}

@@ -16,7 +16,6 @@ package render_test
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/tigera/operator/pkg/common"
 
@@ -28,7 +27,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,12 +60,10 @@ type expectedEnvVar struct {
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
 	var (
-		cfg            *render.IntrusionDetectionConfiguration
-		bundle         certificatemanagement.TrustedBundle
-		adAPIKeyPair   certificatemanagement.KeyPairInterface
-		keyPair        certificatemanagement.KeyPairInterface
-		anomalyKeyPair certificatemanagement.KeyPairInterface
-		cli            client.Client
+		cfg     *render.IntrusionDetectionConfiguration
+		bundle  certificatemanagement.TrustedBundle
+		keyPair certificatemanagement.KeyPairInterface
+		cli     client.Client
 	)
 
 	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")
@@ -76,10 +72,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	expectedIDPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed_ocp.json")
 	expectedIDInstallerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-elastic.json")
 	expectedIDInstallerPolicyForOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-elastic_ocp.json")
-	expectedAnomalyDetectionAPIPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-api.json")
-	expectedAnomalyDetectionAPIPolicyForOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-api_ocp.json")
-	expectedAnomalyDetectorsPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-detectors.json")
-	expectedAnomalyDetectorsPolicyForOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/ad-detectors_ocp.json")
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -89,27 +81,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 
-		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
-		Expect(err).NotTo(HaveOccurred())
-
-		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		secretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.IntrusionDetectionTLSSecretName, "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
-
 		keyPair = certificatemanagement.NewKeyPair(secretTLS, []string{""}, "")
-		anomalySecretTLS, err := certificatemanagement.CreateSelfSignedSecret(render.AnomalyDetectorTLSSecretName, "", "", nil)
-		Expect(err).NotTo(HaveOccurred())
 
-		anomalyKeyPair = certificatemanagement.NewKeyPair(anomalySecretTLS, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{
 			TrustedCertBundle:            bundle,
-			ADAPIServerCertSecret:        adAPIKeyPair,
 			IntrusionDetectionCertSecret: keyPair,
-			AnomalyDetectorCertSecret:    anomalyKeyPair,
 			Installation:                 &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			ESClusterConfig:              relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
 			ClusterDomain:                dns.DefaultClusterDomain,
@@ -152,27 +134,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "anomaly-detectors", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "anomaly-detectors", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ADJobPodTemplateBaseName + ".training", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
-			{name: render.ADJobPodTemplateBaseName + ".detection", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(resources).To(HaveLen(len(expectedResources)))
@@ -264,210 +230,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 					"get", "list", "watch", "create", "update", "patch", "delete",
 				},
 			}))
-
-		// secrets are mounted
-		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMounts(rmeta.OSTypeLinux)[0].Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMounts(rmeta.OSTypeLinux)[0].MountPath))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
-		// emptyDir is expected as the default volume
-		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
-			corev1.Volume{
-				Name: "volume-storage",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-		))
-
-		// check non-privileged container is used
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(false))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(false))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(true))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-		))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}))
-
-		// Check all Role for respective AD API SAs
-		detectorsSecret := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "", "v1", "Secret").(*corev1.Secret)
-		Expect(detectorsSecret.Type).To(Equal(corev1.SecretTypeServiceAccountToken))
-		Expect(detectorsSecret.GetObjectMeta().GetAnnotations()[corev1.ServiceAccountNameKey]).To(Equal("anomaly-detectors"))
-
-		detectorsRole := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(detectorsRole.Rules).To(HaveLen(2))
-		Expect(detectorsRole.Rules).To(Equal(
-			[]rbacv1.PolicyRule{
-				{
-					APIGroups: []string{
-						render.ADResourceGroup,
-					},
-					Resources: []string{
-						render.ADDetectorsModelResourceName, render.ADLogTypeMetaDataResourceName,
-					},
-					Verbs: []string{
-						"get",
-						"create",
-						"update",
-					},
-				},
-				{
-					APIGroups:     []string{"policy"},
-					Resources:     []string{"podsecuritypolicies"},
-					Verbs:         []string{"use"},
-					ResourceNames: []string{"anomaly-detection-api"},
-				},
-			},
-		))
-
-		detectorsClusterRole := rtest.GetResource(resources, "anomaly-detectors", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(detectorsClusterRole.Rules).To(HaveLen(2))
-		Expect(detectorsClusterRole.Rules).To(Equal(
-			[]rbacv1.PolicyRule{
-				{
-					// Add write access to Linseed APIs.
-					APIGroups: []string{"linseed.tigera.io"},
-					Resources: []string{"events"},
-					Verbs:     []string{"create"},
-				},
-				{
-					// Add read access to Linseed APIs.
-					APIGroups: []string{"linseed.tigera.io"},
-					Resources: []string{
-						"dnslogs",
-						"l7logs",
-						"flowlogs",
-					},
-					Verbs: []string{"get"},
-				},
-			},
-		))
-
-		detectorsRoleBinding := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(detectorsRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     "anomaly-detectors",
-		}))
-		Expect(detectorsRoleBinding.Subjects).To(ConsistOf(rbacv1.Subject{
-			Kind:      "ServiceAccount",
-			Name:      "anomaly-detectors",
-			Namespace: render.IntrusionDetectionNamespace,
-		}))
-		detectorsClusterRoleBinding := rtest.GetResource(resources, "anomaly-detectors", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-		Expect(detectorsClusterRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "anomaly-detectors",
-		}))
-		Expect(detectorsClusterRoleBinding.Subjects).To(ConsistOf(rbacv1.Subject{
-			Kind:      "ServiceAccount",
-			Name:      "anomaly-detectors",
-			Namespace: render.IntrusionDetectionNamespace,
-		}))
-
-		adAPIClusterRole := rtest.GetResource(resources, render.ADAPIObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(adAPIClusterRole.Rules).To(HaveLen(3))
-		Expect(adAPIClusterRole.Rules[0].APIGroups).To(ConsistOf("authorization.k8s.io"))
-		Expect(adAPIClusterRole.Rules[0].Resources).To(ConsistOf("subjectaccessreviews"))
-		Expect(adAPIClusterRole.Rules[0].Verbs).To(ConsistOf("create"))
-		Expect(adAPIClusterRole.Rules[1].APIGroups).To(ConsistOf("authentication.k8s.io"))
-		Expect(adAPIClusterRole.Rules[1].Resources).To(ConsistOf("tokenreviews"))
-		Expect(adAPIClusterRole.Rules[1].Verbs).To(ConsistOf("create"))
-		Expect(adAPIClusterRole.Rules[2].APIGroups).To(ConsistOf("policy"))
-		Expect(adAPIClusterRole.Rules[2].Resources).To(ConsistOf("podsecuritypolicies"))
-		Expect(adAPIClusterRole.Rules[2].Verbs).To(ConsistOf("use"))
-		Expect(adAPIClusterRole.Rules[2].ResourceNames).To(ConsistOf("anomaly-detection-api"))
-
-		adAPIClusterRoleBinding := rtest.GetResource(resources, render.ADAPIObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-		Expect(adAPIClusterRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     render.ADAPIObjectName,
-		}))
-		Expect(adAPIClusterRoleBinding.Subjects).To(ConsistOf(rbacv1.Subject{
-			Kind:      "ServiceAccount",
-			Name:      render.ADAPIObjectName,
-			Namespace: render.IntrusionDetectionNamespace,
-		}))
-	})
-
-	It("should render a persistentVolume claim if an AD StorageClassName is provided and an existing PVC does not exist", func() {
-		testADStorageClassName := "test-storage-class-name"
-		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
-			Spec: operatorv1.IntrusionDetectionSpec{
-				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-					StorageClassName: testADStorageClassName,
-				},
-			},
-		}
-		cfg.ShouldRenderADPVC = true
-		cfg.Openshift = notOpenshift
-		cfg.ManagedCluster = false
-
-		component := render.IntrusionDetection(cfg)
-		resources, _ := component.Objects()
-
-		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
-		Expect(*adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
-		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
-
-		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
-			corev1.Volume{
-				Name: "volume-storage",
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: render.ADPersistentVolumeClaimName,
-					},
-				},
-			},
-		))
-
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(false))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(false))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(false))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(Equal(int64(0)))
-		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(int64(0)))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-		))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}))
-	})
-
-	It("should not render a persistentVolume claim if indicated that the AD StorageClassName is provided but an existing PVC already exists", func() {
-		testADStorageClassName := "test-storage-class-name"
-		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
-			Spec: operatorv1.IntrusionDetectionSpec{
-				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-					StorageClassName: testADStorageClassName,
-				},
-			},
-		}
-		cfg.ShouldRenderADPVC = false
-		cfg.Openshift = notOpenshift
-		cfg.ManagedCluster = false
-
-		component := render.IntrusionDetection(cfg)
-		resources, _ := component.Objects()
-
-		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim")
-
-		Expect(adAPIPVC).To(BeNil())
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
@@ -537,27 +299,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "anomaly-detectors", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "anomaly-detectors", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ADJobPodTemplateBaseName + ".training", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
-			{name: render.ADJobPodTemplateBaseName + ".detection", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(resources).To(HaveLen(len(expectedResources)))
@@ -603,30 +349,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
-
-		// expect AD PodTemplate EnvVars
-		expectedADEnvs := []expectedEnvVar{
-			{"LINSEED_URL", "https://tigera-linseed.tigera-elasticsearch.svc", "", ""},
-			{"LINSEED_CA", certificatemanagement.TrustedCertBundleMountPath, "", ""},
-			{"LINSEED_CLIENT_CERT", cfg.AnomalyDetectorCertSecret.VolumeMountCertificateFilePath(), "", ""},
-			{"LINSEED_CLIENT_KEY", cfg.AnomalyDetectorCertSecret.VolumeMountKeyFilePath(), "", ""},
-			{"LINSEED_TOKEN", "/var/run/secrets/kubernetes.io/serviceaccount/token", "", ""},
-			{"MODEL_STORAGE_API_HOST", render.ADAPIExpectedServiceName, "", ""},
-			{"MODEL_STORAGE_API_PORT", strconv.Itoa(8080), "", ""},
-			{"MODEL_STORAGE_CLIENT_CERT", cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(), "", ""},
-			{"MODEL_STORAGE_API_TOKEN", "", "anomaly-detectors", "token"},
-		}
-
-		adDetectionPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".detection", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
-		Expect(*adDetectionPodtemplate.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-		adDetectionEnvs := adDetectionPodtemplate.Template.Spec.Containers[0].Env
-
-		adTrainingPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".training", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
-		Expect(*adTrainingPodtemplate.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-		adTrainingEnvs := adTrainingPodtemplate.Template.Spec.Containers[0].Env
-
-		assertEnvVarlistMatch(adDetectionEnvs, expectedADEnvs)
-		assertEnvVarlistMatch(adTrainingEnvs, expectedADEnvs)
 	})
 
 	It("should not render intrusion-detection-es-job-installer and should disable GlobalAlert controller when cluster is managed", func() {
@@ -667,7 +389,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "tigera-linseed", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 
@@ -684,7 +405,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
 			corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: cfg.TrustedCertBundle.MountPath()},
 			corev1.EnvVar{Name: "DISABLE_ALERTS", Value: "yes"},
-			corev1.EnvVar{Name: "DISABLE_ANOMALY_DETECTION", Value: "yes"},
 		))
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -756,8 +476,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		policyNames := []types.NamespacedName{
 			{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"},
 			{Name: "allow-tigera.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"},
-			{Name: "allow-tigera.anomaly-detection-api", Namespace: "tigera-intrusion-detection"},
-			{Name: "allow-tigera.anomaly-detectors", Namespace: "tigera-intrusion-detection"},
 		}
 
 		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
@@ -770,10 +488,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				)
 			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.intrusion-detection-elastic" {
 				return testutils.SelectPolicyByProvider(scenario, expectedIDInstallerPolicy, expectedIDInstallerPolicyForOCP)
-			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.anomaly-detection-api" {
-				return testutils.SelectPolicyByProvider(scenario, expectedAnomalyDetectionAPIPolicy, expectedAnomalyDetectionAPIPolicyForOCP)
-			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.anomaly-detectors" {
-				return testutils.SelectPolicyByProvider(scenario, expectedAnomalyDetectorsPolicy, expectedAnomalyDetectorsPolicyForOCP)
 			}
 
 			return nil
@@ -799,7 +513,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		)
 	})
 
-	It("should not render anomaly detection or es-job installer when FIPS mode is enabled", func() {
+	It("should not render es-job installer when FIPS mode is enabled", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		testADStorageClassName := "test-storage-class-name"
 		cfg.Installation.FIPSMode = &fipsEnabled
@@ -810,7 +524,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				},
 			},
 		}
-		cfg.ShouldRenderADPVC = true
 		component := render.IntrusionDetection(cfg)
 		toCreate, toRemove := component.Objects()
 
@@ -845,7 +558,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
@@ -939,14 +651,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		cfg.IntrusionDetectionCertSecret = intrusionDetectionCertSecret
 
-		anomalyDetectorCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.AnomalyDetectorTLSSecretName, common.OperatorNamespace(), []string{""})
-		Expect(err).NotTo(HaveOccurred())
-		cfg.AnomalyDetectorCertSecret = anomalyDetectorCertSecret
-
-		adServerSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.ADAPITLSSecretName, common.OperatorNamespace(), []string{""})
-		Expect(err).NotTo(HaveOccurred())
-		cfg.ADAPIServerCertSecret = adServerSecret
-
 		component := render.IntrusionDetection(cfg)
 		toCreate, _ := component.Objects()
 
@@ -954,16 +658,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		csrInitContainer := intrusionDetectionDeploy.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.IntrusionDetectionTLSSecretName)))
-
-		adDeploy := rtest.GetResource(toCreate, render.ADAPIObjectName, "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(adDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		csrInitContainer = adDeploy.Spec.Template.Spec.InitContainers[0]
-		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ADAPITLSSecretName)))
-
-		adPodTemplate := rtest.GetResource(toCreate, "tigera.io.detectors.training", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
-		Expect(adPodTemplate.Template.Spec.InitContainers).To(HaveLen(1))
-		csrInitContainer = adPodTemplate.Template.Spec.InitContainers[0]
-		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.AnomalyDetectorTLSSecretName)))
 	})
 })
 

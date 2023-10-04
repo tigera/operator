@@ -118,6 +118,12 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("tigera-windows-controller failed to watch ImageSet: %w", err)
 	}
 
+	// Watch kube DNS service.
+	dnsService := utils.GetDNSServiceName(opts.DetectedProvider)
+	if err = utils.AddServiceWatch(c, dnsService.Name, dnsService.Namespace); err != nil {
+		return fmt.Errorf("tigera-windows-controller failed to watch Service: %w", err)
+	}
+
 	for _, t := range secondaryResources() {
 		pred := predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
@@ -370,14 +376,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var component render.Component
 
-	// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
-	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
-	if r.autoDetectedProvider == operatorv1.ProviderOpenShift {
-		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
-	} else if r.autoDetectedProvider == operatorv1.ProviderRKE2 {
-		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
-	}
-
+	kubeDNSServiceName := utils.GetDNSServiceName(r.autoDetectedProvider)
 	kubeDNSService := &corev1.Service{}
 	err = r.client.Get(ctx, kubeDNSServiceName, kubeDNSService)
 	if err != nil {

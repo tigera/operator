@@ -25,7 +25,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
@@ -90,7 +89,6 @@ const (
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	defaultNodeReporterPort = 9081
 	CalicoFinalizer         = "tigera.io/operator-cleanup"
-	reconcilePeriod         = 5 * time.Minute
 )
 
 const InstallationName string = "calico"
@@ -111,8 +109,7 @@ const InstallationName string = "calico"
 //
 // When the Installation resource is being deleted (has a DeletionTimestamp) the following sequence is
 // expected:
-//   * While terminating a successful Reconcile will requeue with a 5 second time to ensure we keep
-//     checking if the resources have been cleaned up.
+//   * While terminating a successful Reconcile will requeue to ensure we keep checking if the resources have been cleaned up.
 //   1. The kubernetes system will begin cleaning up the installation resources.
 //   2. Core reconciliation will pass terminating to the kube-controller render, this will ensure
 //      the kube-controller resources are returned to be deleted.
@@ -265,15 +262,6 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 				// Create occurs because we've created it, so we can safely ignore it.
 				return false
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				if utils.IgnoreObject(e.ObjectOld) && !utils.IgnoreObject(e.ObjectNew) {
-					// Don't skip the removal of the "ignore" annotation. We want to
-					// reconcile when that happens.
-					return true
-				}
-				// Otherwise, ignore updates to objects when metadata.Generation does not change.
-				return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
-			},
 		}
 		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
 			IsController: true,
@@ -325,6 +313,11 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the internal manager TLS secret in the operator namespace, which included in the bundle for es-kube-controllers.
+		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret: %v", err)
+		}
+
 		if r.manageCRDs {
 			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
@@ -340,7 +333,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
-	err = utils.AddPeriodicReconcile(c, reconcilePeriod)
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
@@ -354,6 +347,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 func secondaryResources() []client.Object {
 	return []client.Object{
 		&appsv1.DaemonSet{},
+		&appsv1.Deployment{},
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
 		&corev1.ServiceAccount{},
@@ -809,9 +803,6 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 	return nil
 }
 
-// Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
-// and what is in the Installation.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Installation.operator.tigera.io")
@@ -871,7 +862,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 					r.status.SetDegraded(operator.MigrationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
 					// We should always requeue a convert problem. Don't return error
 					// to make sure we never back off retrying.
-					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+					return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 				}
 				r.status.SetDegraded(operator.MigrationError, "Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
@@ -971,7 +962,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if r.typhaAutoscaler.isDegraded() {
 		if err := r.typhaAutoscaler.triggerRun(); err != nil {
 			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	}
 
@@ -992,8 +983,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
 		// this controller to fail.
-		reqLogger.Info("Scheduling a retry in 30 seconds")
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		reqLogger.Info("Scheduling a retry", "when", utils.StandardRetry)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// The operator supports running without the AmazonCloudIntegration when it's CRD is not installed.
@@ -1002,8 +993,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		amazonCRDRequired, err := utils.RequiresAmazonController(r.config)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceNotFound, "Error discovering AmazonCloudIntegration CRD", err, reqLogger)
-			reqLogger.Info("Scheduling a retry in 30 seconds")
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			reqLogger.Info("Scheduling a retry", "when", utils.StandardRetry)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		if amazonCRDRequired {
 			log.Info("Rebooting to enable AWS controllers")
@@ -1086,6 +1077,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
 			return reconcile.Result{}, nil
 		} else if managerInternalTLSSecret != nil {
+			// It may seem odd to add the manager internal TLS secret to the trusted bundle for Typha / calico-node, but this bundle is also used
+			// for other components in this namespace such as es-kube-controllers, who communicates with Voltron and thus needs to trust this certificate.
 			typhaNodeTLS.TrustedBundle.AddCertificates(managerInternalTLSSecret)
 		}
 	}
@@ -1320,13 +1313,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// node can finish terminating by removing the finalizers on the ClusterRole,
 		// ClusterRoleBinding, and ServiceAccount.
 		l := corev1.PodList{}
-		err := r.client.List(ctx, &l,
-			client.MatchingLabels(map[string]string{
-				"k8s-app": kubecontrollers.KubeController,
-			}),
-			client.InNamespace(common.CalicoNamespace))
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Failed to query for KubeController pods", err, reqLogger)
+		selector := client.MatchingLabels(map[string]string{"k8s-app": kubecontrollers.KubeController})
+		if err := r.client.List(ctx, &l, selector, client.InNamespace(common.CalicoNamespace)); err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Failed to query for calico-kube-controllers pod", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if len(l.Items) == 0 {
@@ -1502,7 +1491,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Write updated status.
@@ -1524,9 +1513,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	reqLogger.V(1).Info("Finished reconciling network installation")
-	if terminating {
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-	}
 	return reconcile.Result{}, nil
 }
 
@@ -1937,16 +1923,6 @@ func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
 			// Create occurs because we've created it, so we can safely ignore it.
 			return false
 		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if utils.IgnoreObject(e.ObjectOld) && !utils.IgnoreObject(e.ObjectNew) {
-				// Don't skip the removal of the "ignore" annotation. We want to
-				// reconcile when that happens.
-				return true
-			}
-			// Otherwise, ignore updates to objects when metadata.Generation does not change.
-			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool { return true },
 	}
 	for _, x := range crds.GetCRDs(v) {
 		if err := c.Watch(&source.Kind{Type: x}, &handler.EnqueueRequestForObject{}, pred); err != nil {

@@ -405,20 +405,11 @@ func (c *managerComponent) kibanaEnabled() bool {
 
 // managerEnvVars returns the envvars for the manager container.
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
-	// Prepare conditional env vars up-front.
-	queryURL := "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"
-
-	// if c.cfg.Tenant != nil {
-	// For multi-tenant clusters, we shouldn't ever hit the management cluster API server.
-	// TODO: How to handle this correctly.
-	// queryURL = ""
-	// }
-
 	envs := []corev1.EnvVar{
 		// TODO: Prometheus URL will need to change.
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
-		{Name: "CNX_QUERY_API_URL", Value: queryURL},
+		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
 		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("/%s", KibanaBasePath)},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},

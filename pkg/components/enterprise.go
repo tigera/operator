@@ -149,18 +149,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentAnomalyDetectionJobs = component{
-		Version:  "master",
-		Image:    "tigera/anomaly_detection_jobs",
-		Registry: "",
-	}
-
-	ComponentAnomalyDetectionAPI = component{
-		Version:  "master",
-		Image:    "tigera/anomaly-detection-api",
-		Registry: "",
-	}
-
 	ComponentKibana = component{
 		Version:  "master",
 		Image:    "tigera/kibana",
@@ -346,8 +334,6 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
-		ComponentAnomalyDetectionJobs,
-		ComponentAnomalyDetectionAPI,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

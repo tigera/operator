@@ -481,7 +481,6 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper octrl
 
 		// Get certificate for intrusion detection controller, which Linseed needs to trust in a standalone or management cluster.
 		render.IntrusionDetectionTLSSecretName: common.OperatorNamespace(),
-		render.AnomalyDetectorTLSSecretName:    common.OperatorNamespace(),
 
 		// Get certificate for DPI, which Linseed needs to trust in a standalone or management cluster.
 		render.DPITLSSecretName: common.OperatorNamespace(),

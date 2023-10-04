@@ -72,7 +72,9 @@ type certificateManager struct {
 // CertificateManager can sign new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
 // brings their own secrets, CertificateManager will preserve and return them.
 type CertificateManager interface {
-	// GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
+	// GetKeyPair returns an existing KeyPair. In normal operation, if the KeyPair is not found, nil is returned.
+	// However, when certificate management is enabled keypairs are not written to the cluster. In this case, the keypair returned by this function
+	// is an implementation of KeyPairInterface using the provided dnsNames.
 	GetKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
@@ -181,7 +183,9 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			len(caSecret.Data[corev1.TLSCertKey]) == 0 {
 
 			if !cm.allowCACreation {
-				return nil, fmt.Errorf("CA secret %s/%s does not exist yet", ns, caSecretName)
+				// Most controllers should NOT allow CA creation. For single-tenant, this is handled at cluster startup by the secret controller.
+				// For multi-tenant clusters, each tenant has its own CA that is created by the tenant controller.
+				return nil, fmt.Errorf("CA secret %s/%s does not exist yet and is not allowed for this call", ns, caSecretName)
 			}
 			// No existing CA data - we need to generate a new one.
 			cm.log.Info("Generating a new CA", "namespace", ns)

@@ -264,11 +264,21 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 
 		continue
 	}
+
 	if status != nil {
-		status.AddDaemonsets(daemonSets)
-		status.AddDeployments(deployments)
-		status.AddStatefulSets(statefulsets)
-		status.AddCronJobs(cronJobs)
+		// Add the objects to the status manager so we can report on their status.
+		if len(daemonSets) > 0 {
+			status.AddDaemonsets(daemonSets)
+		}
+		if len(deployments) > 0 {
+			status.AddDeployments(deployments)
+		}
+		if len(statefulsets) > 0 {
+			status.AddStatefulSets(statefulsets)
+		}
+		if len(cronJobs) > 0 {
+			status.AddCronJobs(cronJobs)
+		}
 	}
 
 	for _, obj := range objsToDelete {

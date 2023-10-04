@@ -755,3 +755,15 @@ func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operat
 
 	return kubeDNSService.Spec.ClusterIPs, nil
 }
+
+// GetDNSServiceName returns the name and namespace for the DNS service based on the given provider.
+// This is "kube-dns" for most providers, but varies on OpenShift and RKE2.
+func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
+	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+	if provider == operatorv1.ProviderOpenShift {
+		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+	} else if provider == operatorv1.ProviderRKE2 {
+		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
+	}
+	return kubeDNSServiceName
+}

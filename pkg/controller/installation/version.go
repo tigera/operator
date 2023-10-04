@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,9 +22,11 @@ import (
 	"github.com/tigera/operator/version"
 )
 
-var buildVersion *gv.Version
-var gitDescribeSuffixRegexp = regexp.MustCompile(`-\d+-\w+$`)
-var versionRegexp = regexp.MustCompile("^" + gv.VersionRegexpRaw + "$")
+var (
+	buildVersion            *gv.Version
+	gitDescribeSuffixRegexp = regexp.MustCompile(`-\d+-\w+$`)
+	versionRegexp           = regexp.MustCompile("^" + gv.VersionRegexpRaw + "$")
+)
 
 func init() {
 	bv, err := versionFromBuildVersion(version.VERSION)

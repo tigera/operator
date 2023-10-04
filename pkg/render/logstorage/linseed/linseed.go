@@ -181,6 +181,7 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			// Need to be able to list managed clusters
+			// TODO: Move to namespaced role in multi-tenant.
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},

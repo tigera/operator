@@ -25,13 +25,34 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/active"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/controller/migration/convert"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/crds"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/resourcequota"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -57,30 +78,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/active"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/controller/migration/convert"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/crds"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/resourcequota"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -90,7 +87,6 @@ const (
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	defaultNodeReporterPort = 9081
 	CalicoFinalizer         = "tigera.io/operator-cleanup"
-	reconcilePeriod         = 5 * time.Minute
 )
 
 const InstallationName string = "calico"
@@ -325,6 +321,11 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the internal manager TLS secret in the operator namespace, which included in the bundle for es-kube-controllers.
+		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret: %v", err)
+		}
+
 		if r.manageCRDs {
 			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
@@ -340,7 +341,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
-	err = utils.AddPeriodicReconcile(c, reconcilePeriod)
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
@@ -871,7 +872,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 					r.status.SetDegraded(operator.MigrationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
 					// We should always requeue a convert problem. Don't return error
 					// to make sure we never back off retrying.
-					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+					return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 				}
 				r.status.SetDegraded(operator.MigrationError, "Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
@@ -971,7 +972,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if r.typhaAutoscaler.isDegraded() {
 		if err := r.typhaAutoscaler.triggerRun(); err != nil {
 			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	}
 
@@ -993,7 +994,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
 		// this controller to fail.
 		reqLogger.Info("Scheduling a retry in 30 seconds")
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// The operator supports running without the AmazonCloudIntegration when it's CRD is not installed.
@@ -1003,7 +1004,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceNotFound, "Error discovering AmazonCloudIntegration CRD", err, reqLogger)
 			reqLogger.Info("Scheduling a retry in 30 seconds")
-			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		if amazonCRDRequired {
 			log.Info("Rebooting to enable AWS controllers")
@@ -1086,6 +1087,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
 			return reconcile.Result{}, nil
 		} else if managerInternalTLSSecret != nil {
+			// It may seem odd to add the manager internal TLS secret to the trusted bundle for Typha / calico-node, but this bundle is also used
+			// for other components in this namespace such as es-kube-controllers, who communicates with Voltron and thus needs to trust this certificate.
 			typhaNodeTLS.TrustedBundle.AddCertificates(managerInternalTLSSecret)
 		}
 	}
@@ -1502,7 +1505,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Write updated status.
@@ -1525,7 +1528,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	reqLogger.V(1).Info("Finished reconciling network installation")
 	if terminating {
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	return reconcile.Result{}, nil
 }

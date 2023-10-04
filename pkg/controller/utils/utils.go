@@ -64,7 +64,11 @@ var (
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
 
 	PeriodicReconcileTime = 5 * time.Minute
-	StandardRetry         = 30 * time.Second
+
+	// StandardRetry is the amount of time to wait beofre retrying a request in
+	// most scenarios. Retries should be used sparingly, and only in extraordinary
+	// circumstances. Use this as a default when retries are needed.
+	StandardRetry = 30 * time.Second
 )
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.

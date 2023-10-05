@@ -1309,18 +1309,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
 	nodeTerminating := false
 	if terminating {
-		// When terminating, after kube-controllers has terminated then
-		// node can finish terminating by removing the finalizers on the ClusterRole,
-		// ClusterRoleBinding, and ServiceAccount.
-		l := corev1.PodList{}
-		selector := client.MatchingLabels(map[string]string{"k8s-app": kubecontrollers.KubeController})
-		if err := r.client.List(ctx, &l, selector, client.InNamespace(common.CalicoNamespace)); err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Failed to query for calico-kube-controllers pod", err, reqLogger)
+		// Wait for the calico-kube-controllers deployment to be removed before cleaning up calico/node resources.
+		// The existence of the deployment is a signal that the pods have been torn down, as Kubernetes waits for its children to be deleted
+		// before removing the deployment itself.
+		l := &appsv1.Deployment{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}, l)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
 			return reconcile.Result{}, err
-		}
-		if len(l.Items) == 0 {
-			reqLogger.Info("calico-kube-controllers is removed, calico-node RBAC resources can be removed")
+		} else if apierrors.IsNotFound(err) {
+			reqLogger.Info("calico-kube-controllers has been deleted, calico-node RBAC resources can now be removed")
 			nodeTerminating = true
+		} else {
+			reqLogger.Info("calico-kube-controller is still present, waiting for termination")
 		}
 	}
 

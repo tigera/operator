@@ -236,7 +236,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cfg.Openshift = openshift
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.ManagedCluster = false
-		cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName = "storage"
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
@@ -246,13 +245,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments/finalizers"},
 			Verbs:     []string{"update"},
-		}))
-
-		Expect(idsControllerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"privileged"},
 		}))
 	})
 
@@ -627,6 +619,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "anomaly-detectors", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera.io.detectors.training", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
 			{name: "tigera.io.detectors.detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
+			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
 			{name: "tigera-linseed", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},

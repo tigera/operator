@@ -99,11 +99,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	err = policyRecController.Watch(&source.Kind{Type: &v3.PolicyRecommendationScope{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("policy-recommendation-controller failed to watch policy recommendation scope resource: %w", err)
-	}
-
 	if err = utils.AddInstallationWatch(policyRecController); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch Installation resource: %w", err)
 	}

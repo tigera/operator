@@ -222,7 +222,7 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
-// will be generated.
+// will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
 func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)
@@ -647,13 +647,21 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			generationChanged := e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
-				return true
+				// No name or namespace match was specified. Match everything, assuming the generation has changed.
+				return generationChanged
 			}
+
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match it.
 				return false
 			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Assuming the generation has changed, return a match if the namespaces also match,
+			// or if no namespace was given to match against.
+			return generationChanged && (e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == "")
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {

@@ -45,7 +45,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -109,7 +108,6 @@ const InstallationName string = "calico"
 //
 // When the Installation resource is being deleted (has a DeletionTimestamp) the following sequence is
 // expected:
-//   * While terminating a successful Reconcile will requeue to ensure we keep checking if the resources have been cleaned up.
 //   1. The kubernetes system will begin cleaning up the installation resources.
 //   2. Core reconciliation will pass terminating to the kube-controller render, this will ensure
 //      the kube-controller resources are returned to be deleted.
@@ -256,16 +254,9 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ImageSet: %w", err)
 	}
 
-	for _, t := range secondaryResources() {
-		pred := predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				// Create occurs because we've created it, so we can safely ignore it.
-				return false
-			},
-		}
-		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForObject{}, pred)
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", t, err)
+	for _, obj := range secondaryResources() {
+		if err = utils.AddNamespacedWatch(c, obj, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", obj, err)
 		}
 	}
 
@@ -343,13 +334,20 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 // this controller.
 func secondaryResources() []client.Object {
 	return []client.Object{
-		&appsv1.DaemonSet{},
-		&appsv1.Deployment{},
-		&rbacv1.ClusterRole{},
-		&rbacv1.ClusterRoleBinding{},
-		&corev1.ServiceAccount{},
-		&apiregv1.APIService{},
-		&corev1.Service{},
+		// We care about all of these resource types, so long as they are in the calico-system namespace.
+		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+
+		// We care about specific named resources of these types.
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: common.CalicoNamespace}},
 	}
 }
 
@@ -1309,18 +1307,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
 	nodeTerminating := false
 	if terminating {
-		// When terminating, after kube-controllers has terminated then
-		// node can finish terminating by removing the finalizers on the ClusterRole,
-		// ClusterRoleBinding, and ServiceAccount.
-		l := corev1.PodList{}
-		selector := client.MatchingLabels(map[string]string{"k8s-app": kubecontrollers.KubeController})
-		if err := r.client.List(ctx, &l, selector, client.InNamespace(common.CalicoNamespace)); err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Failed to query for calico-kube-controllers pod", err, reqLogger)
+		// Wait for the calico-kube-controllers deployment to be removed before cleaning up calico/node resources.
+		// The existence of the deployment is a signal that the pods have not been torn down, as Kubernetes waits for its children to be deleted
+		// before removing the deployment itself.
+		l := &appsv1.Deployment{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}, l)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
 			return reconcile.Result{}, err
-		}
-		if len(l.Items) == 0 {
-			reqLogger.Info("calico-kube-controllers is removed, calico-node RBAC resources can be removed")
+		} else if apierrors.IsNotFound(err) {
+			reqLogger.Info("calico-kube-controllers has been deleted, calico-node RBAC resources can now be removed")
 			nodeTerminating = true
+		} else {
+			reqLogger.Info("calico-kube-controller is still present, waiting for termination")
 		}
 	}
 

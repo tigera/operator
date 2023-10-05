@@ -60,7 +60,7 @@ func ExpectResourceDestroyed(c client.Client, obj client.Object, timeout time.Du
 		} else if err != nil {
 			return err
 		} else {
-			return fmt.Errorf("Resource '%s' should no longer exist", obj.GetName())
+			return fmt.Errorf("%T '%s' should no longer exist", obj, obj.GetName())
 		}
 	}, timeout).ShouldNot(HaveOccurred())
 
@@ -133,7 +133,7 @@ func VerifyCertSANs(certBytes []byte, expectedSANs ...string) {
 func MakeTestCA(signer string) *crypto.CA {
 	caConfig, err := crypto.MakeSelfSignedCAConfigForDuration(
 		signer,
-		100*365*24*time.Hour, //100years*365days*24hours
+		100*365*24*time.Hour, // 100years*365days*24hours
 	)
 	Expect(err).To(BeNil(), "Error creating CA config")
 	return &crypto.CA{
@@ -152,6 +152,7 @@ type nodeListWatch struct {
 func NewNodeListWatch(cs kubernetes.Interface) nodeListWatch {
 	return nodeListWatch{cs: cs}
 }
+
 func (n nodeListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
 	return n.cs.CoreV1().Nodes().List(context.Background(), options)
 }

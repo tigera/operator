@@ -17,7 +17,6 @@ package users
 import (
 	"context"
 	"fmt"
-	"time"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -25,7 +24,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -59,7 +57,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 	if !opts.MultiTenant {
-		// TODO: For now, the operator only creates users in multi-tenant mode.
+		// For now, the operator only creates users in multi-tenant mode. In single-tenant mode,
+		// user creation is handled by es-kube-controllers instead.
 		return nil
 	}
 
@@ -104,11 +103,23 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
+	// Watch for Elasticsearch.
+	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{}}, eventHandler); err != nil {
+		return fmt.Errorf("log-storage-user-controller failed to watch Elasticsearch resource: %w", err)
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
+	if err != nil {
+		return fmt.Errorf("log-storage-user-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
 func (r *UserController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := utils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Users")
 
@@ -150,8 +161,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// Wait for Elasticsearch to be installed and available. We don't need to do this in multi-tenant mode because because
-	// we disable kube-controllers ES access in this mode.
+	// Wait for Elasticsearch to be installed and available.
 	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
@@ -159,7 +169,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{}, nil
 	}
 
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
@@ -210,7 +220,6 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 }
 
 func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
-	// ES should be in ready phase when execution reaches here, apply ILM polices
 	esClient, err := utils.NewElasticClient(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)

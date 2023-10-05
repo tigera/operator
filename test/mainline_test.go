@@ -186,10 +186,12 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 	var mgr manager.Manager
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
+
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
 		verifyCRDsExist(c)
 	})
+
 	AfterEach(func() {
 		removeInstallResourceCR(c, "not-default", context.Background())
 	})
@@ -346,6 +348,7 @@ func removeInstallResourceCR(c client.Client, name string, ctx context.Context) 
 	Expect(err).NotTo(HaveOccurred())
 	err = c.Delete(ctx, instance)
 	Expect(err).NotTo(HaveOccurred())
+
 	// Need to wait here for Installation resource to be fully deleted prior to cancelling the context
 	// which will in turn terminate the operator. Race conditions can occur otherwise that will leave the
 	// Installation resource intact while the operator is no longer running which will result in test failures

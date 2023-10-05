@@ -826,6 +826,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	terminating := (instance.DeletionTimestamp != nil)
+	if terminating {
+		reqLogger.Info("Installation object is terminating")
+	}
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	// Mark CR found so we can report converter problems via tigerastatus
@@ -1512,7 +1515,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.V(1).Info("Finished reconciling network installation")
+	reqLogger.V(1).Info("Finished reconciling Installation")
 	return reconcile.Result{}, nil
 }
 

@@ -263,10 +263,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 				return false
 			},
 		}
-		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &operator.Installation{},
-		}, pred)
+		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForObject{}, pred)
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", t, err)
 		}

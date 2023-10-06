@@ -258,7 +258,9 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		)
 		adObjs = append(adObjs, c.adDetectorPodTemplates()...)
 
-		adObjs = append(adObjs, c.adAPIPodSecurityPolicy())
+		if c.cfg.UsePSP {
+			adObjs = append(adObjs, c.adAPIPodSecurityPolicy())
+		}
 
 		// Delete all of those possible AD resources.
 		objsToDelete = append(objsToDelete, adObjs...)

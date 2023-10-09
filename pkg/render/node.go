@@ -1168,6 +1168,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 // mounted on the host itself, otherwise, a restart of the node container would tear down the mount and destroy
 // the BPF dataplane's BPF maps.
 func (c *nodeComponent) bpffsInitContainer() corev1.Container {
+	bpffsEnv := c.bpffsEnvvars()
 	bidirectional := corev1.MountPropagationBidirectional
 	mounts := []corev1.VolumeMount{
 		{
@@ -1196,9 +1197,23 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 		Image:           c.nodeImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{CalicoNodeObjectName, "-init"},
+		Env:             bpffsEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
 	}
+}
+
+// bpffsEnvvars creates the mount-bpffs container's envvars.
+func (c *nodeComponent) bpffsEnvvars() []corev1.EnvVar {
+	envVars := []corev1.EnvVar{}
+
+	if c.bpfDataplaneEnabled() {
+		if c.cfg.Installation.CustomCgroupPath != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: c.cfg.Installation.CustomCgroupPath})
+		}
+	}
+
+	return envVars
 }
 
 // cniEnvvars creates the CNI container's envvars.
@@ -1497,6 +1512,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	if c.bpfDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
+		if c.cfg.Installation.CustomCgroupPath != "" {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: c.cfg.Installation.CustomCgroupPath})
+		}
 	}
 	if c.vppDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{

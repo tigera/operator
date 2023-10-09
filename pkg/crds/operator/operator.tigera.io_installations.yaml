@@ -6954,6 +6954,10 @@ spec:
                         type: object
                     type: object
                 type: object
+              customCgroupPath:
+                description: CustomCgroupPath is used to provide a custom path for
+                  the cgroup2 mount point
+                type: string
               fipsMode:
                 description: 'FIPSMode uses images and features only that are using
                   FIPS 140-2 validated cryptographic modules and standards. Default:
@@ -16461,6 +16465,10 @@ spec:
                             type: object
                         type: object
                     type: object
+                  customCgroupPath:
+                    description: CustomCgroupPath is used to provide a custom path
+                      for the cgroup2 mount point
+                    type: string
                   fipsMode:
                     description: 'FIPSMode uses images and features only that are
                       using FIPS 140-2 validated cryptographic modules and standards.

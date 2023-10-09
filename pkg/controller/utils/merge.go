@@ -118,6 +118,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.KubeletVolumePluginPath = override.KubeletVolumePluginPath
 	}
 
+	switch compareFields(inst.CustomCgroupPath, override.CustomCgroupPath) {
+	case BOnlySet, Different:
+		inst.CustomCgroupPath = override.CustomCgroupPath
+	}
+
 	switch compareFields(inst.NodeUpdateStrategy, override.NodeUpdateStrategy) {
 	case BOnlySet, Different:
 		override.NodeUpdateStrategy.DeepCopyInto(&inst.NodeUpdateStrategy)

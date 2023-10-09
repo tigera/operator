@@ -76,6 +76,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -896,22 +897,36 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// See the section 'Node and Installation finalizer' at the top of this file for details.
 	if terminating {
-		// Keep the finalizer on the Installation until the ClusterRoleBinding for calico-node
-		// (and ClusterRole and ServiceAccount) is removed.
+		// Keep a finalizer on the Installation object until all necessary dependencies have been cleaned up.
+		// This ensures we don't delete the CNI plugin and calico-node too early, as they are a pre-requisite for tearing
+		// down networking for other pods deployed by this operator.
+		doneTerminating := true
+
+		// Wait until the calico-node cluster role binding has been cleaned up.
 		crb := rbacv1.ClusterRoleBinding{}
-		crbKey := types.NamespacedName{Name: "calico-node"}
-		err := r.client.Get(ctx, crbKey, &crb)
+		key := types.NamespacedName{Name: "calico-node"}
+		err := r.client.Get(ctx, key, &crb)
 		if err != nil && !apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operator.ResourceNotFound, "Unable to get ClusterRoleBinding", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		found := false
 		for _, x := range crb.Finalizers {
 			if x == render.NodeFinalizer {
-				found = true
+				doneTerminating = false
 			}
 		}
-		if !found {
+
+		// Wait until the apiserver namespace has been deleted.
+		ns := corev1.Namespace{}
+		key = types.NamespacedName{Name: rmeta.APIServerNamespace(instance.Spec.Variant)}
+		err = r.client.Get(ctx, key, &ns)
+		if !apierrors.IsNotFound(err) {
+			// We're not ready to terminate if the apiserer namespace hasn't been deleted.
+			doneTerminating = false
+		}
+
+		// If all of the above checks passed, we can clear the finalizer.
+		if doneTerminating {
 			reqLogger.Info("Removing installation finalizer")
 			removeInstallationFinalizer(instance)
 		}

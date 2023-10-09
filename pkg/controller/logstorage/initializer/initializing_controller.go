@@ -74,7 +74,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-initializing-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-initializing-controller failed to watch Network resource: %w", err)
+		return fmt.Errorf("log-storage-initializing-controller failed to watch Installation resource: %w", err)
 	}
 
 	return nil
@@ -82,8 +82,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 var _ reconcile.Reconciler = &LogStorageInitializer{}
 
-// LogStorageInitializer initializes a LogStorage object for sub controllers to use
-// by performing validation and defaulting, and marking the resource as available.
+// LogStorageInitializer is responsible for performing validation and defaulting on the LogStorage object,
+// and creating the base namespaces for other controllers to deploy into. It updates the status of the LogStorage
+// object to indicate that it has completed its work to other controllers.
 type LogStorageInitializer struct {
 	client      client.Client
 	scheme      *runtime.Scheme
@@ -192,6 +193,20 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	// We found the LogStorage instance.
 	r.status.OnCRFound()
 
+	// Get Installation resource.
+	_, install, err := utils.GetInstallation(context.Background(), r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Determine if Kibana is enabled for this cluster.
+	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
+
 	// Check if there is a management cluster connection. ManagementClusterConnection is a managed cluster only resource.
 	if err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
 		// LogStorage isn't valid for managed clusters.
@@ -216,6 +231,22 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		r.setConditionDegraded(ctx, ls, reqLogger)
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "An error occurred while validating LogStorage", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// Before we can create secrets, we need to ensure the tigera-elasticsearch namespace exists.
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	esNamespace := render.CreateNamespace(render.ElasticsearchNamespace, install.KubernetesProvider, render.PSSPrivileged)
+	if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(esNamespace), r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if kibanaEnabled {
+		// Create the Namespace.
+		kbNamespace := render.CreateNamespace(render.KibanaNamespace, install.KubernetesProvider, render.PSSBaseline)
+		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Write the logstorage back to the datastore with its newly applied defaults.

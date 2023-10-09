@@ -17,7 +17,6 @@ package kubecontrollers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
@@ -57,7 +56,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var successResult = reconcile.Result{RequeueAfter: 60 * time.Second}
+var successResult = reconcile.Result{}
 
 func NewControllerWithShims(
 	cli client.Client,

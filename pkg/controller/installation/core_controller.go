@@ -45,7 +45,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -256,16 +255,9 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ImageSet: %w", err)
 	}
 
-	for _, t := range secondaryResources() {
-		pred := predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				// Create occurs because we've created it, so we can safely ignore it.
-				return false
-			},
-		}
-		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForObject{}, pred)
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", t, err)
+	for _, obj := range secondaryResources() {
+		if err = utils.AddNamespacedWatch(c, obj, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch %s: %w", obj, err)
 		}
 	}
 
@@ -343,13 +335,20 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 // this controller.
 func secondaryResources() []client.Object {
 	return []client.Object{
-		&appsv1.DaemonSet{},
-		&appsv1.Deployment{},
-		&rbacv1.ClusterRole{},
-		&rbacv1.ClusterRoleBinding{},
-		&corev1.ServiceAccount{},
-		&apiregv1.APIService{},
-		&corev1.Service{},
+		// We care about all of these resource types, so long as they are in the calico-system namespace.
+		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace}},
+
+		// We care about specific named resources of these types.
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: common.CalicoNamespace}},
 	}
 }
 
@@ -1310,7 +1309,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeTerminating := false
 	if terminating {
 		// Wait for the calico-kube-controllers deployment to be removed before cleaning up calico/node resources.
-		// The existence of the deployment is a signal that the pods have been torn down, as Kubernetes waits for its children to be deleted
+		// The existence of the deployment is a signal that the pods have not been torn down, as Kubernetes waits for its children to be deleted
 		// before removing the deployment itself.
 		l := &appsv1.Deployment{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}, l)

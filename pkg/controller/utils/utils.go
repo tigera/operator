@@ -222,7 +222,7 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
-// will be generated.
+// will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
 func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)

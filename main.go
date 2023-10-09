@@ -22,28 +22,13 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
-
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/tools/clientcmd"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/yaml"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/active"
@@ -55,7 +40,25 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/version"
+
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/tools/clientcmd"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/yaml"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -66,11 +69,11 @@ var (
 )
 
 func init() {
+	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatorv1.AddToScheme(scheme))
 	utilruntime.Must(operatorv1beta1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(apis.AddToScheme(scheme))
 }
 
@@ -93,6 +96,8 @@ func main() {
 	var printEnterpriseCRDs string
 	var sgSetup bool
 	var manageCRDs bool
+	var preDelete bool
+
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -110,6 +115,9 @@ func main() {
 		"Setup Security Groups in AWS (should only be used on OpenShift).")
 	flag.BoolVar(&manageCRDs, "manage-crds", false,
 		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
+	flag.BoolVar(&preDelete, "pre-delete", false,
+		"Run helm pre-deletion hook logic, then exit.")
+
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -163,7 +171,7 @@ func main() {
 
 	printVersion()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -171,7 +179,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	c, err := client.New(cfg, client.Options{})
+	c, err := client.New(cfg, client.Options{Scheme: scheme})
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
@@ -209,6 +217,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	if preDelete {
+		// We've built a client - we can use it to clean up.
+		if err := executePreDeleteHook(ctx, c); err != nil {
+			log.Error(err, "Failed to complete pre-delete hook")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// sigHandler is a context that is canceled when we receive a termination
+	// signal. We don't want to immeditely terminate upon receipt of such a signal since
+	// there may be cleanup required. So, we will pass a separate context to our controllers.
+	// That context will be canceled after a successful cleanup.
 	sigHandler := ctrl.SetupSignalHandler()
 	active.WaitUntilActive(cs, c, sigHandler, setupLog)
 	log.Info("Active operator: proceeding")
@@ -252,6 +273,68 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	// Start a goroutine to handle termination.
+	go func() {
+		// Cancel the main context when we are done.
+		defer cancel()
+
+		// Wait for a signal.
+		<-sigHandler.Done()
+
+		// Check if we need to do any cleanup.
+		client := mgr.GetClient()
+		instance := &v1.Installation{}
+		retries := 0
+		for {
+			if err := client.Get(ctx, utils.DefaultInstanceKey, instance); errors.IsNotFound(err) {
+				// No installation - we can exit immediately.
+				return
+			} else if err != nil {
+				// Error querying - retry after a small sleep.
+				if retries >= 5 {
+					log.Errorf("Too many retries, exiting with error: %s", err)
+					return
+				}
+				log.Errorf("Error querying Installation, will retry: %s", err)
+				retries++
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// Success
+			break
+		}
+
+		if instance.DeletionTimestamp == nil {
+			// Installation isn't terminating, so we can exit immediately.
+			return
+		}
+
+		// We need to wait for termination to complete. We can do this by checking if the Installation
+		// resource has been cleaned up or not.
+		to := 60 * time.Second
+		log.Infof("Waiting up to %s for graceful termination to complete", to)
+		timeout := time.After(to)
+		for {
+			select {
+			case <-timeout:
+				// Timeout. Continue with shutdown.
+				log.Warning("Timed out waiting for graceful shutdown to complete")
+				return
+			default:
+				err := client.Get(ctx, utils.DefaultInstanceKey, instance)
+				if errors.IsNotFound(err) {
+					// Installation has been cleaned up, we can terminate.
+					log.Info("Graceful termination complete")
+					return
+				} else if err != nil {
+					log.Errorf("Error querying Installation: %s", err)
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
 
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
@@ -324,7 +407,7 @@ func main() {
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
-		ShutdownContext:     sigHandler,
+		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
 	}
 
@@ -335,7 +418,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(sigHandler); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
@@ -415,4 +498,39 @@ func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
 	}
 
 	return nil
+}
+
+func executePreDeleteHook(ctx context.Context, c client.Client) error {
+	defer log.Info("preDelete hook exiting")
+
+	// Clean up any custom-resources first - this will trigger teardown of pods deloyed
+	// by the operator, and give the operator a chance to clean up gracefully.
+	installation := &operatorv1.Installation{}
+	installation.Name = utils.DefaultInstanceKey.Name
+	apiserver := &operatorv1.APIServer{}
+	apiserver.Name = utils.DefaultInstanceKey.Name
+	for _, o := range []client.Object{installation, apiserver} {
+		if err := c.Delete(ctx, o); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	// Wait for the Installation to be deleted.
+	to := time.After(5 * time.Minute)
+	for {
+		select {
+		case <-to:
+			return fmt.Errorf("Timeout waiting for pre-delete hook")
+		default:
+			if err := c.Get(ctx, utils.DefaultInstanceKey, installation); errors.IsNotFound(err) {
+				// It's gone! We can return.
+				return nil
+			}
+		}
+		log.Info("Waiting for Installation to be fully deleted")
+		time.Sleep(5 * time.Second)
+	}
 }

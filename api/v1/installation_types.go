@@ -135,6 +135,10 @@ type InstallationSpec struct {
 	// +optional
 	KubeletVolumePluginPath string `json:"kubeletVolumePluginPath,omitempty"`
 
+	// CustomCgroupPath is used to provide a custom path for the cgroup2 mount point
+	// +optional
+	CustomCgroupPath string `json:"customCgroupPath,omitempty"`
+
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
 	// field.
 	// +optional

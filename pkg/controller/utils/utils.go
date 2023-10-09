@@ -62,6 +62,13 @@ var (
 	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
 	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+
+	PeriodicReconcileTime = 5 * time.Minute
+
+	// StandardRetry is the amount of time to wait beofre retrying a request in
+	// most scenarios. Retries should be used sparingly, and only in extraordinary
+	// circumstances. Use this as a default when retries are needed.
+	StandardRetry = 30 * time.Second
 )
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
@@ -82,8 +89,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
-// TODO: Deprecate and delete these functions.
-func AddNetworkWatch(c controller.Controller) error {
+func AddInstallationWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
 
@@ -145,11 +151,8 @@ func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
 	}, &handler.EnqueueRequestForObject{})
 }
 
-func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
-	return c.Watch(
-		&source.Channel{Source: createPeriodicReconcileChannel(period)},
-		&handler.EnqueueRequestForObject{},
-	)
+func AddPeriodicReconcile(c controller.Controller, period time.Duration, handler handler.EventHandler) error {
+	return c.Watch(&source.Channel{Source: createPeriodicReconcileChannel(period)}, handler)
 }
 
 // AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.
@@ -219,7 +222,7 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
-// will be generated.
+// will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
 func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)
@@ -644,13 +647,21 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			generationChanged := e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
-				return true
+				// No name or namespace match was specified. Match everything, assuming the generation has changed.
+				return generationChanged
 			}
+
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match it.
 				return false
 			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Assuming the generation has changed, return a match if the namespaces also match,
+			// or if no namespace was given to match against.
+			return generationChanged && (e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == "")
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -755,4 +766,16 @@ func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operat
 	}
 
 	return kubeDNSService.Spec.ClusterIPs, nil
+}
+
+// GetDNSServiceName returns the name and namespace for the DNS service based on the given provider.
+// This is "kube-dns" for most providers, but varies on OpenShift and RKE2.
+func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
+	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+	if provider == operatorv1.ProviderOpenShift {
+		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+	} else if provider == operatorv1.ProviderRKE2 {
+		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
+	}
+	return kubeDNSServiceName
 }

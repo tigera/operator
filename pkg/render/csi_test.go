@@ -66,7 +66,7 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(delObjs).To(HaveLen(0))
 
 		for i, expectedRes := range expectedCreateObjs {
-			rtest.CompareResource(createObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(createObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		ds := rtest.GetResource(createObjs, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -123,7 +123,7 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(len(delObjs)).To(Equal(len(expectedDelObjs)))
 
 		for i, expectedRes := range expectedDelObjs {
-			rtest.CompareResource(delObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(delObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -305,6 +305,5 @@ var _ = Describe("CSI rendering tests", func() {
 		createObjs, _ := comp.Objects()
 		dsResource := rtest.GetResource(createObjs, "csi.tigera.io", "", "storage", "v1", "CSIDriver")
 		Expect(dsResource.(*storagev1.CSIDriver).ObjectMeta.Labels["security.openshift.io/csi-ephemeral-volume-profile"]).To(Equal("restricted"))
-
 	})
 })

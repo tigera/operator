@@ -25,6 +25,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	kmeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -64,8 +65,14 @@ var _ = Describe("Mainline component function tests", func() {
 	var operatorDone chan struct{}
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
+
+		By("Cleaning up resources before the test")
 		cleanupResources(c)
+
+		By("Verifying CRDs are installed")
 		verifyCRDsExist(c)
+
+		By("Creating the tigera-operator namespace, if it doesn't exist")
 		ns := &corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator"},
@@ -75,6 +82,14 @@ var _ = Describe("Mainline component function tests", func() {
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
+
+		By("Checking no Installation is left over from previous tests")
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		}
+		err = c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
+		Expect(errors.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("Expected Installation not to exist, but got: %s", err))
 	})
 
 	AfterEach(func() {
@@ -90,6 +105,7 @@ var _ = Describe("Mainline component function tests", func() {
 			}, 60*time.Second).ShouldNot(HaveOccurred())
 		}()
 
+		By("Cleaning up resources after the test")
 		cleanupResources(c)
 
 		// Clean up Calico data that might be left behind.
@@ -186,10 +202,12 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 	var mgr manager.Manager
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
+
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
 		verifyCRDsExist(c)
 	})
+
 	AfterEach(func() {
 		removeInstallResourceCR(c, "not-default", context.Background())
 	})
@@ -344,12 +362,16 @@ func removeInstallResourceCR(c client.Client, name string, ctx context.Context) 
 		return
 	}
 	Expect(err).NotTo(HaveOccurred())
+
+	By("Deleting the Installation CRD")
 	err = c.Delete(ctx, instance)
 	Expect(err).NotTo(HaveOccurred())
+
 	// Need to wait here for Installation resource to be fully deleted prior to cancelling the context
 	// which will in turn terminate the operator. Race conditions can occur otherwise that will leave the
 	// Installation resource intact while the operator is no longer running which will result in test failures
 	// that try to create an Installation resource of their own
+	By("Waiting for the Installation CRD to be removed")
 	ExpectResourceDestroyed(c, instance, 20*time.Second)
 }
 

@@ -47,7 +47,7 @@ import (
 const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
-	BpfOperatorAnnotation      = "operator.tigera.io/bpf"
+	BpfOperatorAnnotation      = "operator.tigera.io/bpfEnabled"
 
 	nodeCniConfigAnnotation   = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation   = "hash.operator.tigera.io/bgp-layout"

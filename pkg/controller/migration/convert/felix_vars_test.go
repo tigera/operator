@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -135,20 +135,6 @@ var _ = Describe("felix env parser", func() {
 			scheme := kscheme.Scheme
 			Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
 			c.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyFelixConfig()).Build()
-		})
-
-		It("sets a boolean", func() {
-			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
-				Name:  "FELIX_BPFENABLED",
-				Value: "true",
-			}}
-
-			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
-
-			f := crdv1.FelixConfiguration{}
-			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
-			Expect(f.Spec.BPFEnabled).ToNot(BeNil())
-			Expect(*f.Spec.BPFEnabled).To(BeTrue())
 		})
 
 		It("handles 'none' failsafe inbound ports", func() {

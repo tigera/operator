@@ -1110,9 +1110,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 }
 
 func (c *nodeComponent) bpfDataplaneEnabled() bool {
-	return c.cfg.Installation.CalicoNetwork != nil &&
-		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+	return common.BpfDataplaneEnabled(c.cfg.Installation)
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {

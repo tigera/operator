@@ -292,7 +292,12 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	// We rely on the core controller for defaulting, so wait until it has done so before continuing
 	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
 		err := fmt.Errorf("InstallationStatus is empty")
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "InstallationStatus is empty", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "InstallationStatus is empty", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if instance.Spec.WindowsNodes == nil {
+		err := fmt.Errorf("Installation.Spec.WindowsNodes is nil")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Installation.Spec.WindowsNodes is nil", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

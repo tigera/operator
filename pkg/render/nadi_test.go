@@ -207,6 +207,8 @@ var _ = Describe("AdrianaNode rendering tests", func() {
 
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
+
 			if enableIPv4 {
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 			}
@@ -258,7 +260,6 @@ var _ = Describe("AdrianaNode rendering tests", func() {
 				{Name: "CALICO_MANAGE_CNI", Value: "true"},
 				{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 				{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
-				{Name: "FELIX_BPFENABLED", Value: "true"},
 				{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 				{Name: "FELIX_HEALTHENABLED", Value: "true"},
 				{Name: "FELIX_HEALTHPORT", Value: "9099"},

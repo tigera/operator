@@ -1146,10 +1146,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// BPF Upgrade env var initial check:
+	var calicoNodeDaemonset appsv1.DaemonSet
+	calicoNodeDaemonset = appsv1.DaemonSet{}
+
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "Error getting Daemonset", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return r.setDefaultsOnFelixConfiguration(instance, fc)
-	})
+	felixConfiguration, err := r.doSetDefaultsOnFelixConfiguration(ctx, instance, &calicoNodeDaemonset)
+	//felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+	//	return r.setDefaultsOnFelixConfiguration(instance, &calicoNodeDaemonset, fc)
+	//})
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -1422,8 +1433,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
-	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
+	r.status.AddDaemonsets([]types.NamespacedName{{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}})
+	r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)
 
 	// Run this after we have rendered our components so the new (operator created)
@@ -1491,6 +1502,32 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
+
+	// BPF Upgrade without disruption:
+	// First, validate FelixConfig annotations before continuing.
+	err = bpfValidateAnnotations(felixConfiguration)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceValidationError, "Error validating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Next, get the calico-node daemonset.
+	calicoNodeDaemonset = appsv1.DaemonSet{}
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "Error getting Daemonset", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Finally, delegate logic implementation here using the state of the installation and dependent resources.
+	err = r.doSetBPFUpdatesOnFelixConfiguration(ctx, instance, &calicoNodeDaemonset)
+	//_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+	//	return doSetBPFUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, felixConfiguration)
+	//})
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -1619,9 +1656,18 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	}, nil
 }
 
+// doSetDefaultsOnFelixConfiguration is a wrapper function used for to facilitate unit testing.
+func (r *ReconcileInstallation) doSetDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) (*crdv1.FelixConfiguration, error) {
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		return r.setDefaultsOnFelixConfiguration(install, ds, fc)
+	})
+
+	return felixConfiguration, err
+}
+
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1699,6 +1745,46 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 			}
 		}
 	}
+
+	// If BPF is enabled, but not set on FelixConfiguration, do so here. Older versions of the operator
+	// used an environment variable to enable BPF, but we no longer do so. In order to prevent disruption
+	// when the environment variable is removed by the render code, make sure
+	// FelixConfiguration has the correct value set.
+	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
+		setBPFEnabled(fc, true)
+		updated = true
+	}
+
+	return updated
+}
+
+// doSetBPFUpdatesOnFelixConfiguration is a wrapper function used for to facilitate unit testing.
+func (r *ReconcileInstallation) doSetBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) error {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		return r.setBPFUpdatesOnFelixConfiguration(install, ds, fc)
+	})
+
+	return err
+}
+
+// setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed
+// based on the install config and the daemonset.
+func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+	updated := false
+
+	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)
+	if bpfEnabledOnInstall {
+		if bpfEnabledOnFelixConfigNilOrSetFalse(fc) && isRolloutComplete(ds) {
+			setBPFEnabled(fc, bpfEnabledOnInstall)
+			updated = true
+		}
+	} else {
+		if bpfEnabledOnFelixConfigNilOrSetTrue(fc) {
+			setBPFEnabled(fc, bpfEnabledOnInstall)
+			updated = true
+		}
+	}
+
 	return updated
 }
 

@@ -556,7 +556,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "CALICO_MANAGE_CNI", Value: "true"},
 					{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 					{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
-					{Name: "FELIX_BPFENABLED", Value: "true"},
 					{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 					{Name: "FELIX_HEALTHENABLED", Value: "true"},
 					{Name: "FELIX_HEALTHPORT", Value: "9099"},

@@ -81,6 +81,16 @@ func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context) error {
 }
 
 var _ = Describe("Testing core-controller installation", func() {
+
+	var c client.Client
+	var cs *kfake.Clientset
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var r ReconcileInstallation
+	var cr *operator.Installation
+	var scheme *runtime.Scheme
+	var mockStatus *status.MockStatus
+
 	table.DescribeTable("checking rendering configuration",
 		func(detectedProvider, configuredProvider operator.Provider, expectedErr error) {
 			configuredInstallation := &operator.Installation{}
@@ -316,13 +326,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready.MarkAsReady()
 
 	Context("image reconciliation tests", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -419,6 +422,20 @@ var _ = Describe("Testing core-controller installation", func() {
 							Registry: "my-reg",
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
 						},
 					},
 				})).NotTo(HaveOccurred())
@@ -693,15 +710,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	)
 
 	Context("management cluster exists", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var cr *operator.Installation
-
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
 
 		var expectedDNSNames []string
 		var certificateManager certificatemanager.CertificateManager
@@ -815,6 +823,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -884,15 +906,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	})
 
 	Context("Reconcile tests", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
-
-		var cr *operator.Installation
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -998,6 +1011,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()

@@ -46,18 +46,19 @@ import (
 
 var _ = Describe("Testing bore-controller installation", func() {
 
+	var c client.Client
+	var cs *kfake.Clientset
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var r ReconcileInstallation
+	var scheme *runtime.Scheme
+	var mockStatus *status.MockStatus
+
 	//notReady := &utils.ReadyFlag{}
 	ready := &utils.ReadyFlag{}
 	ready.MarkAsReady()
 
 	Context("image reconciliation tests", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.

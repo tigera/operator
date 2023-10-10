@@ -17,12 +17,12 @@ package users
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/go-logr/logr"
 
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -49,7 +49,14 @@ type UserController struct {
 	client      client.Client
 	scheme      *runtime.Scheme
 	status      status.StatusManager
+	esClientFn  utils.ElasticsearchClientCreator
 	multiTenant bool
+}
+
+type UsersCleanupController struct {
+	client     client.Client
+	scheme     *runtime.Scheme
+	esClientFn utils.ElasticsearchClientCreator
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -68,6 +75,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:      mgr.GetScheme(),
 		multiTenant: opts.MultiTenant,
 		status:      status.New(mgr.GetClient(), "log-storage-users", opts.KubernetesVersion),
+		esClientFn:  utils.NewElasticClient,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -113,6 +121,28 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
 	if err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to create periodic reconcile watch: %w", err)
+	}
+
+	// Now that the users controller is set up, we can also set up the controller that cleans up stale users
+	usersCleanupReconciler := &UsersCleanupController{
+		client:     mgr.GetClient(),
+		scheme:     mgr.GetScheme(),
+		esClientFn: utils.NewElasticClient,
+	}
+
+	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
+	usersCleanupController, err := controller.New("log-storage-cleanup-controller", mgr, controller.Options{Reconciler: usersCleanupReconciler})
+	if err != nil {
+		return err
+	}
+
+	if err = usersCleanupController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-cleanup-controller failed to watch Tenant resource: %w", err)
+	}
+
+	err = utils.AddPeriodicReconcile(usersCleanupController, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("log-storage-cleanup-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	return nil
@@ -172,13 +202,37 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
+	clusterIDConfigMap := corev1.ConfigMap{}
+	clusterIDConfigMapKey := client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}
+	err = r.client.Get(ctx, clusterIDConfigMapKey, &clusterIDConfigMap)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Waiting for ConfigMap %s/%s to be available", clusterIDConfigMapKey.Namespace, clusterIDConfigMapKey.Name),
+			nil, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
+	if !ok {
+		err = fmt.Errorf("%s/%s ConfigMap does not contain expected 'cluster-id' key",
+			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if clusterID == "" {
+		err = fmt.Errorf("%s/%s ConfigMap value for key 'cluster-id' must be non-empty",
+			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
-	linseedUser := utils.LinseedUser(tenantID)
+	linseedUser := utils.LinseedUser(clusterID, tenantID)
 	basicCreds := corev1.Secret{}
 	var credentialSecrets []client.Object
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
-	if err := r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
+	if err = r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
@@ -203,13 +257,13 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 	}
-	if err := hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
+	if err = hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating Linseed user secret", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Now that the secret has been created, also provision the user in ES.
-	if err := r.createLinseedLogin(ctx, tenantID, &basicCreds, reqLogger); err != nil {
+	if err = r.createLinseedLogin(ctx, clusterID, tenantID, &basicCreds, reqLogger); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create Linseed user in ES", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -219,8 +273,8 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	return reconcile.Result{}, nil
 }
 
-func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
-	esClient, err := utils.NewElasticClient(r.client, ctx, relasticsearch.ElasticEndpoint())
+func (r *UserController) createLinseedLogin(ctx context.Context, clusterID, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
+	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return err
@@ -236,11 +290,89 @@ func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string
 	}
 
 	// Create the user in ES.
-	user := utils.LinseedUser(tenantID)
+	user := utils.LinseedUser(clusterID, tenantID)
 	user.Password = password
 	if err = esClient.CreateUser(ctx, user); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
 		return err
+	}
+
+	return nil
+}
+
+func (r *UsersCleanupController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	helper := utils.NewNamespaceHelper(true, render.ElasticsearchNamespace, request.Namespace)
+	reqLogger := logf.Log.WithName("controller_logstorage_users_cleanup").WithValues("Request.Namespace",
+		request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
+	reqLogger.Info("Reconciling LogStorage - Cleanup")
+
+	// Wait for Elasticsearch to be installed and available.
+	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+		return reconcile.Result{}, nil
+	}
+
+	// Clean up any stale users that may have been left behind by a previous tenant
+	if err := r.cleanupStaleUsers(ctx, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger logr.Logger) error {
+	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
+	if err != nil {
+		return fmt.Errorf("failed to connect to Elasticsearch - failed to create the Elasticsearch client")
+	}
+
+	allESUsers, err := esClient.GetUsers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch users from Elasticsearch")
+	}
+
+	tenants := operatorv1.TenantList{}
+	err = r.client.List(ctx, &tenants)
+	if err != nil {
+		return fmt.Errorf("failed to fetch TenantList")
+	}
+
+	clusterIDConfigMap := corev1.ConfigMap{}
+	err = r.client.Get(ctx, client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}, &clusterIDConfigMap)
+	if err != nil {
+		return fmt.Errorf("failed to fetch cluster-info configmap")
+	}
+
+	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
+	if !ok {
+		return fmt.Errorf("%s/%s ConfigMap does not contain expected 'cluster-id' key",
+			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
+	}
+
+	if clusterID == "" {
+		return fmt.Errorf("%s/%s ConfigMap value for key 'cluster-id' must be non-empty",
+			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
+	}
+
+	for _, user := range allESUsers {
+		if strings.HasPrefix(user.Username, fmt.Sprintf("%s_%s_", utils.ElasticsearchUserNameLinseed, clusterID)) {
+			active := false
+			for _, t := range tenants.Items {
+				if strings.Contains(user.Username, t.Spec.ID) {
+					active = true
+					break
+				}
+			}
+			if !active {
+				err = esClient.DeleteUser(ctx, &user)
+				if err != nil {
+					logger.Error(err, "Failed to delete elastic user")
+				}
+			}
+		}
 	}
 
 	return nil

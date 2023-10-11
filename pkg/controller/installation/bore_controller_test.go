@@ -179,7 +179,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			ds := getDS1()
 
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-			mockStatus.On("AddDaemonsets", mock.Anything).Return(ds)
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -211,7 +211,7 @@ func getDS1() *appsv1.DaemonSet {
 			},
 		},
 		Status: appsv1.DaemonSetStatus{
-			CurrentNumberScheduled: 17,
+			CurrentNumberScheduled: 5,
 		},
 	}
 	return ds

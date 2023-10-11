@@ -808,26 +808,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	//adriana
-
-	ds := appsv1.DaemonSet{}
-	ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	r.client.Get(ctx, ns, &ds)
-	val2 := ds.Status.CurrentNumberScheduled
-	_ = val2
-
-	mykey := client.ObjectKey{Name: "calico-node", Namespace: "calico-system"}
-	daemonset := &appsv1.DaemonSet{}
-	////var list client.ObjectList
-	////var opts client.ListOption{}
-	////err = r.client.List(ctx, list, opts)
-	err = r.client.Get(ctx, mykey, daemonset)
-	val := daemonset.Status.CurrentNumberScheduled
-	_ = val
-	con := daemonset.Spec.Template.Spec.Containers
-	_ = len(con)
-	//adriana
-
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
 	instance := &operator.Installation{}
@@ -841,9 +821,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	//adriana
+	ds2 := appsv1.DaemonSet{}
+	ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	r.client.Get(ctx, ns2, &ds2)
+	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
+	//
+	//}
+	val2 := ds2.Status.CurrentNumberScheduled
+	_ = val2
 	//dp := instance.Spec.CalicoNetwork.LinuxDataplane
 	//mg := fmt.Sprintf("adriana linuxDP='%s'", *dp)
 	//reqLogger.Info(mg)
+	//adriana
 
 	terminating := (instance.DeletionTimestamp != nil)
 	if terminating {
@@ -1524,6 +1514,28 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
+
+	//adriana
+	ds := appsv1.DaemonSet{}
+	ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	r.client.Get(ctx, ns, &ds)
+	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
+	//
+	//}
+	val := ds.Status.CurrentNumberScheduled
+	_ = val
+
+	//mykey := client.ObjectKey{Name: "calico-node", Namespace: "calico-system"}
+	//daemonset := &appsv1.DaemonSet{}
+	//////var list client.ObjectList
+	//////var opts client.ListOption{}
+	//////err = r.client.List(ctx, list, opts)
+	//err = r.client.Get(ctx, mykey, daemonset)
+	//val := daemonset.Status.CurrentNumberScheduled
+	//_ = val
+	//con := daemonset.Spec.Template.Spec.Containers
+	//_ = len(con)
+	////adriana
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()

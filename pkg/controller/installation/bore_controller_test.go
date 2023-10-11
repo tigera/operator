@@ -201,7 +201,7 @@ func getDS1() *appsv1.DaemonSet {
 	}
 
 	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
 		Spec: appsv1.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{},
@@ -211,7 +211,7 @@ func getDS1() *appsv1.DaemonSet {
 			},
 		},
 		Status: appsv1.DaemonSetStatus{
-			CurrentNumberScheduled: 9,
+			CurrentNumberScheduled: 17,
 		},
 	}
 	return ds

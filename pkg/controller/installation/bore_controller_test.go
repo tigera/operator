@@ -80,7 +80,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
+			//var replicas int32 = 1
 			objs := []runtime.Object{
 				&corev1.Node{
 					TypeMeta: metav1.TypeMeta{},
@@ -106,17 +106,17 @@ var _ = Describe("Testing bore-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
-				&appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
-					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-				},
+				//&appsv1.Deployment{
+				//	TypeMeta:   metav1.TypeMeta{},
+				//	ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+				//	Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+				//},
 			}
 			cs = kfake.NewSimpleClientset(objs...)
 
 			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
-			//mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
@@ -177,9 +177,8 @@ var _ = Describe("Testing bore-controller installation", func() {
 		It("should use builtin images", func() {
 
 			ds := getDS1()
-
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			//mockStatus.On("AddDaemonsets", mock.Anything).Return(ds)
 
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -211,7 +210,7 @@ func getDS1() *appsv1.DaemonSet {
 			},
 		},
 		Status: appsv1.DaemonSetStatus{
-			CurrentNumberScheduled: 5,
+			CurrentNumberScheduled: 13,
 		},
 	}
 	return ds

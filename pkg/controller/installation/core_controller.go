@@ -821,7 +821,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	//adriana
+	////adriana
+	//list := appsv1.DaemonSetList{}
+	//opts := client.MatchingLabels(map[string]string{"": ""})
+	//_ = r.client.List(ctx, &list, opts)
+
 	ds2 := appsv1.DaemonSet{}
 	ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
 	r.client.Get(ctx, ns2, &ds2)
@@ -1416,6 +1420,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		)
 	}
 
+	////adriana
+	//ds := appsv1.DaemonSet{}
+	//ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	//r.client.Get(ctx, ns, &ds)
+	////if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
+	////
+	////}
+	//val := ds.Status.CurrentNumberScheduled
+	//_ = val
+	//////adriana
+
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Error getting ImageSet", err, reqLogger)
@@ -1432,6 +1447,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	//adriana
+	dp := appsv1.Deployment{}
+	nsX := types.NamespacedName{Name: "calico-typha", Namespace: "calico-system"}
+	r.client.Get(ctx, nsX, &dp)
+	_ = dp.Name
+
+	//ds := appsv1.DaemonSet{}
+	//ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	//r.client.Get(ctx, ns, &ds)
+	////if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
+	////
+	////}
+	//val := ds.Status.CurrentNumberScheduled
+	//_ = val
+	////adriana
+
 	// Create a component handler to create or update the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
@@ -1440,6 +1471,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
+
+	//adriana
+	ds := appsv1.DaemonSet{}
+	ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	r.client.Get(ctx, ns, &ds)
+	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
+	//
+	//}
+	val := ds.Status.CurrentNumberScheduled
+	_ = val
+	////adriana
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
@@ -1515,21 +1557,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
 
-	//adriana
-	ds := appsv1.DaemonSet{}
-	ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	r.client.Get(ctx, ns, &ds)
-	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
-	//
-	//}
-	val := ds.Status.CurrentNumberScheduled
-	_ = val
+	// adriana
+	dp2 := appsv1.Deployment{}
+	//nsZ := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.KubeControllersDeploymentName}
+	nsZ := types.NamespacedName{Name: "calico-typha", Namespace: "calico-system"}
+	r.client.Get(ctx, nsZ, &dp2)
+	nop := len(dp2.Name)
+	if nop > 1 {
+		t := dp2.Spec.Replicas
+		_ = t
+		reqLogger.Info("positive")
+	}
+	// adriana
 
 	//mykey := client.ObjectKey{Name: "calico-node", Namespace: "calico-system"}
 	//daemonset := &appsv1.DaemonSet{}
-	//////var list client.ObjectList
-	//////var opts client.ListOption{}
-	//////err = r.client.List(ctx, list, opts)
+
+	//var list client.ObjectList
+	//var opts client.ListOption{}
+	//err = r.client.List(ctx, list, opts)
 	//err = r.client.Get(ctx, mykey, daemonset)
 	//val := daemonset.Status.CurrentNumberScheduled
 	//_ = val

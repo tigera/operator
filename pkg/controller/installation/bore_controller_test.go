@@ -80,7 +80,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
-			//var replicas int32 = 1
+			var replicas int32 = 1
 			objs := []runtime.Object{
 				&corev1.Node{
 					TypeMeta: metav1.TypeMeta{},
@@ -106,11 +106,11 @@ var _ = Describe("Testing bore-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
-				//&appsv1.Deployment{
-				//	TypeMeta:   metav1.TypeMeta{},
-				//	ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
-				//	Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-				//},
+				&appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+				},
 			}
 			cs = kfake.NewSimpleClientset(objs...)
 

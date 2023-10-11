@@ -18,17 +18,20 @@ import (
 	"context"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -53,6 +56,8 @@ var _ = Describe("Testing bore-controller installation", func() {
 	var r ReconcileInstallation
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
+
+	var cr *operator.Installation
 
 	//notReady := &utils.ReadyFlag{}
 	ready := &utils.ReadyFlag{}
@@ -85,6 +90,22 @@ var _ = Describe("Testing bore-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node2",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node3",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
 				&appsv1.Deployment{
 					TypeMeta:   metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
@@ -93,17 +114,14 @@ var _ = Describe("Testing bore-controller installation", func() {
 			}
 			cs = kfake.NewSimpleClientset(objs...)
 
-			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
-			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			//mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
@@ -132,42 +150,24 @@ var _ = Describe("Testing bore-controller installation", func() {
 			}
 
 			r.typhaAutoscaler.start(ctx)
+			ca, err := tls.MakeCA("test")
+			Expect(err).NotTo(HaveOccurred())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			// We start off with a 'standard' installation, with nothing special
+			cr = &operator.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operator.InstallationSpec{
+					Variant:               operator.Calico,
+					Registry:              "some.registry.org/",
+					CertificateManagement: &operator.CertificateManagement{CACert: cert},
+				},
+			}
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
-			// We start off with a 'standard' installation, with nothing special
-			Expect(c.Create(
-				ctx,
-				&operator.Installation{
-					ObjectMeta: metav1.ObjectMeta{Name: "default"},
-					Spec: operator.InstallationSpec{
-						Variant:               operator.TigeraSecureEnterprise,
-						Registry:              "some.registry.org/",
-						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
-					},
-					Status: operator.InstallationStatus{
-						Variant: operator.TigeraSecureEnterprise,
-						Computed: &operator.InstallationSpec{
-							Registry: "my-reg",
-							// The test is provider agnostic.
-							KubernetesProvider: operator.ProviderNone,
-						},
-					},
-				})).NotTo(HaveOccurred())
-
-			Expect(c.Create(
-				ctx,
-				&appsv1.DaemonSet{
-					ObjectMeta: metav1.ObjectMeta{Name: "stevepro", Namespace: "adriana"},
-					Spec:       appsv1.DaemonSetSpec{},
-					Status: appsv1.DaemonSetStatus{
-						CurrentNumberScheduled: 7,
-					},
-				})).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
@@ -176,13 +176,43 @@ var _ = Describe("Testing bore-controller installation", func() {
 
 		It("should use builtin images", func() {
 
-			sum := 3
+			ds := getDS1()
+
+			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
+			mockStatus.On("AddDaemonsets", mock.Anything).Return(ds)
+
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(err).NotTo(HaveOccurred())
+			sum := 3
 			Expect(sum).To(Equal(3))
 		})
 	})
 
 })
+
+func getDS1() *appsv1.DaemonSet {
+
+	envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
+	container := corev1.Container{
+		Name: render.CalicoNodeObjectName,
+		Env:  envVars,
+	}
+
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"},
+		Spec: appsv1.DaemonSetSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{container},
+				},
+			},
+		},
+		Status: appsv1.DaemonSetStatus{
+			CurrentNumberScheduled: 9,
+		},
+	}
+	return ds
+}

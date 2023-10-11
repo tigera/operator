@@ -821,6 +821,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	//adriana
+	mykey := client.ObjectKey{Name: "calico-node", Namespace: "calico-system"}
+	daemonset := &appsv1.DaemonSet{}
+	////var list client.ObjectList
+	////var opts client.ListOption{}
+	////err = r.client.List(ctx, list, opts)
+	err = r.client.Get(ctx, mykey, daemonset)
+	val := daemonset.Status.CurrentNumberScheduled
+	_ = val
+	con := daemonset.Spec.Template.Spec.Containers
+	_ = len(con)
+	//adriana
+
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
 	instance := &operator.Installation{}
@@ -833,6 +846,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		reqLogger.Error(err, "An error occurred when querying the Installation resource")
 		return reconcile.Result{}, err
 	}
+
+	//dp := instance.Spec.CalicoNetwork.LinuxDataplane
+	//mg := fmt.Sprintf("adriana linuxDP='%s'", *dp)
+	//reqLogger.Info(mg)
 
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())

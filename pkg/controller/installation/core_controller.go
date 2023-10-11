@@ -821,19 +821,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	////adriana
-	//list := appsv1.DaemonSetList{}
-	//opts := client.MatchingLabels(map[string]string{"": ""})
-	//_ = r.client.List(ctx, &list, opts)
-
-	ds2 := appsv1.DaemonSet{}
-	ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	r.client.Get(ctx, ns2, &ds2)
-	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
-	//
-	//}
-	val2 := ds2.Status.CurrentNumberScheduled
-	_ = val2
+	//adriana
+	//ds2 := appsv1.DaemonSet{}
+	//ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	//r.client.Get(ctx, ns2, &ds2)
+	////if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
+	////
+	////}
+	//val2 := ds2.Status.CurrentNumberScheduled
+	//_ = val2
 	//dp := instance.Spec.CalicoNetwork.LinuxDataplane
 	//mg := fmt.Sprintf("adriana linuxDP='%s'", *dp)
 	//reqLogger.Info(mg)
@@ -1447,12 +1443,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	//adriana
-	dp := appsv1.Deployment{}
-	nsX := types.NamespacedName{Name: "calico-typha", Namespace: "calico-system"}
-	r.client.Get(ctx, nsX, &dp)
-	_ = dp.Name
-
+	//adriana - DS is accessible here!!
 	//ds := appsv1.DaemonSet{}
 	//ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
 	//r.client.Get(ctx, ns, &ds)
@@ -1472,7 +1463,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	//adriana
+	//adriana - DS is NOT accessible now??
 	ds := appsv1.DaemonSet{}
 	ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
 	r.client.Get(ctx, ns, &ds)
@@ -1558,18 +1549,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// adriana
-	dp2 := appsv1.Deployment{}
+	//dp2 := appsv1.Deployment{}
 	//nsZ := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.KubeControllersDeploymentName}
-	nsZ := types.NamespacedName{Name: "calico-typha", Namespace: "calico-system"}
-	r.client.Get(ctx, nsZ, &dp2)
-	nop := len(dp2.Name)
-	if nop > 1 {
-		t := dp2.Spec.Replicas
-		_ = t
-		reqLogger.Info("positive")
-	}
+	//r.client.Get(ctx, nsZ, &dp2)
+	//nop := len(dp2.Name)
+	//if nop > 1 {
+	//	t := dp2.Spec.Replicas
+	//	_ = t
+	//	reqLogger.Info("positive")
+	//}
 	// adriana
 
+	// calico-node DS not accessible via unit test at this point now??
 	//mykey := client.ObjectKey{Name: "calico-node", Namespace: "calico-system"}
 	//daemonset := &appsv1.DaemonSet{}
 

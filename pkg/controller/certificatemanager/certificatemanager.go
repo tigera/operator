@@ -350,7 +350,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		}
 		return nil, nil, err
 	}
-	keyPEM, certPEM := GetKeyCertPEM(secret)
+	keyPEM, certPEM := certificatemanagement.GetKeyCertPEM(secret)
 	if !readCertOnly {
 		if len(keyPEM) == 0 {
 			return nil, nil, errNoPrivateKeyPEM(secretName, secretNamespace)
@@ -452,36 +452,6 @@ func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNa
 // CertificateManagement returns the CertificateManagement object or nil if it is not configured.
 func (cm *certificateManager) CertificateManagement() *operatorv1.CertificateManagement {
 	return cm.keyPair.CertificateManagement
-}
-
-func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
-	const (
-		legacySecretCertName  = "cert" // Formerly known as certificatemanagement.ManagerSecretCertName
-		legacySecretKeyName   = "key"  // Formerly known as certificatemanagement.ManagerSecretKeyName
-		legacySecretKeyName2  = "apiserver.key"
-		legacySecretCertName2 = "apiserver.crt"
-		legacySecretKeyName3  = "key.key"             // Formerly used for Felix and Typha.
-		legacySecretCertName3 = "cert.crt"            // Formerly used for Felix and Typha.
-		legacySecretKeyName4  = "managed-cluster.key" // Used for tunnel secrets
-		legacySecretCertName4 = "managed-cluster.crt"
-		legacySecretKeyName5  = "management-cluster.key"
-		legacySecretCertName5 = "management-cluster.crt"
-	)
-	data := secret.Data
-	for keyField, certField := range map[string]string{
-		corev1.TLSPrivateKeyKey: corev1.TLSCertKey,
-		legacySecretKeyName:     legacySecretCertName,
-		legacySecretKeyName2:    legacySecretCertName2,
-		legacySecretKeyName3:    legacySecretCertName3,
-		legacySecretKeyName4:    legacySecretCertName4,
-		legacySecretKeyName5:    legacySecretCertName5,
-	} {
-		key, cert := data[keyField], data[certField]
-		if len(cert) > 0 {
-			return key, cert
-		}
-	}
-	return nil, nil
 }
 
 // certificateManagementKeyPair returns a KeyPair for to be used when certificate management is used to provide a key pair to a pod.

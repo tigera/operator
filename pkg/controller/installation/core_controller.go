@@ -1444,14 +1444,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	//adriana - DS is accessible here!!
-	//ds := appsv1.DaemonSet{}
-	//ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	//r.client.Get(ctx, ns, &ds)
-	////if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
-	////
-	////}
-	//val := ds.Status.CurrentNumberScheduled
-	//_ = val
+	ds1 := appsv1.DaemonSet{}
+	ns1 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	r.client.Get(ctx, ns1, &ds1)
+	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
+	//
+	//}
+	val1 := ds1.Status.CurrentNumberScheduled
+	_ = val1
 	////adriana
 
 	// Create a component handler to create or update the rendered components.
@@ -1464,14 +1464,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	//adriana - DS is NOT accessible now??
-	ds := appsv1.DaemonSet{}
-	ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	r.client.Get(ctx, ns, &ds)
+	ds2 := appsv1.DaemonSet{}
+	ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	r.client.Get(ctx, ns2, &ds2)
 	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
 	//
 	//}
-	val := ds.Status.CurrentNumberScheduled
-	_ = val
+	val2 := ds2.Status.CurrentNumberScheduled
+	_ = val2
 	////adriana
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,

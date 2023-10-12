@@ -94,6 +94,8 @@ func main() {
 	var printImages string
 	var printCalicoCRDs string
 	var printEnterpriseCRDs string
+	var userDefinedProviderInput string
+
 	var sgSetup bool
 	var manageCRDs bool
 	var preDelete bool
@@ -117,6 +119,8 @@ func main() {
 		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
 	flag.BoolVar(&preDelete, "pre-delete", false,
 		"Run helm pre-deletion hook logic, then exit.")
+	flag.StringVar(&userDefinedProviderInput, "cluster-type", "",
+		"Use the given cluster type instead of using auto discovery. Valid values are EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -167,6 +171,28 @@ func main() {
 			setupLog.Error(err, "Terminating")
 			os.Exit(1)
 		}
+	}
+
+	userDefinedProvider := v1.ProviderNone
+	if userDefinedProviderInput != "" {
+		switch strings.ToLower(userDefinedProviderInput) {
+		case "eks":
+			userDefinedProvider = v1.ProviderEKS
+		case "gke":
+			userDefinedProvider = v1.ProviderGKE
+		case "aks":
+			userDefinedProvider = v1.ProviderAKS
+		case "rke2":
+			userDefinedProvider = v1.ProviderRKE2
+		case "openshift":
+			userDefinedProvider = v1.ProviderOpenShift
+		case "dockerenterprise":
+			userDefinedProvider = v1.ProviderDockerEE
+		default:
+			fmt.Println("Invalid option for --cluster-type flag ", userDefinedProviderInput, ". Valid values are EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise")
+			os.Exit(1)
+		}
+
 	}
 
 	printVersion()
@@ -342,13 +368,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Attempt to auto discover the provider
-	provider, err := utils.AutoDiscoverProvider(ctx, clientset)
-	if err != nil {
-		setupLog.Error(err, "Auto discovery of Provider failed")
-		os.Exit(1)
+	var provider v1.Provider
+	if userDefinedProvider == v1.ProviderNone {
+		// Attempt to auto discover the provider
+		provider, err = utils.AutoDiscoverProvider(ctx, clientset)
+		if err != nil {
+			setupLog.Error(err, "Auto discovery of Provider failed")
+			os.Exit(1)
+		}
+		setupLog.WithValues("provider", provider).Info("Checking type of cluster")
+	} else {
+		provider = userDefinedProvider
+		setupLog.WithValues("provider", provider).Info("Using user defined cluster type")
 	}
-	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
 
 	// Determine if we're running in single or multi-tenant mode.
 	multiTenant, err := utils.MultiTenant(ctx, clientset)

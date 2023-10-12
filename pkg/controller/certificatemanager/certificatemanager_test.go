@@ -607,7 +607,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 })
 
 func x509FromSecret(secret *corev1.Secret) (*x509.Certificate, error) {
-	_, certPEM := certificatemanager.GetKeyCertPEM(secret)
+	_, certPEM := certificatemanagement.GetKeyCertPEM(secret)
 	x509Cert, err := certificatemanagement.ParseCertificate(certPEM)
 	if err != nil {
 		return nil, err

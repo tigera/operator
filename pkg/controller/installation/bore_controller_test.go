@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -183,7 +184,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 
 			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
 
-			ds := getDS2()
+			ds := getDS3(false)
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
 			//mockStatus.On("AddDaemonsets", mock.Anything).Return(ds)
 
@@ -225,6 +226,7 @@ func createInstallation(c client.Client, ctx context.Context, dp operator.LinuxD
 	Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 }
 
+// DS env var set	FELIX_BPFENABLED: true
 func getDS1() *appsv1.DaemonSet {
 
 	envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
@@ -250,6 +252,7 @@ func getDS1() *appsv1.DaemonSet {
 	return ds
 }
 
+// DS env var NOT set
 func getDS2() *appsv1.DaemonSet {
 
 	envVars := []corev1.EnvVar{}
@@ -272,5 +275,31 @@ func getDS2() *appsv1.DaemonSet {
 			CurrentNumberScheduled: 2,
 		},
 	}
+	return ds
+}
+
+// DS annotation set
+func getDS3(annotation bool) *appsv1.DaemonSet {
+
+	dsAnnotations := make(map[string]string)
+	dsAnnotations[render.BpfOperatorAnnotation] = strconv.FormatBool(annotation)
+
+	container := corev1.Container{Name: render.CalicoNodeObjectName}
+
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        common.NodeDaemonSetName,
+			Namespace:   common.CalicoNamespace,
+			Annotations: dsAnnotations,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{container}},
+			},
+		},
+		//Status: appsv1.DaemonSetStatus{CurrentNumberScheduled: 3},
+	}
+
 	return ds
 }

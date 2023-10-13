@@ -1503,54 +1503,55 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// adriana
 	//instance.Spec.CalicoNetwork.LinuxDataplane
-	test := common.BpfDataplaneEnabled(&instance.Spec)
-	_ = test // Iptables OR BPF
-	// https://stackoverflow.com/questions/38552803/how-to-convert-a-bool-to-a-string-in-go
-	text := strconv.FormatBool(test)
-	_ = text
+	//test := common.BpfDataplaneEnabled(&instance.Spec)
+	//_ = test // Iptables OR BPF
+	//// https://stackoverflow.com/questions/38552803/how-to-convert-a-bool-to-a-string-in-go
+	//text := strconv.FormatBool(test)
+	//_ = text
 
 	//adriana
 	//ds2 := appsv1.DaemonSet{}
 	//ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
 	//r.client.Get(ctx, ns2, &ds2)
 
-	// Get the calico-node daemonset.
-	calicoNodeDaemonset := appsv1.DaemonSet{}
-	r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
-	_ = calicoNodeDaemonset
-
-	bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, calicoNodeDaemonset.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	if err != nil {
-		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
-		return reconcile.Result{}, err
-	}
-
-	bpfEnabledStatus := false
-	if bpfEnabledEnvVar != nil {
-		bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
-		if err != nil {
-			reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
-			return reconcile.Result{}, err
-		}
-	}
-	_ = bpfEnabledStatus
+	//// Get the calico-node daemonset.
+	//calicoNodeDaemonset := appsv1.DaemonSet{}
+	//err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	//return reconcile.Result{}, err
+	////_ = calicoNodeDaemonset
+	//
+	//bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, calicoNodeDaemonset.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	//if err != nil {
+	//	reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
+	//	return reconcile.Result{}, err
+	//}
+	//
+	//bpfEnabledStatus := false
+	//if bpfEnabledEnvVar != nil {
+	//	bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
+	//	if err != nil {
+	//		reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
+	//		return reconcile.Result{}, err
+	//	}
+	//}
+	//_ = bpfEnabledStatus
 
 	// FC annotations - if not found then will be ""
-	var felixConfigurationAnnotations map[string]string
-	felixConfigurationAnnotations = felixConfiguration.Annotations
-	b2 := felixConfigurationAnnotations[render.BpfOperatorAnnotation]
-	_ = b2
+	//var felixConfigurationAnnotations map[string]string
+	//felixConfigurationAnnotations = felixConfiguration.Annotations
+	//b2 := felixConfigurationAnnotations[render.BpfOperatorAnnotation]
+	//_ = b2
+	//
+	//// DS annotations
+	//var calicoNodeDaemonsetAnnotations map[string]string
+	//calicoNodeDaemonsetAnnotations = calicoNodeDaemonset.Annotations
+	//_ = calicoNodeDaemonsetAnnotations
+	//b1 := calicoNodeDaemonsetAnnotations[render.BpfOperatorAnnotation]
+	//_ = b1
 
-	// DS annotations
-	var calicoNodeDaemonsetAnnotations map[string]string
-	calicoNodeDaemonsetAnnotations = calicoNodeDaemonset.Annotations
-	_ = calicoNodeDaemonsetAnnotations
-	b1 := calicoNodeDaemonsetAnnotations[render.BpfOperatorAnnotation]
-	_ = b1
-
-	if err = r.setStevepro(ctx, instance, felixConfiguration, reqLogger); err != nil {
-		return reconcile.Result{}, err
-	}
+	//if err = r.setStevepro(ctx, instance, felixConfiguration, reqLogger); err != nil {
+	//	return reconcile.Result{}, err
+	//}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -2011,6 +2012,7 @@ func removeInstallationFinalizer(i *operator.Installation) {
 	}
 }
 
+/*
 func (r *ReconcileInstallation) setStevepro(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
 
 	log.Info("adriana-1.30.64 setStevepro beg")
@@ -2043,3 +2045,4 @@ func (r *ReconcileInstallation) setStevepro(ctx context.Context, install *operat
 
 	return nil
 }
+*/

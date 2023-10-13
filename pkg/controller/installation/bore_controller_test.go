@@ -153,9 +153,9 @@ var _ = Describe("Testing bore-controller installation", func() {
 
 			ds := getDS3(false)
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-			//mockStatus.On("AddDaemonsets", mock.Anything).Return(ds)
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 
 			fc := &crdv1.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
@@ -192,56 +192,56 @@ func createInstallation(c client.Client, ctx context.Context, dp operator.LinuxD
 }
 
 // DS env var set	FELIX_BPFENABLED: true
-func getDS1() *appsv1.DaemonSet {
-
-	envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
-	container := corev1.Container{
-		Name: render.CalicoNodeObjectName,
-		Env:  envVars,
-	}
-
-	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
-		Spec: appsv1.DaemonSetSpec{
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{container},
-				},
-			},
-		},
-		Status: appsv1.DaemonSetStatus{
-			CurrentNumberScheduled: 13,
-		},
-	}
-	return ds
-}
+//func getDS1() *appsv1.DaemonSet {
+//
+//	envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
+//	container := corev1.Container{
+//		Name: render.CalicoNodeObjectName,
+//		Env:  envVars,
+//	}
+//
+//	ds := &appsv1.DaemonSet{
+//		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+//		Spec: appsv1.DaemonSetSpec{
+//			Template: corev1.PodTemplateSpec{
+//				ObjectMeta: metav1.ObjectMeta{},
+//				Spec: corev1.PodSpec{
+//					Containers: []corev1.Container{container},
+//				},
+//			},
+//		},
+//		Status: appsv1.DaemonSetStatus{
+//			CurrentNumberScheduled: 13,
+//		},
+//	}
+//	return ds
+//}
 
 // DS env var NOT set
-func getDS2() *appsv1.DaemonSet {
-
-	envVars := []corev1.EnvVar{}
-	container := corev1.Container{
-		Name: render.CalicoNodeObjectName,
-		Env:  envVars,
-	}
-
-	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
-		Spec: appsv1.DaemonSetSpec{
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{container},
-				},
-			},
-		},
-		Status: appsv1.DaemonSetStatus{
-			CurrentNumberScheduled: 2,
-		},
-	}
-	return ds
-}
+//func getDS2() *appsv1.DaemonSet {
+//
+//	envVars := []corev1.EnvVar{}
+//	container := corev1.Container{
+//		Name: render.CalicoNodeObjectName,
+//		Env:  envVars,
+//	}
+//
+//	ds := &appsv1.DaemonSet{
+//		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+//		Spec: appsv1.DaemonSetSpec{
+//			Template: corev1.PodTemplateSpec{
+//				ObjectMeta: metav1.ObjectMeta{},
+//				Spec: corev1.PodSpec{
+//					Containers: []corev1.Container{container},
+//				},
+//			},
+//		},
+//		Status: appsv1.DaemonSetStatus{
+//			CurrentNumberScheduled: 2,
+//		},
+//	}
+//	return ds
+//}
 
 // DS annotation set
 func getDS3(annotation bool) *appsv1.DaemonSet {

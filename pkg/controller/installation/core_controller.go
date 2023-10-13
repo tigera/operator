@@ -1429,8 +1429,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
-	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
+	//r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
+	//r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
+	r.status.AddDaemonsets([]types.NamespacedName{{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}})
+	r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)
 
 	// Run this after we have rendered our components so the new (operator created)
@@ -1498,6 +1500,58 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
+
+	// adriana
+	//instance.Spec.CalicoNetwork.LinuxDataplane
+	//test := common.BpfDataplaneEnabled(&instance.Spec)
+	//_ = test // Iptables OR BPF
+	//// https://stackoverflow.com/questions/38552803/how-to-convert-a-bool-to-a-string-in-go
+	//text := strconv.FormatBool(test)
+	//_ = text
+
+	//adriana
+	//ds2 := appsv1.DaemonSet{}
+	//ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	//r.client.Get(ctx, ns2, &ds2)
+
+	//// Get the calico-node daemonset.
+	//calicoNodeDaemonset := appsv1.DaemonSet{}
+	//err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	//return reconcile.Result{}, err
+	////_ = calicoNodeDaemonset
+	//
+	//bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, calicoNodeDaemonset.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	//if err != nil {
+	//	reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
+	//	return reconcile.Result{}, err
+	//}
+	//
+	//bpfEnabledStatus := false
+	//if bpfEnabledEnvVar != nil {
+	//	bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
+	//	if err != nil {
+	//		reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
+	//		return reconcile.Result{}, err
+	//	}
+	//}
+	//_ = bpfEnabledStatus
+
+	// FC annotations - if not found then will be ""
+	//var felixConfigurationAnnotations map[string]string
+	//felixConfigurationAnnotations = felixConfiguration.Annotations
+	//b2 := felixConfigurationAnnotations[render.BpfOperatorAnnotation]
+	//_ = b2
+	//
+	//// DS annotations
+	//var calicoNodeDaemonsetAnnotations map[string]string
+	//calicoNodeDaemonsetAnnotations = calicoNodeDaemonset.Annotations
+	//_ = calicoNodeDaemonsetAnnotations
+	//b1 := calicoNodeDaemonsetAnnotations[render.BpfOperatorAnnotation]
+	//_ = b1
+
+	//if err = r.setStevepro(ctx, instance, felixConfiguration, reqLogger); err != nil {
+	//	return reconcile.Result{}, err
+	//}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -1957,3 +2011,38 @@ func removeInstallationFinalizer(i *operator.Installation) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(CalicoFinalizer, i.GetFinalizers()))
 	}
 }
+
+/*
+func (r *ReconcileInstallation) setStevepro(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
+
+	log.Info("adriana-1.30.64 setStevepro beg")
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+
+	if fc.Annotations != nil {
+		an := fc.Annotations
+		an[render.BpfOperatorAnnotation] = "true"
+		fc.SetAnnotations(an)
+	}
+
+	log.Info("adriana-1.30.64 setStevepro bpf BEG")
+	bpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+	if bpfEnabled {
+		log.Info("adriana-1.30.64 setStevepro bpf val=TRUE")
+	} else {
+		log.Info("adriana-1.30.64 setStevepro bpf val=false")
+	}
+	//log.Info("adriana-1.30.64 setStevepro bpf val", bpfEnabled)
+	log.Info("adriana-1.30.64 setStevepro bpf end")
+	//bpfEnabled := true
+	fc.Spec.BPFLogLevel = "Info"
+	fc.Spec.BPFEnabled = &bpfEnabled
+	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+		log.Info("adriana-1.30.64 setStevepro ERROR:")
+		return err
+	}
+	log.Info("adriana-1.30.64 setStevepro patched:")
+	log.Info("adriana-1.30.64 setStevepro end")
+
+	return nil
+}
+*/

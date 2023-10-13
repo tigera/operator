@@ -834,20 +834,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	//adriana
-	//ds2 := appsv1.DaemonSet{}
-	//ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	//r.client.Get(ctx, ns2, &ds2)
-	////if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
-	////
-	////}
-	//val2 := ds2.Status.CurrentNumberScheduled
-	//_ = val2
-	//dp := instance.Spec.CalicoNetwork.LinuxDataplane
-	//mg := fmt.Sprintf("adriana linuxDP='%s'", *dp)
-	//reqLogger.Info(mg)
-	//adriana
-
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
@@ -1413,17 +1399,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		)
 	}
 
-	////adriana
-	//ds := appsv1.DaemonSet{}
-	//ns := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	//r.client.Get(ctx, ns, &ds)
-	////if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
-	////
-	////}
-	//val := ds.Status.CurrentNumberScheduled
-	//_ = val
-	//////adriana
-
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Error getting ImageSet", err, reqLogger)
@@ -1440,17 +1415,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	//adriana - DS is accessible here!!
-	ds1 := appsv1.DaemonSet{}
-	ns1 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	r.client.Get(ctx, ns1, &ds1)
-	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
-	//
-	//}
-	val1 := ds1.Status.CurrentNumberScheduled
-	_ = val1
-	////adriana
-
 	// Create a component handler to create or update the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
@@ -1459,17 +1423,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
-
-	//adriana - DS is NOT accessible now??
-	ds2 := appsv1.DaemonSet{}
-	ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	r.client.Get(ctx, ns2, &ds2)
-	//if ds.Spec.Template != nil && ds.Spec.Template.Spec != nil && ds.Spec.Template.Spec.Containers != nil {
-	//
-	//}
-	val2 := ds2.Status.CurrentNumberScheduled
-	_ = val2
-	////adriana
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
@@ -1546,30 +1499,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// adriana
-	//dp2 := appsv1.Deployment{}
-	//nsZ := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.KubeControllersDeploymentName}
-	//r.client.Get(ctx, nsZ, &dp2)
-	//nop := len(dp2.Name)
-	//if nop > 1 {
-	//	t := dp2.Spec.Replicas
-	//	_ = t
-	//	reqLogger.Info("positive")
-	//}
-	// adriana
+	//instance.Spec.CalicoNetwork.LinuxDataplane
+	test := common.BpfDataplaneEnabled(&instance.Spec)
+	_ = test // Iptables OR BPF
+	// https://stackoverflow.com/questions/38552803/how-to-convert-a-bool-to-a-string-in-go
+	text := strconv.FormatBool(test)
+	_ = text
 
-	// calico-node DS not accessible via unit test at this point now??
-	//mykey := client.ObjectKey{Name: "calico-node", Namespace: "calico-system"}
-	//daemonset := &appsv1.DaemonSet{}
+	//adriana
+	ds2 := appsv1.DaemonSet{}
+	ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	r.client.Get(ctx, ns2, &ds2)
+	_ = ds2
 
-	//var list client.ObjectList
-	//var opts client.ListOption{}
-	//err = r.client.List(ctx, list, opts)
-	//err = r.client.Get(ctx, mykey, daemonset)
-	//val := daemonset.Status.CurrentNumberScheduled
-	//_ = val
-	//con := daemonset.Spec.Template.Spec.Containers
-	//_ = len(con)
-	////adriana
+	v, err := convert.GetEnv(ctx, r.client, ds2.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
+		return reconcile.Result{}, err
+	}
+	_ = v
+	//adriana
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()

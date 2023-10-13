@@ -1161,6 +1161,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// adriana
+	hp := felixConfiguration.Spec.HealthPort
+	_ = hp
+	an := felixConfiguration.Annotations
+	ln := len(an)
+	_ = ln
+
 	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
 	// Operator is responsible for creating a service which maps to that port.
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
@@ -1534,6 +1541,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 	_ = bpfEnabledStatus
+
+	// DS annotations
+	var calicoNodeDaemonsetAnnotations map[string]string
+	calicoNodeDaemonsetAnnotations = calicoNodeDaemonset.Annotations
+	_ = calicoNodeDaemonsetAnnotations
+	b1 := calicoNodeDaemonsetAnnotations[render.BpfOperatorAnnotation]
+	_ = b1
+
+	// FC annotations
+	var felixConfigurationAnnotations map[string]string
+	felixConfigurationAnnotations := felixConfiguration.Annotations
+	b2 := felixConfigurationAnnotations[render.BpfOperatorAnnotation]
+	_ = b2
 
 	//t := *bpfEnabledEnvVar
 	//f, err := strconv.ParseBool(t)

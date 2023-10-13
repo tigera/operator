@@ -91,22 +91,6 @@ var _ = Describe("Testing bore-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node2",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node3",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
 				&appsv1.Deployment{
 					TypeMeta:   metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
@@ -151,23 +135,6 @@ var _ = Describe("Testing bore-controller installation", func() {
 			}
 
 			r.typhaAutoscaler.start(ctx)
-			//ca, err := tls.MakeCA("test")
-			//Expect(err).NotTo(HaveOccurred())
-			//cert, _, _ = ca.Config.GetPEMBytes() // create a valid pem block
-			// We start off with a 'standard' installation, with nothing special
-
-			//opt := operator.LinuxDataplaneBPF
-			//cr = &operator.Installation{
-			//	ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			//	Spec: operator.InstallationSpec{
-			//		Variant:               operator.Calico,
-			//		Registry:              "some.registry.org/",
-			//		CertificateManagement: &operator.CertificateManagement{CACert: cert},
-			//		CalicoNetwork: &operator.CalicoNetworkSpec{
-			//			LinuxDataplane: &opt,
-			//		},
-			//	},
-			//}
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -205,7 +172,6 @@ var _ = Describe("Testing bore-controller installation", func() {
 })
 
 func createInstallation(c client.Client, ctx context.Context, dp operator.LinuxDataplaneOption) {
-
 	ca, err := tls.MakeCA("test")
 	Expect(err).NotTo(HaveOccurred())
 	cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
@@ -222,7 +188,6 @@ func createInstallation(c client.Client, ctx context.Context, dp operator.LinuxD
 			},
 		},
 	}
-
 	Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 }
 

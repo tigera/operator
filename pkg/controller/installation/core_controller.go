@@ -1161,13 +1161,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// adriana
-	hp := felixConfiguration.Spec.HealthPort
-	_ = hp
-	an := felixConfiguration.Annotations
-	ln := len(an)
-	_ = ln
-
 	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
 	// Operator is responsible for creating a service which maps to that port.
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
@@ -1542,6 +1535,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	_ = bpfEnabledStatus
 
+	// FC annotations - if not found then will be ""
+	var felixConfigurationAnnotations map[string]string
+	felixConfigurationAnnotations = felixConfiguration.Annotations
+	b2 := felixConfigurationAnnotations[render.BpfOperatorAnnotation]
+	_ = b2
+
 	// DS annotations
 	var calicoNodeDaemonsetAnnotations map[string]string
 	calicoNodeDaemonsetAnnotations = calicoNodeDaemonset.Annotations
@@ -1549,21 +1548,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	b1 := calicoNodeDaemonsetAnnotations[render.BpfOperatorAnnotation]
 	_ = b1
 
-	// FC annotations
-	var felixConfigurationAnnotations map[string]string
-	felixConfigurationAnnotations := felixConfiguration.Annotations
-	b2 := felixConfigurationAnnotations[render.BpfOperatorAnnotation]
-	_ = b2
-
-	//t := *bpfEnabledEnvVar
-	//f, err := strconv.ParseBool(t)
-	//f, err := strconv.ParseBool(*bpfEnabledEnvVar)
-	//if err != nil {
-	//	reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
-	//	return reconcile.Result{}, err
-	//}
-	//_ = f
-	//adriana
+	if err = r.setStevepro(ctx, instance, felixConfiguration, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -2022,4 +2009,43 @@ func removeInstallationFinalizer(i *operator.Installation) {
 	if stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(CalicoFinalizer, i.GetFinalizers()))
 	}
+}
+
+func (r *ReconcileInstallation) setStevepro(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
+	//	updated := false
+	log.Info("adriana-1.30.64 setStevepro beg")
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+	fc.ObjectMeta.Name = "default"
+	an := fc.Annotations
+	//log.Info("annn", an)
+	an[render.BpfOperatorAnnotation] = "true"
+	//nw := make(map[string]string)
+	//nw["foo"] = "bar"
+	fc.SetAnnotations(an)
+	//a2 := fc.Annotations
+	//log.Info("annn", a2)
+	//if len(fc.Spec.BPFLogLevel) == 0 {
+	log.Info("adriana-1.30.64 setStevepro bpf BEG")
+	bpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+	if bpfEnabled {
+		log.Info("adriana-1.30.64 setStevepro bpf val=TRUE")
+	} else {
+		log.Info("adriana-1.30.64 setStevepro bpf val=false")
+	}
+	//log.Info("adriana-1.30.64 setStevepro bpf val", bpfEnabled)
+	log.Info("adriana-1.30.64 setStevepro bpf end")
+	//bpfEnabled := true
+	fc.Spec.BPFLogLevel = "Info"
+	fc.Spec.BPFEnabled = &bpfEnabled
+	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+		log.Info("adriana-1.30.64 setStevepro ERROR:")
+		return err
+	}
+	log.Info("adriana-1.30.64 setStevepro patched:")
+	//updated = true
+	//}
+	log.Info("adriana-1.30.64 setStevepro end")
+	//return updated
+
+	return nil
 }

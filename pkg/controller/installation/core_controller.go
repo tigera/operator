@@ -2016,15 +2016,13 @@ func (r *ReconcileInstallation) setStevepro(ctx context.Context, install *operat
 	log.Info("adriana-1.30.64 setStevepro beg")
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 	fc.ObjectMeta.Name = "default"
-	an := fc.Annotations
-	//log.Info("annn", an)
-	an[render.BpfOperatorAnnotation] = "true"
-	//nw := make(map[string]string)
-	//nw["foo"] = "bar"
-	fc.SetAnnotations(an)
-	//a2 := fc.Annotations
-	//log.Info("annn", a2)
-	//if len(fc.Spec.BPFLogLevel) == 0 {
+
+	if fc.Annotations != nil {
+		an := fc.Annotations
+		an[render.BpfOperatorAnnotation] = "true"
+		fc.SetAnnotations(an)
+	}
+
 	log.Info("adriana-1.30.64 setStevepro bpf BEG")
 	bpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
 	if bpfEnabled {

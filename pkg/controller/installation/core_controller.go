@@ -2022,10 +2022,9 @@ func removeInstallationFinalizer(i *operator.Installation) {
 }
 
 func (r *ReconcileInstallation) setStevepro(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
-	//	updated := false
+
 	log.Info("adriana-1.30.64 setStevepro beg")
 	patchFrom := client.MergeFrom(fc.DeepCopy())
-	fc.ObjectMeta.Name = "default"
 
 	if fc.Annotations != nil {
 		an := fc.Annotations
@@ -2050,10 +2049,7 @@ func (r *ReconcileInstallation) setStevepro(ctx context.Context, install *operat
 		return err
 	}
 	log.Info("adriana-1.30.64 setStevepro patched:")
-	//updated = true
-	//}
 	log.Info("adriana-1.30.64 setStevepro end")
-	//return updated
 
 	return nil
 }

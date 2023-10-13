@@ -1510,17 +1510,30 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	_ = text
 
 	//adriana
-	ds2 := appsv1.DaemonSet{}
-	ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	r.client.Get(ctx, ns2, &ds2)
-	_ = ds2
+	//ds2 := appsv1.DaemonSet{}
+	//ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
+	//r.client.Get(ctx, ns2, &ds2)
 
-	v, err := convert.GetEnv(ctx, r.client, ds2.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	// Get the calico-node daemonset.
+	calicoNodeDaemonset := appsv1.DaemonSet{}
+	r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	_ = calicoNodeDaemonset
+
+	bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, calicoNodeDaemonset.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
 	if err != nil {
 		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
 		return reconcile.Result{}, err
 	}
-	_ = v
+	_ = bpfEnabledEnvVar
+
+	//t := *bpfEnabledEnvVar
+	//f, err := strconv.ParseBool(t)
+	f, err := strconv.ParseBool(*bpfEnabledEnvVar)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
+		return reconcile.Result{}, err
+	}
+	_ = f
 	//adriana
 
 	// We can clear the degraded state now since as far as we know everything is in order.

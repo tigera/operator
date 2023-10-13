@@ -18,6 +18,9 @@ import (
 	"context"
 	"time"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"k8s.io/apimachinery/pkg/types"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -57,7 +60,8 @@ var _ = Describe("Testing bore-controller installation", func() {
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
 
-	var cr *operator.Installation
+	//var cr *operator.Installation
+	//var cert []byte
 
 	//notReady := &utils.ReadyFlag{}
 	ready := &utils.ReadyFlag{}
@@ -150,18 +154,23 @@ var _ = Describe("Testing bore-controller installation", func() {
 			}
 
 			r.typhaAutoscaler.start(ctx)
-			ca, err := tls.MakeCA("test")
-			Expect(err).NotTo(HaveOccurred())
-			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			//ca, err := tls.MakeCA("test")
+			//Expect(err).NotTo(HaveOccurred())
+			//cert, _, _ = ca.Config.GetPEMBytes() // create a valid pem block
 			// We start off with a 'standard' installation, with nothing special
-			cr = &operator.Installation{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Spec: operator.InstallationSpec{
-					Variant:               operator.Calico,
-					Registry:              "some.registry.org/",
-					CertificateManagement: &operator.CertificateManagement{CACert: cert},
-				},
-			}
+
+			//opt := operator.LinuxDataplaneBPF
+			//cr = &operator.Installation{
+			//	ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			//	Spec: operator.InstallationSpec{
+			//		Variant:               operator.Calico,
+			//		Registry:              "some.registry.org/",
+			//		CertificateManagement: &operator.CertificateManagement{CACert: cert},
+			//		CalicoNetwork: &operator.CalicoNetworkSpec{
+			//			LinuxDataplane: &opt,
+			//		},
+			//	},
+			//}
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
@@ -176,12 +185,35 @@ var _ = Describe("Testing bore-controller installation", func() {
 
 		It("should use builtin images", func() {
 
+			//opt := operator.LinuxDataplaneIptables
+			//cr = &operator.Installation{
+			//	ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			//	Spec: operator.InstallationSpec{
+			//		Variant:               operator.Calico,
+			//		Registry:              "some.registry.org/",
+			//		CertificateManagement: &operator.CertificateManagement{CACert: cert},
+			//		CalicoNetwork: &operator.CalicoNetworkSpec{
+			//			LinuxDataplane: &opt,
+			//		},
+			//	},
+			//}
+			//cr = getCR()
+			//Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			//getCR(c, ctx, operator.LinuxDataplaneIptables)
+			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
+
 			ds := getDS1()
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
 			//mockStatus.On("AddDaemonsets", mock.Anything).Return(ds)
 
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.HealthPort).NotTo(BeNil())
+			Expect(*fc.Spec.HealthPort).To(Equal(9099))
+
 			Expect(err).ShouldNot(HaveOccurred())
 
 			sum := 3
@@ -190,6 +222,28 @@ var _ = Describe("Testing bore-controller installation", func() {
 	})
 
 })
+
+func createInstallation(c client.Client, ctx context.Context, dp operator.LinuxDataplaneOption) {
+
+	ca, err := tls.MakeCA("test")
+	Expect(err).NotTo(HaveOccurred())
+	cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+
+	//We start off with a 'standard' installation, with nothing special except setting the dataplane.
+	cr := &operator.Installation{
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		Spec: operator.InstallationSpec{
+			Variant:               operator.Calico,
+			Registry:              "some.registry.org/",
+			CertificateManagement: &operator.CertificateManagement{CACert: cert},
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				LinuxDataplane: &dp,
+			},
+		},
+	}
+
+	Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+}
 
 func getDS1() *appsv1.DaemonSet {
 

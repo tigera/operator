@@ -60,10 +60,6 @@ var _ = Describe("Testing bore-controller installation", func() {
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
 
-	//var cr *operator.Installation
-	//var cert []byte
-
-	//notReady := &utils.ReadyFlag{}
 	ready := &utils.ReadyFlag{}
 	ready.MarkAsReady()
 
@@ -185,24 +181,9 @@ var _ = Describe("Testing bore-controller installation", func() {
 
 		It("should use builtin images", func() {
 
-			//opt := operator.LinuxDataplaneIptables
-			//cr = &operator.Installation{
-			//	ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			//	Spec: operator.InstallationSpec{
-			//		Variant:               operator.Calico,
-			//		Registry:              "some.registry.org/",
-			//		CertificateManagement: &operator.CertificateManagement{CACert: cert},
-			//		CalicoNetwork: &operator.CalicoNetworkSpec{
-			//			LinuxDataplane: &opt,
-			//		},
-			//	},
-			//}
-			//cr = getCR()
-			//Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-			//getCR(c, ctx, operator.LinuxDataplaneIptables)
 			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
 
-			ds := getDS1()
+			ds := getDS2()
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
 			//mockStatus.On("AddDaemonsets", mock.Anything).Return(ds)
 
@@ -213,8 +194,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.HealthPort).NotTo(BeNil())
 			Expect(*fc.Spec.HealthPort).To(Equal(9099))
-
-			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.BPFLogLevel).To(Equal("Info"))
 
 			sum := 3
 			Expect(sum).To(Equal(3))
@@ -265,6 +245,31 @@ func getDS1() *appsv1.DaemonSet {
 		},
 		Status: appsv1.DaemonSetStatus{
 			CurrentNumberScheduled: 13,
+		},
+	}
+	return ds
+}
+
+func getDS2() *appsv1.DaemonSet {
+
+	envVars := []corev1.EnvVar{}
+	container := corev1.Container{
+		Name: render.CalicoNodeObjectName,
+		Env:  envVars,
+	}
+
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+		Spec: appsv1.DaemonSetSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{container},
+				},
+			},
+		},
+		Status: appsv1.DaemonSetStatus{
+			CurrentNumberScheduled: 2,
 		},
 	}
 	return ds

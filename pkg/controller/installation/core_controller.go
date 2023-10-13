@@ -1521,16 +1521,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
 		return reconcile.Result{}, err
 	}
-	_ = bpfEnabledEnvVar
+
+	bpfEnabledStatus := false
+	if bpfEnabledEnvVar != nil {
+		bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
+		if err != nil {
+			reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
+			return reconcile.Result{}, err
+		}
+	}
+	_ = bpfEnabledStatus
 
 	//t := *bpfEnabledEnvVar
 	//f, err := strconv.ParseBool(t)
-	f, err := strconv.ParseBool(*bpfEnabledEnvVar)
-	if err != nil {
-		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
-		return reconcile.Result{}, err
-	}
-	_ = f
+	//f, err := strconv.ParseBool(*bpfEnabledEnvVar)
+	//if err != nil {
+	//	reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
+	//	return reconcile.Result{}, err
+	//}
+	//_ = f
 	//adriana
 
 	// We can clear the degraded state now since as far as we know everything is in order.

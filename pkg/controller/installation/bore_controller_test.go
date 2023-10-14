@@ -147,6 +147,27 @@ var _ = Describe("Testing bore-controller installation", func() {
 			cancel()
 		})
 
+		It("adrianaTODO test#1", func() {
+
+			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
+
+			ds := getDS3(false)
+			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.HealthPort).NotTo(BeNil())
+			Expect(*fc.Spec.HealthPort).To(Equal(9099))
+			//Expect(fc.Spec.BPFLogLevel).To(Equal("Info"))
+
+			sum := 4
+			Expect(sum).To(Equal(4))
+		})
+
 		It("should use builtin images", func() {
 
 			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
@@ -164,8 +185,8 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(*fc.Spec.HealthPort).To(Equal(9099))
 			//Expect(fc.Spec.BPFLogLevel).To(Equal("Info"))
 
-			sum := 3
-			Expect(sum).To(Equal(3))
+			sum := 5
+			Expect(sum).To(Equal(5))
 		})
 	})
 

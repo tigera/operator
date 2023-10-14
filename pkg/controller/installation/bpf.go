@@ -21,7 +21,6 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/render"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -32,14 +31,24 @@ func Adriana() (int, error) {
 }
 
 func Adriana1(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
+	return setStevepro(r, ctx, install, fc, log)
+}
+
+func setStevepro(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+	bpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+	// TODO - check from #1
+	//bpfEnabled = false
+	fc.Spec.BPFEnabled = &bpfEnabled
+	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+		log.Info("adriana-1.30.64 setStevepro ERROR:")
+		return err
+	}
 	return nil
 }
 
-//func Adriana1(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error
-//return r.setStevepro(ctx, instance, felixConfiguration, reqLogger)
-//}
-
-func setStevepro(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
+/*
+func setStevepro1(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
 
 	log.Info("adriana-1.30.64 setStevepro beg")
 	patchFrom := client.MergeFrom(fc.DeepCopy())
@@ -71,3 +80,4 @@ func setStevepro(r *ReconcileInstallation, ctx context.Context, install *operato
 
 	return nil
 }
+*/

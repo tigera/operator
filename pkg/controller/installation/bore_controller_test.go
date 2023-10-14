@@ -185,7 +185,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
-			Expect(*fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
+			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
 
 			sum := 4
 			Expect(sum).To(Equal(4))

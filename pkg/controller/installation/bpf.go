@@ -17,6 +17,8 @@ package installation
 import (
 	"context"
 
+	"github.com/tigera/operator/pkg/render"
+
 	"github.com/go-logr/logr"
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -36,6 +38,17 @@ func Adriana1(r *ReconcileInstallation, ctx context.Context, install *operator.I
 
 func setStevepro(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
 	patchFrom := client.MergeFrom(fc.DeepCopy())
+
+	// Managed fields "light".
+	var fcAnnotations map[string]string
+	if fc.Annotations == nil {
+		fcAnnotations = make(map[string]string)
+	} else {
+		fcAnnotations = fc.Annotations
+	}
+	fcAnnotations[render.BpfOperatorAnnotation] = "true"
+	fc.SetAnnotations(fcAnnotations)
+
 	bpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
 	// TODO - check from #1
 	//bpfEnabled = false

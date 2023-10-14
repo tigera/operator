@@ -64,7 +64,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 	ready := &utils.ReadyFlag{}
 	ready.MarkAsReady()
 
-	Context("image reconciliation tests", func() {
+	Context("Reconcile tests BPF Upgrade", func() {
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -147,22 +147,45 @@ var _ = Describe("Testing bore-controller installation", func() {
 			cancel()
 		})
 
-		It("adrianaTODO test#1", func() {
+		It("adrianaTODO should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
 
+			// Arrange.
+			// FELIX_BPFENABLED env var only set in BPF datatplane.
 			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
 
-			ds := getDS3(false)
+			// Create calico-node Daemonset with FELIX_BPFENABLED env var set.
+			envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
+			container := corev1.Container{
+				Name: render.CalicoNodeObjectName,
+				Env:  envVars,
+			}
+			ds := &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+				Spec: appsv1.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{container},
+						},
+					},
+				},
+				Status: appsv1.DaemonSetStatus{
+					CurrentNumberScheduled: 13,
+				},
+			}
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
 
+			// Act.
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
+			// Assert.
+			bpfEnabled := true
 			fc := &crdv1.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(fc.Spec.HealthPort).NotTo(BeNil())
-			Expect(*fc.Spec.HealthPort).To(Equal(9099))
-			//Expect(fc.Spec.BPFLogLevel).To(Equal("Info"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
 
 			sum := 4
 			Expect(sum).To(Equal(4))

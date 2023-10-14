@@ -13,3 +13,9 @@
 // limitations under the License.
 
 package installation
+
+func Adriana() (int, error) {
+	//err := fmt.Errorf("this is a pretent errro")
+	//return 8, err
+	return 8, nil
+}

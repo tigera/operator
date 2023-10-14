@@ -84,7 +84,7 @@ func printVersion() {
 
 func main() {
 	//log.Info("adriana custom operator v1.30.5-14-ge85c17724148")
-	log.Info("adriana-1.30.6193")
+	log.Info("adriana-1.30.6196")
 
 	var enableLeaderElection bool
 	// urlOnlyKubeconfig is a slight hack; we need to get the apiserver from the

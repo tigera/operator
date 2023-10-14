@@ -1499,6 +1499,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// adriana
+	_, err = Adriana()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	//instance.Spec.CalicoNetwork.LinuxDataplane
 	//test := common.BpfDataplaneEnabled(&instance.Spec)
 	//_ = test // Iptables OR BPF

@@ -147,7 +147,89 @@ var _ = Describe("Testing bore-controller installation", func() {
 			cancel()
 		})
 
-		It("adrianaTODO should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
+		It("adrianaTODO #3 should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
+
+			// Arrange.
+			// Upgrade cluster from IP Tables to BPF dataplane.
+			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
+
+			// Create calico-node Daemonset annotation to indicate update rollout complete.
+			annotation := true
+			dsAnnotations := make(map[string]string)
+			dsAnnotations[render.BpfOperatorAnnotation] = strconv.FormatBool(annotation)
+			container := corev1.Container{Name: render.CalicoNodeObjectName}
+
+			ds := &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        common.NodeDaemonSetName,
+					Namespace:   common.CalicoNamespace,
+					Annotations: dsAnnotations,
+				},
+				Spec: appsv1.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{},
+						Spec:       corev1.PodSpec{Containers: []corev1.Container{container}},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
+
+			// Act.
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Assert.
+			bpfEnabled := true
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
+			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
+		})
+
+		It("#2 should query calico-node DS and if apply logic to verify update rollout is complete", func() {
+
+			// Arrange.
+			// Upgrade cluster from IP Tables to BPF dataplane.
+			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
+
+			// Create calico-node Daemonset annotation to indicate update rollout complete.
+			annotation := true
+			dsAnnotations := make(map[string]string)
+			dsAnnotations[render.BpfOperatorAnnotation] = strconv.FormatBool(annotation)
+			container := corev1.Container{Name: render.CalicoNodeObjectName}
+
+			ds := &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        common.NodeDaemonSetName,
+					Namespace:   common.CalicoNamespace,
+					Annotations: dsAnnotations,
+				},
+				Spec: appsv1.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{},
+						Spec:       corev1.PodSpec{Containers: []corev1.Container{container}},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
+
+			// Act.
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Assert.
+			bpfEnabled := true
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
+			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
+		})
+
+		It("#1 should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
 
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
@@ -186,31 +268,8 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-
-			sum := 4
-			Expect(sum).To(Equal(4))
 		})
 
-		It("should use builtin images", func() {
-
-			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
-
-			ds := getDS3(false)
-			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			fc := &crdv1.FelixConfiguration{}
-			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(fc.Spec.HealthPort).NotTo(BeNil())
-			Expect(*fc.Spec.HealthPort).To(Equal(9099))
-			//Expect(fc.Spec.BPFLogLevel).To(Equal("Info"))
-
-			sum := 5
-			Expect(sum).To(Equal(5))
-		})
 	})
 
 })

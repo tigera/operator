@@ -31,12 +31,13 @@ import (
 
 func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 
-	// Use case #1
-	patchFelixConfig, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
+	// Query calico-node DS: if FELIX_BPFENABLED env var set and FC bpfEnabled unset then patch FC and quit.
+	patchFelixConfig, err := processDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
 	if err != nil {
 		return err
 	}
 
+	// Otherwise check dataplane and patch Felix Config according to logic:
 	if !patchFelixConfig {
 
 		// Check the install dataplane mode is either Iptables or BPF.
@@ -44,6 +45,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		if !installBpfEnabled {
 			patchFelixConfig = true
 		} else {
+			// BPF dataplane: check daemonset rollout complete.
 			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
 		}
 
@@ -70,24 +72,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 	return nil
 }
 
-func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
-	//return ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true"
-
-	if ds.Spec.Template.Spec.Volumes == nil {
-		return false
-	}
-
-	for _, volume := range ds.Spec.Template.Spec.Volumes {
-		//if volume.Name == common.BPFVolumeName {
-		if volume.Name == "bpffs" {
-			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
-		}
-	}
-
-	return false
-}
-
-func queryDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 
 	dsBpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, ds.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
 	if err != nil {
@@ -114,6 +99,10 @@ func queryDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *app
 	}
 
 	return false, nil
+}
+
+func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
+	return ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true"
 }
 
 func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchBpfEnabled bool) error {

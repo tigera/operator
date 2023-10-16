@@ -51,7 +51,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = Describe("Testing bore-controller installation", func() {
+var _ = Describe("suzanne Testing BPF Upgrade without disruption during core-controller installation", func() {
 
 	var c client.Client
 	var cs *kfake.Clientset
@@ -65,7 +65,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 	ready := &utils.ReadyFlag{}
 	ready.MarkAsReady()
 
-	Context("Reconcile tests BPF Upgrade", func() {
+	Context("Reconcile tests BPF Upgrade without disruption", func() {
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -151,7 +151,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			cancel()
 		})
 
-		It("#1 should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
+		It("should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
 
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
@@ -193,7 +193,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
 		})
 
-		It("#2 should query calico-node DS in BPF dataplane and if annotations not set then verify rollout not complete", func() {
+		It("should query calico-node DS in BPF dataplane and if annotations not set then verify rollout not complete", func() {
 
 			// Arrange.
 			// Upgrade cluster from IP Tables to BPF dataplane.
@@ -229,7 +229,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(fc.Spec.BPFEnabled).To(BeNil())
 		})
 
-		It(" #3 should query calico-node DS in BPF dataplane and if annotations set then verify rollout complete", func() {
+		It(" should query calico-node DS in BPF dataplane and if annotations set then verify rollout complete", func() {
 
 			// Arrange.
 			// Upgrade cluster from IP Tables to BPF dataplane.
@@ -271,103 +271,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
 		})
 
-		It("adriana #3b should query calico-node DS in BPF dataplane and if BPF pre-reqs not set then verify rollout not complete", func() {
-
-			// Arrange.
-			// Upgrade cluster from IP Tables to BPF dataplane.
-			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
-
-			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			volume := corev1.Volume{
-				Name: "bpffs",
-			}
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
-			ds := &appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      common.NodeDaemonSetName,
-					Namespace: common.CalicoNamespace,
-				},
-				Spec: appsv1.DaemonSetSpec{
-					Template: corev1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{},
-						Spec: corev1.PodSpec{
-							Volumes:    []corev1.Volume{volume},
-							Containers: []corev1.Container{container},
-						},
-					},
-				},
-				Status: appsv1.DaemonSetStatus{
-					CurrentNumberScheduled: 2,
-					UpdatedNumberScheduled: 2,
-					NumberAvailable:        1,
-				},
-			}
-			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-
-			// Create felix config
-			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-
-			// Act.
-			err := bpfUpgradeWithoutDisruption(&r, ctx, cr, ds, fc, reqLogger)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// Assert.
-			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(fc.Spec.BPFEnabled).To(BeNil())
-		})
-		It("adriana #3c should query calico-node DS in BPF dataplane and if BPF pre-reqs set then verify rollout complete", func() {
-
-			// Arrange.
-			// Upgrade cluster from IP Tables to BPF dataplane.
-			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
-
-			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			volume := corev1.Volume{
-				Name: "bpffs",
-			}
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
-			ds := &appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      common.NodeDaemonSetName,
-					Namespace: common.CalicoNamespace,
-				},
-				Spec: appsv1.DaemonSetSpec{
-					Template: corev1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{},
-						Spec: corev1.PodSpec{
-							Volumes:    []corev1.Volume{volume},
-							Containers: []corev1.Container{container},
-						},
-					},
-				},
-				Status: appsv1.DaemonSetStatus{
-					CurrentNumberScheduled: 2,
-					UpdatedNumberScheduled: 2,
-					NumberAvailable:        2,
-				},
-			}
-			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-
-			// Create felix config
-			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-
-			// Act.
-			err := bpfUpgradeWithoutDisruption(&r, ctx, cr, ds, fc, reqLogger)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// Assert.
-			bpfEnabled := true
-			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
-			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
-		})
-
-		It(" #4 should query calico-node DS in Iptables dataplane and if annotations not set then verify rollout not complete", func() {
+		It(" should query calico-node DS in Iptables dataplane and if annotations not set then verify rollout not complete", func() {
 
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.

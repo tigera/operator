@@ -151,7 +151,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			cancel()
 		})
 
-		It("should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
+		It("adrianaTODO should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
 
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.

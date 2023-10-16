@@ -57,11 +57,6 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		}
 		return err
 	}
-	//
-	reqLogger.Info("testing")
-
-	test := ds.Annotations["foo"]
-	_ = test
 
 	return err
 }

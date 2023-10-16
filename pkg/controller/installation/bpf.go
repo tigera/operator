@@ -42,7 +42,8 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		// Check the install dataplane mode is either Iptables or BPF.
 		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
 		if installBpfEnabled {
-			if ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true" {
+			//if ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true" {
+			if checkDaemonsetRolloutComplete(ds) {
 				err = patchFelixConfiguration(r, ctx, fc, reqLogger, true)
 				if err != nil {
 					return err
@@ -68,8 +69,8 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 	return nil
 }
 
-func checkDaemonsetRolloutComplete() bool {
-	return false
+func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
+	return ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true"
 }
 
 func queryDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {

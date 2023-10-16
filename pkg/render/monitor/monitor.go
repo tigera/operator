@@ -745,9 +745,11 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector: metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
-					{Key: "k8s-app",
+					{
+						Key:      "k8s-app",
 						Operator: metav1.LabelSelectorOpIn,
-						Values:   []string{"calico-node", "calico-node-windows"}},
+						Values:   []string{"calico-node", "calico-node-windows"},
+					},
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"calico-system"}},
@@ -823,9 +825,11 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector: metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
-					{Key: "k8s-app",
+					{
+						Key:      "k8s-app",
 						Operator: metav1.LabelSelectorOpIn,
-						Values:   []string{"fluentd-node", "fluentd-node-windows"}},
+						Values:   []string{"fluentd-node", "fluentd-node-windows"},
+					},
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{render.LogCollectorNamespace}},

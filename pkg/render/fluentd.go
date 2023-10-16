@@ -215,7 +215,10 @@ func (c *fluentdComponent) fluentdNodeName() string {
 	return FluentdNodeName
 }
 
-func (c *fluentdComponent) fluentdMetricsService() string {
+// Use different service names depending on the OS type ("fluentd-metrics"
+// vs "fluentd-metrics-windows") in order to help identify which OS daemonset
+// we are referring to.
+func (c *fluentdComponent) fluentdMetricsServiceName() string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		return FluentdMetricsServiceWindows
 	}
@@ -592,7 +595,7 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.fluentdMetricsService(),
+			Name:      c.fluentdMetricsServiceName(),
 			Namespace: LogCollectorNamespace,
 			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
 		},

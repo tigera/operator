@@ -33,16 +33,32 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 
 	// Use case #1
 	patchFelixConfig, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
-	//_, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
 	if err != nil {
 		return err
 	}
 
 	if !patchFelixConfig {
 
+		// Check the install dataplane mode is either Iptables or BPF.
 		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
-		_ = installBpfEnabled
+		if installBpfEnabled {
 
+		} else {
+			patchBpfEnabled := false
+			err = patchFelixConfiguration(r, ctx, fc, reqLogger, patchBpfEnabled)
+			if err != nil {
+				return err
+			}
+		}
+
+		patchFelixConfig = err == nil
+	}
+
+	if patchFelixConfig {
+		if fc.Spec.BPFEnabled != nil {
+			msg := fmt.Sprintf("Successfully patched Felix Config OK bpfEnabled='%s'\n", strconv.FormatBool(*fc.Spec.BPFEnabled))
+			reqLogger.Info(msg)
+		}
 	}
 
 	return nil

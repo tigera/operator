@@ -271,7 +271,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
 		})
 
-		It("adrianaTODO #4 should query calico-node DS in Iptables dataplane and if annotations not set then verify rollout not complete", func() {
+		It(" adrianaTODO #4 should query calico-node DS in Iptables dataplane and if annotations not set then verify rollout not complete", func() {
 
 			// Arrange.
 			// Upgrade cluster from IP Tables to BPF dataplane.

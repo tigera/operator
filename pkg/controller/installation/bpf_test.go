@@ -229,7 +229,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(fc.Spec.BPFEnabled).To(BeNil())
 		})
 
-		It("#3 should query calico-node DS in BPF dataplane and if annotations not set then verify rollout not complete", func() {
+		It("#3 should query calico-node DS in BPF dataplane and if annotations set then verify rollout complete", func() {
 
 			// Arrange.
 			// Upgrade cluster from IP Tables to BPF dataplane.
@@ -271,21 +271,18 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
 		})
 
-		It(" adrianaTODO #4 should query calico-node DS in Iptables dataplane and if annotations not set then verify rollout not complete", func() {
+		It(" #4 should query calico-node DS in Iptables dataplane and if annotations not set then verify rollout not complete", func() {
 
 			// Arrange.
-			// Upgrade cluster from IP Tables to BPF dataplane.
+			// Upgrade cluster from BPF to IP Tables dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			dsAnnotations := make(map[string]string)
-			dsAnnotations[render.BpfOperatorAnnotation] = "true"
 			container := corev1.Container{Name: render.CalicoNodeObjectName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        common.NodeDaemonSetName,
-					Namespace:   common.CalicoNamespace,
-					Annotations: dsAnnotations,
+					Name:      common.NodeDaemonSetName,
+					Namespace: common.CalicoNamespace,
 				},
 				Spec: appsv1.DaemonSetSpec{
 					Template: corev1.PodTemplateSpec{
@@ -312,86 +309,6 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
 			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
 		})
-		/*
-			It("#2 should query calico-node DS and if apply logic to verify update rollout is complete", func() {
-
-				// Arrange.
-				// Upgrade cluster from IP Tables to BPF dataplane.
-				createInstallation(c, ctx, operator.LinuxDataplaneBPF)
-
-				// Create calico-node Daemonset annotation to indicate update rollout complete.
-				annotation := true
-				dsAnnotations := make(map[string]string)
-				dsAnnotations[render.BpfOperatorAnnotation] = strconv.FormatBool(annotation)
-				container := corev1.Container{Name: render.CalicoNodeObjectName}
-
-				ds := &appsv1.DaemonSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:        common.NodeDaemonSetName,
-						Namespace:   common.CalicoNamespace,
-						Annotations: dsAnnotations,
-					},
-					Spec: appsv1.DaemonSetSpec{
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{},
-							Spec:       corev1.PodSpec{Containers: []corev1.Container{container}},
-						},
-					},
-				}
-				Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-
-				// Act.
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Assert.
-				bpfEnabled := true
-				fc := &crdv1.FelixConfiguration{}
-				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
-				Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-				Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
-			})
-
-			It("#1 should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
-
-				// Arrange.
-				// FELIX_BPFENABLED env var only set in BPF datatplane.
-				createInstallation(c, ctx, operator.LinuxDataplaneBPF)
-
-				// Create calico-node Daemonset with FELIX_BPFENABLED env var set.
-				envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
-				container := corev1.Container{
-					Name: render.CalicoNodeObjectName,
-					Env:  envVars,
-				}
-				ds := &appsv1.DaemonSet{
-					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
-					Spec: appsv1.DaemonSetSpec{
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{},
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{container},
-							},
-						},
-					},
-				}
-				Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-
-				// Act.
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Assert.
-				bpfEnabled := true
-				fc := &crdv1.FelixConfiguration{}
-				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
-				Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-			})
-		*/
 	})
 
 })
@@ -413,84 +330,7 @@ func createInstallation(c client.Client, ctx context.Context, dp operator.LinuxD
 			},
 		},
 	}
+
 	Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 	return cr
 }
-
-// DS env var set	FELIX_BPFENABLED: true
-//func getDS1() *appsv1.DaemonSet {
-//
-//	envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
-//	container := corev1.Container{
-//		Name: render.CalicoNodeObjectName,
-//		Env:  envVars,
-//	}
-//
-//	ds := &appsv1.DaemonSet{
-//		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
-//		Spec: appsv1.DaemonSetSpec{
-//			Template: corev1.PodTemplateSpec{
-//				ObjectMeta: metav1.ObjectMeta{},
-//				Spec: corev1.PodSpec{
-//					Containers: []corev1.Container{container},
-//				},
-//			},
-//		},
-//		Status: appsv1.DaemonSetStatus{
-//			CurrentNumberScheduled: 13,
-//		},
-//	}
-//	return ds
-//}
-
-// DS env var NOT set
-//func getDS2() *appsv1.DaemonSet {
-//
-//	envVars := []corev1.EnvVar{}
-//	container := corev1.Container{
-//		Name: render.CalicoNodeObjectName,
-//		Env:  envVars,
-//	}
-//
-//	ds := &appsv1.DaemonSet{
-//		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
-//		Spec: appsv1.DaemonSetSpec{
-//			Template: corev1.PodTemplateSpec{
-//				ObjectMeta: metav1.ObjectMeta{},
-//				Spec: corev1.PodSpec{
-//					Containers: []corev1.Container{container},
-//				},
-//			},
-//		},
-//		Status: appsv1.DaemonSetStatus{
-//			CurrentNumberScheduled: 2,
-//		},
-//	}
-//	return ds
-//}
-
-// DS annotation set
-//func getDS3(annotation bool) *appsv1.DaemonSet {
-//
-//	dsAnnotations := make(map[string]string)
-//	dsAnnotations[render.BpfOperatorAnnotation] = strconv.FormatBool(annotation)
-//
-//	container := corev1.Container{Name: render.CalicoNodeObjectName}
-//
-//	ds := &appsv1.DaemonSet{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:        common.NodeDaemonSetName,
-//			Namespace:   common.CalicoNamespace,
-//			Annotations: dsAnnotations,
-//		},
-//		Spec: appsv1.DaemonSetSpec{
-//			Template: corev1.PodTemplateSpec{
-//				ObjectMeta: metav1.ObjectMeta{},
-//				Spec:       corev1.PodSpec{Containers: []corev1.Container{container}},
-//			},
-//		},
-//		//Status: appsv1.DaemonSetStatus{CurrentNumberScheduled: 3},
-//	}
-//
-//	return ds
-//}

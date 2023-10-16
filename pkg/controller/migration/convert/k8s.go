@@ -167,11 +167,8 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 	r.checkedVars[container].envVars[key] = true
 }
 
-// adriana - TODO refactor below and fix breakages...
 func GetEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component, container, key string) (*string, error) {
 	return getEnv(ctx, client, pts, component, container, key)
-	//v, err := getEnv(ctx, client, pts, component, container, key)
-	//return v, err
 }
 
 // getEnv gets the value of an environment variable.

@@ -51,7 +51,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = Describe("suzanne Testing BPF Upgrade without disruption during core-controller installation", func() {
+var _ = Describe("Testing BPF Upgrade without disruption during core-controller installation", func() {
 
 	var c client.Client
 	var cs *kfake.Clientset

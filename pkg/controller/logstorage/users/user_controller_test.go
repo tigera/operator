@@ -23,8 +23,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	tigeraelastic "github.com/tigera/operator/pkg/controller/logstorage/elastic"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,31 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-func NewReconcilerWithShims(
-	cli client.Client,
-	scheme *runtime.Scheme,
-	status status.StatusManager,
-	provider operatorv1.Provider,
-	esCliCreator utils.ElasticsearchClientCreator,
-	clusterDomain string,
-) (*UserController, error) {
-	opts := options.AddOptions{
-		DetectedProvider: provider,
-		ClusterDomain:    clusterDomain,
-		ShutdownContext:  context.TODO(),
-	}
-
-	r := &UserController{
-		client:      cli,
-		scheme:      scheme,
-		esClientFn:  esCliCreator,
-		status:      status,
-		multiTenant: opts.MultiTenant,
-	}
-	r.status.Run(opts.ShutdownContext)
-	return r, nil
-}
 
 var _ = Describe("LogStorage users controller", func() {
 	var (

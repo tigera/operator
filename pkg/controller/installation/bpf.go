@@ -44,8 +44,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		if installBpfEnabled {
 
 		} else {
-			patchBpfEnabled := false
-			err = patchFelixConfiguration(r, ctx, fc, reqLogger, patchBpfEnabled)
+			err = patchFelixConfiguration(r, ctx, fc, reqLogger, false)
 			if err != nil {
 				return err
 			}

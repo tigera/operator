@@ -17,10 +17,11 @@ package users
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
-	"strings"
 
 	"github.com/go-logr/logr"
 

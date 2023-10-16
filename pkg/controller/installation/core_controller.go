@@ -1498,18 +1498,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
 
-	// adriana
-
-	//instance.Spec.CalicoNetwork.LinuxDataplane
-	//test := common.BpfDataplaneEnabled(&instance.Spec)
-	//_ = test // Iptables OR BPF
-	//// https://stackoverflow.com/questions/38552803/how-to-convert-a-bool-to-a-string-in-go
-	//text := strconv.FormatBool(test)
-	//_ = text
-
-	//adriana
-
-	//// Get the calico-node daemonset.
+	// BPF Upgrade without disruption:
+	// First get the calico-node daemonset.
 	calicoNodeDaemonset := appsv1.DaemonSet{}
 	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
 	if err != nil {
@@ -1517,52 +1507,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Next delegate logic implementation here using the state of the installation and dependent resources.
 	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
 	if err != nil {
 		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade without disruption")
 		return reconcile.Result{}, err
 	}
-
-	//bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, calicoNodeDaemonset.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	//if err != nil {
-	//	reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
-	//	return reconcile.Result{}, err
-	//}
-	//
-	//bpfEnabledStatus := false
-	//if bpfEnabledEnvVar != nil {
-	//	bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
-	//	if err != nil {
-	//		reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
-	//		return reconcile.Result{}, err
-	//	}
-	//}
-	//_ = bpfEnabledStatus
-
-	// FC annotations - if not found then will be ""
-	//var felixConfigurationAnnotations map[string]string
-	//felixConfigurationAnnotations = felixConfiguration.Annotations
-	//b2 := felixConfigurationAnnotations[render.BpfOperatorAnnotation]
-	//_ = b2
-	//
-	//// DS annotations
-	//var calicoNodeDaemonsetAnnotations map[string]string
-	//calicoNodeDaemonsetAnnotations = calicoNodeDaemonset.Annotations
-	//_ = calicoNodeDaemonsetAnnotations
-	//b1 := calicoNodeDaemonsetAnnotations[render.BpfOperatorAnnotation]
-	//_ = b1
-
-	//_, err = Adriana()
-	//_, err = Adriana1(r *ReconcileInstallation, ctx, instance, felixConfiguration, reqLogger)
-	//err = Adriana1(r, ctx, instance, felixConfiguration, reqLogger)
-	//err = r.Adriana1(ctx, instance, felixConfiguration, reqLogger)
-	//if err != nil {
-	//	return reconcile.Result{}, err
-	//}
-
-	//if err = r.setStevepro(ctx, instance, felixConfiguration, reqLogger); err != nil {
-	//	return reconcile.Result{}, err
-	//}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()

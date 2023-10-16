@@ -18,6 +18,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/types"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -56,6 +59,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 	var r ReconcileInstallation
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
+	var reqLogger logr.Logger
 
 	ready := &utils.ReadyFlag{}
 	ready.MarkAsReady()
@@ -137,13 +141,16 @@ var _ = Describe("Testing bore-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			// Create the logger
+			reqLogger = log.WithValues("Request.Namespace", "test-namespace", "Request.Name", "test-name")
 		})
 
 		AfterEach(func() {
 			cancel()
 		})
 
-		It("adrianaTODO #4 extract calico-node DS", func() {
+		It("adrianaTODO #1 should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
 
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
@@ -170,8 +177,16 @@ var _ = Describe("Testing bore-controller installation", func() {
 			fc := &crdv1.FelixConfiguration{}
 
 			// Act.
-			err := bpfUpgradeWithoutDisruption(&r, ctx, cr, ds, fc)
+			err := bpfUpgradeWithoutDisruption(&r, ctx, cr, ds, fc, reqLogger)
 			Expect(err).ShouldNot(HaveOccurred())
+
+			// Assert.
+			bpfEnabled := true
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
+			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
 		})
 		/*
 			It("#3 should query calico-node DS and ", func() {

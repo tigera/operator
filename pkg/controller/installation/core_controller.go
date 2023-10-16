@@ -1520,7 +1520,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration)
+	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
 	if err != nil {
 		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade without disruption")
 		return reconcile.Result{}, err

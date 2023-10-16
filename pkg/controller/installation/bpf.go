@@ -29,11 +29,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) error {
+func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 
 	// Extract
 	bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, ds.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
 	_ = bpfEnabledEnvVar
+	//bpfEnabledStatus := false
+	//if bpfEnabledEnvVar != nil {
+	//	bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
+	//	if err != nil {
+	//		log.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
+	//		return err
+	//	}
+	//}
+
+	reqLogger.Info("testing")
 
 	test := ds.Annotations["foo"]
 	_ = test

@@ -108,6 +108,8 @@ type ElasticsearchClientCreator func(client client.Client, ctx context.Context, 
 type ElasticClient interface {
 	SetILMPolicies(context.Context, *operatorv1.LogStorage) error
 	CreateUser(context.Context, *User) error
+	DeleteUser(context.Context, *User) error
+	GetUsers(ctx context.Context) ([]User, error)
 }
 
 type esClient struct {
@@ -243,9 +245,9 @@ type Application struct {
 }
 
 // CreateRoles wraps createRoles to make creating multiple rows slightly more convenient
-func (es *esClient) CreateRoles(roles ...Role) error {
+func (es *esClient) CreateRoles(ctx context.Context, roles ...Role) error {
 	for _, role := range roles {
-		if err := es.createRole(role); err != nil {
+		if err := es.createRole(ctx, role); err != nil {
 			return err
 		}
 	}
@@ -254,12 +256,12 @@ func (es *esClient) CreateRoles(roles ...Role) error {
 }
 
 // createRole attempts to create (or updated) the given Elasticsearch role.
-func (es *esClient) createRole(role Role) error {
+func (es *esClient) createRole(ctx context.Context, role Role) error {
 	if role.Name == "" {
 		return fmt.Errorf("can't create a role with an empty name")
 	}
 
-	_, err := es.client.XPackSecurityPutRole(role.Name).Body(role.Definition).Do(context.TODO())
+	_, err := es.client.XPackSecurityPutRole(role.Name).Body(role.Definition).Do(ctx)
 	if err != nil {
 		return err
 	}
@@ -276,7 +278,7 @@ func (es *esClient) CreateUser(ctx context.Context, user *User) error {
 	}
 
 	if len(rolesToCreate) > 0 {
-		if err := es.CreateRoles(rolesToCreate...); err != nil {
+		if err := es.CreateRoles(ctx, rolesToCreate...); err != nil {
 			return err
 		}
 	}
@@ -293,6 +295,79 @@ func (es *esClient) CreateUser(ctx context.Context, user *User) error {
 	}
 
 	return nil
+}
+
+// DeleteRoles wraps deleteRoles to make deleting multiple rows slightly more convenient
+func (es *esClient) DeleteRoles(ctx context.Context, roles ...Role) error {
+	for _, role := range roles {
+		if err := es.deleteRole(ctx, role); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// deleteRole attempts to delete the given Elasticsearch role.
+func (es *esClient) deleteRole(ctx context.Context, role Role) error {
+	if role.Name == "" {
+		return fmt.Errorf("can't delete a role with an empty name")
+	}
+
+	_, err := es.client.XPackSecurityDeleteRole(role.Name).Do(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (es *esClient) DeleteUser(ctx context.Context, user *User) error {
+	var rolesToDelete []Role
+	for _, role := range user.Roles {
+		if role.Definition != nil {
+			rolesToDelete = append(rolesToDelete, role)
+		}
+	}
+
+	if len(rolesToDelete) > 0 {
+		if err := es.DeleteRoles(ctx, rolesToDelete...); err != nil {
+			return err
+		}
+	}
+
+	_, err := es.client.XPackSecurityDeleteUser(user.Username).Do(ctx)
+	if err != nil {
+		log.Error(err, "Error deleting user")
+		return err
+	}
+
+	return nil
+}
+
+// GetUsers returns all users stored in ES
+func (es *esClient) GetUsers(ctx context.Context) ([]User, error) {
+	usersResponse, err := es.client.XPackSecurityGetUser("").Do(ctx)
+	if err != nil {
+		log.Error(err, "Error getting users")
+		return []User{}, err
+	}
+
+	users := []User{}
+	for name, data := range *usersResponse {
+		user := User{
+			Username: name,
+		}
+		for _, roleName := range data.Roles {
+			role := Role{
+				Name: roleName,
+			}
+			user.Roles = append(user.Roles, role)
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
 }
 
 // SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage

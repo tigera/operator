@@ -1511,16 +1511,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	//_ = text
 
 	//adriana
-	//ds2 := appsv1.DaemonSet{}
-	//ns2 := types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}
-	//r.client.Get(ctx, ns2, &ds2)
 
 	//// Get the calico-node daemonset.
-	//calicoNodeDaemonset := appsv1.DaemonSet{}
-	//err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
-	//return reconcile.Result{}, err
-	////_ = calicoNodeDaemonset
-	//
+	calicoNodeDaemonset := appsv1.DaemonSet{}
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying the calico-node daemonset")
+		return reconcile.Result{}, err
+	}
+
+	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade without disruption")
+		return reconcile.Result{}, err
+	}
+
 	//bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, calicoNodeDaemonset.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
 	//if err != nil {
 	//	reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
@@ -1552,10 +1557,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	//_, err = Adriana()
 	//_, err = Adriana1(r *ReconcileInstallation, ctx, instance, felixConfiguration, reqLogger)
-	err = Adriana1(r, ctx, instance, felixConfiguration, reqLogger)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
+	//err = Adriana1(r, ctx, instance, felixConfiguration, reqLogger)
+	//err = r.Adriana1(ctx, instance, felixConfiguration, reqLogger)
+	//if err != nil {
+	//	return reconcile.Result{}, err
+	//}
 
 	//if err = r.setStevepro(ctx, instance, felixConfiguration, reqLogger); err != nil {
 	//	return reconcile.Result{}, err

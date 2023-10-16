@@ -228,9 +228,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
-	//adriana
-	//objs = append(objs, c.nodeDaemonset(cniConfig))
-	//adriana
+	objs = append(objs, c.nodeDaemonset(cniConfig))
 
 	// This controller creates the cluster role for any pod in the cluster that requires certificate management.
 	if c.cfg.Installation.CertificateManagement != nil {

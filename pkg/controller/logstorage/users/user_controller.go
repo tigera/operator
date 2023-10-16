@@ -17,6 +17,7 @@ package users
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -49,6 +50,7 @@ type UserController struct {
 	client      client.Client
 	scheme      *runtime.Scheme
 	status      status.StatusManager
+	esClientFn  utils.ElasticsearchClientCreator
 	multiTenant bool
 }
 
@@ -161,7 +163,8 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// Wait for Elasticsearch to be installed and available.
+	// Wait for Elasticsearch to be installed and available. We don't need to do this in multi-tenant mode because
+	// we disable kube-controllers ES access in this mode.
 	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
@@ -178,7 +181,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	basicCreds := corev1.Secret{}
 	var credentialSecrets []client.Object
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
-	if err := r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
+	if err = r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
@@ -203,14 +206,19 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 	}
-	if err := hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
+	if err = hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating Linseed user secret", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Now that the secret has been created, also provision the user in ES.
-	if err := r.createLinseedLogin(ctx, tenantID, &basicCreds, reqLogger); err != nil {
+	if err = r.createLinseedLogin(ctx, tenantID, &basicCreds, reqLogger); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create Linseed user in ES", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err = r.cleanupStaleUsers(ctx, reqLogger); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failure occurred while cleaning up stale users", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -220,7 +228,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 }
 
 func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
-	esClient, err := utils.NewElasticClient(r.client, ctx, relasticsearch.ElasticEndpoint())
+	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return err
@@ -241,6 +249,46 @@ func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string
 	if err = esClient.CreateUser(ctx, user); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
 		return err
+	}
+
+	return nil
+}
+
+func (r *UserController) cleanupStaleUsers(ctx context.Context, logger logr.Logger) error {
+	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
+	if err != nil {
+		return fmt.Errorf("failed to connect to Elasticsearch - failed to create the Elasticsearch client")
+	}
+
+	// Each Elasticsearch instance is only connected to a single management cluster, but if that ever changes we'll
+	// need to rework this logic so that we're only deleting stale users created by the current management cluster.
+	allEsUsers, err := esClient.GetUsers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch users from Elasticsearch")
+	}
+
+	tenants := operatorv1.TenantList{}
+	err = r.client.List(ctx, &tenants)
+	if err != nil {
+		return fmt.Errorf("failed to fetch TenantList")
+	}
+
+	for _, user := range allEsUsers {
+		if strings.HasPrefix(user.Username, utils.ElasticsearchUserNameLinseed) {
+			active := false
+			for _, t := range tenants.Items {
+				if strings.Contains(user.Username, t.Spec.ID) {
+					active = true
+					break
+				}
+			}
+			if !active {
+				err = esClient.DeleteUser(ctx, &user)
+				if err != nil {
+					logger.Error(err, "Failed to delete elastic user")
+				}
+			}
+		}
 	}
 
 	return nil

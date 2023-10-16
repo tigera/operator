@@ -18,11 +18,12 @@ import (
 	"context"
 	"time"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/render"
@@ -150,7 +151,7 @@ var _ = Describe("Testing bore-controller installation", func() {
 			cancel()
 		})
 
-		It("adrianaTODO #1 should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
+		It("should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled", func() {
 
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
@@ -174,7 +175,10 @@ var _ = Describe("Testing bore-controller installation", func() {
 				},
 			}
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
-			fc := &crdv1.FelixConfiguration{}
+
+			// Create felix config
+			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
 			err := bpfUpgradeWithoutDisruption(&r, ctx, cr, ds, fc, reqLogger)

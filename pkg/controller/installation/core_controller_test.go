@@ -82,6 +82,16 @@ func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context) error {
 }
 
 var _ = Describe("Testing core-controller installation", func() {
+
+	var c client.Client
+	var cs *kfake.Clientset
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var r ReconcileInstallation
+	var cr *operator.Installation
+	var scheme *runtime.Scheme
+	var mockStatus *status.MockStatus
+
 	table.DescribeTable("checking rendering configuration",
 		func(detectedProvider, configuredProvider operator.Provider, expectedErr error) {
 			configuredInstallation := &operator.Installation{}
@@ -317,13 +327,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready.MarkAsReady()
 
 	Context("image reconciliation tests", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -694,15 +697,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	)
 
 	Context("management cluster exists", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var cr *operator.Installation
-
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
 
 		var expectedDNSNames []string
 		var certificateManager certificatemanager.CertificateManager
@@ -885,15 +879,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	})
 
 	Context("Reconcile tests", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
-
-		var cr *operator.Installation
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.

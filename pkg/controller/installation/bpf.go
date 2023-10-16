@@ -32,14 +32,14 @@ import (
 func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 
 	// Use case #1
-	patchFelixConfig, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
+	//patchFelixConfig, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
+	_, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
 	if err != nil {
 		return err
 	}
 
-	if !patchFelixConfig {
-
-	}
+	//if !patchFelixConfig {
+	//}
 
 	return nil
 }

@@ -56,6 +56,7 @@ const (
 	// use-case for this credential. However, it is used on all TLS connections served by fluentd.
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
+	FluentdMetricsServiceWindows             = "fluentd-metrics-windows"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
 	FluentdMetricsPort                       = 9081
 	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
@@ -212,6 +213,16 @@ func (c *fluentdComponent) fluentdNodeName() string {
 		return fluentdNodeWindowsName
 	}
 	return FluentdNodeName
+}
+
+// Use different service names depending on the OS type ("fluentd-metrics"
+// vs "fluentd-metrics-windows") in order to help identify which OS daemonset
+// we are referring to.
+func (c *fluentdComponent) fluentdMetricsServiceName() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return FluentdMetricsServiceWindows
+	}
+	return FluentdMetricsService
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
@@ -584,12 +595,12 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      FluentdMetricsService,
+			Name:      c.fluentdMetricsServiceName(),
 			Namespace: LogCollectorNamespace,
-			Labels:    map[string]string{"k8s-app": FluentdNodeName},
+			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": FluentdNodeName},
+			Selector: map[string]string{"k8s-app": c.fluentdNodeName()},
 			// Important: "None" tells Kubernetes that we want a headless service with
 			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
 			// a huge set of iptables rules for this service since there's an instance
@@ -795,13 +806,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
+		corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.trustedBundlePath()},
 	)
 
-	if c.SupportedOSType() != rmeta.OSTypeWindows {
-		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
-		)
-	}
 	return envs
 }
 

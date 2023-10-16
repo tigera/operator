@@ -1426,8 +1426,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
-	//r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-	//r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}})
 	r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)

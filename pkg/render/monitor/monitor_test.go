@@ -417,9 +417,11 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(ConsistOf([]metav1.LabelSelectorRequirement{
-			{Key: "k8s-app",
+			{
+				Key:      "k8s-app",
 				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{"fluentd-node", "fluentd-node-windows"}},
+				Values:   []string{"fluentd-node", "fluentd-node-windows"},
+			},
 		}))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("tigera-fluentd"))
@@ -488,9 +490,11 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(ConsistOf([]metav1.LabelSelectorRequirement{
-			{Key: "k8s-app",
+			{
+				Key:      "k8s-app",
 				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{"fluentd-node", "fluentd-node-windows"}},
+				Values:   []string{"fluentd-node", "fluentd-node-windows"},
+			},
 		}))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("tigera-fluentd"))

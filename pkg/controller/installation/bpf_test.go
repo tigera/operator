@@ -16,7 +16,6 @@ package installation
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -237,9 +236,8 @@ var _ = Describe("Testing bore-controller installation", func() {
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			annotation := true
 			dsAnnotations := make(map[string]string)
-			dsAnnotations[render.BpfOperatorAnnotation] = strconv.FormatBool(annotation)
+			dsAnnotations[render.BpfOperatorAnnotation] = "true"
 			container := corev1.Container{Name: render.CalicoNodeObjectName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{

@@ -273,7 +273,6 @@ func (r *UserController) cleanupStaleUsers(ctx context.Context, logger logr.Logg
 		return fmt.Errorf("failed to fetch TenantList")
 	}
 
-	inactiveLinseedUsers := []utils.User{}
 	for _, user := range allEsUsers {
 		if strings.HasPrefix(user.Username, utils.ElasticsearchUserNameLinseed) {
 			active := false
@@ -284,15 +283,11 @@ func (r *UserController) cleanupStaleUsers(ctx context.Context, logger logr.Logg
 				}
 			}
 			if !active {
-				inactiveLinseedUsers = append(inactiveLinseedUsers, user)
+				err = esClient.DeleteUser(ctx, &user)
+				if err != nil {
+					logger.Error(err, "Failed to delete elastic user")
+				}
 			}
-		}
-	}
-
-	for _, userToDelete := range inactiveLinseedUsers {
-		err = esClient.DeleteUser(ctx, &userToDelete)
-		if err != nil {
-			logger.Error(err, "Failed to delete elastic user")
 		}
 	}
 

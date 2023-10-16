@@ -64,7 +64,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 
 	if patchFelixConfig {
 		if fc.Spec.BPFEnabled != nil {
-			msg := fmt.Sprintf("Successfully patched Felix Config OK bpfEnabled='%s'\n", strconv.FormatBool(*fc.Spec.BPFEnabled))
+			msg := fmt.Sprintf("Successfully patched Felix Config OK bpfEnabled='%s'", strconv.FormatBool(*fc.Spec.BPFEnabled))
 			reqLogger.Info(msg)
 		}
 	}
@@ -123,7 +123,7 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 
 	fc.Spec.BPFEnabled = &patchBpfEnabled
 	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
-		msg := fmt.Sprintf("An error occurred when attempting to patch Felix configuration BPF Enabled: '%s'\n", patchText)
+		msg := fmt.Sprintf("An error occurred when attempting to patch Felix configuration BPF Enabled: '%s'", patchText)
 		reqLogger.Error(err, msg)
 		return err
 	}

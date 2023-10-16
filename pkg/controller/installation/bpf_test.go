@@ -271,7 +271,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
 		})
 
-		It(" should query calico-node DS in Iptables dataplane and if annotations not set then verify rollout not complete", func() {
+		It(" should query calico-node DS in Iptables dataplane and patch Felix Config immediately", func() {
 
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.

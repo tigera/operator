@@ -49,7 +49,7 @@ var _ = Describe("LogStorage users controller", func() {
 			esClientFn: tigeraelastic.MockESCLICreator,
 		}
 		testESClient := tigeraelastic.MockESClient{}
-		ctx := context.WithValue(context.Background(), "esClient", &testESClient)
+		ctx := context.WithValue(context.Background(), tigeraelastic.MockESClientKey("mockESClient"), &testESClient)
 
 		esTestUsers := []utils.User{
 			{

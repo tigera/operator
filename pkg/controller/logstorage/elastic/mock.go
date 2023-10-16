@@ -24,12 +24,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type MockESClientKey string
+
 type MockESClient struct {
 	mock.Mock
 }
 
 func MockESCLICreator(_ client.Client, ctx context.Context, _ string) (utils.ElasticClient, error) {
-	if esCli := ctx.Value("esClient"); esCli != nil {
+	if esCli := ctx.Value(MockESClientKey("mockESClient")); esCli != nil {
 		return esCli.(*MockESClient), nil
 	}
 	return &MockESClient{}, nil

@@ -217,6 +217,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
+	// Clean up any stale users that may have been left behind by a previous tenant
 	if err = r.cleanupStaleUsers(ctx, reqLogger); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failure occurred while cleaning up stale users", err, reqLogger)
 		return reconcile.Result{}, err

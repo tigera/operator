@@ -260,9 +260,8 @@ func (r *UserController) cleanupStaleUsers(ctx context.Context, logger logr.Logg
 		return fmt.Errorf("failed to connect to Elasticsearch - failed to create the Elasticsearch client")
 	}
 
-	// TODO: This set might also include ES users from other management clusters in a Calico Cloud environment. We may need
-	// to come up with a way to differentiate multi-tenant users on a per-cluster basis so that we can restrict our cleanup
-	// only to those that came from our own cluster.
+	// Each Elasticsearch instance is only connected to a single management cluster, but if that ever changes we'll
+	// need to rework this logic so that we're only deleting stale users created by the current management cluster.
 	allEsUsers, err := esClient.GetUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to fetch users from Elasticsearch")

@@ -86,6 +86,8 @@ func printVersion() {
 }
 
 func main() {
+	log.Info("adriana-1.23.02")
+
 	var enableLeaderElection bool
 	// urlOnlyKubeconfig is a slight hack; we need to get the apiserver from the
 	// kubeconfig but should use the in-cluster service account

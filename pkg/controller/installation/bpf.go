@@ -32,14 +32,18 @@ import (
 func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 
 	// Use case #1
-	//patchFelixConfig, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
-	_, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
+	patchFelixConfig, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
+	//_, err := queryDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
 	if err != nil {
 		return err
 	}
 
-	//if !patchFelixConfig {
-	//}
+	if !patchFelixConfig {
+
+		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+		_ = installBpfEnabled
+
+	}
 
 	return nil
 }
@@ -50,7 +54,6 @@ func queryDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *app
 	if err != nil {
 		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
 		return false, err
-
 	}
 
 	dsBpfEnabledStatus := false
@@ -66,10 +69,12 @@ func queryDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *app
 		err = patchFelixConfiguration(r, ctx, fc, reqLogger, dsBpfEnabledStatus)
 		if err != nil {
 			return false, err
+		} else {
+			return true, nil
 		}
 	}
 
-	return true, nil
+	return false, nil
 }
 
 func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchBpfEnabled bool) error {

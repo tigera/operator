@@ -41,22 +41,23 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 
 		// Check the install dataplane mode is either Iptables or BPF.
 		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
-		if installBpfEnabled {
-			//if ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true" {
-			if checkDaemonsetRolloutComplete(ds) {
-				err = patchFelixConfiguration(r, ctx, fc, reqLogger, true)
-				if err != nil {
-					return err
-				}
-			}
+		if !installBpfEnabled {
+			patchFelixConfig = true
 		} else {
-			err = patchFelixConfiguration(r, ctx, fc, reqLogger, false)
+			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
+		}
+
+		// Attempt to patch Felix Config now.
+		if patchFelixConfig {
+
+			err = patchFelixConfiguration(r, ctx, fc, reqLogger, installBpfEnabled)
 			if err != nil {
 				return err
 			}
-		}
 
-		patchFelixConfig = err == nil
+			// Ensure if no errors occurred while attempting to patch Falix Config then successfully patched.
+			patchFelixConfig = err == nil
+		}
 	}
 
 	if patchFelixConfig {
@@ -70,7 +71,20 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 }
 
 func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
-	return ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true"
+	//return ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true"
+
+	if ds.Spec.Template.Spec.Volumes == nil {
+		return false
+	}
+
+	for _, volume := range ds.Spec.Template.Spec.Volumes {
+		//if volume.Name == common.BPFVolumeName {
+		if volume.Name == "bpffs" {
+			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+		}
+	}
+
+	return false
 }
 
 func queryDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {

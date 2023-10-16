@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -32,23 +33,63 @@ import (
 func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 
 	// Extract
-	bpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, ds.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	_ = bpfEnabledEnvVar
-	//bpfEnabledStatus := false
-	//if bpfEnabledEnvVar != nil {
-	//	bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
-	//	if err != nil {
-	//		log.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
-	//		return err
-	//	}
-	//}
+	dsBpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, ds.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
 
+	}
+
+	dsBpfEnabledStatus := false
+	if dsBpfEnabledEnvVar != nil {
+		dsBpfEnabledStatus, err = strconv.ParseBool(*dsBpfEnabledEnvVar)
+		if err != nil {
+			reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
+			return err
+		}
+	}
+
+	// Use case #1
+	if dsBpfEnabledStatus && fc.Spec.BPFEnabled == nil {
+		err = patchFelixConfiguration(r, ctx, fc, reqLogger, dsBpfEnabledStatus)
+		if err == nil {
+			// TODO - better msg
+			reqLogger.Info("Successfully patched FelixConfig")
+		}
+		return err
+	}
+	//
 	reqLogger.Info("testing")
 
 	test := ds.Annotations["foo"]
 	_ = test
 
 	return err
+}
+
+func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchBpfEnabled bool) error {
+
+	// Obtain the original FelixConfig to patch.
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+	patchText := strconv.FormatBool(patchBpfEnabled)
+
+	// Add managed fields "light".
+	var fcAnnotations map[string]string
+	if fc.Annotations == nil {
+		fcAnnotations = make(map[string]string)
+	} else {
+		fcAnnotations = fc.Annotations
+	}
+	fcAnnotations[render.BpfOperatorAnnotation] = patchText
+	fc.SetAnnotations(fcAnnotations)
+
+	fc.Spec.BPFEnabled = &patchBpfEnabled
+	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+		msg := fmt.Sprintf("An error occurred when attempting to patch Felix configuration BPF Enabled: '%s'\n", patchText)
+		reqLogger.Error(err, msg)
+		return err
+	}
+
+	return nil
 }
 
 func AdrianaX(ds *appsv1.DaemonSet) (string, error) {

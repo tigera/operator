@@ -307,7 +307,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
+			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("false"))
 		})
 	})
 

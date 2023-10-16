@@ -118,7 +118,7 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 	} else {
 		fcAnnotations = fc.Annotations
 	}
-	fcAnnotations[render.BpfOperatorAnnotation] = "true"
+	fcAnnotations[render.BpfOperatorAnnotation] = patchText
 	fc.SetAnnotations(fcAnnotations)
 
 	fc.Spec.BPFEnabled = &patchBpfEnabled

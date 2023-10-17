@@ -44,6 +44,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		// Check the install dataplane mode is either Iptables or BPF.
 		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
 		if !installBpfEnabled {
+			// IP Tables dataplane:
 			// Only patch Felix Config once to prevent log spamming.
 			if fc.Spec.BPFEnabled == nil {
 				patchFelixConfig = true
@@ -55,7 +56,14 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 				}
 			}
 		} else {
-			// BPF dataplane: check daemonset rollout complete.
+			// BPF dataplane:
+			// Edge case where User has externally patched FelixConfig bpfEnabled: false causing a conflict which would prevent Operator from upgrading dataplane.
+			if fc.Spec.BPFEnabled != nil && !(*fc.Spec.BPFEnabled) {
+				err = errors.New("An error occurred while attempting patch Felix Config bpfEnabled: true as Felix Config has been modified externally")
+				return err
+			}
+
+			// Check daemonset rollout complete before patching.
 			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
 		}
 

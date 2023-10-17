@@ -64,7 +64,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		if !installBpfEnabled {
 			// IP Tables dataplane:
 			// Only patch Felix Config once to prevent log spamming.
-			if fc.Spec.BPFEnabled == nil {
+			if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
 				patchFelixConfig = true
 			}
 		} else {

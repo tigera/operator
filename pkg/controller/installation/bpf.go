@@ -43,7 +43,10 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		// Check the install dataplane mode is either Iptables or BPF.
 		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
 		if !installBpfEnabled {
-			patchFelixConfig = true
+			// Only patch Felix Config once to prevent log spamming.
+			if fc.Spec.BPFEnabled == nil {
+				patchFelixConfig = true
+			}
 		} else {
 			// BPF dataplane: check daemonset rollout complete.
 			patchFelixConfig = checkDaemonsetRolloutComplete(ds)

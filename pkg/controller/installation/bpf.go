@@ -46,13 +46,18 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 
 		// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
 		if fc.Spec.BPFEnabled != nil {
+
 			fcBPFEnabled := *fc.Spec.BPFEnabled
 			if installBpfEnabled != fcBPFEnabled {
-				text := fmt.Sprintf("An error occurred while attempting patch Felix Config bpfEnabled: '%s' as Felix Config has been modified externally to '%s'",
-					strconv.FormatBool(installBpfEnabled),
-					strconv.FormatBool(fcBPFEnabled))
-				err = errors.New(text)
-				return err
+
+				// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
+				if fc.Annotations[render.BpfOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
+					text := fmt.Sprintf("An error occurred while attempting patch Felix Config bpfEnabled: '%s' as Felix Config has been modified externally to '%s'",
+						strconv.FormatBool(installBpfEnabled),
+						strconv.FormatBool(fcBPFEnabled))
+					err = errors.New(text)
+					return err
+				}
 			}
 		}
 

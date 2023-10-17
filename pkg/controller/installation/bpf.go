@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -46,6 +47,12 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 			// Only patch Felix Config once to prevent log spamming.
 			if fc.Spec.BPFEnabled == nil {
 				patchFelixConfig = true
+			} else {
+				// Edge case where User has externally patched FelixConfig bpfEnabled: true causing a conflict which would prevent Operator from upgrading dataplane.
+				if fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled {
+					err = errors.New("An error occurred while attempting patch Felix Config bpfEnabled: false as Felix Config has been modified externally")
+					return err
+				}
 			}
 		} else {
 			// BPF dataplane: check daemonset rollout complete.

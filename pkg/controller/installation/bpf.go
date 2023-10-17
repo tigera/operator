@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -42,10 +43,33 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 
 		// Check the install dataplane mode is either Iptables or BPF.
 		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+
+		// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
+		if fc.Spec.BPFEnabled != nil {
+
+			fcBPFEnabled := *fc.Spec.BPFEnabled
+			if installBpfEnabled != fcBPFEnabled {
+
+				// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
+				if fc.Annotations[render.BpfOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
+					text := fmt.Sprintf("An error occurred while attempting patch Felix Config bpfEnabled: '%s' as Felix Config has been modified externally to '%s'",
+						strconv.FormatBool(installBpfEnabled),
+						strconv.FormatBool(fcBPFEnabled))
+					err = errors.New(text)
+					return err
+				}
+			}
+		}
+
 		if !installBpfEnabled {
-			patchFelixConfig = true
+			// IP Tables dataplane:
+			// Only patch Felix Config once to prevent log spamming.
+			if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
+				patchFelixConfig = true
+			}
 		} else {
-			// BPF dataplane: check daemonset rollout complete.
+			// BPF dataplane:
+			// Check daemonset rollout complete before patching.
 			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
 		}
 
@@ -118,7 +142,7 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 	} else {
 		fcAnnotations = fc.Annotations
 	}
-	fcAnnotations[render.BpfOperatorAnnotation] = "true"
+	fcAnnotations[render.BpfOperatorAnnotation] = patchText
 	fc.SetAnnotations(fcAnnotations)
 
 	fc.Spec.BPFEnabled = &patchBpfEnabled

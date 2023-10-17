@@ -51,7 +51,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = Describe("Testing BPF Upgrade without disruption during core-controller installation", func() {
+var _ = Describe("adriana Testing BPF Upgrade without disruption during core-controller installation", func() {
 
 	var c client.Client
 	var cs *kfake.Clientset
@@ -269,6 +269,41 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
 			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
+		})
+
+		It("should query calico-node DS in BPF dataplane and throw error Felix Config when bpfEnabled false", func() {
+
+			// Arrange.
+			// Upgrade cluster from BPF to IP Tables dataplane.
+			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
+
+			// Create calico-node Daemonset annotation to indicate update rollout complete.
+			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			ds := &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      common.NodeDaemonSetName,
+					Namespace: common.CalicoNamespace,
+				},
+				Spec: appsv1.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{},
+						Spec:       corev1.PodSpec{Containers: []corev1.Container{container}},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
+
+			// Create felix config
+			bpfEnabled := false
+			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			fc.Spec.BPFEnabled = &bpfEnabled
+			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			// Act.
+			err := bpfUpgradeWithoutDisruption(&r, ctx, cr, ds, fc, reqLogger)
+
+			// Assert.
+			Expect(err).Should(HaveOccurred())
 		})
 
 		It("should query calico-node DS in Iptables dataplane and patch Felix Config immediately when bpfEnabled not set", func() {

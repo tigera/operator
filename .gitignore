@@ -93,3 +93,7 @@ cscope.*
 .idea/
 # Test reports
 pkg/report
+ut/
+
+# Tar files created as part of running FVs
+*.tar

@@ -19,7 +19,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -111,13 +110,13 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
 	}
 
 	// Watch for configmap changes in tigera-operator namespace; the cm contains ruleset for ModSecurity library:
-	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace())
+	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf(
 			"applicationlayer-controller failed to watch ConfigMap %s: %v",
@@ -131,7 +130,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		applicationlayer.ModSecurityRulesetConfigMapName,
 	}
 	for _, configMapName := range maps {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}
@@ -311,7 +310,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future, hopefully by then things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.

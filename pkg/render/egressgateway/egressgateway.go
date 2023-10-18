@@ -345,7 +345,7 @@ func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 }
 
 func (c *component) egwRole() *rbacv1.Role {
-	return &rbacv1.Role{
+	role := &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.config.EgressGW.Name,
@@ -360,6 +360,19 @@ func (c *component) egwRole() *rbacv1.Role {
 			},
 		},
 	}
+
+	if c.config.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"privileged"},
+			},
+		)
+	}
+
+	return role
 }
 
 func (c *component) egwRoleBinding() *rbacv1.RoleBinding {

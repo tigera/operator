@@ -153,6 +153,11 @@ spec:
                 - Enabled
                 - Disabled
                 type: string
+              multiTenantManagementClusterNamespace:
+                description: If running as a multi-tenant management cluster, the
+                  namespace in which the management cluster's tenant services are
+                  running.
+                type: string
             type: object
           status:
             description: Most recently observed state for Tigera log collection.

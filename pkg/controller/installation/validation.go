@@ -21,11 +21,12 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
-	windowsupgrade "github.com/tigera/operator/pkg/common/validation/calico-windows-upgrade"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 
@@ -399,6 +400,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify the CalicoNodeWindowsDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoNodeWindowsDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeWindowsDaemonSetContainer, node.ValidateCalicoNodeWindowsDaemonSetInitContainer)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
+
+		}
+	}
+
 	// Verify the CalicoKubeControllersDeployment overrides, if specified, is valid.
 	if deploy := instance.Spec.CalicoKubeControllersDeployment; deploy != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
@@ -416,14 +426,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	// Verify the CalicoWindowsUpgradeDaemonSet overrides, if specified, is valid.
-	if ds := instance.Spec.CalicoWindowsUpgradeDaemonSet; ds != nil {
-		err := validation.ValidateReplicatedPodResourceOverrides(ds, windowsupgrade.ValidateCalicoWindowsUpgradeDaemonSetContainer, validation.NoContainersDefined)
-		if err != nil {
-			return fmt.Errorf("Installation spec.CalicoWindowsUpgradeDaemonSet is not valid: %w", err)
-		}
-	}
-
 	// Verify the CSINodeDriverDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CSINodeDriverDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, validation.NoContainersDefined, validation.NoContainersDefined)
@@ -438,6 +440,29 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			return fmt.Errorf("Installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")
 		}
 	}
+
+	if common.WindowsEnabled(instance.Spec) {
+		if k8sapi.Endpoint.Host == "" || k8sapi.Endpoint.Port == "" {
+			return fmt.Errorf("Services endpoint configmap '%s' does not have all required information for Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName)
+		}
+		if instance.Spec.CNI.Type == operatorv1.PluginCalico {
+			if len(instance.Spec.ServiceCIDRs) == 0 {
+				return fmt.Errorf("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows")
+			}
+			if instance.Spec.CalicoNetwork != nil {
+				if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
+					if v4pool.Encapsulation != operatorv1.EncapsulationVXLAN && v4pool.Encapsulation != operatorv1.EncapsulationNone {
+						return fmt.Errorf("IPv4 IPPool encapsulation %s is not supported by Calico for Windows", v4pool.Encapsulation)
+					}
+				}
+			}
+		}
+	} else {
+		if instance.Spec.WindowsNodes != nil {
+			return fmt.Errorf("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled")
+		}
+	}
+
 	return nil
 }
 

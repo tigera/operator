@@ -20,22 +20,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"time"
-
-	"k8s.io/client-go/kubernetes"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -43,6 +29,16 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/tiers"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // The Tiers controller reconciles Tiers and NetworkPolicies that are shared across components or do not directly
@@ -106,7 +102,7 @@ type ReconcileTiers struct {
 
 // add adds watches for resources that are available at startup.
 func add(mgr manager.Manager, c controller.Controller) error {
-	if err := utils.AddNetworkWatch(c); err != nil {
+	if err := utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("tiers-controller failed to watch Tigera network resource: %v", err)
 	}
 
@@ -127,7 +123,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure a license is present that enables this controller to create/manage tiers.
@@ -135,14 +131,14 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	if !utils.IsFeatureActive(license, common.TiersFeature) {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	tiersConfig, reconcileResult := r.prepareTiersConfig(ctx, reqLogger)
@@ -173,7 +169,7 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		nodeLocalDNSExists, err := utils.IsNodeLocalDNSAvailable(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
-			return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
+			return nil, &reconcile.Result{RequeueAfter: utils.StandardRetry}
 		} else if nodeLocalDNSExists {
 			dnsServiceIPs, err := utils.GetDNSServiceIPs(ctx, r.client, r.provider)
 			if err != nil {
@@ -182,7 +178,7 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 				} else {
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying DNS service", err, reqLogger)
 				}
-				return nil, &reconcile.Result{RequeueAfter: 10 * time.Second}
+				return nil, &reconcile.Result{RequeueAfter: utils.StandardRetry}
 			}
 
 			if len(dnsServiceIPs) > 0 {

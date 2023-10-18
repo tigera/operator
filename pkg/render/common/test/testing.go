@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 
 	. "github.com/onsi/gomega"
 
@@ -88,7 +90,58 @@ func ExpectResourceInList(objs []client.Object, name, ns, group, version, kind s
 	Expect(elems).To(ContainElement(o))
 }
 
-func ExpectResource(resource runtime.Object, name, ns, group, version, kind string) {
+// ExpectResources checks that the given list of resources contains the expected resources, and that
+// the given resource list does not contain any unexpected resources.
+func ExpectResources(resources []client.Object, expected []client.Object) {
+	// First, check that each actual resource is in the expected list.
+	for _, resource := range resources {
+		ExpectWithOffset(1, ExpectResource(resource, expected)).NotTo(HaveOccurred(), "Unexpected resouce was rendered")
+	}
+
+	// Then, check that each expected resource is in the actual list.
+	for _, resource := range expected {
+		ExpectWithOffset(1, ExpectResource(resource, resources)).NotTo(HaveOccurred(), "Expected resource was not rendered")
+	}
+}
+
+// ExpectResource checks that the given list of resources contains a resource with the given name and
+// namespace, and that the resource has the given GroupVersionKind.
+func ExpectResource(expected client.Object, resources []client.Object) error {
+	name := expected.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
+	ns := expected.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
+
+	for _, resource := range resources {
+		if reflect.TypeOf(resource) == reflect.TypeOf(expected) {
+			if resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName() == name &&
+				resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace() == ns {
+				// Same type, name, and namespace. Consider it a match.
+				return nil
+			}
+		}
+	}
+
+	// Build a list of items so we can print a nice error message.
+	items := []string{}
+	for i, r := range resources {
+		items = append(items,
+			fmt.Sprintf("%d: %T Namespace=%s Name=%s",
+				i,
+				r,
+				r.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace(),
+				r.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName(),
+			))
+	}
+	if ns == "" {
+		return fmt.Errorf("%T %s not found in:\n\n%s", expected, name, strings.Join(items, "\n"))
+	}
+	return fmt.Errorf("%T %s/%s not found in:\n\n%s", expected, ns, name, strings.Join(items, "\n"))
+}
+
+// ExpectResourceTypeAndObjectMetadata checks that the given resource matches the expected name, namespace, group, version, and kind.
+// Note that this function often results in tests that are brittle and subject to breakages when resource ordering changes, and are also hard to debug.
+// most tests should use ExpectResources instead, which is more robust and provides better error messages.
+// Use this function only when the order of resources is actually important.
+func ExpectResourceTypeAndObjectMetadata(resource runtime.Object, name, ns, group, version, kind string) {
 	gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
 	actualName := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	actualNS := resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
@@ -97,6 +150,7 @@ func ExpectResource(resource runtime.Object, name, ns, group, version, kind stri
 	ExpectWithOffset(1, resource.GetObjectKind().GroupVersionKind()).To(Equal(gvk), fmt.Sprintf("Rendered resource %s does not match expected GVK", name))
 }
 
+// GetResource returns the resource with the given name, namespace, group, version, and kind from the given list of resources.
 func GetResource(resources []client.Object, name, ns, group, version, kind string) client.Object {
 	for _, resource := range resources {
 		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}

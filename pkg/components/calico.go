@@ -34,6 +34,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoCNIWindows = component{
+		Version:  "v3.26.1",
+		Image:    "calico/cni-windows",
+		Registry: "",
+	}
+
 	ComponentCalicoKubeControllers = component{
 		Version:  "v3.26.1",
 		Image:    "calico/kube-controllers",
@@ -55,6 +61,12 @@ var (
 	ComponentCalicoNodeFIPS = component{
 		Version:  "v3.26.1-fips",
 		Image:    "calico/node",
+		Registry: "",
+	}
+
+	ComponentCalicoNodeWindows = component{
+		Version:  "v3.26.1",
+		Image:    "calico/node-windows",
 		Registry: "",
 	}
 
@@ -85,12 +97,6 @@ var (
 	ComponentCalicoAPIServerFIPS = component{
 		Version:  "v3.26.1-fips",
 		Image:    "calico/apiserver",
-		Registry: "",
-	}
-
-	ComponentWindowsUpgrade = component{
-		Version:  "v3.26.1",
-		Image:    "calico/windows-upgrade",
 		Registry: "",
 	}
 
@@ -125,17 +131,18 @@ var (
 	CalicoImages = []component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
+		ComponentCalicoCNIWindows,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
 		ComponentCalicoNodeFIPS,
+		ComponentCalicoNodeWindows,
 		ComponentCalicoTypha,
 		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,
-		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,

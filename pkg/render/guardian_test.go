@@ -62,8 +62,10 @@ var _ = Describe("Rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		bundle := certificateManager.CreateTrustedBundle()
 
 		return &render.GuardianConfiguration{
@@ -122,7 +124,7 @@ var _ = Describe("Rendering tests", func() {
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 			for i, expectedRes := range expectedResources {
-				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -148,6 +150,13 @@ var _ = Describe("Rendering tests", func() {
 			ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)
 			Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
 			Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			crb := rtest.GetResource(resources, render.ManagerClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.Subjects).To(Equal([]rbacv1.Subject{{
+				Kind:      "ServiceAccount",
+				Name:      render.ManagerServiceAccount,
+				Namespace: render.ManagerNamespace,
+			}}))
 		})
 
 		It("should render controlPlaneTolerations", func() {
@@ -162,7 +171,6 @@ var _ = Describe("Rendering tests", func() {
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
 		})
-
 	})
 
 	It("should render PSP when flagged", func() {
@@ -184,7 +192,6 @@ var _ = Describe("Rendering tests", func() {
 			Verbs:         []string{"use"},
 			ResourceNames: []string{render.GuardianPodSecurityPolicyName},
 		}))
-
 	})
 
 	Context("GuardianPolicy component", func() {
@@ -235,14 +242,13 @@ var _ = Describe("Rendering tests", func() {
 
 var _ = Describe("guardian", func() {
 	Context("with public CA", func() {
-		var (
-			cfg *render.GuardianConfiguration
-		)
+		var cfg *render.GuardianConfiguration
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg = &render.GuardianConfiguration{

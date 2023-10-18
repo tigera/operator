@@ -448,7 +448,7 @@ func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     linseed,
+			Name:     render.TigeraLinseedSecretsClusterRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -481,7 +481,7 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedServiceSelectorEntityRule,
+			Destination: networkpolicy.Helper(false, render.ElasticsearchNamespace).LinseedServiceSelectorEntityRule(),
 		})
 	}
 

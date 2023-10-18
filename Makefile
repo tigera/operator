@@ -111,6 +111,7 @@ CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./controllers -name '*.go')
+SRC_FILES+=$(shell find ./test -name '*.go')
 SRC_FILES+=main.go
 
 EXTRA_DOCKER_ARGS += -e GO111MODULE=on -e GOPRIVATE=github.com/tigera/*
@@ -141,6 +142,8 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e GOPATH=/go \
 		-e GOCACHE=/go-cache \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
+		-e ACK_GINKGO_RC=true \
+		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
@@ -287,24 +290,24 @@ clean:
 ###############################################################################
 UT_DIR?=./pkg
 FV_DIR?=./test
-GINKGO_ARGS?= -v
+GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
 ut:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
+	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
-fv: cluster-create run-fvs cluster-destroy
+fv: cluster-create load-container-images run-fvs cluster-destroy
 run-fvs:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
+	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
-KUBECONFIG?=./kubeconfig.yaml
+KIND_KUBECONFIG?=./kubeconfig.yaml
 K8S_VERSION?=v1.21.14
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
@@ -313,7 +316,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
 	        --config ./deploy/kind-config.yaml \
-	        --kubeconfig $(KUBECONFIG) \
+	        --kubeconfig $(KIND_KUBECONFIG) \
 	        --image kindest/node:$(K8S_VERSION)
 
 	./deploy/scripts/ipv6_kind_cluster_update.sh
@@ -321,7 +324,74 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	$(MAKE) deploy-crds
 
 	# Wait for controller manager to be running and healthy.
-	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
+	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
+
+IMAGE_REGISTRY := docker.io
+VERSION_TAG := master
+NODE_IMAGE := calico/node
+APISERVER_IMAGE := calico/apiserver
+CNI_IMAGE := calico/cni
+FLEXVOL_IMAGE := calico/pod2daemon-flexvol
+KUBECONTROLLERS_IMAGE := calico/kube-controllers
+TYPHA_IMAGE := calico/typha
+CSI_IMAGE := calico/csi
+NODE_DRIVER_REGISTRAR_IMAGE := calico/node-driver-registrar
+
+.PHONY: calico-node.tar
+calico-node.tar:
+	docker pull $(IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(NODE_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-apiserver.tar
+calico-apiserver.tar:
+	docker pull $(IMAGE_REGISTRY)/$(APISERVER_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(APISERVER_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-cni.tar
+calico-cni.tar:
+	docker pull $(IMAGE_REGISTRY)/$(CNI_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(CNI_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-pod2daemon-flexvol.tar
+calico-pod2daemon-flexvol.tar:
+	docker pull $(IMAGE_REGISTRY)/$(FLEXVOL_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(FLEXVOL_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-kube-controllers.tar
+calico-kube-controllers.tar:
+	docker pull $(IMAGE_REGISTRY)/$(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-typha.tar
+calico-typha.tar:
+	docker pull $(IMAGE_REGISTRY)/$(TYPHA_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(TYPHA_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-csi.tar
+calico-csi.tar:
+	docker pull $(IMAGE_REGISTRY)/$(CSI_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(CSI_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-node-driver-registrar.tar
+calico-node-driver-registrar.tar:
+	docker pull $(IMAGE_REGISTRY)/$(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
+
+IMAGE_TARS := calico-node.tar \
+	calico-apiserver.tar \
+	calico-cni.tar \
+	calico-pod2daemon-flexvol.tar \
+	calico-kube-controllers.tar \
+	calico-typha.tar \
+	calico-csi.tar \
+	calico-node-driver-registrar.tar
+
+load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
+	# Load the latest tar files onto the currently running kind cluster.
+	KUBECONFIG=$(KIND_KUBECONFIG) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
+	# Restart the Calico containers so they launch with the newly loaded code.
+	# TODO: We should be able to do this without restarting everything in kube-system.
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl delete pods -n kube-system --all
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 ## kubectl create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
@@ -330,7 +400,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 ##   The CustomResourceDefinition "installations.operator.tigera.io" is invalid: metadata.annotations: Too long: must have at most 262144 bytes
 ##
 deploy-crds: kubectl
-	@export KUBECONFIG=$(KUBECONFIG) && \
+	@export KUBECONFIG=$(KIND_KUBECONFIG) && \
 		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
@@ -339,12 +409,12 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
-	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
 
 ## Destroy local kind cluster
 cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 	-$(BINDIR)/kind delete cluster
-	rm -f $(KUBECONFIG)
+	rm -f $(KIND_KUBECONFIG)
 
 
 

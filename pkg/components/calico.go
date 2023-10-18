@@ -20,100 +20,106 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-	CalicoRelease string = "v3.26.1"
+	CalicoRelease string = "master"
 
 	ComponentCalicoCNI = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/cni",
 		Registry: "",
 	}
 
 	ComponentCalicoCNIFIPS = component{
-		Version:  "v3.26.1-fips",
+		Version:  "master-fips",
 		Image:    "calico/cni",
 		Registry: "",
 	}
 
+	ComponentCalicoCNIWindows = component{
+		Version:  "master",
+		Image:    "calico/cni-windows",
+		Registry: "",
+	}
+
 	ComponentCalicoKubeControllers = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/kube-controllers",
 		Registry: "",
 	}
 
 	ComponentCalicoKubeControllersFIPS = component{
-		Version:  "v3.26.1-fips",
+		Version:  "master-fips",
 		Image:    "calico/kube-controllers",
 		Registry: "",
 	}
 
 	ComponentCalicoNode = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/node",
 		Registry: "",
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version:  "v3.26.1-fips",
+		Version:  "master-fips",
 		Image:    "calico/node",
 		Registry: "",
 	}
 
+	ComponentCalicoNodeWindows = component{
+		Version:  "master",
+		Image:    "calico/node-windows",
+		Registry: "",
+	}
+
 	ComponentCalicoTypha = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/typha",
 		Registry: "",
 	}
 
 	ComponentCalicoTyphaFIPS = component{
-		Version:  "v3.26.1-fips",
+		Version:  "master-fips",
 		Image:    "calico/typha",
 		Registry: "",
 	}
 
 	ComponentFlexVolume = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/pod2daemon-flexvol",
 		Registry: "",
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}
 
 	ComponentCalicoAPIServerFIPS = component{
-		Version:  "v3.26.1-fips",
+		Version:  "master-fips",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}
 
-	ComponentWindowsUpgrade = component{
-		Version:  "v3.26.1",
-		Image:    "calico/windows-upgrade",
-		Registry: "",
-	}
-
 	ComponentCalicoCSI = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/csi",
 		Registry: "",
 	}
 
 	ComponentCalicoCSIFIPS = component{
-		Version:  "v3.26.1-fips",
+		Version:  "master-fips",
 		Image:    "calico/csi",
 		Registry: "",
 	}
 
 	ComponentCalicoCSIRegistrar = component{
-		Version:  "v3.26.1",
+		Version:  "master",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = component{
-		Version:  "v3.26.1-fips",
+		Version:  "master-fips",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
@@ -125,17 +131,18 @@ var (
 	CalicoImages = []component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
+		ComponentCalicoCNIWindows,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
 		ComponentCalicoNodeFIPS,
+		ComponentCalicoNodeWindows,
 		ComponentCalicoTypha,
 		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,
-		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,

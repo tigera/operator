@@ -36,23 +36,12 @@ spec:
             description: Specification of the desired state for Tigera intrusion detection.
             properties:
               anomalyDetection:
-                description: AnomalyDetection provides configuration for running AnomalyDetection
-                  Component within IntrusionDetection. Anomaly Detection configuration
-                  will only be applied to standalone and management clusters.
+                description: AnomalyDetection is now deprecated, and configuring it
+                  has no effect.
                 properties:
                   storageClassName:
-                    description: StorageClassName will be used to query for an existing
-                      StorageClass with the same as the field value. It will also
-                      populate the PersistentVolumeClaim.StorageClassName that is
-                      used to provision disks for the Anomaly Detection API pod for
-                      model storage. If the field is left blank, Anomaly Detection
-                      API will be using EmptyDir VolumeSource. The StorageClassName
-                      should only be modified when no StorageClass is currently active.
-                      We recommend choosing a storage class dedicated to AnomalyDetection
-                      only. Otherwise, model retention cannot be guaranteed during
-                      upgrades. See https://docs.tigera.io/maintenance/upgrading for
-                      up-to-date instructions. This field is not used for managed
-                      clusters in a Multi-cluster management setup.
+                    description: StorageClassName is now deprecated, and configuring
+                      it has no effect.
                     type: string
                 type: object
               componentResources:
@@ -72,6 +61,28 @@ spec:
                       description: ResourceRequirements allows customization of limits
                         and requests for compute resources such as cpu and memory.
                       properties:
+                        claims:
+                          description: "Claims lists the names of resources, defined
+                            in spec.resourceClaims, that are used by this container.
+                            \n This is an alpha field and requires enabling the DynamicResourceAllocation
+                            feature gate. \n This field is immutable. It can only
+                            be set for containers."
+                          items:
+                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                            properties:
+                              name:
+                                description: Name must match the name of one entry
+                                  in pod.spec.resourceClaims of the Pod where this
+                                  field is used. It makes that resource available
+                                  inside a container.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
                         limits:
                           additionalProperties:
                             anyOf:

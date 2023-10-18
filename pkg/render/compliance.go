@@ -705,7 +705,7 @@ func (c *complianceComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     linseed,
+			Name:     TigeraLinseedSecretsClusterRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1633,12 +1633,12 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		})
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		})
 	} else {
 		egressRules = append(egressRules, v3.Rule{
@@ -1675,12 +1675,12 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.LinseedEntityRule,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		},
 	}
 
@@ -1696,7 +1696,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ManagerEntityRule,
+			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
 		},
 	}...)
 
@@ -1704,7 +1704,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   ManagerSourceEntityRule,
+			Source:   networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(complianceServerPort),
 			},

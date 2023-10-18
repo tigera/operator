@@ -199,14 +199,16 @@ var _ = Describe("DPI rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+
 		nodeKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
 		typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
 		dpiCertSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.DPITLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
+
 		trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair, dpiCertSecret)
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			TyphaSecret:   typhaKeyPair,
@@ -248,7 +250,7 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -285,23 +287,18 @@ var _ = Describe("DPI rendering tests", func() {
 
 		resources, _ := component.Objects()
 
-		expectedResources := []resourceTestObj{
-			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace}},
+			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName, Namespace: dpi.DeepPacketInspectionNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
 		}
-
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(resources, expectedResources)
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
@@ -337,22 +334,17 @@ var _ = Describe("DPI rendering tests", func() {
 
 		resources, _ := component.Objects()
 
-		expectedResources := []resourceTestObj{
-			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: "tigera-linseed", ns: dpi.DeepPacketInspectionNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace}},
+			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName, Namespace: dpi.DeepPacketInspectionNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: dpi.DeepPacketInspectionNamespace}},
 		}
-
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(resources, expectedResources)
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
@@ -388,17 +380,12 @@ var _ = Describe("DPI rendering tests", func() {
 
 		resources, _ := component.Objects()
 
-		expectedResources := []resourceTestObj{
-			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
 		}
-
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(resources, expectedResources)
 
 		dpiNs := rtest.GetResource(resources, dpi.DeepPacketInspectionNamespace, "", "", "v1", "Namespace").(*corev1.Namespace)
 		Expect(dpiNs).ShouldNot(BeNil())
@@ -448,7 +435,7 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -484,7 +471,7 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(createResources)).To(Equal(0))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -505,34 +492,24 @@ var _ = Describe("DPI rendering tests", func() {
 		component := dpi.DPI(cfg)
 		createResources, deleteResource := component.Objects()
 
-		expectedDeleteResources := []resourceTestObj{
-			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedDeleteResources := []client.Object{
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace}},
+			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName, Namespace: dpi.DeepPacketInspectionNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
 		}
+		rtest.ExpectResources(deleteResource, expectedDeleteResources)
 
-		Expect(len(deleteResource)).To(Equal(len(expectedDeleteResources)))
-
-		for i, expectedRes := range expectedDeleteResources {
-			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		expectedCreateResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: dpi.DeepPacketInspectionNamespace}},
 		}
-
-		expectedCreateResources := []resourceTestObj{
-			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-linseed", ns: dpi.DeepPacketInspectionNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-		}
-
-		Expect(len(createResources)).To(Equal(len(expectedCreateResources)))
-
-		for i, expectedRes := range expectedCreateResources {
-			rtest.ExpectResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(createResources, expectedCreateResources)
 	})
 
 	It("should delete resources for deep packet inspection for a management cluster if there is no DPI resource", func() {
@@ -552,34 +529,24 @@ var _ = Describe("DPI rendering tests", func() {
 		component := dpi.DPI(cfg)
 		createResources, deleteResource := component.Objects()
 
-		expectedDeleteResources := []resourceTestObj{
-			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: "tigera-linseed", ns: dpi.DeepPacketInspectionNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+		expectedDeleteResources := []client.Object{
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: dpi.DeepPacketInspectionNamespace}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace, Namespace: dpi.DeepPacketInspectionNamespace}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace}},
+			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName, Namespace: dpi.DeepPacketInspectionNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: dpi.DeepPacketInspectionNamespace}},
 		}
+		rtest.ExpectResources(deleteResource, expectedDeleteResources)
 
-		Expect(len(deleteResource)).To(Equal(len(expectedDeleteResources)))
-
-		for i, expectedRes := range expectedDeleteResources {
-			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		expectedCreateResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionLinseedRBACName}},
 		}
-
-		expectedCreateResources := []resourceTestObj{
-			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-		}
-
-		Expect(len(createResources)).To(Equal(len(expectedCreateResources)))
-
-		for i, expectedRes := range expectedCreateResources {
-			rtest.ExpectResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(createResources, expectedCreateResources)
 	})
 
 	It("should delete resources for deep packet inspection if there is no DPI resource", func() {
@@ -606,10 +573,10 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(len(createResources)).To(Equal(len(expectedCreateResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		for i, expectedRes := range expectedCreateResources {
-			rtest.ExpectResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -660,8 +627,8 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	Expect(dpiClusterRoleBinding.Subjects).Should(BeEquivalentTo(expectedCRB.Subjects))
 
 	dpiDaemonSet := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/node-certs"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/node-certs"))
 
 	Expect(dpiDaemonSet.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolumes))
 	Expect(dpiDaemonSet.Spec.Template.Spec.HostNetwork).Should(BeTrue())

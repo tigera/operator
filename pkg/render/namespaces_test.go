@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
-		rtest.ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("calico-system"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -49,7 +49,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
-		rtest.ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["openshift.io/run-level"]).To(Equal("0"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("control-plane"))
@@ -61,7 +61,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
-		rtest.ExpectResource(resources[0], "calico-system", "", "", "v1", "Namespace")
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetLabels()["control-plane"]).To(Equal("true"))
@@ -72,7 +72,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
-		rtest.ExpectResource(resources[1], "tigera-dex", "", "", "v1", "Namespace")
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[1], "tigera-dex", "", "", "v1", "Namespace")
 		meta := resources[1].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["name"]).To(Equal("tigera-dex"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
@@ -85,7 +85,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
-		rtest.ExpectResource(resources[1], "tigera-dex", "", "", "v1", "Namespace")
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[1], "tigera-dex", "", "", "v1", "Namespace")
 		meta := resources[1].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()["openshift.io/run-level"]).To(Equal("0"))
 		Expect(meta.GetAnnotations()["openshift.io/node-selector"]).To(Equal(""))

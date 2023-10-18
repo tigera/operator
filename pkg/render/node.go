@@ -1306,7 +1306,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		)
 	}
 	if c.bpfDataplaneEnabled() {
-		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
+		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: common.BPFVolumeName})
 	}
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})

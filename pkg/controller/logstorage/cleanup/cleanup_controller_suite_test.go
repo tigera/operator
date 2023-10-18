@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package users
+package cleanup
 
 import (
 	"testing"
@@ -29,6 +29,6 @@ import (
 func TestStatus(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/logstorage_users_controller_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/logstorage/users Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/logstorage_cleanup_controller_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/logstorage/cleanup Suite", []Reporter{junitReporter})
 }

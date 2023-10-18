@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package users
+package cleanup
 
 import (
 	"context"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -24,14 +26,14 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	tigeraelastic "github.com/tigera/operator/pkg/controller/logstorage/elastic"
 	"github.com/tigera/operator/pkg/controller/utils"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var _ = Describe("LogStorage users controller", func() {
+var _ = Describe("LogStorage cleanup controller", func() {
 	var (
 		cli client.Client
 	)
@@ -39,43 +41,64 @@ var _ = Describe("LogStorage users controller", func() {
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(operatorv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 	})
 
 	It("should clean up Elastic users for tenants that no longer exist", func() {
 		t := &testing.T{}
-		ctrl := UserController{
+		ctrl := CleanupController{
 			client:     cli,
 			esClientFn: tigeraelastic.MockESCLICreator,
 		}
 		testESClient := tigeraelastic.MockESClient{}
 		ctx := context.WithValue(context.Background(), tigeraelastic.MockESClientKey("mockESClient"), &testESClient)
 
+		clusterID1 := "cluster1"
+		clusterID2 := "cluster2"
+
+		tenantID1 := "tenant1"
+		tenantID2 := "tenant2"
+
+		staleUser := utils.LinseedUser(clusterID1, tenantID1)
+
 		esTestUsers := []utils.User{
-			{
-				Username: "tigera-ee-linseed-1",
-			},
-			{
-				Username: "tigera-ee-linseed-2",
-			},
+			*staleUser,
+			*utils.LinseedUser(clusterID1, tenantID2),
+			*utils.LinseedUser(clusterID2, tenantID1),
+			*utils.LinseedUser(clusterID2, tenantID2),
 		}
 
 		testESClient.On("GetUsers", ctx).Return(esTestUsers, nil)
-		testESClient.On("DeleteUser", ctx, &utils.User{Username: "tigera-ee-linseed-1"}).Return(nil)
+		testESClient.On("DeleteUser", ctx, staleUser).Return(nil)
+		testESClient.On("DeleteRoles", ctx, staleUser.Roles).Return(nil)
+		testESClient.On("deleteRole", ctx, staleUser.Roles[0]).Return(nil)
 
-		t1 := operatorv1.Tenant{
-			ObjectMeta: v1.ObjectMeta{
+		cluster1IDConfigMap := corev1.ConfigMap{
+			ObjectMeta: apiv1.ObjectMeta{
+				Name:      "cluster-info",
+				Namespace: "tigera-operator",
+			},
+			Data: map[string]string{
+				"cluster-id": clusterID1,
+			},
+		}
+		err := cli.Create(ctx, &cluster1IDConfigMap)
+		Expect(err).NotTo(HaveOccurred())
+
+		cluster1Tenant2 := operatorv1.Tenant{
+			ObjectMeta: apiv1.ObjectMeta{
 				Name: "default",
 			},
 			Spec: operatorv1.TenantSpec{
-				ID: "2",
+				ID: tenantID2,
 			},
 		}
 
-		err := cli.Create(ctx, &t1)
+		err = cli.Create(ctx, &cluster1Tenant2)
 		Expect(err).NotTo(HaveOccurred())
 
-		logr := logf.Log.WithName("user-controller-test")
+		logr := logf.Log.WithName("cleanup-controller-test")
 		err = ctrl.cleanupStaleUsers(ctx, logr)
 		Expect(err).NotTo(HaveOccurred())
 

@@ -45,8 +45,31 @@ func (m *MockESClient) SetILMPolicies(_ context.Context, _ *operatorv1.LogStorag
 	return nil
 }
 
+func (m *MockESClient) deleteRole(ctx context.Context, role utils.Role) error {
+	ret := m.Called(ctx, role)
+	return ret.Error(0)
+}
+
+func (m *MockESClient) DeleteRoles(ctx context.Context, roles []utils.Role) error {
+	var ret mock.Arguments
+	for _, role := range roles {
+		ret = m.MethodCalled("deleteRole", ctx, role)
+		if ret.Error(0) != nil {
+			return ret.Error(0)
+		}
+	}
+
+	ret = m.Called(ctx, roles)
+	return ret.Error(0)
+}
+
 func (m *MockESClient) DeleteUser(ctx context.Context, u *utils.User) error {
-	ret := m.Called(ctx, u)
+	ret := m.MethodCalled("DeleteRoles", ctx, u.Roles)
+	if ret.Error(0) != nil {
+		return ret.Error(0)
+	}
+
+	ret = m.Called(ctx, u)
 	return ret.Error(0)
 }
 

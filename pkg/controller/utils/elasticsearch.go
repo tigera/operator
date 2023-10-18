@@ -151,9 +151,9 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 	return &esClient{client: esCli}, err
 }
 
-func formatName(name string, clusterName, tenantID string, management bool) string {
+func formatName(name string, clusterID, tenantID string, management bool) string {
 	if tenantID != "" {
-		return fmt.Sprintf("%s_%s", name, tenantID)
+		return fmt.Sprintf("%s_%s_%s", name, clusterID, tenantID)
 	}
 
 	var formattedName string
@@ -161,7 +161,7 @@ func formatName(name string, clusterName, tenantID string, management bool) stri
 	if management {
 		formattedName = string(name)
 	} else {
-		formattedName = fmt.Sprintf("%s-%s", string(name), clusterName)
+		formattedName = fmt.Sprintf("%s-%s", string(name), clusterID)
 	}
 
 	// Add the secure suffix before returning.
@@ -179,8 +179,8 @@ func indexPattern(prefix, cluster, suffix, tenant string) string {
 // Name for the linseed user in ES.
 var ElasticsearchUserNameLinseed = "tigera-ee-linseed"
 
-func LinseedUser(tenant string) *User {
-	username := formatName(ElasticsearchUserNameLinseed, "cluster", tenant, true)
+func LinseedUser(clusterID, tenant string) *User {
+	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant, true)
 	return &User{
 		Username: username,
 		Roles: []Role{
@@ -298,7 +298,7 @@ func (es *esClient) CreateUser(ctx context.Context, user *User) error {
 }
 
 // DeleteRoles wraps deleteRoles to make deleting multiple rows slightly more convenient
-func (es *esClient) DeleteRoles(ctx context.Context, roles ...Role) error {
+func (es *esClient) DeleteRoles(ctx context.Context, roles []Role) error {
 	for _, role := range roles {
 		if err := es.deleteRole(ctx, role); err != nil {
 			return err
@@ -323,17 +323,8 @@ func (es *esClient) deleteRole(ctx context.Context, role Role) error {
 }
 
 func (es *esClient) DeleteUser(ctx context.Context, user *User) error {
-	var rolesToDelete []Role
-	for _, role := range user.Roles {
-		if role.Definition != nil {
-			rolesToDelete = append(rolesToDelete, role)
-		}
-	}
-
-	if len(rolesToDelete) > 0 {
-		if err := es.DeleteRoles(ctx, rolesToDelete...); err != nil {
-			return err
-		}
+	if err := es.DeleteRoles(ctx, user.Roles); err != nil {
+		return err
 	}
 
 	_, err := es.client.XPackSecurityDeleteUser(user.Username).Do(ctx)

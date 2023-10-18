@@ -17,11 +17,11 @@ package users
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/go-logr/logr"
 
@@ -163,8 +163,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// Wait for Elasticsearch to be installed and available. We don't need to do this in multi-tenant mode because
-	// we disable kube-controllers ES access in this mode.
+	// Wait for Elasticsearch to be installed and available.
 	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
@@ -175,9 +174,26 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
+	// TODO: Fetch cluster UUID and use it in construction of ES usernames so that we can determine which cluster
+	// is responsible for which ES users in Calico Cloud deployments where multiple multi-tenant management clusters
+	// are connecting to a single ElasticSearch instance.
+	clusterIDConfigMap := corev1.ConfigMap{
+		ObjectMeta: apiv1.ObjectMeta{
+			Name:      "cluster-info",
+			Namespace: "tigera-operator",
+		},
+	}
+	err = r.client.Get(ctx, client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}, &clusterIDConfigMap)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for cluster-info configmap to be available", nil, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	clusterID := clusterIDConfigMap.Data["cluster-id"]
+
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
-	linseedUser := utils.LinseedUser(tenantID)
+	linseedUser := utils.LinseedUser(clusterID, tenantID)
 	basicCreds := corev1.Secret{}
 	var credentialSecrets []client.Object
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
@@ -212,14 +228,8 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Now that the secret has been created, also provision the user in ES.
-	if err = r.createLinseedLogin(ctx, tenantID, &basicCreds, reqLogger); err != nil {
+	if err = r.createLinseedLogin(ctx, clusterID, tenantID, &basicCreds, reqLogger); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create Linseed user in ES", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// Clean up any stale users that may have been left behind by a previous tenant
-	if err = r.cleanupStaleUsers(ctx, reqLogger); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failure occurred while cleaning up stale users", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -228,7 +238,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	return reconcile.Result{}, nil
 }
 
-func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
+func (r *UserController) createLinseedLogin(ctx context.Context, clusterID, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
 	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
@@ -245,51 +255,11 @@ func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string
 	}
 
 	// Create the user in ES.
-	user := utils.LinseedUser(tenantID)
+	user := utils.LinseedUser(clusterID, tenantID)
 	user.Password = password
 	if err = esClient.CreateUser(ctx, user); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
 		return err
-	}
-
-	return nil
-}
-
-func (r *UserController) cleanupStaleUsers(ctx context.Context, logger logr.Logger) error {
-	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
-	if err != nil {
-		return fmt.Errorf("failed to connect to Elasticsearch - failed to create the Elasticsearch client")
-	}
-
-	// Each Elasticsearch instance is only connected to a single management cluster, but if that ever changes we'll
-	// need to rework this logic so that we're only deleting stale users created by the current management cluster.
-	allEsUsers, err := esClient.GetUsers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to fetch users from Elasticsearch")
-	}
-
-	tenants := operatorv1.TenantList{}
-	err = r.client.List(ctx, &tenants)
-	if err != nil {
-		return fmt.Errorf("failed to fetch TenantList")
-	}
-
-	for _, user := range allEsUsers {
-		if strings.HasPrefix(user.Username, utils.ElasticsearchUserNameLinseed) {
-			active := false
-			for _, t := range tenants.Items {
-				if strings.Contains(user.Username, t.Spec.ID) {
-					active = true
-					break
-				}
-			}
-			if !active {
-				err = esClient.DeleteUser(ctx, &user)
-				if err != nil {
-					logger.Error(err, "Failed to delete elastic user")
-				}
-			}
-		}
 	}
 
 	return nil

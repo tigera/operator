@@ -72,7 +72,6 @@ var _ = Describe("LogStorage cleanup controller", func() {
 		testESClient.On("GetUsers", ctx).Return(esTestUsers, nil)
 		testESClient.On("DeleteUser", ctx, staleUser).Return(nil)
 		testESClient.On("DeleteRoles", ctx, staleUser.Roles).Return(nil)
-		testESClient.On("deleteRole", ctx, staleUser.Roles[0]).Return(nil)
 
 		cluster1IDConfigMap := corev1.ConfigMap{
 			ObjectMeta: apiv1.ObjectMeta{

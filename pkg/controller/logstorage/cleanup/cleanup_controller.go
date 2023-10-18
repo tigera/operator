@@ -47,7 +47,6 @@ type CleanupController struct {
 	status      status.StatusManager
 	esClientFn  utils.ElasticsearchClientCreator
 	multiTenant bool
-	clusterID   string
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {

@@ -70,7 +70,9 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		} else {
 			// BPF dataplane:
 			// Check daemonset rollout complete before patching.
-			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
+			if fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled) {
+				patchFelixConfig = checkDaemonsetRolloutComplete(ds)
+			}
 		}
 
 		// Attempt to patch Felix Config now.

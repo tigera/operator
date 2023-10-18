@@ -45,11 +45,14 @@ import (
 )
 
 const (
-	BirdTemplatesConfigMapName        = "bird-templates"
-	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
-	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
-	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
-	bgpBindModeHashAnnotation         = "hash.operator.tigera.io/bgp-bind-mode"
+	BirdTemplatesConfigMapName = "bird-templates"
+	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
+	BpfOperatorAnnotation      = "operator.tigera.io/bpfEnabled"
+
+	nodeCniConfigAnnotation   = "hash.operator.tigera.io/cni-config"
+	bgpLayoutHashAnnotation   = "hash.operator.tigera.io/bgp-layout"
+	bgpBindModeHashAnnotation = "hash.operator.tigera.io/bgp-bind-mode"
+
 	CSRLabelCalicoSystem              = "calico-system"
 	BGPLayoutConfigMapName            = "bgp-layout"
 	BGPLayoutConfigMapKey             = "earlyNetworkConfiguration"
@@ -934,13 +937,20 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
 	}
 
+	// Include the annotation to indicate whether BPF is configured or not.
+	dsAnnotations := make(map[string]string)
+	if c.bpfDataplaneEnabled() {
+		dsAnnotations[BpfOperatorAnnotation] = "true"
+	}
+
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.NodeDaemonSetName,
-			Namespace: common.CalicoNamespace,
+			Name:        common.NodeDaemonSetName,
+			Namespace:   common.CalicoNamespace,
+			Annotations: dsAnnotations,
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -1110,9 +1120,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 }
 
 func (c *nodeComponent) bpfDataplaneEnabled() bool {
-	return c.cfg.Installation.CalicoNetwork != nil &&
-		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+	return common.BpfDataplaneEnabled(c.cfg.Installation)
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {
@@ -1298,7 +1306,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		)
 	}
 	if c.bpfDataplaneEnabled() {
-		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
+		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: common.BPFVolumeName})
 	}
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
@@ -1495,9 +1503,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		}
 	}
 
-	if c.bpfDataplaneEnabled() {
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
-	}
 	if c.vppDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "FELIX_USEINTERNALDATAPLANEDRIVER",

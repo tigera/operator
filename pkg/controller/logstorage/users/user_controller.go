@@ -21,6 +21,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/go-logr/logr"
 
@@ -49,6 +50,7 @@ type UserController struct {
 	client      client.Client
 	scheme      *runtime.Scheme
 	status      status.StatusManager
+	esClientFn  utils.ElasticsearchClientCreator
 	multiTenant bool
 }
 
@@ -172,13 +174,30 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
+	// TODO: Fetch cluster UUID and use it in construction of ES usernames so that we can determine which cluster
+	// is responsible for which ES users in Calico Cloud deployments where multiple multi-tenant management clusters
+	// are connecting to a single ElasticSearch instance.
+	clusterIDConfigMap := corev1.ConfigMap{
+		ObjectMeta: apiv1.ObjectMeta{
+			Name:      "cluster-info",
+			Namespace: "tigera-operator",
+		},
+	}
+	err = r.client.Get(ctx, client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}, &clusterIDConfigMap)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for cluster-info configmap to be available", nil, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	clusterID := clusterIDConfigMap.Data["cluster-id"]
+
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
-	linseedUser := utils.LinseedUser(tenantID)
+	linseedUser := utils.LinseedUser(clusterID, tenantID)
 	basicCreds := corev1.Secret{}
 	var credentialSecrets []client.Object
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
-	if err := r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
+	if err = r.client.Get(ctx, key, &basicCreds); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
@@ -203,13 +222,13 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 	}
-	if err := hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
+	if err = hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating Linseed user secret", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Now that the secret has been created, also provision the user in ES.
-	if err := r.createLinseedLogin(ctx, tenantID, &basicCreds, reqLogger); err != nil {
+	if err = r.createLinseedLogin(ctx, clusterID, tenantID, &basicCreds, reqLogger); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create Linseed user in ES", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -219,8 +238,8 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	return reconcile.Result{}, nil
 }
 
-func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
-	esClient, err := utils.NewElasticClient(r.client, ctx, relasticsearch.ElasticEndpoint())
+func (r *UserController) createLinseedLogin(ctx context.Context, clusterID, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
+	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return err
@@ -236,7 +255,7 @@ func (r *UserController) createLinseedLogin(ctx context.Context, tenantID string
 	}
 
 	// Create the user in ES.
-	user := utils.LinseedUser(tenantID)
+	user := utils.LinseedUser(clusterID, tenantID)
 	user.Password = password
 	if err = esClient.CreateUser(ctx, user); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)

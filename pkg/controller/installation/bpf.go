@@ -128,7 +128,18 @@ func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *a
 }
 
 func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
-	return ds.Annotations != nil && ds.Annotations[render.BpfOperatorAnnotation] == "true"
+
+	if ds.Spec.Template.Spec.Volumes == nil {
+		return false
+	}
+
+	for _, volume := range ds.Spec.Template.Spec.Volumes {
+		if volume.Name == common.BPFVolumeName {
+			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+		}
+	}
+
+	return false
 }
 
 func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchBpfEnabled bool) error {

@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
+func bpfUpgradeDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 
 	// Query calico-node DS: if FELIX_BPFENABLED env var set and FC bpfEnabled unset then patch FC and quit.
 	patchFelixConfig, err := processDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
@@ -38,64 +38,50 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		return err
 	}
 
-	// Otherwise check dataplane and patch Felix Config according to logic:
-	if !patchFelixConfig {
+	// Attempt to patch Felix Config now.
+	return patchFelixConfigurationImpl(r, ctx, install, fc, reqLogger, patchFelixConfig)
+}
 
-		// Check the install dataplane mode is either Iptables or BPF.
-		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 
-		// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
-		if fc.Spec.BPFEnabled != nil {
+	var patchFelixConfig bool
 
-			fcBPFEnabled := *fc.Spec.BPFEnabled
-			if installBpfEnabled != fcBPFEnabled {
+	// Check the install dataplane mode is either Iptables or BPF.
+	installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
 
-				// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
-				if fc.Annotations[render.BpfOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
-					text := fmt.Sprintf("An error occurred while attempting patch Felix Config bpfEnabled: '%s' as Felix Config has been modified externally to '%s'",
-						strconv.FormatBool(installBpfEnabled),
-						strconv.FormatBool(fcBPFEnabled))
-					err = errors.New(text)
-					return err
-				}
-			}
-		}
+	// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
+	if fc.Spec.BPFEnabled != nil {
 
-		if !installBpfEnabled {
-			// IP Tables dataplane:
-			// Only patch Felix Config once to prevent log spamming.
-			if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
-				patchFelixConfig = true
-			}
-		} else {
-			// BPF dataplane:
-			// Check daemonset rollout complete before patching.
-			if fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled) {
-				patchFelixConfig = checkDaemonsetRolloutComplete(ds)
-			}
-		}
+		fcBPFEnabled := *fc.Spec.BPFEnabled
+		if installBpfEnabled != fcBPFEnabled {
 
-		// Attempt to patch Felix Config now.
-		if patchFelixConfig {
-
-			err = patchFelixConfiguration(r, ctx, fc, reqLogger, installBpfEnabled)
-			if err != nil {
+			// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
+			if fc.Annotations[render.BpfOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
+				text := fmt.Sprintf("An error occurred while attempting patch Felix Config bpfEnabled: '%s' as Felix Config has been modified externally to '%s'",
+					strconv.FormatBool(installBpfEnabled),
+					strconv.FormatBool(fcBPFEnabled))
+				err := errors.New(text)
 				return err
 			}
-
-			// Ensure if no errors occurred while attempting to patch Falix Config then successfully patched.
-			patchFelixConfig = err == nil
 		}
 	}
 
-	if patchFelixConfig {
-		if fc.Spec.BPFEnabled != nil {
-			msg := fmt.Sprintf("Successfully patched Felix Config OK bpfEnabled='%s'", strconv.FormatBool(*fc.Spec.BPFEnabled))
-			reqLogger.Info(msg)
+	if !installBpfEnabled {
+		// IP Tables dataplane:
+		// Only patch Felix Config once to prevent log spamming.
+		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
+			patchFelixConfig = true
+		}
+	} else {
+		// BPF dataplane:
+		// Check daemonset rollout complete before patching.
+		if fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled) {
+			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
 		}
 	}
 
-	return nil
+	// Attempt to patch Felix Config now.
+	return patchFelixConfigurationImpl(r, ctx, install, fc, reqLogger, patchFelixConfig)
 }
 
 func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
@@ -140,6 +126,30 @@ func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
 	}
 
 	return false
+}
+
+func patchFelixConfigurationImpl(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchFelixConfig bool) error {
+
+	if patchFelixConfig {
+
+		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+		err := patchFelixConfiguration(r, ctx, fc, reqLogger, installBpfEnabled)
+		if err != nil {
+			return err
+		}
+
+		// Ensure if no errors occurred while attempting to patch Falix Config then successfully patched.
+		patchFelixConfig = err == nil
+	}
+
+	if patchFelixConfig {
+		if fc.Spec.BPFEnabled != nil {
+			msg := fmt.Sprintf("Successfully patched Felix Config OK bpfEnabled='%s'", strconv.FormatBool(*fc.Spec.BPFEnabled))
+			reqLogger.Info(msg)
+		}
+	}
+
+	return nil
 }
 
 func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchBpfEnabled bool) error {

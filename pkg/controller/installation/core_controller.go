@@ -1418,6 +1418,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// BPF Upgrade env var initial check:
+	var calicoNodeDaemonset appsv1.DaemonSet
+	calicoNodeDaemonset = appsv1.DaemonSet{}
+
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying the calico-node daemonset")
+		return reconcile.Result{}, err
+	}
+
+	// Next delegate logic implementation here using the state of the installation and dependent resources.
+	err = bpfUpgradeDaemonsetEnvVar(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade Calico-Node DS env var")
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to create or update the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
@@ -1501,7 +1518,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// BPF Upgrade without disruption:
 	// First get the calico-node daemonset.
-	calicoNodeDaemonset := appsv1.DaemonSet{}
+	calicoNodeDaemonset = appsv1.DaemonSet{}
 	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
 	if err != nil {
 		reqLogger.Error(err, "An error occurred when querying the calico-node daemonset")

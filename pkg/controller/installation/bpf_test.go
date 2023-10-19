@@ -181,7 +181,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := bpfUpgradeWithoutDisruption(&r, ctx, cr, ds, fc, reqLogger)
+			err := bpfUpgradeDaemonsetEnvVar(&r, ctx, cr, ds, fc, reqLogger)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.

@@ -41,7 +41,6 @@ import (
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
-	var esConfigMap *relasticsearch.ClusterConfig
 	var cfg *render.FluentdConfiguration
 
 	expectedFluentdPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_unmanaged.json")
@@ -51,7 +50,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		//esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -62,10 +61,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.FluentdConfiguration{
-			LogCollector:    &operatorv1.LogCollector{},
-			ESClusterConfig: esConfigMap,
-			ClusterDomain:   dns.DefaultClusterDomain,
-			OSType:          rmeta.OSTypeLinux,
+			LogCollector:  &operatorv1.LogCollector{},
+			ClusterDomain: dns.DefaultClusterDomain,
+			OSType:        rmeta.OSTypeLinux,
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
@@ -823,6 +821,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
 			FetchInterval: fetchInterval,
 		}
+		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
 			Key:      "foo",
 			Operator: corev1.TolerationOpEqual,

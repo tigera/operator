@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG QEMU_IMAGE=calico/go-build:v0.84-s390x
+ARG QEMU_IMAGE=calico/go-build:v0.88-s390x
 FROM ${QEMU_IMAGE} as qemu
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.8 AS ubi

@@ -533,7 +533,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 
 	if c.cfg.Tenant != nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
+		env = append(env,
+			corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace},
+			corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Tenant.Namespace)},
+		)
 	}
 
 	return corev1.Container{

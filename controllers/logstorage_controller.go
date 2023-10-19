@@ -18,7 +18,7 @@ package controllers
 
 import (
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/controller/logstorage/cleanup"
+	"github.com/tigera/operator/pkg/controller/logstorage/esuserscleanup"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -93,7 +93,7 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 
 	// The cleanup controller runs in multi-tenant mode only and is responsible for garbage collection and cleanup of stale
 	// resources
-	if err := cleanup.Add(mgr, opts); err != nil {
+	if err := esuserscleanup.Add(mgr, opts); err != nil {
 		return err
 	}
 

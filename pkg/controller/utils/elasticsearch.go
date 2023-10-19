@@ -151,22 +151,8 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 	return &esClient{client: esCli}, err
 }
 
-func formatName(name string, clusterID, tenantID string, management bool) string {
-	if tenantID != "" {
-		return fmt.Sprintf("%s_%s_%s", name, clusterID, tenantID)
-	}
-
-	var formattedName string
-
-	if management {
-		formattedName = string(name)
-	} else {
-		formattedName = fmt.Sprintf("%s-%s", string(name), clusterID)
-	}
-
-	// Add the secure suffix before returning.
-	formattedName = fmt.Sprintf("%s-secure", formattedName)
-	return formattedName
+func formatName(name, clusterID, tenantID string) string {
+	return fmt.Sprintf("%s_%s_%s", name, clusterID, tenantID)
 }
 
 func indexPattern(prefix, cluster, suffix, tenant string) string {
@@ -180,7 +166,7 @@ func indexPattern(prefix, cluster, suffix, tenant string) string {
 var ElasticsearchUserNameLinseed = "tigera-ee-linseed"
 
 func LinseedUser(clusterID, tenant string) *User {
-	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant, true)
+	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant)
 	return &User{
 		Username: username,
 		Roles: []Role{

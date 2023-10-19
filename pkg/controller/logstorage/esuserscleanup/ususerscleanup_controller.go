@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cleanup
+package esuserscleanup
 
 import (
 	"context"
@@ -23,12 +23,10 @@ import (
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	corev1 "k8s.io/api/core/v1"
-	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -44,14 +42,13 @@ var log = logf.Log.WithName("controller_logstorage_cleanup")
 type CleanupController struct {
 	client      client.Client
 	scheme      *runtime.Scheme
-	status      status.StatusManager
 	esClientFn  utils.ElasticsearchClientCreator
 	multiTenant bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.MultiTenant {
-		// This controller is only meant to run alongside other multi-tenant exclusive controllers
+		// This controller is only meant to run alongside the users controller which is a multi-tenant exclusive controller.
 		return nil
 	}
 
@@ -59,9 +56,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		client:      mgr.GetClient(),
 		scheme:      mgr.GetScheme(),
 		multiTenant: opts.MultiTenant,
-		status:      status.New(mgr.GetClient(), "log-storage-cleanup", opts.KubernetesVersion),
 	}
-	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
 	c, err := controller.New("log-storage-cleanup-controller", mgr, controller.Options{Reconciler: r})
@@ -89,22 +84,17 @@ func (r *CleanupController) Reconcile(ctx context.Context, request reconcile.Req
 	// Wait for Elasticsearch to be installed and available.
 	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	// Clean up any stale users that may have been left behind by a previous tenant
 	if err := r.cleanupStaleUsers(ctx, reqLogger); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failure occurred while cleaning up stale users", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	r.status.ReadyToMonitor()
-	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
 }
 
@@ -125,21 +115,16 @@ func (r *CleanupController) cleanupStaleUsers(ctx context.Context, logger logr.L
 		return fmt.Errorf("failed to fetch TenantList")
 	}
 
-	// TODO: Fetch cluster UUID and use it to filter out stale users from clusters other than our own. The exact form
-	// this will take is TBD. However the cluster UUID is stored/fetched should be immutable to prevent the possibility
-	// of a change in cluster-id resulting in orphaned users
-	clusterIDConfigMap := corev1.ConfigMap{
-		ObjectMeta: apiv1.ObjectMeta{
-			Name:      "cluster-info",
-			Namespace: "tigera-operator",
-		},
-	}
+	clusterIDConfigMap := corev1.ConfigMap{}
 	err = r.client.Get(ctx, client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}, &clusterIDConfigMap)
 	if err != nil {
 		return fmt.Errorf("failed to fetch cluster-info configmap")
 	}
 
-	clusterID := clusterIDConfigMap.Data["cluster-id"]
+	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
+	if !ok {
+		return fmt.Errorf("%s ConfigMap does not contain expected 'cluster-id' key", clusterIDConfigMap.Name)
+	}
 
 	for _, user := range allESUsers {
 		if strings.HasPrefix(user.Username, fmt.Sprintf("%s_%s_", utils.ElasticsearchUserNameLinseed, clusterID)) {

@@ -19,11 +19,9 @@ import (
 	"fmt"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/go-logr/logr"
 
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -174,22 +172,21 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// TODO: Fetch cluster UUID and use it in construction of ES usernames so that we can determine which cluster
-	// is responsible for which ES users in Calico Cloud deployments where multiple multi-tenant management clusters
-	// are connecting to a single ElasticSearch instance.
-	clusterIDConfigMap := corev1.ConfigMap{
-		ObjectMeta: apiv1.ObjectMeta{
-			Name:      "cluster-info",
-			Namespace: "tigera-operator",
-		},
-	}
-	err = r.client.Get(ctx, client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}, &clusterIDConfigMap)
+	clusterIDConfigMap := corev1.ConfigMap{}
+	clusterIDConfigMapKey := client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}
+	err = r.client.Get(ctx, clusterIDConfigMapKey, &clusterIDConfigMap)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for cluster-info configmap to be available", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Waiting for ConfigMap %s/%s to be available", clusterIDConfigMapKey.Namespace, clusterIDConfigMapKey.Name),
+			nil, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	clusterID := clusterIDConfigMap.Data["cluster-id"]
+	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
+	if !ok {
+		err = fmt.Errorf("%s ConfigMap does not contain expected 'cluster-id' key", clusterIDConfigMap.Name)
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), nil, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.

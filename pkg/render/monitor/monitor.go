@@ -684,6 +684,9 @@ func (mc *monitorComponent) prometheusServiceService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PrometheusServiceServiceName,
 			Namespace: common.TigeraPrometheusNamespace,
+			Labels: map[string]string{
+				"k8s-app": TigeraPrometheusObjectName,
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,

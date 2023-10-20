@@ -75,6 +75,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:      mgr.GetScheme(),
 		multiTenant: opts.MultiTenant,
 		status:      status.New(mgr.GetClient(), "log-storage-users", opts.KubernetesVersion),
+		esClientFn:  utils.NewElasticClient,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -124,8 +125,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Now that the users controller is set up, we can also set up the controller that cleans up stale users
 	usersCleanupReconciler := &UsersCleanupController{
-		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
+		client:     mgr.GetClient(),
+		scheme:     mgr.GetScheme(),
+		esClientFn: utils.NewElasticClient,
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.

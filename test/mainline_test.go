@@ -357,7 +357,7 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 	Expect(err).NotTo(HaveOccurred())
 
 	ds := &apps.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace, Labels: make(map[string]string)},
 		Spec: apps.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{},

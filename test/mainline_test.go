@@ -358,13 +358,15 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 		Expect(err).NotTo(HaveOccurred())
 	}
 
+	labels := make(map[string]string)
+	labels["foo"] = "bar"
 	ds := &apps.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace, Labels: make(map[string]string)},
+		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace, Labels: labels},
 		Spec: apps.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{},
+				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+					Containers: []corev1.Container{{Name: render.CalicoNodeObjectName, Image: render.CalicoNodeObjectName}},
 				},
 			},
 		},

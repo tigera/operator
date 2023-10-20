@@ -426,6 +426,20 @@ var _ = Describe("Testing core-controller installation", func() {
 						},
 					},
 				})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -810,6 +824,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -984,6 +1012,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()

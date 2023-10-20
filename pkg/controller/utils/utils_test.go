@@ -272,6 +272,42 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 
 })
 
+var _ = Describe("Utils ElasticSearch test", func() {
+	var (
+		userPrefix = "test-es-prefix"
+		clusterID  = "clusterUUID"
+		tenantID   = "tenantID"
+	)
+	It("should generate usernames in expected format", func() {
+		generatedESUsername := formatName(userPrefix, clusterID, tenantID)
+		expectedESUsername := fmt.Sprintf("%s_%s_%s", userPrefix, clusterID, tenantID)
+		Expect(generatedESUsername).To(Equal(expectedESUsername))
+	})
+
+	It("should generate Linseed ElasticUser with expected username and roles", func() {
+		linseedUser := LinseedUser(clusterID, tenantID)
+		expectedLinseedESName := fmt.Sprintf("%s_%s_%s", ElasticsearchUserNameLinseed, clusterID, tenantID)
+
+		Expect(linseedUser.Username).To(Equal(expectedLinseedESName))
+		Expect(len(linseedUser.Roles)).To(Equal(1))
+		linseedRole := linseedUser.Roles[0]
+		Expect(linseedRole.Name).To(Equal(expectedLinseedESName))
+
+		expectedLinseedRoleDef := RoleDefinition{
+			Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
+			Indices: []RoleIndex{
+				{
+					// Include both single-index and multi-index name formats.
+					Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenantID), "calico_*"},
+					Privileges: []string{"create_index", "write", "manage", "read"},
+				},
+			},
+		}
+
+		Expect(*linseedRole.Definition).To(Equal(expectedLinseedRoleDef))
+	})
+})
+
 type fakeClient struct {
 	discovery discovery.DiscoveryInterface
 	kubernetes.Interface

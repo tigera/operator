@@ -21,6 +21,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +31,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
@@ -57,6 +59,7 @@ const (
 
 	// Use the same API server container name for both OSS and Enterprise.
 	APIServerContainerName                  = "calico-apiserver"
+	APIServerK8sAppName                     = "calico-apiserver"
 	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
 
 	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
@@ -222,6 +225,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.apiServerServiceAccount(),
 		c.apiServerDeployment(),
 		c.apiServerService(),
+		c.apiServerPodDisruptionBudget(),
 	)
 
 	// Add in certificates for API server TLS.
@@ -288,6 +292,25 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *apiServerComponent) Ready() bool {
 	return true
+}
+
+func (c *apiServerComponent) apiServerPodDisruptionBudget() *policyv1.PodDisruptionBudget {
+	maxUnavailable := intstr.FromInt(1)
+	return &policyv1.PodDisruptionBudget{
+		TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      common.APIServerDeploymentName,
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MaxUnavailable: &maxUnavailable,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					AppLabelName: APIServerK8sAppName,
+				},
+			},
+		},
+	}
 }
 
 // apiServiceRegistration creates an API service that registers Tigera Secure APIs (and API server).

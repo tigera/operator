@@ -965,6 +965,31 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 			}))
 		})
+
+		It("should render multi-tenant environment variables", func() {
+			tenantAResources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantANamespace,
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tenant",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{
+						ID: "tenant-a",
+					},
+				},
+			})
+			d := rtest.GetResource(tenantAResources, "tigera-manager", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[2].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: tenantANamespace}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: "tenant-a"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
+		})
 	})
 })
 
@@ -977,6 +1002,7 @@ type renderConfig struct {
 	openshift               bool
 	ns                      string
 	bindingNamespaces       []string
+	tenant                  *operatorv1.Tenant
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -1042,6 +1068,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		Namespace:               roc.ns,
 		BindingNamespaces:       roc.bindingNamespaces,
 		TruthNamespace:          common.OperatorNamespace(),
+		Tenant:                  roc.tenant,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

@@ -101,16 +101,7 @@ func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *a
 		}
 	}
 
-	if dsBpfEnabledStatus && fc.Spec.BPFEnabled == nil {
-		err = patchFelixConfiguration(r, ctx, fc, reqLogger, dsBpfEnabledStatus)
-		if err != nil {
-			return false, err
-		} else {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return dsBpfEnabledStatus && fc.Spec.BPFEnabled == nil, nil
 }
 
 func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {

@@ -342,7 +342,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(cr.Rules).To(ContainElements(expectedRules))
 		})
 
-		It("should render MULTI-TENANT environment variables", func() {
+		It("should render multi-tenant environment variables", func() {
 			cfg.ManagementCluster = true
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())

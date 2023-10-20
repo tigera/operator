@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package esuserscleanup
+package users
 
 import (
 	"context"
@@ -47,7 +47,7 @@ var _ = Describe("LogStorage cleanup controller", func() {
 
 	It("should clean up Elastic users for tenants that no longer exist", func() {
 		t := &testing.T{}
-		ctrl := CleanupController{
+		ctrl := UsersCleanupController{
 			client:     cli,
 			esClientFn: tigeraelastic.MockESCLICreator,
 		}

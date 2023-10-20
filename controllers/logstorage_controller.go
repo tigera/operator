@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/controller/logstorage/esuserscleanup"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -88,12 +87,6 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 	// The users controller runs in multi-tenant mode only, and is responsible for genmerating unique credentials for each Linseed instance
 	// and provisioning users into Elasticsearch for them to use.
 	if err := users.Add(mgr, opts); err != nil {
-		return err
-	}
-
-	// The cleanup controller runs in multi-tenant mode only and is responsible for garbage collection and cleanup of stale
-	// resources
-	if err := esuserscleanup.Add(mgr, opts); err != nil {
 		return err
 	}
 

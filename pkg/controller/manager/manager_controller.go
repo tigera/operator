@@ -360,7 +360,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Get or create a certificate for the manager pod to use within the cluster.
-	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.TruthNamespace(), r.clusterDomain)
+	namespace := render.ManagerNamespace
+	if tenant != nil {
+		namespace = tenant.Namespace
+	}
+	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, namespace, r.clusterDomain)
 	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerInternalTLSSecretName,

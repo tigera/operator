@@ -50,7 +50,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		//esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()

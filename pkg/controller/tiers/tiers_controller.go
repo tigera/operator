@@ -193,6 +193,7 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		render.PolicyRecommendationNamespace,
 		common.TigeraPrometheusNamespace,
 		rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+		"tigera-skraper",
 	}
 	if r.multiTenant {
 		// For multi-tenant clusters, we need to include well-known namespaces as well as per-tenant namespaces.

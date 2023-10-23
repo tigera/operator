@@ -351,16 +351,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -541,10 +531,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
+	var esClusterConfig *relasticsearch.ClusterConfig
 	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+				esClusterConfig, err = utils.GetElasticsearchClusterConfig(ctx, r.client)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
+						return reconcile.Result{}, nil
+					}
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+
 				eksConfig, err = getEksCloudwatchLogConfig(r.client,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,

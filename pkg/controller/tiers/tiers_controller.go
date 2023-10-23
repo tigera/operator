@@ -27,6 +27,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/tiers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,9 +38,11 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // The Tiers controller reconciles Tiers and NetworkPolicies that are shared across components or do not directly
@@ -74,16 +78,23 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: tiers.ClusterDNSPolicyName, Namespace: "kube-system"},
 	})
 
+	if opts.MultiTenant {
+		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("tiers-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	return add(mgr, c)
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &ReconcileTiers{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: opts.DetectedProvider,
-		status:   status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
+		client:      mgr.GetClient(),
+		scheme:      mgr.GetScheme(),
+		provider:    opts.DetectedProvider,
+		status:      status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
+		multiTenant: opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -98,6 +109,7 @@ type ReconcileTiers struct {
 	status             status.StatusManager
 	tierWatchReady     *utils.ReadyFlag
 	policyWatchesReady *utils.ReadyFlag
+	multiTenant        bool
 }
 
 // add adds watches for resources that are available at startup.
@@ -163,6 +175,35 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		Openshift:      r.provider == operatorv1.ProviderOpenShift,
 		DNSEgressCIDRs: tiers.DNSEgressCIDR{},
 	}
+
+	// Determine the namespaces that should be allowed to access the DNS service. For single tenant clusters, this is a
+	// well-known list of namespaces that contain product code.
+	namespaces := []string{
+		common.CalicoNamespace,
+		render.GuardianNamespace,
+		render.ComplianceNamespace,
+		render.DexNamespace,
+		render.ElasticsearchNamespace,
+		render.LogCollectorNamespace,
+		render.IntrusionDetectionNamespace,
+		render.KibanaNamespace,
+		render.ManagerNamespace,
+		render.ECKOperatorNamespace,
+		render.PacketCaptureNamespace,
+		render.PolicyRecommendationNamespace,
+		common.TigeraPrometheusNamespace,
+		rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+	}
+	if r.multiTenant {
+		// For multi-tenant clusters, we need to include well-known namespaces as well as per-tenant namespaces.
+		tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying tenant namespaces", err, reqLogger)
+			return nil, &reconcile.Result{RequeueAfter: utils.StandardRetry}
+		}
+		namespaces = append(namespaces, tenantNamespaces...)
+	}
+	tiersConfig.CalicoNamespaces = namespaces
 
 	// node-local-dns is not supported on openshift
 	if r.provider != operatorv1.ProviderOpenShift {

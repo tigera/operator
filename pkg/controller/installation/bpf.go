@@ -47,7 +47,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 	var patchFelixConfig bool
 
 	// Check the install dataplane mode is either Iptables or BPF.
-	installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+	installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
 
 	// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
 	if fc.Spec.BPFEnabled != nil {
@@ -123,7 +123,7 @@ func patchFelixConfigurationImpl(r *ReconcileInstallation, ctx context.Context, 
 
 	if patchFelixConfig {
 
-		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
+		installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
 		err := patchFelixConfiguration(r, ctx, fc, reqLogger, installBpfEnabled)
 		if err != nil {
 			return err

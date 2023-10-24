@@ -1120,7 +1120,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 }
 
 func (c *nodeComponent) bpfDataplaneEnabled() bool {
-	return common.BpfDataplaneEnabled(c.cfg.Installation)
+	return common.BPFDataplaneEnabled(c.cfg.Installation)
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {

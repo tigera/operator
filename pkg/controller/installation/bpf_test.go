@@ -149,7 +149,53 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cancel()
 		})
 
-		It("TODO name this correctly should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true", func() {
+		//It("TODO name this correctly should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true", func() {
+		//	// Arrange.
+		//	// FELIX_BPFENABLED env var only set in BPF datatplane.
+		//	cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
+		//	cr.Spec.CNI = &operator.CNISpec{}
+		//
+		//	// Create calico-node Daemonset with FELIX_BPFENABLED env var set.
+		//	envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
+		//	container := corev1.Container{
+		//		Name: common.NodeDaemonSetName,
+		//		Env:  envVars,
+		//	}
+		//	ds := &appsv1.DaemonSet{
+		//		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+		//		Spec: appsv1.DaemonSetSpec{
+		//			Template: corev1.PodTemplateSpec{
+		//				ObjectMeta: metav1.ObjectMeta{},
+		//				Spec: corev1.PodSpec{
+		//					Containers: []corev1.Container{container},
+		//				},
+		//			},
+		//		},
+		//	}
+		//	Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
+		//
+		//	// Create felix config
+		//	bpfEnabled := true
+		//	healthPort := 9099
+		//	vxlanVNI := 4096
+		//	fc := &crdv1.FelixConfiguration{
+		//		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		//		Spec: crdv1.FelixConfigurationSpec{
+		//			HealthPort: &healthPort,
+		//			VXLANVNI:   &vxlanVNI,
+		//			BPFEnabled: &bpfEnabled,
+		//		},
+		//	}
+		//	Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
+		//
+		//	// Act.
+		//	test := bpfEnabledOnFelixConfig(fc)
+		//
+		//	// Assert.
+		//	Expect(test).To(BeTrue())
+		//})
+
+		It("TODO name this correctly - should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true", func() {
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)

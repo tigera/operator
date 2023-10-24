@@ -1733,19 +1733,28 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 		}
 	}
 
-	// if FC bpfEnabled unset and FELIX_BPFENABLED env var set then set FC bpfEnabled true.
-	if fc.Spec.BPFEnabled == nil {
-		dsBpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-		if dsBpfEnabledEnvVar != nil {
-			dsBpfEnabledStatus, _ := strconv.ParseBool(*dsBpfEnabledEnvVar)
-			if dsBpfEnabledStatus {
-				// TODO - invoke annotations
-				bpfEnabled := true
-				fc.Spec.BPFEnabled = &bpfEnabled
-				updated = true
-			}
-		}
+	// If BPF is enabled, but not set on FelixConfiguration, do so here. Older versions of the operator
+	// used an environment variable to enable BPF, but we no longer do so. In order to prevent disruption
+	// when the environment variable is removed by the render code, make sure
+	// FelixConfiguration has the correct value set.
+	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
+		// TODO - invoke annotations
+		bpfEnabled := true
+		fc.Spec.BPFEnabled = &bpfEnabled
+		updated = true
 	}
+	//if fc.Spec.BPFEnabled == nil {
+	//	dsBpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	//	if dsBpfEnabledEnvVar != nil {
+	//		dsBpfEnabledStatus, _ := strconv.ParseBool(*dsBpfEnabledEnvVar)
+	//		if dsBpfEnabledStatus {
+	//			// TODO - invoke annotations
+	//			bpfEnabled := true
+	//			fc.Spec.BPFEnabled = &bpfEnabled
+	//			updated = true
+	//		}
+	//	}
+	//}
 
 	return updated
 }

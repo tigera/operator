@@ -70,10 +70,6 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 }
 
 func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
-	if ds.Spec.Template.Spec.Volumes == nil {
-		return false
-	}
-
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == common.BPFVolumeName {
 			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable

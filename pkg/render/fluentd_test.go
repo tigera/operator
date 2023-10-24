@@ -34,7 +34,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -820,7 +819,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
 			FetchInterval: fetchInterval,
 		}
-		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
 			Key:      "foo",
 			Operator: corev1.TolerationOpEqual,

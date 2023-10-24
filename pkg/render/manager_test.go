@@ -43,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -130,7 +129,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		// es-proxy container
 		Expect(esProxy.Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/internal-manager-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 		))
@@ -428,7 +426,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				VoltronLinseedKeyPair: voltronLinseedCert,
 				InternalTLSKeyPair:    internalTraffic,
 				Installation:          installation,
-				ClusterConfig:         &relasticsearch.ClusterConfig{},
 				Namespace:             render.ManagerNamespace,
 				TruthNamespace:        common.OperatorNamespace(),
 			}
@@ -696,7 +693,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		cfg := &render.ManagerConfiguration{
 			TrustedCertBundle:     bundle,
-			ClusterConfig:         &relasticsearch.ClusterConfig{},
 			TLSKeyPair:            kp,
 			VoltronLinseedKeyPair: voltronLinseedKP,
 			Installation:          i,
@@ -1047,11 +1043,9 @@ func renderObjects(roc renderConfig) []client.Object {
 		roc.bindingNamespaces = []string{roc.ns}
 	}
 
-	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	cfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      dexCfg,
 		TrustedCertBundle:       bundle,
-		ClusterConfig:           esConfigMap,
 		TLSKeyPair:              managerTLS,
 		Installation:            roc.installation,
 		ManagementCluster:       roc.managementCluster,

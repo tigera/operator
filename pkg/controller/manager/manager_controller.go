@@ -44,7 +44,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -145,7 +144,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret, render.ElasticsearchManagerUserSecret,
+			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusTLSSecretName, certificatemanagement.CASecretName,
 		} {
@@ -157,10 +156,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	if err = utils.AddConfigMapWatch(managerController, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
-	}
-
-	if err = utils.AddConfigMapWatch(managerController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err = utils.AddNamespaceWatch(managerController, common.TigeraPrometheusNamespace); err != nil {
@@ -391,7 +386,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = []string{
 			render.PacketCaptureServerCert,
 			monitor.PrometheusTLSSecretName,
-			relasticsearch.PublicCertSecret,
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
 		}
@@ -451,16 +445,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, logc)
-		return reconcile.Result{}, err
-	}
-
-	clusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
 		return reconcile.Result{}, err
 	}
 
@@ -607,7 +591,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
 		TrustedCertBundle:       trustedBundle,
-		ClusterConfig:           clusterConfig,
 		TLSKeyPair:              tlsSecret,
 		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,

@@ -228,7 +228,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					ServiceAccountName: ElasticsearchMetricsName,
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
-						relasticsearch.ContainerDecorate(
+						relasticsearch.DecorateEnvironment(
 							corev1.Container{
 								Name:            ElasticsearchMetricsName,
 								Image:           e.esMetricsImage,
@@ -248,7 +248,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 								},
-							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
+							}, render.ElasticsearchNamespace, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
 							e.cfg.ClusterDomain, e.SupportedOSType(),
 						),
 					},
@@ -257,7 +257,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 						e.cfg.TrustedBundle.Volume(),
 					},
 				},
-			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret}).(*corev1.PodTemplateSpec),
+			}, []*corev1.Secret{e.cfg.ESMetricsCredsSecret}).(*corev1.PodTemplateSpec),
 		},
 	}
 }

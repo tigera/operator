@@ -371,7 +371,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	toCreate = append(toCreate, es.elasticsearchServiceAccount())
-	toCreate = append(toCreate, es.cfg.ClusterConfig.ConfigMap())
 
 	toCreate = append(toCreate, es.elasticsearchCluster())
 
@@ -1479,7 +1478,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 							NodeSelector: es.cfg.Installation.ControlPlaneNodeSelector,
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
-								relasticsearch.ContainerDecorate(corev1.Container{
+								relasticsearch.DecorateEnvironment(corev1.Container{
 									Name:            ESCuratorName,
 									Image:           es.curatorImage,
 									ImagePullPolicy: ImagePullPolicy(),
@@ -1487,7 +1486,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 									LivenessProbe:   elasticCuratorLivenessProbe,
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts:    es.cfg.TrustedBundle.VolumeMounts(es.SupportedOSType()),
-								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.cfg.ClusterDomain, es.SupportedOSType()),
+								}, ElasticsearchNamespace, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.cfg.ClusterDomain, es.SupportedOSType()),
 							},
 							ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,

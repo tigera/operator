@@ -52,7 +52,6 @@ import (
 )
 
 var _ = Describe("Testing BPF Upgrade without disruption during core-controller installation", func() {
-
 	var c client.Client
 	var cs *kfake.Clientset
 	var ctx context.Context
@@ -66,7 +65,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 	ready.MarkAsReady()
 
 	Context("Reconcile tests BPF Upgrade without disruption", func() {
-
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
@@ -152,7 +150,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true", func() {
-
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
@@ -194,7 +191,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in BPF dataplane and if DS status not set then verify rollout not complete", func() {
-
 			// Arrange.
 			// Upgrade cluster from IP Tables to BPF dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
@@ -230,7 +226,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in BPF dataplane and if DS status rolling out then verify rollout not complete", func() {
-
 			// Arrange.
 			// Upgrade cluster from IP Tables to BPF dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
@@ -280,7 +275,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in BPF dataplane and if DS status rolling out complete then patch Felix Config", func() {
-
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
@@ -335,7 +329,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in BPF dataplane and error Felix Config when bpfEnabled false and FC opp annotations set", func() {
-
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
@@ -373,7 +366,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in Iptables dataplane and patch Felix Config when bpfEnabled empty", func() {
-
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
@@ -412,7 +404,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in Iptables dataplane and steer Felix Config when bpfEnabled false", func() {
-
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
@@ -451,7 +442,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in Iptables dataplane and patch Felix Config when bpfEnabled true and FC not annotations set", func() {
-
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
@@ -491,7 +481,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 		})
 
 		It("should query calico-node DS in Iptables dataplane and error Felix Config when bpfEnabled true and FC opp annotations set", func() {
-
 			// Arrange.
 			// Upgrade cluster from BPF to IP Tables dataplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
@@ -527,7 +516,6 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(err).Should(HaveOccurred())
 		})
 	})
-
 })
 
 func createInstallation(c client.Client, ctx context.Context, dp operator.LinuxDataplaneOption) *operator.Installation {

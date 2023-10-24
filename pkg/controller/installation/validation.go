@@ -230,6 +230,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
+		bpfIPv6Enabled := false
 		if v6pool != nil {
 			_, cidr, err := net.ParseCIDR(v6pool.CIDR)
 			if err != nil {
@@ -241,7 +242,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 			if bpfDataplane {
-				return fmt.Errorf("IPv6 IP pool is specified but eBPF mode does not support IPv6")
+				bpfIPv6Enabled = true
 			}
 
 			// Verify NAT outgoing values.
@@ -291,8 +292,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
-		if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-			return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
+		if bpfDataplane {
+			if bpfIPv6Enabled {
+				if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV6 is required for the BPF dataplane")
+				}
+			} else {
+				if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
+				}
+			}
 		}
 
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil {

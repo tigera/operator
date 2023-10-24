@@ -69,6 +69,13 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 	return patchFelixConfigurationImpl(r, ctx, install, fc, reqLogger, patchFelixConfig)
 }
 
+// If the Installation resource has been patched to dataplane: BPF then the
+// calico-node daemonset will be re-created with BPF infrastructure such as
+// the "bpffs" volumne mount etc. which will cause the DS to do a rolling update.
+// Therefore, one way to check that the daemonset rolling update is complete is
+// to compare the DS status current scheduled pods equals the updated number and
+// the current scheduled pods also equals the number available.  When all these
+// checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
 func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == common.BPFVolumeName {

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/tigera/operator/pkg/controller/utils"
+
 	"github.com/go-logr/logr"
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -126,4 +128,17 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 	}
 
 	return nil
+}
+
+func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {
+	dsBpfEnabledStatus := false
+	dsBpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	if dsBpfEnabledEnvVar != nil {
+		dsBpfEnabledStatus, _ = strconv.ParseBool(*dsBpfEnabledEnvVar)
+	}
+	return dsBpfEnabledStatus
+}
+
+func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
+	return fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled
 }

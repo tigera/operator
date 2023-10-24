@@ -235,7 +235,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 				Name: "bpffs",
 			}
 			dsAnnotations := make(map[string]string)
-			dsAnnotations[render.BpfOperatorAnnotation] = "true"
+			dsAnnotations[render.BPFOperatorAnnotation] = "true"
 			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -284,7 +284,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 				Name: "bpffs",
 			}
 			dsAnnotations := make(map[string]string)
-			dsAnnotations[render.BpfOperatorAnnotation] = "true"
+			dsAnnotations[render.BPFOperatorAnnotation] = "true"
 			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -325,7 +325,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
 		})
 
 		It("should query calico-node DS in BPF dataplane and error Felix Config when bpfEnabled false and FC opp annotations set", func() {
@@ -352,7 +352,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			// Create felix config
 			bpfEnabled := false
 			fcAnnotations := make(map[string]string)
-			fcAnnotations[render.BpfOperatorAnnotation] = "true"
+			fcAnnotations[render.BPFOperatorAnnotation] = "true"
 			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: fcAnnotations}}
 
 			fc.Spec.BPFEnabled = &bpfEnabled
@@ -400,7 +400,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("false"))
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
 		})
 
 		It("should query calico-node DS in Iptables dataplane and steer Felix Config when bpfEnabled false", func() {
@@ -504,7 +504,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			// Create felix config
 			bpfEnabled := true
 			fcAnnotations := make(map[string]string)
-			fcAnnotations[render.BpfOperatorAnnotation] = "false"
+			fcAnnotations[render.BPFOperatorAnnotation] = "false"
 			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: fcAnnotations}}
 			fc.Spec.BPFEnabled = &bpfEnabled
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())

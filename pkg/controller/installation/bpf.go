@@ -55,10 +55,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 
 			// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
 			if fc.Annotations[render.BpfOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
-				text := fmt.Sprintf("An error occurred while attempting patch Felix Config bpfEnabled: '%s' as Felix Config has been modified externally to '%s'",
-					strconv.FormatBool(installBpfEnabled),
-					strconv.FormatBool(fcBPFEnabled))
-				err := errors.New(text)
+				err := errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
 				return err
 			}
 		}

@@ -1418,6 +1418,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// BPF Upgrade env var initial check:
+	var calicoNodeDaemonset appsv1.DaemonSet
+	calicoNodeDaemonset = appsv1.DaemonSet{}
+
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying the calico-node daemonset")
+		return reconcile.Result{}, err
+	}
+
+	// Next delegate logic implementation here using the state of the installation and dependent resources.
+	err = bpfUpgradeDaemonsetEnvVar(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade Calico-Node DS env var")
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to create or update the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
@@ -1429,8 +1446,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
-	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
+	r.status.AddDaemonsets([]types.NamespacedName{{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}})
+	r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)
 
 	// Run this after we have rendered our components so the new (operator created)
@@ -1498,6 +1515,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
+
+	// BPF Upgrade without disruption:
+	// First get the calico-node daemonset.
+	calicoNodeDaemonset = appsv1.DaemonSet{}
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying the calico-node daemonset")
+		return reconcile.Result{}, err
+	}
+
+	// Next delegate logic implementation here using the state of the installation and dependent resources.
+	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade without disruption")
+		return reconcile.Result{}, err
+	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()

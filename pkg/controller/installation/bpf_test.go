@@ -173,12 +173,8 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			}
 			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
 
-			// Create felix config
-			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-
 			// Act.
-			envVar := getEnv(ds, "FELIX_BPFENABLED")
+			envVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
 
 			// Assert.
 			Expect(envVar).ToNot(BeNil())

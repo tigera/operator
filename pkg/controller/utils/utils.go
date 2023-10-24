@@ -781,7 +781,7 @@ func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
 }
 
 func GetPodEnvVar(spec corev1.PodSpec, name, key string) *string {
-	c := GetContainer(spec, name)
+	c := getContainer(spec, name)
 	for _, e := range c.Env {
 		if e.Name == key {
 			if e.ValueFrom == nil {
@@ -792,7 +792,7 @@ func GetPodEnvVar(spec corev1.PodSpec, name, key string) *string {
 	return nil
 }
 
-func GetContainer(spec corev1.PodSpec, name string) *corev1.Container {
+func getContainer(spec corev1.PodSpec, name string) *corev1.Container {
 	for _, container := range spec.Containers {
 		if container.Name == name {
 			return &container

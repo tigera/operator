@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/tigera/operator/pkg/controller/utils"
 
 	"github.com/go-logr/logr"
@@ -28,7 +30,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
@@ -131,6 +132,23 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 	}
 
 	return nil
+}
+
+// TODO - reanme
+func stevepro(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
+	text := strconv.FormatBool(bpfEnabled)
+
+	// Add managed fields "light".
+	var fcAnnotations map[string]string
+	if fc.Annotations == nil {
+		fcAnnotations = make(map[string]string)
+	} else {
+		fcAnnotations = fc.Annotations
+	}
+	fcAnnotations[render.BpfOperatorAnnotation] = text
+	fc.SetAnnotations(fcAnnotations)
+
+	fc.Spec.BPFEnabled = &bpfEnabled
 }
 
 func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {

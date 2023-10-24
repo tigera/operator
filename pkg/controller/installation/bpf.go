@@ -31,7 +31,6 @@ import (
 )
 
 func bpfUpgradeDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
-
 	// Query calico-node DS: if FELIX_BPFENABLED env var set and FC bpfEnabled unset then patch FC and quit.
 	patchFelixConfig, err := processDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
 	if err != nil {
@@ -43,7 +42,6 @@ func bpfUpgradeDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, in
 }
 
 func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
-
 	var patchFelixConfig bool
 
 	// Check the install dataplane mode is either Iptables or BPF.
@@ -85,7 +83,6 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 }
 
 func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
-
 	dsBpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, ds.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
 	if err != nil {
 		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
@@ -105,7 +102,6 @@ func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *a
 }
 
 func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
-
 	if ds.Spec.Template.Spec.Volumes == nil {
 		return false
 	}
@@ -120,9 +116,7 @@ func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
 }
 
 func patchFelixConfigurationImpl(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchFelixConfig bool) error {
-
 	if patchFelixConfig {
-
 		installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
 		err := patchFelixConfiguration(r, ctx, fc, reqLogger, installBpfEnabled)
 		if err != nil {
@@ -144,7 +138,6 @@ func patchFelixConfigurationImpl(r *ReconcileInstallation, ctx context.Context, 
 }
 
 func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchBpfEnabled bool) error {
-
 	// Obtain the original FelixConfig to patch.
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 	patchText := strconv.FormatBool(patchBpfEnabled)

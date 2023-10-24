@@ -157,7 +157,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			// Create calico-node Daemonset with FELIX_BPFENABLED env var set.
 			envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
 			container := corev1.Container{
-				Name: render.CalicoNodeObjectName,
+				Name: common.NodeDaemonSetName,
 				Env:  envVars,
 			}
 			ds := &appsv1.DaemonSet{
@@ -196,7 +196,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      common.NodeDaemonSetName,
@@ -236,7 +236,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			}
 			dsAnnotations := make(map[string]string)
 			dsAnnotations[render.BpfOperatorAnnotation] = "true"
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        common.NodeDaemonSetName,
@@ -285,7 +285,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			}
 			dsAnnotations := make(map[string]string)
 			dsAnnotations[render.BpfOperatorAnnotation] = "true"
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        common.NodeDaemonSetName,
@@ -334,7 +334,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      common.NodeDaemonSetName,
@@ -371,7 +371,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      common.NodeDaemonSetName,
@@ -409,7 +409,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      common.NodeDaemonSetName,
@@ -447,7 +447,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      common.NodeDaemonSetName,
@@ -486,7 +486,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneIptables)
 
 			// Create calico-node Daemonset annotation to indicate update rollout complete.
-			container := corev1.Container{Name: render.CalicoNodeObjectName}
+			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      common.NodeDaemonSetName,

@@ -47,7 +47,7 @@ import (
 const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
-	BpfOperatorAnnotation      = "operator.tigera.io/bpfEnabled"
+	BPFOperatorAnnotation      = "operator.tigera.io/bpfEnabled"
 
 	nodeCniConfigAnnotation   = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation   = "hash.operator.tigera.io/bgp-layout"
@@ -940,7 +940,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	// Include the annotation to indicate whether BPF is configured or not.
 	dsAnnotations := make(map[string]string)
 	if c.bpfDataplaneEnabled() {
-		dsAnnotations[BpfOperatorAnnotation] = "true"
+		dsAnnotations[BPFOperatorAnnotation] = "true"
 	}
 
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet

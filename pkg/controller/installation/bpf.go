@@ -45,7 +45,7 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 		if installBpfEnabled != fcBPFEnabled {
 
 			// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
-			if fc.Annotations[render.BpfOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
+			if fc.Annotations[render.BPFOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
 				err := errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
 				return err
 			}
@@ -121,7 +121,7 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 	} else {
 		fcAnnotations = fc.Annotations
 	}
-	fcAnnotations[render.BpfOperatorAnnotation] = patchText
+	fcAnnotations[render.BPFOperatorAnnotation] = patchText
 	fc.SetAnnotations(fcAnnotations)
 
 	fc.Spec.BPFEnabled = &patchBpfEnabled
@@ -145,7 +145,7 @@ func stevepro(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 	} else {
 		fcAnnotations = fc.Annotations
 	}
-	fcAnnotations[render.BpfOperatorAnnotation] = text
+	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
 
 	fc.Spec.BPFEnabled = &bpfEnabled

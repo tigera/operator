@@ -1518,17 +1518,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// TODO - implement change
-	//_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-	//	test := adriana(instance, &calicoNodeDaemonset, felixConfiguration)
-	//	return test
-	//})
-	//if err != nil {
-	//	r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
-	//	return reconcile.Result{}, err
-	//}
-	// TODO - implement change
-
 	// Next delegate logic implementation here using the state of the installation and dependent resources.
 	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
 	if err != nil {

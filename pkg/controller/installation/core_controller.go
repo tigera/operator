@@ -1743,18 +1743,6 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 		fc.Spec.BPFEnabled = &bpfEnabled
 		updated = true
 	}
-	//if fc.Spec.BPFEnabled == nil {
-	//	dsBpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	//	if dsBpfEnabledEnvVar != nil {
-	//		dsBpfEnabledStatus, _ := strconv.ParseBool(*dsBpfEnabledEnvVar)
-	//		if dsBpfEnabledStatus {
-	//			// TODO - invoke annotations
-	//			bpfEnabled := true
-	//			fc.Spec.BPFEnabled = &bpfEnabled
-	//			updated = true
-	//		}
-	//	}
-	//}
 
 	return updated
 }

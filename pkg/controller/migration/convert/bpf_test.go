@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,7 +110,7 @@ var _ = Describe("convert bpf config", func() {
 		Expect(data).To(Equal(cmData))
 	})
 
-	It("converts bpfenabled env var set to true", func() {
+	It("converts dataplane to BPF given bpfenabled env var set to true", func() {
 		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
 		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
@@ -125,12 +125,26 @@ var _ = Describe("convert bpf config", func() {
 		Expect(data).To(Equal(cmData))
 	})
 
-	It("converts bpfenabled env var set to false", func() {
+	It("converts dataplane to empty given bpfenabled env var set to false", func() {
 		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
 		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
 			Value: "false",
 		}}
+		err := handleBPF(&comps, i)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(i.Spec.CalicoNetwork).To(BeNil())
+		err, data := getEndPointCM(&comps, "kube-system")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(data).To(Equal(cmData))
+		err, data = getEndPointCM(&comps, common.OperatorNamespace())
+		Expect(err).To(HaveOccurred())
+		Expect(data).To(BeNil())
+	})
+
+	It("converts dataplane to empty given bpfenabled env var set not set", func() {
+		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
+		comps.node.Spec.Template.Spec.Containers[0].Env = nil
 		err := handleBPF(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(i.Spec.CalicoNetwork).To(BeNil())

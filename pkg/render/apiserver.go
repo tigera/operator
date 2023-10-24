@@ -197,20 +197,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
-	if c.cfg.ManagementCluster != nil {
-		if c.cfg.MultiTenant {
-			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
-			// per-tenant guardian certificates when creating ManagedClusters.
-			globalObjects = append(globalObjects, c.multiTenantSecretsRBAC()...)
-		} else {
-			globalObjects = append(globalObjects, c.secretsRBAC()...)
-		}
-	} else {
-		// If we're not a management cluster, the API server doesn't need permissions to access secrets.
-		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
-		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
-	}
-
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
 	// deleted, since they will be garbage collected on namespace deletion.
 	namespacedObjects := []client.Object{}
@@ -246,6 +232,20 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tieredPolicyPassthruClusterRolebinding(),
 		c.uiSettingsPassthruClusterRole(),
 		c.uiSettingsPassthruClusterRolebinding(),
+	}
+
+	if c.cfg.ManagementCluster != nil {
+		if c.cfg.MultiTenant {
+			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
+			// per-tenant guardian certificates when creating ManagedClusters.
+			globalEnterpriseObjects = append(globalEnterpriseObjects, c.multiTenantSecretsRBAC()...)
+		} else {
+			globalEnterpriseObjects = append(globalEnterpriseObjects, c.secretsRBAC()...)
+		}
+	} else {
+		// If we're not a management cluster, the API server doesn't need permissions to access secrets.
+		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
+		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
 	}
 
 	// Namespaced enterprise-only objects.

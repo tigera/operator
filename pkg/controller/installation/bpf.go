@@ -24,22 +24,10 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-func bpfUpgradeDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
-	// Query calico-node DS: if FELIX_BPFENABLED env var set and FC bpfEnabled unset then patch FC and quit.
-	patchFelixConfig, err := processDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
-	if err != nil {
-		return err
-	}
-
-	// Attempt to patch Felix Config now.
-	return patchFelixConfigurationImpl(r, ctx, install, fc, reqLogger, patchFelixConfig)
-}
 
 func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 	var patchFelixConfig bool
@@ -77,25 +65,6 @@ func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, 
 
 	// Attempt to patch Felix Config now.
 	return patchFelixConfigurationImpl(r, ctx, install, fc, reqLogger, patchFelixConfig)
-}
-
-func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
-	dsBpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, ds.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	if err != nil {
-		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
-		return false, err
-	}
-
-	dsBpfEnabledStatus := false
-	if dsBpfEnabledEnvVar != nil {
-		dsBpfEnabledStatus, err = strconv.ParseBool(*dsBpfEnabledEnvVar)
-		if err != nil {
-			reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
-			return false, err
-		}
-	}
-
-	return dsBpfEnabledStatus && fc.Spec.BPFEnabled == nil, nil
 }
 
 func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {

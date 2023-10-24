@@ -167,11 +167,6 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 	r.checkedVars[container].envVars[key] = true
 }
 
-// Expose as public API thus can be re-used externally.
-func GetEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component, container, key string) (*string, error) {
-	return getEnv(ctx, client, pts, component, container, key)
-}
-
 // getEnv gets the value of an environment variable.
 func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component, container, key string) (*string, error) {
 	c := getContainer(pts, container)

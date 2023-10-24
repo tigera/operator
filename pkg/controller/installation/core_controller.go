@@ -1424,14 +1424,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
 	if err != nil {
-		reqLogger.Error(err, "An error occurred when querying the calico-node daemonset")
+		r.status.SetDegraded(operator.ResourceReadError, "Error getting Daemonset", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Next delegate logic implementation here using the state of the installation and dependent resources.
 	err = bpfUpgradeDaemonsetEnvVar(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
 	if err != nil {
-		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade Calico-Node DS env var")
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1521,14 +1521,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	calicoNodeDaemonset = appsv1.DaemonSet{}
 	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
 	if err != nil {
-		reqLogger.Error(err, "An error occurred when querying the calico-node daemonset")
+		r.status.SetDegraded(operator.ResourceReadError, "Error getting Daemonset", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Next delegate logic implementation here using the state of the installation and dependent resources.
 	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
 	if err != nil {
-		reqLogger.Error(err, "An error occurred when attempting to process BPF Upgrade without disruption")
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

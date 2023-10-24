@@ -779,3 +779,18 @@ func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
 	}
 	return kubeDNSServiceName
 }
+
+// TODO - update callers from getContainer()
+func GetContainer(spec corev1.PodSpec, name string) *corev1.Container {
+	for _, container := range spec.Containers {
+		if container.Name == name {
+			return &container
+		}
+	}
+	for _, container := range spec.InitContainers {
+		if container.Name == name {
+			return &container
+		}
+	}
+	return nil
+}

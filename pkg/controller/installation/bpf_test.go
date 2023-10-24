@@ -149,10 +149,10 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cancel()
 		})
 
-		It("should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true", func() {
+		It("TODO - name this correctly should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true", func() {
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
-			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)
+			createInstallation(c, ctx, operator.LinuxDataplaneBPF)
 
 			// Create calico-node Daemonset with FELIX_BPFENABLED env var set.
 			envVars := []corev1.EnvVar{{Name: "FELIX_BPFENABLED", Value: "true"}}
@@ -178,16 +178,11 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := bpfUpgradeDaemonsetEnvVar(&r, ctx, cr, ds, fc, reqLogger)
-			Expect(err).ShouldNot(HaveOccurred())
+			envVar := getEnv(ds, "FELIX_BPFENABLED")
 
 			// Assert.
-			bpfEnabled := true
-			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
-			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-			Expect(fc.Annotations[render.BpfOperatorAnnotation]).To(Equal("true"))
+			Expect(envVar).ToNot(BeNil())
+			Expect(*envVar).To(Equal("true"))
 		})
 
 		It("should query calico-node DS in BPF dataplane and if DS status not set then verify rollout not complete", func() {

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/tigera/operator/pkg/controller/utils"
+
 	"github.com/go-logr/logr"
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -29,6 +31,18 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func getEnv(ds *appsv1.DaemonSet, key string) *string {
+	c := utils.GetContainer(ds.Spec.Template.Spec, common.NodeDaemonSetName)
+	for _, e := range c.Env {
+		if e.Name == key {
+			if e.ValueFrom == nil {
+				return &e.Value
+			}
+		}
+	}
+	return nil
+}
 
 func bpfUpgradeDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
 	// Query calico-node DS: if FELIX_BPFENABLED env var set and FC bpfEnabled unset then patch FC and quit.

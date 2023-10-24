@@ -137,6 +137,16 @@ var _ = Describe("felix env parser", func() {
 			c.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyFelixConfig()).Build()
 		})
 
+		It("handle empty BPF Enabled environment variable", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{}
+
+			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
+
+			f := crdv1.FelixConfiguration{}
+			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
+			Expect(f.Spec.BPFEnabled).To(BeNil())
+		})
+
 		It("handles 'none' failsafe inbound ports", func() {
 			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",

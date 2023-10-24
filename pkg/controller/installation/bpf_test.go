@@ -149,7 +149,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			cancel()
 		})
 
-		It("TODO name this correctly - should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true", func() {
+		It("should query calico-node DS and if FELIX_BPFENABLED true and FelixConfig unset then set BPF enabled true to be patched", func() {
 			// Arrange.
 			// FELIX_BPFENABLED env var only set in BPF datatplane.
 			cr := createInstallation(c, ctx, operator.LinuxDataplaneBPF)

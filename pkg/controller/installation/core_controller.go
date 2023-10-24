@@ -1153,9 +1153,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// BPF Upgrade env var initial check:
+	var calicoNodeDaemonset appsv1.DaemonSet
+	calicoNodeDaemonset = appsv1.DaemonSet{}
+
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "Error getting Daemonset", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Set any non-default FelixConfiguration values that we need.
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return r.setDefaultsOnFelixConfiguration(instance, fc)
+		return r.setDefaultsOnFelixConfiguration(instance, &calicoNodeDaemonset, fc)
 	})
 	if err != nil {
 		return reconcile.Result{}, err
@@ -1418,23 +1428,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// BPF Upgrade env var initial check:
-	var calicoNodeDaemonset appsv1.DaemonSet
-	calicoNodeDaemonset = appsv1.DaemonSet{}
-
-	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
-	if err != nil {
-		r.status.SetDegraded(operator.ResourceReadError, "Error getting Daemonset", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// Next delegate logic implementation here using the state of the installation and dependent resources.
-	err = bpfUpgradeDaemonsetEnvVar(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
-	if err != nil {
-		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Create a component handler to create or update the rendered components.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
@@ -1661,7 +1654,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1739,6 +1732,21 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 			}
 		}
 	}
+
+	// if FC bpfEnabled unset and FELIX_BPFENABLED env var set then set FC bpfEnabled true.
+	if fc.Spec.BPFEnabled == nil {
+		dsBpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+		if dsBpfEnabledEnvVar != nil {
+			dsBpfEnabledStatus, _ := strconv.ParseBool(*dsBpfEnabledEnvVar)
+			if dsBpfEnabledStatus {
+				// TODO - invoke annotations
+				bpfEnabled := true
+				fc.Spec.BPFEnabled = &bpfEnabled
+				updated = true
+			}
+		}
+	}
+
 	return updated
 }
 

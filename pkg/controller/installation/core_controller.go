@@ -1518,6 +1518,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// TODO - implement change
+	//_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+	//	test := adriana(instance, &calicoNodeDaemonset, felixConfiguration)
+	//	return test
+	//})
+	//if err != nil {
+	//	r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
+	//	return reconcile.Result{}, err
+	//}
+	// TODO - implement change
+
 	// Next delegate logic implementation here using the state of the installation and dependent resources.
 	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
 	if err != nil {
@@ -1738,9 +1749,10 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	// when the environment variable is removed by the render code, make sure
 	// FelixConfiguration has the correct value set.
 	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
+		stevepro(fc, true)
 		// TODO - invoke annotations
-		bpfEnabled := true
-		fc.Spec.BPFEnabled = &bpfEnabled
+		//bpfEnabled := true
+		//fc.Spec.BPFEnabled = &bpfEnabled
 		updated = true
 	}
 

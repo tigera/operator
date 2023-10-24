@@ -1510,6 +1510,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// BPF Upgrade without disruption:
+	// TODO - check annotations first: if error then do not proceed...
+
 	// First get the calico-node daemonset.
 	calicoNodeDaemonset = appsv1.DaemonSet{}
 	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
@@ -1519,7 +1521,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Next delegate logic implementation here using the state of the installation and dependent resources.
-	err = bpfUpgradeWithoutDisruption(r, ctx, instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		patchFelixConfig := bpfUpgradeWithoutDisruption(instance, &calicoNodeDaemonset, felixConfiguration)
+		if patchFelixConfig {
+			bpfEnabled := common.BPFDataplaneEnabled(&instance.Spec)
+			setBPFEnabled(fc, bpfEnabled)
+		}
+		return patchFelixConfig
+	})
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err

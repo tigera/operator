@@ -1738,10 +1738,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	// when the environment variable is removed by the render code, make sure
 	// FelixConfiguration has the correct value set.
 	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
-		stevepro(fc, true)
-		// TODO - invoke annotations
-		//bpfEnabled := true
-		//fc.Spec.BPFEnabled = &bpfEnabled
+		setBPFEnabled(fc, true)
 		updated = true
 	}
 

@@ -134,8 +134,7 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 	return nil
 }
 
-// TODO - reanme
-func stevepro(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
+func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 	text := strconv.FormatBool(bpfEnabled)
 
 	// Add managed fields "light".

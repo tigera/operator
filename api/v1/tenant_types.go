@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// DataType represent the type of data stored
 type DataType string
 
 const (
@@ -38,6 +39,24 @@ const (
 	DataTypeThreadFeedsIPSet     DataType = "ThreadFeedsIPSet"
 	DataTypeWAFLogs              DataType = "WAFLogs"
 )
+
+// DataTypes is a set of all data types stored mapped to
+// their corresponding environment variables
+var DataTypes = map[DataType]string{
+	DataTypeAlerts:               "ELASTIC_ALERTS_INDEX_NAME",
+	DataTypeAuditLogs:            "ELASTIC_AUDIT_LOGS_INDEX_NAME",
+	DataTypeBGPLogs:              "ELASTIC_BGP_LOGS_INDEX_NAME",
+	DataTypeComplianceBenchmarks: "ELASTIC_COMPLIANCE_BENCHMARKS_INDEX_NAME",
+	DataTypeComplianceReports:    "ELASTIC_COMPLIANCE_REPORTS_INDEX_NAME",
+	DataTypeComplianceSnapshots:  "ELASTIC_COMPLIANCE_SNAPSHOTS_INDEX_NAME",
+	DataTypeDNSLogs:              "ELASTIC_DNS_LOGS_INDEX_NAME",
+	DataTypeFlowLogs:             "ELASTIC_FLOW_LOGS_INDEX_NAME",
+	DataTypeL7Logs:               "ELASTIC_L7_LOGS_INDEX_NAME",
+	DataTypeRuntimeReports:       "ELASTIC_RUNTIME_REPORTS_INDEX_NAME",
+	DataTypeThreadFeedsDomainSet: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_INDEX_NAME",
+	DataTypeThreadFeedsIPSet:     "ELASTIC_THREAT_FEEDS_IP_SET_INDEX_NAME",
+	DataTypeWAFLogs:              "ELASTIC_WAF_LOGS_INDEX_NAME",
+}
 
 type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
@@ -93,34 +112,10 @@ func (i *Index) EnvVar() corev1.EnvVar {
 }
 
 func (t DataType) IndexEnvName() string {
-	switch t {
-	case DataTypeAlerts:
-		return "ELASTIC_ALERTS_INDEX_NAME"
-	case DataTypeAuditLogs:
-		return "ELASTIC_AUDIT_LOGS_INDEX_NAME"
-	case DataTypeBGPLogs:
-		return "ELASTIC_BGP_LOGS_INDEX_NAME"
-	case DataTypeComplianceBenchmarks:
-		return "ELASTIC_COMPLIANCE_BENCHMARKS_INDEX_NAME"
-	case DataTypeComplianceReports:
-		return "ELASTIC_COMPLIANCE_REPORTS_INDEX_NAME"
-	case DataTypeComplianceSnapshots:
-		return "ELASTIC_COMPLIANCE_SNAPSHOTS_INDEX_NAME"
-	case DataTypeDNSLogs:
-		return "ELASTIC_DNS_LOGS_INDEX_NAME"
-	case DataTypeFlowLogs:
-		return "ELASTIC_FLOW_LOGS_INDEX_NAME"
-	case DataTypeL7Logs:
-		return "ELASTIC_L7_LOGS_INDEX_NAME"
-	case DataTypeRuntimeReports:
-		return "ELASTIC_RUNTIME_REPORTS_INDEX_NAME"
-	case DataTypeThreadFeedsIPSet:
-		return "ELASTIC_THREAT_FEEDS_IP_SET_INDEX_NAME"
-	case DataTypeThreadFeedsDomainSet:
-		return "ELASTIC_THREAT_FEEDS_DOMAIN_SET_INDEX_NAME"
-	case DataTypeWAFLogs:
-		return "ELASTIC_WAF_LOG_INDEX_NAME"
-	default:
+	envName, ok := DataTypes[t]
+	if !ok {
 		panic("Unexpected data type")
 	}
+
+	return envName
 }

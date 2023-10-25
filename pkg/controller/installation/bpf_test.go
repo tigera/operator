@@ -179,10 +179,20 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			bpfEnabled := r.setDefaultsOnFelixConfiguration(cr, ds, fc)
+			_, err := r.doSetDefaultsOnFelixConfiguration(ctx, cr, ds)
+			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
-			Expect(bpfEnabled).To(BeTrue())
+			bpfEnabled := true
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+
+			//bpfEnabled := r.setDefaultsOnFelixConfiguration(cr, ds, fc)
+			// Assert.
+			//Expect(bpfEnabled).To(BeTrue())
 		})
 
 		It("should query FelixConfig annotation and spec is set but does not match then outcome is invalid", func() {

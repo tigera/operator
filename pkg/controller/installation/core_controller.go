@@ -2110,15 +2110,15 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 func adriana(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
 	updated := false
 
-	installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
-	if installBpfEnabled {
-		if fooT(fc) && isRolloutComplete(ds) {
-			setBPFEnabled(fc, installBpfEnabled)
+	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)
+	if bpfEnabledOnInstall {
+		if bpfEnabledOnFelixConfigNilOrSetFalse(fc) && isRolloutComplete(ds) {
+			setBPFEnabled(fc, bpfEnabledOnInstall)
 			updated = true
 		}
 	} else {
-		if fooF(fc) {
-			setBPFEnabled(fc, installBpfEnabled)
+		if bpfEnabledOnFelixConfigNilOrSetTrue(fc) {
+			setBPFEnabled(fc, bpfEnabledOnInstall)
 			updated = true
 		}
 	}

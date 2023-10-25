@@ -21,6 +21,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render"
+
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -345,6 +348,33 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 		Spec:       s,
 	}
 	err := c.Create(context.Background(), instance)
+	Expect(err).NotTo(HaveOccurred())
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: common.CalicoNamespace, Namespace: common.CalicoNamespace},
+	}
+	err = c.Create(context.Background(), ns)
+	if err != nil && !kerror.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	labels := make(map[string]string)
+	labels["foo"] = "bar"
+	ds := &apps.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+		Spec: apps.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: render.CalicoNodeObjectName, Image: render.CalicoNodeObjectName}},
+				},
+			},
+		},
+	}
+	err = c.Create(context.Background(), ds)
 	Expect(err).NotTo(HaveOccurred())
 
 	By("Running the operator")

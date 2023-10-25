@@ -17,13 +17,67 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// DataType represent the type of data stored
+type DataType string
+
+const (
+	DataTypeAlerts               DataType = "Alerts"
+	DataTypeAuditLogs            DataType = "AuditLogs"
+	DataTypeBGPLogs              DataType = "BGPLogs"
+	DataTypeComplianceBenchmarks DataType = "ComplianceBenchmarks"
+	DataTypeComplianceReports    DataType = "ComplianceReports"
+	DataTypeComplianceSnapshots  DataType = "ComplianceSnapshots"
+	DataTypeDNSLogs              DataType = "DNSLogs"
+	DataTypeFlowLogs             DataType = "FlowLogs"
+	DataTypeL7Logs               DataType = "L7Logs"
+	DataTypeRuntimeReports       DataType = "RuntimeReports"
+	DataTypeThreadFeedsDomainSet DataType = "ThreadFeedsDomainSet"
+	DataTypeThreadFeedsIPSet     DataType = "ThreadFeedsIPSet"
+	DataTypeWAFLogs              DataType = "WAFLogs"
+)
+
+// DataTypes is a set of all data types stored mapped to
+// their corresponding environment variables
+var DataTypes = map[DataType]string{
+	DataTypeAlerts:               "ELASTIC_ALERTS_INDEX_NAME",
+	DataTypeAuditLogs:            "ELASTIC_AUDIT_LOGS_INDEX_NAME",
+	DataTypeBGPLogs:              "ELASTIC_BGP_LOGS_INDEX_NAME",
+	DataTypeComplianceBenchmarks: "ELASTIC_COMPLIANCE_BENCHMARKS_INDEX_NAME",
+	DataTypeComplianceReports:    "ELASTIC_COMPLIANCE_REPORTS_INDEX_NAME",
+	DataTypeComplianceSnapshots:  "ELASTIC_COMPLIANCE_SNAPSHOTS_INDEX_NAME",
+	DataTypeDNSLogs:              "ELASTIC_DNS_LOGS_INDEX_NAME",
+	DataTypeFlowLogs:             "ELASTIC_FLOW_LOGS_INDEX_NAME",
+	DataTypeL7Logs:               "ELASTIC_L7_LOGS_INDEX_NAME",
+	DataTypeRuntimeReports:       "ELASTIC_RUNTIME_REPORTS_INDEX_NAME",
+	DataTypeThreadFeedsDomainSet: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_INDEX_NAME",
+	DataTypeThreadFeedsIPSet:     "ELASTIC_THREAT_FEEDS_IP_SET_INDEX_NAME",
+	DataTypeWAFLogs:              "ELASTIC_WAF_LOGS_INDEX_NAME",
+}
 
 type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
 	// +required
 	ID string `json:"id,omitempty"`
+
+	// Indices defines the how to store a tenant's data
+	Indices []Index `json:"indices"`
+}
+
+// Index defines how to store a tenant's data
+type Index struct {
+	// IndexName defines the name of the index
+	// that will be used to store data (this name
+	// excludes the numerical identifier suffix)
+	IndexName string `json:"indexName"`
+
+	// DataType represents the type of data stored
+	// in the defined index
+	// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreadFeedsIPSet;WAFLogs
+	DataType DataType `json:"dataType"`
 }
 
 type TenantStatus struct{}
@@ -51,4 +105,17 @@ type TenantList struct {
 
 func init() {
 	SchemeBuilder.Register(&Tenant{}, &TenantList{})
+}
+
+func (i *Index) EnvVar() corev1.EnvVar {
+	return corev1.EnvVar{Name: i.DataType.IndexEnvName(), Value: i.IndexName}
+}
+
+func (t DataType) IndexEnvName() string {
+	envName, ok := DataTypes[t]
+	if !ok {
+		panic("Unexpected data type")
+	}
+
+	return envName
 }

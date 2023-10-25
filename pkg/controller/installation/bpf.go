@@ -26,7 +26,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 )
 
-// TODO implement logic
 func bpfCheckAnnotations(fc *crdv1.FelixConfiguration) error {
 	var err error = nil
 
@@ -48,21 +47,6 @@ func bpfCheckAnnotations(fc *crdv1.FelixConfiguration) error {
 
 	if !match {
 		err = errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
-	}
-
-	return err
-}
-
-func bpfCheckAnnotationsX(fc *crdv1.FelixConfiguration) error {
-	var err error = nil
-
-	if fc.Annotations == nil {
-		return nil
-	} else {
-		if fc.Spec.BPFEnabled == nil {
-			err = errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
-		} else {
-		}
 	}
 
 	return err

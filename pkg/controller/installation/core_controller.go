@@ -1526,9 +1526,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Finally, delegate logic implementation here using the state of the installation and dependent resources.
-	err = r.stevepro(ctx, instance, &calicoNodeDaemonset)
+	err = r.doSetBPFUpdatesOnFelixConfiguration(ctx, instance, &calicoNodeDaemonset)
 	//_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-	//	return setUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, felixConfiguration)
+	//	return doSetBPFUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, felixConfiguration)
 	//})
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
@@ -1755,7 +1755,18 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	return updated
 }
 
-func setUpdatesOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+// doSetBPFUpdatesOnFelixConfiguration is a wrapper function used for to facilitate unit testing.
+func (r *ReconcileInstallation) doSetBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) error {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		return setBPFUpdatesOnFelixConfiguration(install, ds, fc)
+	})
+
+	return err
+}
+
+// setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed
+// based on the install config and the daemonset.
+func setBPFUpdatesOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
 	updated := false
 
 	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)
@@ -2021,12 +2032,4 @@ func removeInstallationFinalizer(i *operator.Installation) {
 	if stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(CalicoFinalizer, i.GetFinalizers()))
 	}
-}
-
-func (r *ReconcileInstallation) stevepro(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return setUpdatesOnFelixConfiguration(install, ds, fc)
-	})
-
-	return err
 }

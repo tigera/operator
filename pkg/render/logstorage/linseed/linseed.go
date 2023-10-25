@@ -310,10 +310,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 		envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
-		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_DYNAMIC_INDEX_CREATION_ENABLED", Value: "true"})
-		for _, data := range l.cfg.Tenant.Spec.DataRetention {
-			envVars = append(envVars, corev1.EnvVar{Name: fmt.Sprintf("ELASTIC_%s_INDEX_NAME", strings.ToUpper(data.Type)), Value: data.IndexName})
-			envVars = append(envVars, corev1.EnvVar{Name: fmt.Sprintf("ELASTIC_%s_POLICY_NAME", strings.ToUpper(data.Type)), Value: data.PolicyName})
+		for _, index := range l.cfg.Tenant.Spec.Indices {
+			envVars = append(envVars, index.EnvVar())
 		}
 	}
 

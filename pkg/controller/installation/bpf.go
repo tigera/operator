@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -26,7 +27,46 @@ import (
 )
 
 // TODO implement logic
-//func bpfCheckAnnotations() error {}
+func bpfCheckAnnotations(fc *crdv1.FelixConfiguration) error {
+	var err error = nil
+
+	var annotationValue *bool
+	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
+		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
+		annotationValue = &v
+		if err != nil {
+			return err
+		}
+	}
+
+	// The values are considered matching if one of the following is true:
+	// - Both values are nil
+	// - Neither are nil and they have the same value.
+	// Otherwise, the we consider the annotation to not match the spec field.
+	match := annotationValue == nil && fc.Spec.BPFEnabled == nil
+	match = match || annotationValue != nil && fc.Spec.BPFEnabled != nil && *annotationValue == *fc.Spec.BPFEnabled
+
+	if !match {
+		err = errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
+	}
+
+	return err
+}
+
+func bpfCheckAnnotationsX(fc *crdv1.FelixConfiguration) error {
+	var err error = nil
+
+	if fc.Annotations == nil {
+		return nil
+	} else {
+		if fc.Spec.BPFEnabled == nil {
+			err = errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
+		} else {
+		}
+	}
+
+	return err
+}
 
 // If the Installation resource has been patched to dataplane: BPF then the
 // calico-node daemonset will be re-created with BPF infrastructure such as

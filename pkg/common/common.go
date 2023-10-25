@@ -14,6 +14,10 @@
 
 package common
 
+import (
+	operatorv1 "github.com/tigera/operator/api/v1"
+)
+
 const (
 	CalicoNamespace               = "calico-system"
 	TyphaDeploymentName           = "calico-typha"
@@ -41,4 +45,11 @@ const (
 	// references with any that already exist on the object rather than replace the owner references. Further
 	// the controller in the owner reference will not be set.
 	MultipleOwnersLabel = "operator.tigera.io/multipleOwners"
+	BPFVolumeName       = "bpffs"
 )
+
+func BPFDataplaneEnabled(installation *operatorv1.InstallationSpec) bool {
+	return installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.LinuxDataplane != nil &&
+		*installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+}

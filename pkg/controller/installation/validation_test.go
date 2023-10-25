@@ -92,6 +92,33 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(BeNil())
 	})
 
+	It("should not allow dual stack (both IPv4 and IPv6) if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "1eef::/64",
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				Encapsulation: operator.EncapsulationNone,
+				NodeSelector:  "all()",
+			},
+			{
+				CIDR:          "192.168.0.0/27",
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+			CanReach: "2001:4860:4860::8888",
+		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach: "8.8.8.8",
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("bpf dataplane does not support dual stack"))
+	})
+
 	It("should allow IPv6 VXLAN", func() {
 		encaps := []operator.EncapsulationType{operator.EncapsulationVXLAN, operator.EncapsulationVXLANCrossSubnet}
 		for _, vxlanMode := range encaps {

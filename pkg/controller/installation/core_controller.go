@@ -2112,12 +2112,12 @@ func adriana(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.Fel
 
 	installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
 	if installBpfEnabled {
-		if fooT(install, fc) && checkDaemonsetRolloutComplete(ds) {
+		if fooT(fc) && isRolloutComplete(ds) {
 			setBPFEnabled(fc, installBpfEnabled)
 			updated = true
 		}
 	} else {
-		if fooF(install, fc) {
+		if fooF(fc) {
 			setBPFEnabled(fc, installBpfEnabled)
 			updated = true
 		}

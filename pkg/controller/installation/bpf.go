@@ -19,7 +19,6 @@ import (
 
 	"github.com/tigera/operator/pkg/controller/utils"
 
-	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
@@ -29,40 +28,41 @@ import (
 // TODO implement logic
 //func bpfCheckAnnotations() error {}
 
-func bpfUpgradeWithoutDisruptionX(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
-	var patchFelixConfig bool
-
-	// Check the install dataplane mode is either Iptables or BPF.
-	installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
-
-	//// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
-	//if fc.Spec.BPFEnabled != nil {
-	//	fcBPFEnabled := *fc.Spec.BPFEnabled
-	//	if installBpfEnabled != fcBPFEnabled {
-	//		// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
-	//		if fc.Annotations[render.BPFOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
-	//			err := errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
-	//			return false
-	//		}
-	//	}
-	//}
-
-	if !installBpfEnabled {
-		// IP Tables dataplane:
-		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
-			patchFelixConfig = true
-		}
-	} else {
-		// BPF dataplane:
-		// Check daemonset rollout complete before patching.
-		if fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled) {
-			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
-		}
-	}
-
-	// Attempt to patch Felix Config now.
-	return patchFelixConfig
-}
+// TODO - remove
+//func bpfUpgradeWithoutDisruptionX(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+//	var patchFelixConfig bool
+//
+//	// Check the install dataplane mode is either Iptables or BPF.
+//	installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
+//
+//	//// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
+//	//if fc.Spec.BPFEnabled != nil {
+//	//	fcBPFEnabled := *fc.Spec.BPFEnabled
+//	//	if installBpfEnabled != fcBPFEnabled {
+//	//		// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
+//	//		if fc.Annotations[render.BPFOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
+//	//			err := errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
+//	//			return false
+//	//		}
+//	//	}
+//	//}
+//
+//	if !installBpfEnabled {
+//		// IP Tables dataplane:
+//		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
+//			patchFelixConfig = true
+//		}
+//	} else {
+//		// BPF dataplane:
+//		// Check daemonset rollout complete before patching.
+//		if fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled) {
+//			patchFelixConfig = isRolloutComplete(ds)
+//		}
+//	}
+//
+//	// Attempt to patch Felix Config now.
+//	return patchFelixConfig
+//}
 
 // TODO - remove
 //func bpfUpgradeWithoutDisruptionORG(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) (bool, error) {
@@ -92,7 +92,7 @@ func bpfUpgradeWithoutDisruptionX(install *operator.Installation, ds *appsv1.Dae
 //		// BPF dataplane:
 //		// Check daemonset rollout complete before patching.
 //		if fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled) {
-//			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
+//			patchFelixConfig = isRolloutComplete(ds)
 //		}
 //	}
 //
@@ -107,7 +107,7 @@ func bpfUpgradeWithoutDisruptionX(install *operator.Installation, ds *appsv1.Dae
 // to compare the DS status current scheduled pods equals the updated number and
 // the current scheduled pods also equals the number available.  When all these
 // checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
-func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
+func isRolloutComplete(ds *appsv1.DaemonSet) bool {
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == common.BPFVolumeName {
 			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
@@ -164,10 +164,10 @@ func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
 //	return false
 //}
 
-func fooF(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
+func fooF(fc *crdv1.FelixConfiguration) bool {
 	return fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled
 }
 
-func fooT(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
+func fooT(fc *crdv1.FelixConfiguration) bool {
 	return fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)
 }

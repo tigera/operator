@@ -1526,10 +1526,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Finally, delegate logic implementation here using the state of the installation and dependent resources.
-	//	_, err = r.stevepro(ctx, instance, &calicoNodeDaemonset)
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return adriana(instance, &calicoNodeDaemonset, felixConfiguration)
-	})
+	err = r.stevepro(ctx, instance, &calicoNodeDaemonset)
+	//_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+	//	return setUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, felixConfiguration)
+	//})
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1662,98 +1662,117 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	}, nil
 }
 
-//// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
-//// based on the install config.
-//func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
-//	updated := false
-//
-//	switch install.Spec.CNI.Type {
-//	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
-//	// uses do not conflict with the ones the AWS CNI plugin uses so default them
-//	// in the FelixConfiguration if they are not already set.
-//	case operator.PluginAmazonVPC:
-//		if fc.Spec.RouteTableRange == nil {
-//			updated = true
-//			// Defaulting based on that AWS might be using the following:
-//			// - The ENI device number + 1
-//			//   Currently the max number of ENIs for any host is 15.
-//			//   p4d.24xlarge is reported to support 4x15 ENI but it uses 4 cards
-//			//   and AWS CNI only uses ENIs on card 0.
-//			// - The VLAN table ID + 100 (there is doubt if this is true)
-//			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
-//				Min: 65,
-//				Max: 99,
-//			}
-//		}
-//	case operator.PluginGKE:
-//		if fc.Spec.RouteTableRange == nil {
-//			updated = true
-//			// Don't conflict with the GKE CNI plugin's routes.
-//			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
-//				Min: 10,
-//				Max: 250,
-//			}
-//		}
-//	}
-//
-//	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
-//	// but default to 9099 (or 9199 on OpenShift). We will also write back whatever we select to FelixConfiguration.
-//	felixHealthPort := 9099
-//	if install.Spec.KubernetesProvider == operator.ProviderOpenShift {
-//		felixHealthPort = 9199
-//	}
-//	if fc.Spec.HealthPort == nil {
-//		fc.Spec.HealthPort = &felixHealthPort
-//		updated = true
-//	}
-//	vxlanVNI := 4096
-//	if fc.Spec.VXLANVNI == nil {
-//		fc.Spec.VXLANVNI = &vxlanVNI
-//		updated = true
-//	}
-//
-//	if install.Spec.Variant == operator.TigeraSecureEnterprise {
-//		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
-//		dnsService := ""
-//		switch install.Spec.KubernetesProvider {
-//		case operator.ProviderOpenShift:
-//			dnsService = "k8s-service:openshift-dns/dns-default"
-//		case operator.ProviderRKE2:
-//			dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
-//		}
-//		if dnsService != "" {
-//			felixDefault := "k8s-service:kube-dns"
-//			trustedServers := []string{dnsService}
-//			// Keep any other values that are already configured, excepting the value
-//			// that we are setting and the kube-dns default.
-//			existingSetting := ""
-//			if fc.Spec.DNSTrustedServers != nil {
-//				existingSetting = strings.Join(*(fc.Spec.DNSTrustedServers), ",")
-//				for _, server := range *(fc.Spec.DNSTrustedServers) {
-//					if server != felixDefault && server != dnsService {
-//						trustedServers = append(trustedServers, server)
-//					}
-//				}
-//			}
-//			newSetting := strings.Join(trustedServers, ",")
-//			if newSetting != existingSetting {
-//				fc.Spec.DNSTrustedServers = &trustedServers
-//				updated = true
-//			}
-//		}
-//	}
-//
-//	// If BPF is enabled, but not set on FelixConfiguration, do so here. Older versions of the operator
-//	// used an environment variable to enable BPF, but we no longer do so. In order to prevent disruption
-//	// when the environment variable is removed by the render code, make sure
-//	// FelixConfiguration has the correct value set.
-//	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
-//		setBPFEnabled(fc, true)
-//		updated = true
-//	}
-//
-//	return updated
-//}
+// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
+// based on the install config.
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+	updated := false
+
+	switch install.Spec.CNI.Type {
+	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
+	// uses do not conflict with the ones the AWS CNI plugin uses so default them
+	// in the FelixConfiguration if they are not already set.
+	case operator.PluginAmazonVPC:
+		if fc.Spec.RouteTableRange == nil {
+			updated = true
+			// Defaulting based on that AWS might be using the following:
+			// - The ENI device number + 1
+			//   Currently the max number of ENIs for any host is 15.
+			//   p4d.24xlarge is reported to support 4x15 ENI but it uses 4 cards
+			//   and AWS CNI only uses ENIs on card 0.
+			// - The VLAN table ID + 100 (there is doubt if this is true)
+			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+				Min: 65,
+				Max: 99,
+			}
+		}
+	case operator.PluginGKE:
+		if fc.Spec.RouteTableRange == nil {
+			updated = true
+			// Don't conflict with the GKE CNI plugin's routes.
+			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+				Min: 10,
+				Max: 250,
+			}
+		}
+	}
+
+	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
+	// but default to 9099 (or 9199 on OpenShift). We will also write back whatever we select to FelixConfiguration.
+	felixHealthPort := 9099
+	if install.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		felixHealthPort = 9199
+	}
+	if fc.Spec.HealthPort == nil {
+		fc.Spec.HealthPort = &felixHealthPort
+		updated = true
+	}
+	vxlanVNI := 4096
+	if fc.Spec.VXLANVNI == nil {
+		fc.Spec.VXLANVNI = &vxlanVNI
+		updated = true
+	}
+
+	if install.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
+		dnsService := ""
+		switch install.Spec.KubernetesProvider {
+		case operator.ProviderOpenShift:
+			dnsService = "k8s-service:openshift-dns/dns-default"
+		case operator.ProviderRKE2:
+			dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
+		}
+		if dnsService != "" {
+			felixDefault := "k8s-service:kube-dns"
+			trustedServers := []string{dnsService}
+			// Keep any other values that are already configured, excepting the value
+			// that we are setting and the kube-dns default.
+			existingSetting := ""
+			if fc.Spec.DNSTrustedServers != nil {
+				existingSetting = strings.Join(*(fc.Spec.DNSTrustedServers), ",")
+				for _, server := range *(fc.Spec.DNSTrustedServers) {
+					if server != felixDefault && server != dnsService {
+						trustedServers = append(trustedServers, server)
+					}
+				}
+			}
+			newSetting := strings.Join(trustedServers, ",")
+			if newSetting != existingSetting {
+				fc.Spec.DNSTrustedServers = &trustedServers
+				updated = true
+			}
+		}
+	}
+
+	// If BPF is enabled, but not set on FelixConfiguration, do so here. Older versions of the operator
+	// used an environment variable to enable BPF, but we no longer do so. In order to prevent disruption
+	// when the environment variable is removed by the render code, make sure
+	// FelixConfiguration has the correct value set.
+	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
+		setBPFEnabled(fc, true)
+		updated = true
+	}
+
+	return updated
+}
+
+func setUpdatesOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+	updated := false
+
+	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)
+	if bpfEnabledOnInstall {
+		if bpfEnabledOnFelixConfigNilOrSetFalse(fc) && isRolloutComplete(ds) {
+			setBPFEnabled(fc, bpfEnabledOnInstall)
+			updated = true
+		}
+	} else {
+		if bpfEnabledOnFelixConfigNilOrSetTrue(fc) {
+			setBPFEnabled(fc, bpfEnabledOnInstall)
+			updated = true
+		}
+	}
+
+	return updated
+}
 
 var osExitOverride = os.Exit
 
@@ -2004,122 +2023,10 @@ func removeInstallationFinalizer(i *operator.Installation) {
 	}
 }
 
-// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
-// based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
-	updated := false
-
-	switch install.Spec.CNI.Type {
-	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
-	// uses do not conflict with the ones the AWS CNI plugin uses so default them
-	// in the FelixConfiguration if they are not already set.
-	case operator.PluginAmazonVPC:
-		if fc.Spec.RouteTableRange == nil {
-			updated = true
-			// Defaulting based on that AWS might be using the following:
-			// - The ENI device number + 1
-			//   Currently the max number of ENIs for any host is 15.
-			//   p4d.24xlarge is reported to support 4x15 ENI but it uses 4 cards
-			//   and AWS CNI only uses ENIs on card 0.
-			// - The VLAN table ID + 100 (there is doubt if this is true)
-			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
-				Min: 65,
-				Max: 99,
-			}
-		}
-	case operator.PluginGKE:
-		if fc.Spec.RouteTableRange == nil {
-			updated = true
-			// Don't conflict with the GKE CNI plugin's routes.
-			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
-				Min: 10,
-				Max: 250,
-			}
-		}
-	}
-
-	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
-	// but default to 9099 (or 9199 on OpenShift). We will also write back whatever we select to FelixConfiguration.
-	felixHealthPort := 9099
-	if install.Spec.KubernetesProvider == operator.ProviderOpenShift {
-		felixHealthPort = 9199
-	}
-	if fc.Spec.HealthPort == nil {
-		fc.Spec.HealthPort = &felixHealthPort
-		updated = true
-	}
-	vxlanVNI := 4096
-	if fc.Spec.VXLANVNI == nil {
-		fc.Spec.VXLANVNI = &vxlanVNI
-		updated = true
-	}
-
-	if install.Spec.Variant == operator.TigeraSecureEnterprise {
-		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
-		dnsService := ""
-		switch install.Spec.KubernetesProvider {
-		case operator.ProviderOpenShift:
-			dnsService = "k8s-service:openshift-dns/dns-default"
-		case operator.ProviderRKE2:
-			dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
-		}
-		if dnsService != "" {
-			felixDefault := "k8s-service:kube-dns"
-			trustedServers := []string{dnsService}
-			// Keep any other values that are already configured, excepting the value
-			// that we are setting and the kube-dns default.
-			existingSetting := ""
-			if fc.Spec.DNSTrustedServers != nil {
-				existingSetting = strings.Join(*(fc.Spec.DNSTrustedServers), ",")
-				for _, server := range *(fc.Spec.DNSTrustedServers) {
-					if server != felixDefault && server != dnsService {
-						trustedServers = append(trustedServers, server)
-					}
-				}
-			}
-			newSetting := strings.Join(trustedServers, ",")
-			if newSetting != existingSetting {
-				fc.Spec.DNSTrustedServers = &trustedServers
-				updated = true
-			}
-		}
-	}
-
-	// If BPF is enabled, but not set on FelixConfiguration, do so here. Older versions of the operator
-	// used an environment variable to enable BPF, but we no longer do so. In order to prevent disruption
-	// when the environment variable is removed by the render code, make sure
-	// FelixConfiguration has the correct value set.
-	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
-		setBPFEnabled(fc, true)
-		updated = true
-	}
-
-	return updated
-}
-
-func adriana(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
-	updated := false
-
-	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)
-	if bpfEnabledOnInstall {
-		if bpfEnabledOnFelixConfigNilOrSetFalse(fc) && isRolloutComplete(ds) {
-			setBPFEnabled(fc, bpfEnabledOnInstall)
-			updated = true
-		}
-	} else {
-		if bpfEnabledOnFelixConfigNilOrSetTrue(fc) {
-			setBPFEnabled(fc, bpfEnabledOnInstall)
-			updated = true
-		}
-	}
-
-	return updated
-}
-
-func (r *ReconcileInstallation) stevepro(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) (*crdv1.FelixConfiguration, error) {
-	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return adriana(install, ds, fc)
+func (r *ReconcileInstallation) stevepro(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) error {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		return setUpdatesOnFelixConfiguration(install, ds, fc)
 	})
 
-	return fc, err
+	return err
 }

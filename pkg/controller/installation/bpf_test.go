@@ -274,7 +274,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.stevepro(ctx, cr, ds)
+			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -283,7 +283,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(fc.Spec.BPFEnabled).To(BeNil())
 
 			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := setUpdatesOnFelixConfiguration(cr, ds, fc)
+			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
 
 			// Assert.
 			//Expect(patchFelixConfig).To(BeFalse())
@@ -330,7 +330,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.stevepro(ctx, cr, ds)
+			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -339,7 +339,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(fc.Spec.BPFEnabled).To(BeNil())
 
 			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := setUpdatesOnFelixConfiguration(cr, ds, fc)
+			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
 			// Assert.
 			//Expect(patchFelixConfig).To(BeFalse())
 			//Expect(err).ShouldNot(HaveOccurred())
@@ -387,7 +387,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.stevepro(ctx, cr, ds)
+			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -399,7 +399,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
 
 			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := setUpdatesOnFelixConfiguration(cr, ds, fc)
+			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
 
 			// Assert.
 			//Expect(patchFelixConfig).To(BeTrue())
@@ -432,7 +432,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.stevepro(ctx, cr, ds)
+			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -444,7 +444,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
 
 			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := setUpdatesOnFelixConfiguration(cr, ds, fc)
+			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
 
 			// Assert.
 			//Expect(patchFelixConfig).To(BeTrue())
@@ -479,7 +479,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.stevepro(ctx, cr, ds)
+			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
@@ -488,7 +488,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
 
 			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := setUpdatesOnFelixConfiguration(cr, ds, fc)
+			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
 			// Assert.
 			//Expect(patchFelixConfig).To(BeFalse())
 			//Expect(err).ShouldNot(HaveOccurred())

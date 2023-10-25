@@ -287,13 +287,6 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).To(BeNil())
-
-			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
-
-			// Assert.
-			//Expect(patchFelixConfig).To(BeFalse())
-			//Expect(err).ShouldNot(HaveOccurred())
 		})
 
 		It("should query calico-node DS in BPF dataplane and if DS status rolling out then verify rollout not complete", func() {
@@ -343,12 +336,6 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).To(BeNil())
-
-			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
-			// Assert.
-			//Expect(patchFelixConfig).To(BeFalse())
-			//Expect(err).ShouldNot(HaveOccurred())
 		})
 
 		It("should query calico-node DS in BPF dataplane and if DS status rolling out complete then patch Felix Config", func() {
@@ -403,13 +390,6 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
 			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
-
-			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
-
-			// Assert.
-			//Expect(patchFelixConfig).To(BeTrue())
-			//Expect(err).ShouldNot(HaveOccurred())
 		})
 
 		It("should query calico-node DS in Iptables dataplane and patch Felix Config when bpfEnabled empty", func() {
@@ -448,13 +428,6 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
 			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
-
-			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
-
-			// Assert.
-			//Expect(patchFelixConfig).To(BeTrue())
-			//Expect(err).ShouldNot(HaveOccurred())
 		})
 
 		It("should query calico-node DS in Iptables dataplane and steer Felix Config when bpfEnabled false", func() {
@@ -488,16 +461,11 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
 			Expect(err).ShouldNot(HaveOccurred())
 
+			// Assert.
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(fc.Spec.BPFEnabled).To(Equal(&bpfEnabled))
-
-			//patchFelixConfig, err := bpfUpgradeWithoutDisruption(cr, ds, fc)
-			//patchFelixConfig := doSetBPFUpdatesOnFelixConfiguration(cr, ds, fc)
-			// Assert.
-			//Expect(patchFelixConfig).To(BeFalse())
-			//Expect(err).ShouldNot(HaveOccurred())
 		})
 	})
 })

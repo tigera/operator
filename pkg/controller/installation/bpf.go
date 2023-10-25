@@ -26,7 +26,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 )
 
-func bpfCheckAnnotations(fc *crdv1.FelixConfiguration) error {
+// Validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
+func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 	var err error = nil
 
 	var annotationValue *bool
@@ -81,17 +82,16 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 	}
 	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
-
 	fc.Spec.BPFEnabled = &bpfEnabled
 }
 
 func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {
-	dsBpfEnabledStatus := false
-	dsBpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	if dsBpfEnabledEnvVar != nil {
-		dsBpfEnabledStatus, _ = strconv.ParseBool(*dsBpfEnabledEnvVar)
+	bpfEnabledStatus := false
+	bpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	if bpfEnabledEnvVar != nil {
+		bpfEnabledStatus, _ = strconv.ParseBool(*bpfEnabledEnvVar)
 	}
-	return dsBpfEnabledStatus
+	return bpfEnabledStatus
 }
 
 func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {

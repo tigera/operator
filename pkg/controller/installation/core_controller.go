@@ -1768,7 +1768,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 // doSetBPFUpdatesOnFelixConfiguration is a wrapper function used for to facilitate unit testing.
 func (r *ReconcileInstallation) doSetBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) error {
 	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return setBPFUpdatesOnFelixConfiguration(install, ds, fc)
+		return r.setBPFUpdatesOnFelixConfiguration(install, ds, fc)
 	})
 
 	return err
@@ -1776,7 +1776,7 @@ func (r *ReconcileInstallation) doSetBPFUpdatesOnFelixConfiguration(ctx context.
 
 // setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed
 // based on the install config and the daemonset.
-func setBPFUpdatesOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
 	updated := false
 
 	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)

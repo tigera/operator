@@ -35,6 +35,42 @@ spec:
               id:
                 description: ID is the unique identifier for this tenant.
                 type: string
+              indices:
+                description: Indices defines the how to store a tenant's data
+                items:
+                  description: Index defines how to store a tenant's data
+                  properties:
+                    dataType:
+                      description: DataType represents the type of data stored in
+                        the defined index
+                      enum:
+                      - Alerts
+                      - AuditLogs
+                      - BGPLogs
+                      - ComplianceBenchmarks
+                      - ComplianceReports
+                      - ComplianceSnapshots
+                      - DNSLogs
+                      - FlowLogs
+                      - L7Logs
+                      - RuntimeReports
+                      - ThreatFeedsDomainSet
+                      - ThreadFeedsIPSet
+                      - WAFLogs
+                      type: string
+                    indexName:
+                      description: IndexName defines the name of the index that will
+                        be used to store data (this name excludes the numerical identifier
+                        suffix)
+                      type: string
+                  required:
+                  - dataType
+                  - indexName
+                  type: object
+                type: array
+                uniqueItems: true
+            required:
+            - indices
             type: object
           status:
             type: object

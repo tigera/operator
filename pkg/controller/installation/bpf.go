@@ -29,7 +29,7 @@ import (
 // TODO implement logic
 //func bpfCheckAnnotations() error {}
 
-func bpfUpgradeWithoutDisruption(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+func bpfUpgradeWithoutDisruptionX(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
 	var patchFelixConfig bool
 
 	// Check the install dataplane mode is either Iptables or BPF.
@@ -144,4 +144,30 @@ func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {
 
 func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
 	return fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled
+}
+
+// new code
+//func bpfEnabledOnFelixConfig2(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
+//
+//	installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
+//
+//	fcBPFEnabled := fc.Spec.BPFEnabled
+//	if fcBPFEnabled == nil {
+//		return true
+//	}
+//
+//	//installBpfEnabled := common.BPFDataplaneEnabled(&install.Spec)
+//	if installBpfEnabled == *fcBPFEnabled {
+//		return true
+//	}
+//
+//	return false
+//}
+
+func fooF(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
+	return fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled
+}
+
+func fooT(install *operator.Installation, fc *crdv1.FelixConfiguration) bool {
+	return fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)
 }

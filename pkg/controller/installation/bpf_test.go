@@ -199,7 +199,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 				},
 			}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-			Expect(bpfCheckAnnotations(fc)).Should(HaveOccurred())
+			Expect(bpfValidateAnnotations(fc)).Should(HaveOccurred())
 		})
 
 		It("should query FelixConfig annotation is set and spec is set and matches then outcome is valid", func() {
@@ -216,7 +216,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 				},
 			}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-			Expect(bpfCheckAnnotations(fc)).ShouldNot(HaveOccurred())
+			Expect(bpfValidateAnnotations(fc)).ShouldNot(HaveOccurred())
 		})
 
 		It("should query FelixConfig annotation is set but spec is nil then outcome is invalid", func() {
@@ -224,7 +224,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			fcAnnotations[render.BPFOperatorAnnotation] = "true"
 			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: fcAnnotations}}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-			Expect(bpfCheckAnnotations(fc)).Should(HaveOccurred())
+			Expect(bpfValidateAnnotations(fc)).Should(HaveOccurred())
 		})
 
 		It("should query FelixConfig annotation is set but is invalid then outcome is invalid", func() {
@@ -232,20 +232,20 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			fcAnnotations[render.BPFOperatorAnnotation] = "foo"
 			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: fcAnnotations}}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-			Expect(bpfCheckAnnotations(fc)).Should(HaveOccurred())
+			Expect(bpfValidateAnnotations(fc)).Should(HaveOccurred())
 		})
 
 		It("should query FelixConfig annotation is nil and spec is not nil then outcome is invalid", func() {
 			bpfEnabled := false
 			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Spec: crdv1.FelixConfigurationSpec{BPFEnabled: &bpfEnabled}}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-			Expect(bpfCheckAnnotations(fc)).Should(HaveOccurred())
+			Expect(bpfValidateAnnotations(fc)).Should(HaveOccurred())
 		})
 
 		It("should query FelixConfig annotation is nil and spec is nil then outcome is valid", func() {
 			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
-			Expect(bpfCheckAnnotations(fc)).ShouldNot(HaveOccurred())
+			Expect(bpfValidateAnnotations(fc)).ShouldNot(HaveOccurred())
 		})
 
 		It("should query calico-node DS in BPF dataplane and if DS status not set then verify rollout not complete", func() {

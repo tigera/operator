@@ -1510,9 +1510,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// BPF Upgrade without disruption:
-	// TODO - check annotations first: if error then do not proceed...
+	// First, validate FelixConfig annotations before continuing.
+	err = bpfValidateAnnotations(felixConfiguration)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceValidationError, "Error validating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
-	// First get the calico-node daemonset.
+	// Next, get the calico-node daemonset.
 	calicoNodeDaemonset = appsv1.DaemonSet{}
 	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
 	if err != nil {
@@ -1520,26 +1525,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Next delegate logic implementation here using the state of the installation and dependent resources.
-
-	//xx, zz := r.stevepro(ctx, instance, &calicoNodeDaemonset)
-	//_ = xx
-	//_ = zz
-
+	// Finally, delegate logic implementation here using the state of the installation and dependent resources.
+	//	_, err = r.stevepro(ctx, instance, &calicoNodeDaemonset)
 	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		test := adriana(instance, &calicoNodeDaemonset, felixConfiguration)
-		return test
+		return adriana(instance, &calicoNodeDaemonset, felixConfiguration)
 	})
-
-	// Next delegate logic implementation here using the state of the installation and dependent resources.
-	//_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-	//	patchFelixConfig := bpfUpgradeWithoutDisruption(instance, &calicoNodeDaemonset, felixConfiguration)
-	//	if patchFelixConfig {
-	//		bpfEnabled := common.BPFDataplaneEnabled(&instance.Spec)
-	//		setBPFEnabled(fc, bpfEnabled)
-	//	}
-	//	return patchFelixConfig
-	//})
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err

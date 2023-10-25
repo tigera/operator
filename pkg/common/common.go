@@ -48,7 +48,7 @@ const (
 	BPFVolumeName       = "bpffs"
 )
 
-func BpfDataplaneEnabled(installation *operatorv1.InstallationSpec) bool {
+func BPFDataplaneEnabled(installation *operatorv1.InstallationSpec) bool {
 	return installation.CalicoNetwork != nil &&
 		installation.CalicoNetwork.LinuxDataplane != nil &&
 		*installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF

@@ -15,101 +15,52 @@
 package installation
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"strconv"
 
-	"github.com/go-logr/logr"
-	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/utils"
+
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func bpfUpgradeDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
+// Validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
+func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
+	var err error = nil
 
-	// Query calico-node DS: if FELIX_BPFENABLED env var set and FC bpfEnabled unset then patch FC and quit.
-	patchFelixConfig, err := processDaemonsetEnvVar(r, ctx, ds, fc, reqLogger)
-	if err != nil {
-		return err
-	}
-
-	// Attempt to patch Felix Config now.
-	return patchFelixConfigurationImpl(r, ctx, install, fc, reqLogger, patchFelixConfig)
-}
-
-func bpfUpgradeWithoutDisruption(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) error {
-
-	var patchFelixConfig bool
-
-	// Check the install dataplane mode is either Iptables or BPF.
-	installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
-
-	// Check edge case where User has externally patched FelixConfig bpfEnabled which causes conflict to prevent Operator from upgrading dataplane.
-	if fc.Spec.BPFEnabled != nil {
-
-		fcBPFEnabled := *fc.Spec.BPFEnabled
-		if installBpfEnabled != fcBPFEnabled {
-
-			// Ensure Felix Config annotations are either empty or equal previous FC bpfEnabled value.
-			if fc.Annotations[render.BpfOperatorAnnotation] == strconv.FormatBool(installBpfEnabled) {
-				text := fmt.Sprintf("An error occurred while attempting patch Felix Config bpfEnabled: '%s' as Felix Config has been modified externally to '%s'",
-					strconv.FormatBool(installBpfEnabled),
-					strconv.FormatBool(fcBPFEnabled))
-				err := errors.New(text)
-				return err
-			}
-		}
-	}
-
-	if !installBpfEnabled {
-		// IP Tables dataplane:
-		// Only patch Felix Config once to prevent log spamming.
-		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
-			patchFelixConfig = true
-		}
-	} else {
-		// BPF dataplane:
-		// Check daemonset rollout complete before patching.
-		if fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled) {
-			patchFelixConfig = checkDaemonsetRolloutComplete(ds)
-		}
-	}
-
-	// Attempt to patch Felix Config now.
-	return patchFelixConfigurationImpl(r, ctx, install, fc, reqLogger, patchFelixConfig)
-}
-
-func processDaemonsetEnvVar(r *ReconcileInstallation, ctx context.Context, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
-
-	dsBpfEnabledEnvVar, err := convert.GetEnv(ctx, r.client, ds.Spec.Template.Spec, convert.ComponentCalicoNode, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	if err != nil {
-		reqLogger.Error(err, "An error occurred when querying Calico-Node environment variable FELIX_BPFENABLED")
-		return false, err
-	}
-
-	dsBpfEnabledStatus := false
-	if dsBpfEnabledEnvVar != nil {
-		dsBpfEnabledStatus, err = strconv.ParseBool(*dsBpfEnabledEnvVar)
+	var annotationValue *bool
+	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
+		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
+		annotationValue = &v
 		if err != nil {
-			reqLogger.Error(err, "An error occurred when converting Calico-Node environment variable FELIX_BPFENABLED")
-			return false, err
+			return err
 		}
 	}
 
-	return dsBpfEnabledStatus && fc.Spec.BPFEnabled == nil, nil
-}
+	// The values are considered matching if one of the following is true:
+	// - Both values are nil
+	// - Neither are nil and they have the same value.
+	// Otherwise, the we consider the annotation to not match the spec field.
+	match := annotationValue == nil && fc.Spec.BPFEnabled == nil
+	match = match || annotationValue != nil && fc.Spec.BPFEnabled != nil && *annotationValue == *fc.Spec.BPFEnabled
 
-func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
-
-	if ds.Spec.Template.Spec.Volumes == nil {
-		return false
+	if !match {
+		err = errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
 	}
 
+	return err
+}
+
+// If the Installation resource has been patched to dataplane: BPF then the
+// calico-node daemonset will be re-created with BPF infrastructure such as
+// the "bpffs" volumne mount etc. which will cause the DS to do a rolling update.
+// Therefore, one way to check that the daemonset rolling update is complete is
+// to compare the DS status current scheduled pods equals the updated number and
+// the current scheduled pods also equals the number available.  When all these
+// checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
+func isRolloutComplete(ds *appsv1.DaemonSet) bool {
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == common.BPFVolumeName {
 			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
@@ -119,35 +70,8 @@ func checkDaemonsetRolloutComplete(ds *appsv1.DaemonSet) bool {
 	return false
 }
 
-func patchFelixConfigurationImpl(r *ReconcileInstallation, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchFelixConfig bool) error {
-
-	if patchFelixConfig {
-
-		installBpfEnabled := common.BpfDataplaneEnabled(&install.Spec)
-		err := patchFelixConfiguration(r, ctx, fc, reqLogger, installBpfEnabled)
-		if err != nil {
-			return err
-		}
-
-		// Ensure if no errors occurred while attempting to patch Falix Config then successfully patched.
-		patchFelixConfig = err == nil
-	}
-
-	if patchFelixConfig {
-		if fc.Spec.BPFEnabled != nil {
-			msg := fmt.Sprintf("Successfully patched Felix Config OK bpfEnabled='%s'", strconv.FormatBool(*fc.Spec.BPFEnabled))
-			reqLogger.Info(msg)
-		}
-	}
-
-	return nil
-}
-
-func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, patchBpfEnabled bool) error {
-
-	// Obtain the original FelixConfig to patch.
-	patchFrom := client.MergeFrom(fc.DeepCopy())
-	patchText := strconv.FormatBool(patchBpfEnabled)
+func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
+	text := strconv.FormatBool(bpfEnabled)
 
 	// Add managed fields "light".
 	var fcAnnotations map[string]string
@@ -156,15 +80,28 @@ func patchFelixConfiguration(r *ReconcileInstallation, ctx context.Context, fc *
 	} else {
 		fcAnnotations = fc.Annotations
 	}
-	fcAnnotations[render.BpfOperatorAnnotation] = patchText
+	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
+	fc.Spec.BPFEnabled = &bpfEnabled
+}
 
-	fc.Spec.BPFEnabled = &patchBpfEnabled
-	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
-		msg := fmt.Sprintf("An error occurred when attempting to patch Felix configuration BPF Enabled: '%s'", patchText)
-		reqLogger.Error(err, msg)
-		return err
+func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {
+	bpfEnabledStatus := false
+	bpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+	if bpfEnabledEnvVar != nil {
+		bpfEnabledStatus, _ = strconv.ParseBool(*bpfEnabledEnvVar)
 	}
+	return bpfEnabledStatus
+}
 
-	return nil
+func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
+	return fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled
+}
+
+func bpfEnabledOnFelixConfigNilOrSetTrue(fc *crdv1.FelixConfiguration) bool {
+	return fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled
+}
+
+func bpfEnabledOnFelixConfigNilOrSetFalse(fc *crdv1.FelixConfiguration) bool {
+	return fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)
 }

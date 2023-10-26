@@ -28,8 +28,6 @@ import (
 
 // updateBPFEnabledAllowed validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
 func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
-	var err error = nil
-
 	var annotationValue *bool
 	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
 		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
@@ -47,10 +45,10 @@ func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
 	match = match || annotationValue != nil && fc.Spec.BPFEnabled != nil && *annotationValue == *fc.Spec.BPFEnabled
 
 	if !match {
-		err = errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
+		return errors.New(`Unable to set bpfEnabled: FelixConfiguration "default" has been modified by someone else, refusing to override potential user configuration.`)
 	}
 
-	return err
+	return nil
 }
 
 // If the Installation resource has been patched to dataplane: BPF then the

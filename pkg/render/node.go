@@ -894,7 +894,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	if c.bpfDataplaneEnabled() {
+	if c.cfg.Installation.BPFEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
@@ -1033,7 +1033,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	}
 
-	if c.bpfDataplaneEnabled() {
+	if c.cfg.Installation.BPFEnabled() {
 		volumes = append(volumes,
 			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
@@ -1111,10 +1111,6 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	return volumes
-}
-
-func (c *nodeComponent) bpfDataplaneEnabled() bool {
-	return common.BPFDataplaneEnabled(c.cfg.Installation)
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {
@@ -1299,7 +1295,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		)
 	}
-	if c.bpfDataplaneEnabled() {
+	if c.cfg.Installation.BPFEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	}
 	if c.vppDataplaneEnabled() {

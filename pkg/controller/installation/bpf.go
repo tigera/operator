@@ -71,7 +71,8 @@ func isRolloutComplete(ds *appsv1.DaemonSet) bool {
 func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 	text := strconv.FormatBool(bpfEnabled)
 
-	// Add managed fields "light".
+	// Add an annotation matching the field value. This allows the operator to compare the annotation to the field
+	// when performing an update to determine if another entity has modified the value since the last write.
 	var fcAnnotations map[string]string
 	if fc.Annotations == nil {
 		fcAnnotations = make(map[string]string)

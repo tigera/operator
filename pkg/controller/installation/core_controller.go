@@ -1149,7 +1149,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// BPF Upgrade env var initial check:
 	var calicoNodeDaemonset appsv1.DaemonSet
 	calicoNodeDaemonset = appsv1.DaemonSet{}
-
 	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, &calicoNodeDaemonset)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Error getting Daemonset", err, reqLogger)

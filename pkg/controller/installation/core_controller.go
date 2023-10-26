@@ -1774,12 +1774,12 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *opera
 
 	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)
 	if bpfEnabledOnInstall {
-		if bpfEnabledOnFelixConfigNilOrSetFalse(fc) && isRolloutComplete(ds) {
+		if (fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)) && isRolloutComplete(ds) {
 			setBPFEnabled(fc, bpfEnabledOnInstall)
 			updated = true
 		}
 	} else {
-		if bpfEnabledOnFelixConfigNilOrSetTrue(fc) {
+		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
 			setBPFEnabled(fc, bpfEnabledOnInstall)
 			updated = true
 		}

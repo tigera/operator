@@ -96,11 +96,3 @@ func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {
 func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
 	return fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled
 }
-
-func bpfEnabledOnFelixConfigNilOrSetTrue(fc *crdv1.FelixConfiguration) bool {
-	return fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled
-}
-
-func bpfEnabledOnFelixConfigNilOrSetFalse(fc *crdv1.FelixConfiguration) bool {
-	return fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)
-}

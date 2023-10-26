@@ -749,12 +749,10 @@ type Installation struct {
 
 // BPFEnabled is an extension method that returns true if the Installation resource
 // has Calico Network Linux Dataplane set and equal to value "BPF" otherwise false.
-func (installation *Installation) BPFEnabled() bool {
-
-	return installation.Spec.CalicoNetwork != nil &&
-		installation.Spec.CalicoNetwork.LinuxDataplane != nil &&
-		*installation.Spec.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
-
+func (installation *InstallationSpec) BPFEnabled() bool {
+	return installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.LinuxDataplane != nil &&
+		*installation.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
 }
 
 // +kubebuilder:object:root=true

@@ -1751,7 +1751,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) bool {
 	updated := false
 
-	bpfEnabledOnInstall := common.BPFDataplaneEnabled(&install.Spec)
+	bpfEnabledOnInstall := install.Spec.BPFEnabled()
 	if bpfEnabledOnInstall {
 		if (fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)) && isRolloutComplete(ds) {
 			err := setBPFEnabled(fc, bpfEnabledOnInstall)

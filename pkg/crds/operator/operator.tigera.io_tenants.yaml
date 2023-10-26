@@ -40,6 +40,11 @@ spec:
                 items:
                   description: Index defines how to store a tenant's data
                   properties:
+                    baseIndexName:
+                      description: BaseIndexName defines the name of the index that
+                        will be used to store data (this name excludes the numerical
+                        identifier suffix)
+                      type: string
                     dataType:
                       description: DataType represents the type of data stored in
                         the defined index
@@ -55,17 +60,12 @@ spec:
                       - L7Logs
                       - RuntimeReports
                       - ThreatFeedsDomainSet
-                      - ThreadFeedsIPSet
+                      - ThreatFeedsIPSet
                       - WAFLogs
                       type: string
-                    indexName:
-                      description: IndexName defines the name of the index that will
-                        be used to store data (this name excludes the numerical identifier
-                        suffix)
-                      type: string
                   required:
+                  - baseIndexName
                   - dataType
-                  - indexName
                   type: object
                 type: array
             required:

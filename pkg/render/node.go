@@ -938,20 +938,13 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
 	}
 
-	// Include the annotation to indicate whether BPF is configured or not.
-	dsAnnotations := make(map[string]string)
-	if c.bpfDataplaneEnabled() {
-		dsAnnotations[BPFOperatorAnnotation] = "true"
-	}
-
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        common.NodeDaemonSetName,
-			Namespace:   common.CalicoNamespace,
-			Annotations: dsAnnotations,
+			Name:      common.NodeDaemonSetName,
+			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{

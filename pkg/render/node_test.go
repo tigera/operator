@@ -505,7 +505,6 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
-				Expect(ds.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
 				if enableIPv4 {
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 				}

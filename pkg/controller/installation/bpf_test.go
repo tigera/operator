@@ -282,7 +282,9 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
+			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+			})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -331,7 +333,9 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
+			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+			})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -382,7 +386,9 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
+			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+			})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -420,7 +426,9 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
+			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+			})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.
@@ -460,7 +468,9 @@ var _ = Describe("#1 Testing BPF Upgrade without disruption during core-controll
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
-			err := r.doSetBPFUpdatesOnFelixConfiguration(ctx, cr, ds)
+			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+			})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Assert.

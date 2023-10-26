@@ -1519,10 +1519,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Finally, delegate logic implementation here using the state of the installation and dependent resources.
-	err = r.doSetBPFUpdatesOnFelixConfiguration(ctx, instance, &calicoNodeDaemonset)
-	//_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-	//	return doSetBPFUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, felixConfiguration)
-	//})
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		return r.setBPFUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, felixConfiguration)
+	})
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1758,15 +1757,6 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	}
 
 	return updated
-}
-
-// doSetBPFUpdatesOnFelixConfiguration is a wrapper function used for to facilitate unit testing.
-func (r *ReconcileInstallation) doSetBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return r.setBPFUpdatesOnFelixConfiguration(install, ds, fc)
-	})
-
-	return err
 }
 
 // setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed

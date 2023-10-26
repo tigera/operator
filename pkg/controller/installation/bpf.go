@@ -84,13 +84,14 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 	fc.Spec.BPFEnabled = &bpfEnabled
 }
 
-func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {
+func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) (bool, error) {
 	bpfEnabledStatus := false
+	var err error
 	bpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
 	if bpfEnabledEnvVar != nil {
-		bpfEnabledStatus, _ = strconv.ParseBool(*bpfEnabledEnvVar)
+		bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
 	}
-	return bpfEnabledStatus
+	return bpfEnabledStatus, err
 }
 
 func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {

@@ -1157,10 +1157,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := r.doSetDefaultsOnFelixConfiguration(ctx, instance, &calicoNodeDaemonset)
-	//felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-	//	return r.setDefaultsOnFelixConfiguration(instance, &calicoNodeDaemonset, fc)
-	//})
+	//felixConfiguration, err := r.doSetDefaultsOnFelixConfiguration(ctx, instance, &calicoNodeDaemonset)
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+		return r.setDefaultsOnFelixConfiguration(instance, &calicoNodeDaemonset, fc, reqLogger)
+	})
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -1657,17 +1657,17 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 }
 
 // doSetDefaultsOnFelixConfiguration is a wrapper function used for to facilitate unit testing.
-func (r *ReconcileInstallation) doSetDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) (*crdv1.FelixConfiguration, error) {
-	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return r.setDefaultsOnFelixConfiguration(install, ds, fc)
-	})
+//func (r *ReconcileInstallation) doSetDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) (*crdv1.FelixConfiguration, error) {
+//	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+//		return r.setDefaultsOnFelixConfiguration(install, ds, fc)
+//	})
 
-	return felixConfiguration, err
-}
+//	return felixConfiguration, err
+//}
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration) bool {
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operator.Installation, ds *appsv1.DaemonSet, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) bool {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1750,7 +1750,10 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	// used an environment variable to enable BPF, but we no longer do so. In order to prevent disruption
 	// when the environment variable is removed by the render code, make sure
 	// FelixConfiguration has the correct value set.
-	if bpfEnabledOnDaemonSet(ds) && !bpfEnabledOnFelixConfig(fc) {
+	bpfEnabledOnDaemonSet, err := bpfEnabledOnDaemonSet(ds)
+	if err != nil {
+		reqLogger.Error(err, "An error occurred when querying the Daemonset resource")
+	} else if bpfEnabledOnDaemonSet && !bpfEnabledOnFelixConfig(fc) {
 		setBPFEnabled(fc, true)
 		updated = true
 	}

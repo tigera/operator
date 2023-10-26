@@ -1156,7 +1156,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	//felixConfiguration, err := r.doSetDefaultsOnFelixConfiguration(ctx, instance, &calicoNodeDaemonset)
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
 		return r.setDefaultsOnFelixConfiguration(instance, &calicoNodeDaemonset, fc, reqLogger)
 	})
@@ -1653,15 +1652,6 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		NodeURISAN:      nodeURISAN,
 	}, nil
 }
-
-// doSetDefaultsOnFelixConfiguration is a wrapper function used for to facilitate unit testing.
-//func (r *ReconcileInstallation) doSetDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, ds *appsv1.DaemonSet) (*crdv1.FelixConfiguration, error) {
-//	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-//		return r.setDefaultsOnFelixConfiguration(install, ds, fc)
-//	})
-
-//	return felixConfiguration, err
-//}
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.

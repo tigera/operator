@@ -16,6 +16,7 @@ package installation
 
 import (
 	"errors"
+	"reflect"
 	"strconv"
 
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -24,6 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // updateBPFEnabledAllowed validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
@@ -87,10 +89,17 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) (bool, error) {
 	bpfEnabledStatus := false
 	var err error
-	bpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	if bpfEnabledEnvVar != nil {
-		bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
+
+	if ds != nil &&
+		!reflect.DeepEqual(ds.Spec, appsv1.DaemonSetSpec{}) &&
+		!reflect.DeepEqual(ds.Spec.Template, corev1.PodTemplateSpec{}) &&
+		!reflect.DeepEqual(ds.Spec.Template.Spec, corev1.PodSpec{}) {
+		bpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+		if bpfEnabledEnvVar != nil {
+			bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
+		}
 	}
+
 	return bpfEnabledStatus, err
 }
 

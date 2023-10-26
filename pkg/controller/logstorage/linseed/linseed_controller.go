@@ -441,7 +441,7 @@ func validateTenant(tenant *operatorv1.Tenant) error {
 	for _, index := range tenant.Spec.Indices {
 		_, found := declaredDataTypes[index.DataType]
 		if found {
-			return fmt.Errorf("index %s was been declared multiple times", index.DataType)
+			return fmt.Errorf("index %s is declared multiple times", index.DataType)
 		}
 		declaredDataTypes[index.DataType] = struct{}{}
 	}

@@ -1744,7 +1744,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	} else if bpfEnabledOnDaemonSet && !bpfEnabledOnFelixConfig(fc) {
 		err = setBPFEnabled(fc, true)
 		if err != nil {
-			reqLogger.Error(err, "An error occurred when updating the FelixConfiguration resource")
+			reqLogger.Error(err, "Unable to enable eBPF data plane")
 		} else {
 			updated = true
 		}
@@ -1763,7 +1763,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *opera
 		if (fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)) && isRolloutComplete(ds) {
 			err := setBPFEnabled(fc, bpfEnabledOnInstall)
 			if err != nil {
-				reqLogger.Error(err, "An error occurred when updating the FelixConfiguration resource")
+				reqLogger.Error(err, "Unable to enable eBPF data plane")
 			} else {
 				updated = true
 			}
@@ -1772,7 +1772,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *opera
 		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
 			err := setBPFEnabled(fc, bpfEnabledOnInstall)
 			if err != nil {
-				reqLogger.Error(err, "An error occurred when updating the FelixConfiguration resource")
+				reqLogger.Error(err, "Unable to enable eBPF data plane")
 			} else {
 				updated = true
 			}

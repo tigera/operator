@@ -17,11 +17,14 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // DataType represent the type of data stored
+// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreadFeedsIPSet;WAFLogs
 type DataType string
 
 const (
@@ -74,9 +77,7 @@ type Index struct {
 	// excludes the numerical identifier suffix)
 	IndexName string `json:"indexName"`
 
-	// DataType represents the type of data stored
-	// in the defined index
-	// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreadFeedsIPSet;WAFLogs
+	// DataType represents the type of data stored in the defined index
 	DataType DataType `json:"dataType"`
 }
 
@@ -114,7 +115,7 @@ func (i *Index) EnvVar() corev1.EnvVar {
 func (t DataType) IndexEnvName() string {
 	envName, ok := DataTypes[t]
 	if !ok {
-		panic("Unexpected data type")
+		panic(fmt.Sprintf("Unexpected data type %s", t))
 	}
 
 	return envName

@@ -289,7 +289,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 
 			// Act.
 			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc, reqLogger)
 			})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -337,7 +337,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 
 			// Act.
 			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc, reqLogger)
 			})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -381,13 +381,22 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 
 			// Create felix config
 			bpfEnabled := false
-			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-			fc.Spec.BPFEnabled = &bpfEnabled
+			fcAnnotations := make(map[string]string)
+			fcAnnotations[render.BPFOperatorAnnotation] = "false"
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "default",
+					Annotations: fcAnnotations,
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					BPFEnabled: &bpfEnabled,
+				},
+			}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
 			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc, reqLogger)
 			})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -427,7 +436,7 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 
 			// Act.
 			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc, reqLogger)
 			})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -463,13 +472,22 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 
 			// Create felix config
 			bpfEnabled := false
-			fc := &crdv1.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-			fc.Spec.BPFEnabled = &bpfEnabled
+			fcAnnotations := make(map[string]string)
+			fcAnnotations[render.BPFOperatorAnnotation] = "false"
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "default",
+					Annotations: fcAnnotations,
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					BPFEnabled: &bpfEnabled,
+				},
+			}
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			// Act.
 			_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc)
+				return r.setBPFUpdatesOnFelixConfiguration(cr, ds, fc, reqLogger)
 			})
 			Expect(err).ShouldNot(HaveOccurred())
 

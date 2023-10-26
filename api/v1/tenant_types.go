@@ -17,11 +17,14 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // DataType represent the type of data stored
+// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreatFeedsIPSet;WAFLogs
 type DataType string
 
 const (
@@ -35,27 +38,27 @@ const (
 	DataTypeFlowLogs             DataType = "FlowLogs"
 	DataTypeL7Logs               DataType = "L7Logs"
 	DataTypeRuntimeReports       DataType = "RuntimeReports"
-	DataTypeThreadFeedsDomainSet DataType = "ThreadFeedsDomainSet"
-	DataTypeThreadFeedsIPSet     DataType = "ThreadFeedsIPSet"
+	DataTypeThreatFeedsDomainSet DataType = "ThreatFeedsDomainSet"
+	DataTypeThreatFeedsIPSet     DataType = "ThreatFeedsIPSet"
 	DataTypeWAFLogs              DataType = "WAFLogs"
 )
 
 // DataTypes is a set of all data types stored mapped to
 // their corresponding environment variables
 var DataTypes = map[DataType]string{
-	DataTypeAlerts:               "ELASTIC_ALERTS_INDEX_NAME",
-	DataTypeAuditLogs:            "ELASTIC_AUDIT_LOGS_INDEX_NAME",
-	DataTypeBGPLogs:              "ELASTIC_BGP_LOGS_INDEX_NAME",
-	DataTypeComplianceBenchmarks: "ELASTIC_COMPLIANCE_BENCHMARKS_INDEX_NAME",
-	DataTypeComplianceReports:    "ELASTIC_COMPLIANCE_REPORTS_INDEX_NAME",
-	DataTypeComplianceSnapshots:  "ELASTIC_COMPLIANCE_SNAPSHOTS_INDEX_NAME",
-	DataTypeDNSLogs:              "ELASTIC_DNS_LOGS_INDEX_NAME",
-	DataTypeFlowLogs:             "ELASTIC_FLOW_LOGS_INDEX_NAME",
-	DataTypeL7Logs:               "ELASTIC_L7_LOGS_INDEX_NAME",
-	DataTypeRuntimeReports:       "ELASTIC_RUNTIME_REPORTS_INDEX_NAME",
-	DataTypeThreadFeedsDomainSet: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_INDEX_NAME",
-	DataTypeThreadFeedsIPSet:     "ELASTIC_THREAT_FEEDS_IP_SET_INDEX_NAME",
-	DataTypeWAFLogs:              "ELASTIC_WAF_LOGS_INDEX_NAME",
+	DataTypeAlerts:               "ELASTIC_ALERTS_BASE_INDEX_NAME",
+	DataTypeAuditLogs:            "ELASTIC_AUDIT_LOGS_BASE_INDEX_NAME",
+	DataTypeBGPLogs:              "ELASTIC_BGP_LOGS_BASE_INDEX_NAME",
+	DataTypeComplianceBenchmarks: "ELASTIC_COMPLIANCE_BENCHMARKS_BASE_INDEX_NAME",
+	DataTypeComplianceReports:    "ELASTIC_COMPLIANCE_REPORTS_BASE_INDEX_NAME",
+	DataTypeComplianceSnapshots:  "ELASTIC_COMPLIANCE_SNAPSHOTS_BASE_INDEX_NAME",
+	DataTypeDNSLogs:              "ELASTIC_DNS_LOGS_BASE_INDEX_NAME",
+	DataTypeFlowLogs:             "ELASTIC_FLOW_LOGS_BASE_INDEX_NAME",
+	DataTypeL7Logs:               "ELASTIC_L7_LOGS_BASE_INDEX_NAME",
+	DataTypeRuntimeReports:       "ELASTIC_RUNTIME_REPORTS_BASE_INDEX_NAME",
+	DataTypeThreatFeedsDomainSet: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_BASE_INDEX_NAME",
+	DataTypeThreatFeedsIPSet:     "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME",
+	DataTypeWAFLogs:              "ELASTIC_WAF_LOGS_BASE_INDEX_NAME",
 }
 
 type TenantSpec struct {
@@ -69,14 +72,12 @@ type TenantSpec struct {
 
 // Index defines how to store a tenant's data
 type Index struct {
-	// IndexName defines the name of the index
+	// BaseIndexName defines the name of the index
 	// that will be used to store data (this name
 	// excludes the numerical identifier suffix)
-	IndexName string `json:"indexName"`
+	BaseIndexName string `json:"baseIndexName"`
 
-	// DataType represents the type of data stored
-	// in the defined index
-	// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreadFeedsIPSet;WAFLogs
+	// DataType represents the type of data stored in the defined index
 	DataType DataType `json:"dataType"`
 }
 
@@ -108,13 +109,13 @@ func init() {
 }
 
 func (i *Index) EnvVar() corev1.EnvVar {
-	return corev1.EnvVar{Name: i.DataType.IndexEnvName(), Value: i.IndexName}
+	return corev1.EnvVar{Name: i.DataType.IndexEnvName(), Value: i.BaseIndexName}
 }
 
 func (t DataType) IndexEnvName() string {
 	envName, ok := DataTypes[t]
 	if !ok {
-		panic("Unexpected data type")
+		panic(fmt.Sprintf("Unexpected data type %s", t))
 	}
 
 	return envName

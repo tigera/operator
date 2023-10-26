@@ -26,8 +26,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 )
 
-// Validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
-func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
+// updateBPFEnabledAllowed validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
+func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
 	var err error = nil
 
 	var annotationValue *bool

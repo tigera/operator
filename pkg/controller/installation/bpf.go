@@ -70,7 +70,12 @@ func isRolloutComplete(ds *appsv1.DaemonSet) bool {
 	return false
 }
 
-func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
+func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
+	err := updateBPFEnabledAllowed(fc)
+	if err != nil {
+		return err
+	}
+
 	text := strconv.FormatBool(bpfEnabled)
 
 	// Add an annotation matching the field value. This allows the operator to compare the annotation to the field
@@ -84,6 +89,8 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
 	fc.Spec.BPFEnabled = &bpfEnabled
+
+	return nil
 }
 
 func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) (bool, error) {

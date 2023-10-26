@@ -16,6 +16,7 @@ package installation
 
 import (
 	"errors"
+	"reflect"
 	"strconv"
 
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -24,12 +25,11 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
-// Validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
-func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
-	var err error = nil
-
+// updateBPFEnabledAllowed validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
+func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
 	var annotationValue *bool
 	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
 		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
@@ -47,10 +47,10 @@ func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 	match = match || annotationValue != nil && fc.Spec.BPFEnabled != nil && *annotationValue == *fc.Spec.BPFEnabled
 
 	if !match {
-		err = errors.New("Unable to set bpfEnabled: FelixConfiguration \"default\" has been modified by someone else, refusing to override potential user configuration.")
+		return errors.New(`Unable to set bpfEnabled: FelixConfiguration "default" has been modified by someone else, refusing to override potential user configuration.`)
 	}
 
-	return err
+	return nil
 }
 
 // If the Installation resource has been patched to dataplane: BPF then the
@@ -62,7 +62,7 @@ func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 // checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
 func isRolloutComplete(ds *appsv1.DaemonSet) bool {
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
-		if volume.Name == common.BPFVolumeName {
+		if volume.Name == render.BPFVolumeName {
 			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
 		}
 	}
@@ -70,10 +70,16 @@ func isRolloutComplete(ds *appsv1.DaemonSet) bool {
 	return false
 }
 
-func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
+func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
+	err := updateBPFEnabledAllowed(fc)
+	if err != nil {
+		return err
+	}
+
 	text := strconv.FormatBool(bpfEnabled)
 
-	// Add managed fields "light".
+	// Add an annotation matching the field value. This allows the operator to compare the annotation to the field
+	// when performing an update to determine if another entity has modified the value since the last write.
 	var fcAnnotations map[string]string
 	if fc.Annotations == nil {
 		fcAnnotations = make(map[string]string)
@@ -83,25 +89,27 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) {
 	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
 	fc.Spec.BPFEnabled = &bpfEnabled
+
+	return nil
 }
 
-func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) bool {
+func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) (bool, error) {
 	bpfEnabledStatus := false
-	bpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
-	if bpfEnabledEnvVar != nil {
-		bpfEnabledStatus, _ = strconv.ParseBool(*bpfEnabledEnvVar)
+	var err error
+
+	if ds != nil &&
+		!reflect.DeepEqual(ds.Spec, appsv1.DaemonSetSpec{}) &&
+		!reflect.DeepEqual(ds.Spec.Template, corev1.PodTemplateSpec{}) &&
+		!reflect.DeepEqual(ds.Spec.Template.Spec, corev1.PodSpec{}) {
+		bpfEnabledEnvVar := utils.GetPodEnvVar(ds.Spec.Template.Spec, common.NodeDaemonSetName, "FELIX_BPFENABLED")
+		if bpfEnabledEnvVar != nil {
+			bpfEnabledStatus, err = strconv.ParseBool(*bpfEnabledEnvVar)
+		}
 	}
-	return bpfEnabledStatus
+
+	return bpfEnabledStatus, err
 }
 
 func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
 	return fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled
-}
-
-func bpfEnabledOnFelixConfigNilOrSetTrue(fc *crdv1.FelixConfiguration) bool {
-	return fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled
-}
-
-func bpfEnabledOnFelixConfigNilOrSetFalse(fc *crdv1.FelixConfiguration) bool {
-	return fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)
 }

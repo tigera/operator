@@ -66,6 +66,7 @@ const (
 	NodePrometheusTLSServerSecret = "calico-node-prometheus-server-tls"
 	CalicoNodeObjectName          = "calico-node"
 	CalicoCNIPluginObjectName     = "calico-cni-plugin"
+	BPFVolumeName                 = "bpffs"
 )
 
 var (
@@ -893,7 +894,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	if c.bpfDataplaneEnabled() {
+	if c.cfg.Installation.BPFEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
@@ -937,20 +938,13 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
 	}
 
-	// Include the annotation to indicate whether BPF is configured or not.
-	dsAnnotations := make(map[string]string)
-	if c.bpfDataplaneEnabled() {
-		dsAnnotations[BPFOperatorAnnotation] = "true"
-	}
-
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        common.NodeDaemonSetName,
-			Namespace:   common.CalicoNamespace,
-			Annotations: dsAnnotations,
+			Name:      common.NodeDaemonSetName,
+			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -1039,7 +1033,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	}
 
-	if c.bpfDataplaneEnabled() {
+	if c.cfg.Installation.BPFEnabled() {
 		volumes = append(volumes,
 			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
@@ -1117,10 +1111,6 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	return volumes
-}
-
-func (c *nodeComponent) bpfDataplaneEnabled() bool {
-	return common.BPFDataplaneEnabled(c.cfg.Installation)
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {
@@ -1305,8 +1295,8 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		)
 	}
-	if c.bpfDataplaneEnabled() {
-		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: common.BPFVolumeName})
+	if c.cfg.Installation.BPFEnabled() {
+		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	}
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})

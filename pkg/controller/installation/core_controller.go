@@ -1512,7 +1512,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// BPF Upgrade without disruption:
 	// First, validate FelixConfig annotations before continuing.
-	err = bpfValidateAnnotations(felixConfiguration)
+	err = updateBPFEnabledAllowed(felixConfiguration)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "Error validating resource", err, reqLogger)
 		return reconcile.Result{}, err

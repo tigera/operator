@@ -308,14 +308,11 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			volume := corev1.Volume{
 				Name: "bpffs",
 			}
-			dsAnnotations := make(map[string]string)
-			dsAnnotations[render.BPFOperatorAnnotation] = "true"
 			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        common.NodeDaemonSetName,
-					Namespace:   common.CalicoNamespace,
-					Annotations: dsAnnotations,
+					Name:      common.NodeDaemonSetName,
+					Namespace: common.CalicoNamespace,
 				},
 				Spec: appsv1.DaemonSetSpec{
 					Template: corev1.PodTemplateSpec{
@@ -359,14 +356,11 @@ var _ = Describe("Testing BPF Upgrade without disruption during core-controller 
 			volume := corev1.Volume{
 				Name: "bpffs",
 			}
-			dsAnnotations := make(map[string]string)
-			dsAnnotations[render.BPFOperatorAnnotation] = "true"
 			container := corev1.Container{Name: common.NodeDaemonSetName}
 			ds := &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        common.NodeDaemonSetName,
-					Namespace:   common.CalicoNamespace,
-					Annotations: dsAnnotations,
+					Name:      common.NodeDaemonSetName,
+					Namespace: common.CalicoNamespace,
 				},
 				Spec: appsv1.DaemonSetSpec{
 					Template: corev1.PodTemplateSpec{

@@ -269,6 +269,21 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			tenant.Name = "default"
 			tenant.Namespace = tenantNS
 			tenant.Spec.ID = "test-tenant-id"
+			tenant.Spec.Indices = []operatorv1.Index{
+				{IndexName: "calico_alerts", DataType: operatorv1.DataTypeAlerts},
+				{IndexName: "calico_auditlogs", DataType: operatorv1.DataTypeAuditLogs},
+				{IndexName: "calico_bgplogs", DataType: operatorv1.DataTypeBGPLogs},
+				{IndexName: "calico_compliance_benchmarks", DataType: operatorv1.DataTypeComplianceBenchmarks},
+				{IndexName: "calico_compliance_reports", DataType: operatorv1.DataTypeComplianceReports},
+				{IndexName: "calico_compliance_snapshots", DataType: operatorv1.DataTypeComplianceSnapshots},
+				{IndexName: "calico_dnslogs", DataType: operatorv1.DataTypeDNSLogs},
+				{IndexName: "calico_flowlogs", DataType: operatorv1.DataTypeFlowLogs},
+				{IndexName: "calico_L7logs", DataType: operatorv1.DataTypeL7Logs},
+				{IndexName: "calico_runtime_reports", DataType: operatorv1.DataTypeRuntimeReports},
+				{IndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreadFeedsDomainSet},
+				{IndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreadFeedsIPSet},
+				{IndexName: "calico_waf", DataType: operatorv1.DataTypeWAFLogs},
+			}
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}

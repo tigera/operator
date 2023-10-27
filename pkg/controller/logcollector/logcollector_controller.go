@@ -46,7 +46,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -141,7 +140,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchEksLogForwarderUserSecret,
-		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
+		render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
 	} {
@@ -150,10 +149,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
-	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
-		}
+	if err = utils.AddConfigMapWatch(c, render.FluentdFilterConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", render.FluentdFilterConfigMapName, err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
@@ -531,21 +528,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
-	var esClusterConfig *relasticsearch.ClusterConfig
 	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
-				esClusterConfig, err = utils.GetElasticsearchClusterConfig(ctx, r.client)
-				if err != nil {
-					if errors.IsNotFound(err) {
-						r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-						return reconcile.Result{}, nil
-					}
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-					return reconcile.Result{}, err
-				}
-
 				eksConfig, err = getEksCloudwatchLogConfig(r.client,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
@@ -564,7 +550,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:         instance,
-		ESClusterConfig:      esClusterConfig,
 		S3Credential:         s3Credential,
 		SplkCredential:       splunkCredential,
 		Filters:              filters,
@@ -615,7 +600,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
 			LogCollector:         instance,
-			ESClusterConfig:      esClusterConfig,
 			S3Credential:         s3Credential,
 			SplkCredential:       splunkCredential,
 			Filters:              filters,

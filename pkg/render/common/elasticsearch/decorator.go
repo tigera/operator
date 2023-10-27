@@ -15,8 +15,6 @@
 package elasticsearch
 
 import (
-	"strconv"
-
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -49,32 +47,15 @@ func elasticCertPath(osType rmeta.OSType) string {
 	return certificatemanagement.TrustedCertBundleMountPath
 }
 
-func DecorateAnnotations(obj Annotatable, config *ClusterConfig, secrets []*corev1.Secret) Annotatable {
+func DecorateAnnotations(obj Annotatable, secrets []*corev1.Secret) Annotatable {
 	annots := obj.GetAnnotations()
 	if annots == nil {
 		annots = map[string]string{}
 	}
-	annots[elasticsearchConfigMapAnnotation] = config.Annotation()
 	annots[elasticsearchSecretsAnnotation] = rmeta.SecretsAnnotationHash(secrets...)
 	obj.SetAnnotations(annots)
 
 	return obj
-}
-
-// ContainerDecorate is the legacy implementation, which does not support multi-tenancy.
-// Use DecorateEnvironment instead.
-func ContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string, osType rmeta.OSType) corev1.Container {
-	return DecorateEnvironment(c, "tigera-elasticsearch", cluster, secret, clusterDomain, osType)
-}
-
-func ContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
-	envVars := []corev1.EnvVar{
-		{Name: "ELASTIC_REPLICAS", Value: strconv.Itoa(replicas)},
-		{Name: "ELASTIC_SHARDS", Value: strconv.Itoa(shards)},
-	}
-	c.Env = append(c.Env, envVars...)
-
-	return c
 }
 
 func DecorateEnvironment(c corev1.Container, namespace string, cluster, esUserSecretName, clusterDomain string, osType rmeta.OSType) corev1.Container {

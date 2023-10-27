@@ -126,7 +126,6 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 type ManagerConfiguration struct {
 	KeyValidatorConfig authentication.KeyValidatorConfig
 	ESSecrets          []*corev1.Secret
-	ClusterConfig      *relasticsearch.ClusterConfig
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	Installation       *operatorv1.InstallationSpec
@@ -277,8 +276,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	esProxyContainer := c.managerEsProxyContainer()
 	if c.cfg.Tenant == nil {
 		// If we're running in multi-tenant mode, we don't need ES credentials as these are used for Kibana login. Otherwise, add them.
-		managerContainer = relasticsearch.ContainerDecorate(managerContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
-		esProxyContainer = relasticsearch.ContainerDecorate(esProxyContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
+		managerContainer = relasticsearch.DecorateEnvironment(managerContainer, ElasticsearchNamespace, DefaultElasticsearchClusterName, ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
+		esProxyContainer = relasticsearch.DecorateEnvironment(esProxyContainer, ElasticsearchNamespace, DefaultElasticsearchClusterName, ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
 	}
 	if c.cfg.InternalTLSKeyPair != nil && c.cfg.InternalTLSKeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.InternalTLSKeyPair.InitContainer(ManagerNamespace))
@@ -302,7 +301,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Containers:         []corev1.Container{managerContainer, esProxyContainer, c.voltronContainer()},
 			Volumes:            c.managerVolumes(),
 		},
-	}, c.cfg.ClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", c.cfg.Namespace)

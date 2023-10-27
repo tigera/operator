@@ -122,7 +122,6 @@ type IntrusionDetectionConfiguration struct {
 	LogCollector       *operatorv1.LogCollector
 	ESSecrets          []*corev1.Secret
 	Installation       *operatorv1.InstallationSpec
-	ESClusterConfig    *relasticsearch.ClusterConfig
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	ClusterDomain      string
@@ -321,13 +320,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.cfg.ESClusterConfig.ClusterName(),
+				relasticsearch.DecorateEnvironment(c.intrusionDetectionJobContainer(), ElasticsearchNamespace, DefaultElasticsearchClusterName,
 					ElasticsearchIntrusionDetectionJobUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux),
 			},
 			Volumes:            []corev1.Volume{c.cfg.TrustedCertBundle.Volume()},
 			ServiceAccountName: IntrusionDetectionInstallerJobName,
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
@@ -701,10 +700,8 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			})
 	}
 
-	container := relasticsearch.ContainerDecorateIndexCreator(
-		relasticsearch.ContainerDecorate(c.intrusionDetectionControllerContainer(), c.cfg.ESClusterConfig.ClusterName(),
-			ElasticsearchIntrusionDetectionUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux),
-		c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards())
+	container := relasticsearch.DecorateEnvironment(c.intrusionDetectionControllerContainer(), ElasticsearchNamespace, DefaultElasticsearchClusterName,
+		ElasticsearchIntrusionDetectionUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
 
 	if c.cfg.ManagedCluster {
 		envVars := []corev1.EnvVar{
@@ -734,7 +731,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			},
 			Volumes: volumes,
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() corev1.Container {

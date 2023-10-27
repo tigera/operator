@@ -150,17 +150,14 @@ type FluentdConfiguration struct {
 	S3Credential   *S3Credential
 	SplkCredential *SplunkCredential
 	Filters        *FluentdFilters
-	// ESClusterConfig is only populated for when EKSConfig
-	// is also defined
-	ESClusterConfig *relasticsearch.ClusterConfig
-	EKSConfig       *EksCloudwatchLogConfig
-	PullSecrets     []*corev1.Secret
-	Installation    *operatorv1.InstallationSpec
-	ClusterDomain   string
-	OSType          rmeta.OSType
-	FluentdKeyPair  certificatemanagement.KeyPairInterface
-	TrustedBundle   certificatemanagement.TrustedBundle
-	ManagedCluster  bool
+	EKSConfig      *EksCloudwatchLogConfig
+	PullSecrets    []*corev1.Secret
+	Installation   *operatorv1.InstallationSpec
+	ClusterDomain  string
+	OSType         rmeta.OSType
+	FluentdKeyPair certificatemanagement.KeyPairInterface
+	TrustedBundle  certificatemanagement.TrustedBundle
+	ManagedCluster bool
 
 	// Set if running as a multi-tenant management cluster. Configures the management cluster's
 	// own fluentd daemonset.
@@ -1076,7 +1073,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
-					InitContainers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
+					InitContainers: []corev1.Container{relasticsearch.DecorateEnvironment(corev1.Container{
 						Name:            eksLogForwarderName + "-startup",
 						Image:           c.image,
 						ImagePullPolicy: ImagePullPolicy(),
@@ -1084,15 +1081,15 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 						Env:             envVars,
 						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
-					Containers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
+					}, ElasticsearchNamespace, DefaultElasticsearchClusterName, ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
+					Containers: []corev1.Container{relasticsearch.DecorateEnvironment(corev1.Container{
 						Name:            eksLogForwarderName,
 						Image:           c.image,
 						ImagePullPolicy: ImagePullPolicy(),
 						Env:             envVars,
 						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
+					}, ElasticsearchNamespace, DefaultElasticsearchClusterName, ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
 					Volumes: c.eksLogForwarderVolumes(),
 				},
 			},

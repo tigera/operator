@@ -294,6 +294,16 @@ func (c *apiServerComponent) Ready() bool {
 	return true
 }
 
+// For legacy reasons we use apiserver: true here instead of the k8s-app: name label,
+// so we need to set it explicitly rather than use the common labeling logic.
+func (c *apiServerComponent) deploymentSelector() *metav1.LabelSelector {
+	return &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"apiserver": "true",
+		},
+	}
+}
+
 // Determine names based on the configured variant
 // It takes two name as parameters, enterpriseName and ossName, and returns name and nameToDelete.
 func (c *apiServerComponent) resourceNameBasedOnVariant(enterpriseName, ossName string) (string, string) {
@@ -320,11 +330,7 @@ func (c *apiServerComponent) apiServerPodDisruptionBudget() *policyv1.PodDisrupt
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MaxUnavailable: &maxUnavailable,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					AppLabelName: APIServerK8sAppName,
-				},
-			},
+			Selector:       c.deploymentSelector(),
 		},
 	}
 }
@@ -940,9 +946,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			// For legacy reasons we use apiserver: true here instead of the k8s-app: name label,
-			// so we need to set it explicitly rather than use the common labeling logic.
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"apiserver": "true"}},
+			Selector: c.deploymentSelector(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
@@ -1217,11 +1221,7 @@ func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant)},
 		Spec: netv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"apiserver": "true",
-				},
-			},
+			PodSelector: *c.deploymentSelector(),
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
 			Ingress: []netv1.NetworkPolicyIngressRule{
 				{

@@ -17,7 +17,6 @@ package common
 const (
 	CalicoNamespace               = "calico-system"
 	TyphaDeploymentName           = "calico-typha"
-	APIServerDeploymentName       = "calico-apiserver"
 	NodeDaemonSetName             = "calico-node"
 	KubeControllersDeploymentName = "calico-kube-controllers"
 	WindowsDaemonSetName          = "calico-node-windows"

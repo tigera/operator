@@ -35,11 +35,6 @@ spec:
             description: ManagedClusterSpec contains the specification of a ManagedCluster
               resource.
             properties:
-              certificate:
-                description: The certificate used to authenticate the managed cluster
-                  to the management cluster.
-                format: byte
-                type: string
               installationManifest:
                 description: Field to store dynamically generated manifest for installing
                   component into the actual application cluster corresponding to this

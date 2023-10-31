@@ -1,25 +1,25 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/calico.go.tpl
-title: master
+title: v3.26.1
 components:
   libcalico-go:
-    version: master
+    version: v3.26.1
   typha:
-    version: master
+    version: v3.26.1
   calico/node:
-    version: master
+    version: v3.26.1
   calico/cni:
-    version: master
+    version: v3.26.1
   calico/node-windows:
-    version: master
+    version: v3.26.1
   calico/cni-windows:
-    version: master
+    version: v3.26.1
   calico/kube-controllers:
-    version: master
+    version: v3.26.1
   flexvol:
-    version: master
+    version: v3.26.1
   calico/apiserver:
-    version: master
+    version: v3.26.1
   calico/csi:
-    version: master
+    version: v3.26.1
   csi-node-driver-registrar:
-    version: master
+    version: v3.26.1

@@ -87,6 +87,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
+	if opts.ElasticExternal {
+		// This controller installs the Elastic operator and an Elasticsearch instance, which is not
+		// needed when using an external Elastic cluster.
+		return nil
+	}
 
 	// Create the reconciler
 	r := &ElasticSubController{

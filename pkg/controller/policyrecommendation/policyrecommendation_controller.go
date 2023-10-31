@@ -415,7 +415,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 		policyRecommendationCfg.TrustedBundle = trustedBundle
 		policyRecommendationCfg.PolicyRecommendationCertSecret = policyRecommendationKeyPair
-		policyRecommendationCfg.Tenant = tenant
 
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

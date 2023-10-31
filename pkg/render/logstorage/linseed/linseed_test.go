@@ -21,6 +21,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -59,7 +60,7 @@ type resourceTestObj struct {
 }
 
 var _ = Describe("Linseed rendering tests", func() {
-	Context("Linseed deployment", func() {
+	Context("single-tenant rendering", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
 		var cfg *Config
@@ -103,6 +104,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 		})
 
@@ -207,6 +210,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 
 			component := Linseed(cfg)
@@ -321,6 +326,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			})
 
 			resources, _ := component.Objects()
@@ -422,6 +429,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				Tenant:          tenant,
 				BindNamespaces:  []string{tenant.Namespace, "tigera-elasticsearch"},
 				ExternalElastic: true,
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 		})
 

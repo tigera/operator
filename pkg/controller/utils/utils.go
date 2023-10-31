@@ -17,17 +17,20 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -788,4 +792,55 @@ func IsDexDisabled(authentication *operatorv1.Authentication) bool {
 		disableDex = true
 	}
 	return disableDex
+}
+
+// MonitorConfigMap starts a goroutine which exits if the given configmap's data is changed.
+func MonitorConfigMap(cs kubernetes.Interface, name string, data map[string]string) error {
+	informer := cache.NewSharedInformer(
+		cache.NewListWatchFromClient(
+			cs.CoreV1().RESTClient(),
+			"configmaps",
+			common.OperatorNamespace(),
+			fields.OneTermEqualSelector("metadata.name", name),
+		),
+		&v1.ConfigMap{},
+		0, // no resync period
+	)
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: func(_, newObj interface{}) {
+			if !compareMap(data, newObj.(*v1.ConfigMap).Data) {
+				log.Info("detected config change. rebooting")
+				os.Exit(0)
+			}
+			log.Info("ignoring configmap update as data was not modified")
+		},
+		AddFunc: func(obj interface{}) {
+			if !compareMap(data, obj.(*v1.ConfigMap).Data) {
+				log.Info("detected config creation change. rebooting")
+				os.Exit(0)
+			}
+			log.Info("ignoring configmap creation as data was not modified")
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	go informer.Run(make(chan struct{}))
+	for !informer.HasSynced() {
+		time.Sleep(1 * time.Second)
+	}
+	return nil
+}
+
+func compareMap(m1, m2 map[string]string) bool {
+	if len(m1) != len(m2) {
+		return false
+	}
+	for k, v := range m1 {
+		if m2[k] != v {
+			return false
+		}
+	}
+	return true
 }

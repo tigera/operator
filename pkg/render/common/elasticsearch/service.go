@@ -48,6 +48,8 @@ func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
 	return GatewayEndpoint(osType, clusterDomain, "tigera-elasticsearch")
 }
 
-func ElasticEndpoint() string {
+// ECKElasticEndpoint returns the URL of the Elasticsearch provisioned by the ECK operator. This
+// endpoint is only valid when using internal elasticsearch.
+func ECKElasticEndpoint() string {
 	return "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 }

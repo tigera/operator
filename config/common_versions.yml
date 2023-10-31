@@ -1,5 +1,5 @@
-title: master
+title: v1.1.15
 components:
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
-    version: master
+    version: v1.1.15

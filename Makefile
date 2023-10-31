@@ -6,12 +6,20 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
-GIT_CMD           = git
+define yq_cmd
+	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
+endef
+YQ_V4 = $(call yq_cmd,4)
+
+GIT_CMD   = git
+CURL_CMD  = curl -fL
 
 ifdef CONFIRM
-GIT           = $(GIT_CMD)
+GIT       = $(GIT_CMD)
+CURL      = $(CURL_CMD)
 else
-GIT           = echo [DRY RUN] $(GIT_CMD)
+GIT       = echo [DRY RUN] $(GIT_CMD)
+CURL      = echo [DRY RUN] $(CURL_CMD)
 endif
 
 
@@ -566,35 +574,38 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-release-prep: var-require-all-VERSION-CALICO_VERSION-COMMON_VERSION
-ifdef CNX
-	$(MAKE) var-require-all-CALICO_ENTERPRISE_VERSION
-	yq e ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
-endif
-	yq e ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
-	yq e ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
+release-prep: var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
+	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
+	$(YQ_V4) ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
 	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-merge-when-ready-on-pr
 
 GIT_REMOTE?=origin
-GIT_PR_BRANCH_BASE?=$(SEMAPHORE_GIT_BRANCH)
-GIT_REPO_SLUG?=$(SEMAPHORE_GIT_REPO_SLUG)
-RELEASE_UPDATE_BRANCH?=semaphore-auto-build-updates-$(VERSION)
-GIT_PR_BRANCH_HEAD?=$(RELEASE_UPDATE_BRANCH)
+ifneq ($(if $(GIT_REPO_SLUG),$(shell dirname $(GIT_REPO_SLUG)),), $(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`))
+GIT_FORK_USER:=$(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`)
+endif
+GIT_PR_BRANCH_BASE?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_BRANCH),)
+GIT_REPO_SLUG?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_REPO_SLUG),)
+RELEASE_UPDATE_BRANCH?=$(if $(SEMAPHORE),semaphore-,)auto-build-updates-$(VERSION)
+GIT_PR_BRANCH_HEAD?=$(if $(GIT_FORK_USER),$(GIT_FORK_USER):$(RELEASE_UPDATE_BRANCH),$(RELEASE_UPDATE_BRANCH))
 release-prep/create-and-push-branch:
-ifeq ($(shell git rev-parse --abbrev-ref HEAD),$(GIT_PR_BRANCH_HEAD))
+ifeq ($(shell git rev-parse --abbrev-ref HEAD),$(RELEASE_UPDATE_BRANCH))
 	$(error Current branch is pull request head, cannot set it up.)
 endif
-	-git branch -D $(GIT_PR_BRANCH_HEAD)
-	-$(GIT) push $(GIT_REMOTE) --delete $(GIT_PR_BRANCH_HEAD)
-	git checkout -b $(GIT_PR_BRANCH_HEAD)
+	-git branch -D $(RELEASE_UPDATE_BRANCH)
+	-$(GIT) push $(GIT_REMOTE) --delete $(RELEASE_UPDATE_BRANCH)
+	git checkout -b $(RELEASE_UPDATE_BRANCH)
 	$(GIT) add config/*_versions.yml hack/gen-versions/main.go pkg/components/* pkg/crds/*
 	$(GIT) commit -m "Automatic version updates for $(VERSION) release"
-	$(GIT) push $(GIT_REMOTE) $(GIT_PR_BRANCH_HEAD)
+	$(GIT) push $(GIT_REMOTE) $(RELEASE_UPDATE_BRANCH)
+
+tester:
+	@echo hello
 
 release-prep/create-pr:
-	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] Semaphore Auto $(VERSION) Release Update,$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
+	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] $(if $(SEMAPHORE), Semaphore,) Auto Release Update for $(VERSION),$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
 	echo 'Created release update pull request for $(VERSION): $(PR_NUMBER)'
 
 release-prep/set-merge-when-ready-on-pr:
@@ -936,11 +947,12 @@ var-require-all-%:
 var-require-one-of-%:
 	$(MAKE) var-require REQUIRED_VARS=$*
 
+GITHUB_API_EXIT_ON_FAILURE?=1
 # Call the github API. $(1) is the http method type for the https request, $(2) is the repo slug, and is $(3) is for json
 # data (if omitted then no data is set for the request). If GITHUB_API_EXIT_ON_FAILURE is set then the macro exits with 1
 # on failure. On success, the ENV variable GITHUB_API_RESPONSE will contain the response from github
 define github_call_api
-	$(eval CMD := curl -fL -X $(1) \
+	$(eval CMD := $(CURL) -X $(1) \
 		-H "Content-Type: application/json"\
 		-H "Authorization: Bearer ${GITHUB_TOKEN}"\
 		https://api.github.com/repos/$(2) $(if $(3),--data '$(3)',))

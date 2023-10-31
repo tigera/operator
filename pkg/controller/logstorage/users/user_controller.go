@@ -46,17 +46,19 @@ import (
 var log = logf.Log.WithName("controller_logstorage_users")
 
 type UserController struct {
-	client      client.Client
-	scheme      *runtime.Scheme
-	status      status.StatusManager
-	esClientFn  utils.ElasticsearchClientCreator
-	multiTenant bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	esClientFn      utils.ElasticsearchClientCreator
+	multiTenant     bool
+	elasticExternal bool
 }
 
 type UsersCleanupController struct {
-	client     client.Client
-	scheme     *runtime.Scheme
-	esClientFn utils.ElasticsearchClientCreator
+	client          client.Client
+	scheme          *runtime.Scheme
+	esClientFn      utils.ElasticsearchClientCreator
+	elasticExternal bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -71,11 +73,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &UserController{
-		client:      mgr.GetClient(),
-		scheme:      mgr.GetScheme(),
-		multiTenant: opts.MultiTenant,
-		status:      status.New(mgr.GetClient(), "log-storage-users", opts.KubernetesVersion),
-		esClientFn:  utils.NewElasticClient,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		multiTenant:     opts.MultiTenant,
+		status:          status.New(mgr.GetClient(), "log-storage-users", opts.KubernetesVersion),
+		esClientFn:      utils.NewElasticClient,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -125,9 +128,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Now that the users controller is set up, we can also set up the controller that cleans up stale users
 	usersCleanupReconciler := &UsersCleanupController{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		esClientFn: utils.NewElasticClient,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		esClientFn:      utils.NewElasticClient,
+		elasticExternal: opts.ElasticExternal,
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
@@ -191,15 +195,17 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// Wait for Elasticsearch to be installed and available.
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{}, nil
+	if !r.elasticExternal {
+		// Wait for Elasticsearch to be installed and available.
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	clusterIDConfigMap := corev1.ConfigMap{}
@@ -263,7 +269,11 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Now that the secret has been created, also provision the user in ES.
-	if err = r.createLinseedLogin(ctx, clusterID, tenantID, &basicCreds, reqLogger); err != nil {
+	elasticEndpoint := relasticsearch.ElasticEndpoint()
+	if tenant.Spec.Elastic != nil && tenant.Spec.Elastic.URL != "" {
+		elasticEndpoint = tenant.Spec.Elastic.URL
+	}
+	if err = r.createLinseedLogin(ctx, elasticEndpoint, clusterID, tenantID, &basicCreds, reqLogger); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create Linseed user in ES", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -273,8 +283,8 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	return reconcile.Result{}, nil
 }
 
-func (r *UserController) createLinseedLogin(ctx context.Context, clusterID, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
-	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
+func (r *UserController) createLinseedLogin(ctx context.Context, elasticEndpoint string, clusterID, tenantID string, secret *corev1.Secret, reqLogger logr.Logger) error {
+	esClient, err := r.esClientFn(r.client, ctx, elasticEndpoint)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return err

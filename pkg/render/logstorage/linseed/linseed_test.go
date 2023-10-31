@@ -21,6 +21,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -59,7 +60,7 @@ type resourceTestObj struct {
 }
 
 var _ = Describe("Linseed rendering tests", func() {
-	Context("Linseed deployment", func() {
+	Context("single-tenant rendering", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
 		var cfg *Config
@@ -103,6 +104,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 		})
 
@@ -122,6 +125,47 @@ var _ = Describe("Linseed rendering tests", func() {
 				Verbs:     []string{"get", "list", "watch"},
 			}
 			Expect(cr.Rules).To(ContainElement(secretsRules))
+		})
+
+		It("should support an external elasticsearch endpoint", func() {
+			cfg.ElasticHost = "test-host"
+			cfg.ElasticPort = "443"
+			cfg.ElasticClientSecret = &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      logstorage.ExternalCertsSecret,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string][]byte{
+					"client.crt": {1, 2, 3},
+					"client.key": {4, 5, 6},
+				},
+			}
+			component := Linseed(cfg)
+			createResources, _ := component.Objects()
+			d, ok := rtest.GetResource(createResources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue(), "Deployment not found")
+
+			// The deployment should have the hash annotation set, as well as a volume and volume mount for the client secret.
+			Expect(d.Spec.Template.Annotations["hash.operator.tigera.io/elastic-client-secret"]).To(Equal("ae1a6776a81bf1fc0ee4aac936a90bd61a07aea7"))
+			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
+				Name: logstorage.ExternalCertsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: logstorage.ExternalCertsSecret,
+					},
+				},
+			}))
+			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
+				Name:      logstorage.ExternalCertsVolumeName,
+				MountPath: "/certs/elasticsearch/mtls",
+				ReadOnly:  true,
+			}))
+
+			// The client secret should also be emitted as a resources, but copied to the destination namespace.
+			s, ok := rtest.GetResource(createResources, logstorage.ExternalCertsSecret, render.ElasticsearchNamespace, "", "v1", "Secret").(*corev1.Secret)
+			Expect(ok).To(BeTrue(), "Secret not copied")
+			Expect(s.Data).To(Equal(cfg.ElasticClientSecret.Data))
 		})
 
 		It("should render properly when PSP is not supported by the cluster", func() {
@@ -154,6 +198,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 
 			component := Linseed(cfg)
@@ -268,6 +314,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			})
 
 			resources, _ := component.Objects()
@@ -367,6 +415,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       "tenant-test-tenant",
 				Tenant:          tenant,
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 		})
 

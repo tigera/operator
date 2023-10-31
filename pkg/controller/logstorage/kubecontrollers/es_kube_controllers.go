@@ -48,11 +48,12 @@ import (
 var log = logf.Log.WithName("controller_logstorage_kube-controllers")
 
 type ESKubeControllersController struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	clusterDomain string
-	usePSP        bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	clusterDomain   string
+	usePSP          bool
+	elasticExternal bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -66,10 +67,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &ESKubeControllersController{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		clusterDomain: opts.ClusterDomain,
-		status:        status.New(mgr.GetClient(), "log-storage-kubecontrollers", opts.KubernetesVersion),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clusterDomain:   opts.ClusterDomain,
+		status:          status.New(mgr.GetClient(), "log-storage-kubecontrollers", opts.KubernetesVersion),
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -185,15 +187,17 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// Wait for Elasticsearch to be installed and available
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	if !r.elasticExternal {
+		// Wait for Elasticsearch to be installed and available
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
 	}
 
 	// Get secrets needed for kube-controllers to talk to elastic.

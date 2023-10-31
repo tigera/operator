@@ -5,8 +5,13 @@
 #
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
+define yq_cmd
+	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
+endef
 
 GIT_CMD           = git
+YQ_V4 = $(call yq_cmd,4)
+YQ_V2 = $(call yq_cmd,2)
 
 ifdef CONFIRM
 GIT           = $(GIT_CMD)
@@ -569,10 +574,10 @@ endif
 release-prep: var-require-all-VERSION-CALICO_VERSION-COMMON_VERSION
 ifdef CNX
 	$(MAKE) var-require-all-CALICO_ENTERPRISE_VERSION
-	yq e ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
 endif
-	yq e ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
-	yq e ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
+	$(YQ_V4) ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
 	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-merge-when-ready-on-pr
@@ -674,7 +679,7 @@ CALICO?=projectcalico/calico
 read-libcalico-calico-version:
 	$(eval CALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
-	yq r config/calico_versions.yml components.libcalico-go.version'))
+	$(YQ_V2) r config/calico_versions.yml components.libcalico-go.version'))
 	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
@@ -690,7 +695,7 @@ CALICO_ENTERPRISE?=tigera/calico-private
 read-libcalico-enterprise-version:
 	$(eval CALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
-	yq r config/enterprise_versions.yml components.libcalico-go.version'))
+	$(YQ_V2) config/enterprise_versions.yml components.libcalico-go.version'))
 	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds

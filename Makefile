@@ -6,6 +6,22 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
+define yq_cmd
+	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
+endef
+YQ_V4 = $(call yq_cmd,4)
+
+GIT_CMD   = git
+CURL_CMD  = curl -fL
+
+ifdef CONFIRM
+GIT       = $(GIT_CMD)
+CURL      = $(CURL_CMD)
+else
+GIT       = echo [DRY RUN] $(GIT_CMD)
+CURL      = echo [DRY RUN] $(CURL_CMD)
+endif
+
 
 # Shortcut targets
 default: build
@@ -558,6 +574,41 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
+release-prep: var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
+	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
+	$(YQ_V4) ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
+	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
+	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
+	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-merge-when-ready-on-pr
+
+GIT_REMOTE?=origin
+ifneq ($(if $(GIT_REPO_SLUG),$(shell dirname $(GIT_REPO_SLUG)),), $(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`))
+GIT_FORK_USER:=$(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`)
+endif
+GIT_PR_BRANCH_BASE?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_BRANCH),)
+GIT_REPO_SLUG?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_REPO_SLUG),)
+RELEASE_UPDATE_BRANCH?=$(if $(SEMAPHORE),semaphore-,)auto-build-updates-$(VERSION)
+GIT_PR_BRANCH_HEAD?=$(if $(GIT_FORK_USER),$(GIT_FORK_USER):$(RELEASE_UPDATE_BRANCH),$(RELEASE_UPDATE_BRANCH))
+release-prep/create-and-push-branch:
+ifeq ($(shell git rev-parse --abbrev-ref HEAD),$(RELEASE_UPDATE_BRANCH))
+	$(error Current branch is pull request head, cannot set it up.)
+endif
+	-git branch -D $(RELEASE_UPDATE_BRANCH)
+	-$(GIT) push $(GIT_REMOTE) --delete $(RELEASE_UPDATE_BRANCH)
+	git checkout -b $(RELEASE_UPDATE_BRANCH)
+	$(GIT) add config/*_versions.yml hack/gen-versions/main.go pkg/components/* pkg/crds/*
+	$(GIT) commit -m "Automatic version updates for $(VERSION) release"
+	$(GIT) push $(GIT_REMOTE) $(RELEASE_UPDATE_BRANCH)
+
+release-prep/create-pr:
+	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] $(if $(SEMAPHORE), Semaphore,) Auto Release Update for $(VERSION),$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
+	echo 'Created release update pull request for $(VERSION): $(PR_NUMBER)'
+
+release-prep/set-merge-when-ready-on-pr:
+	$(call github_pr_add_comment,$(GIT_REPO_SLUG),$(PR_NUMBER),/merge-when-ready delete-branch)
+	echo "Added '/merge-when-ready' comment command to pull request $(PR_NUMBER)"
+
 ###############################################################################
 # Utilities
 ###############################################################################
@@ -866,3 +917,57 @@ install-git-hooks:
 .PHONY: pre-commit
 pre-commit:
 	$(CONTAINERIZED) $(CALICO_BUILD) git-hooks/pre-commit-in-container
+
+# var-set-% checks if there is a non empty variable for the value describe by %. If FAIL_NOT_SET is set, then var-set-%
+# fails with an error message. If FAIL_NOT_SET is not set, then var-set-% appends a 1 to VARSET if the variable isn't
+# set.
+var-set-%:
+	$(if $($*),$(eval VARSET+=1),$(if $(FAIL_NOT_SET),$(error $* is required but not set),))
+
+# var-require is used to check if one or all of the variables are set in REQUIRED_VARS, and fails if not. The variables
+# in REQUIRE_VARS are hyphen separated.
+#
+# If FAIL_NOT_SET is set, then all variables described in REQUIRED_VARS must be set for var-require to not fail,
+# otherwise only one variable needs to be set for var-require to not fail.
+var-require: $(addprefix var-set-,$(subst -, ,$(REQUIRED_VARS)))
+	$(if $(VARSET),,$(error one of $(subst -, ,$(REQUIRED_VARS)) is not set or empty, but at least one is required))
+
+# var-require-all-% checks if the there are non empty variables set for the hyphen separated values in %, and fails if
+# there isn't a non empty variable for each given value. For instance, to require FOO and BAR both must be set you would
+# call var-require-all-FOO-BAR.
+var-require-all-%:
+	$(MAKE) var-require REQUIRED_VARS=$* FAIL_NOT_SET=true
+
+# var-require-one-of-% checks if the there are non empty variables set for the hyphen separated values in %, and fails
+# there isn't a non empty variable for at least one of the given values. For instance, to require either FOO or BAR both
+# must be set you would call var-require-all-FOO-BAR.
+var-require-one-of-%:
+	$(MAKE) var-require REQUIRED_VARS=$*
+
+GITHUB_API_EXIT_ON_FAILURE?=1
+# Call the github API. $(1) is the http method type for the https request, $(2) is the repo slug, and is $(3) is for json
+# data (if omitted then no data is set for the request). If GITHUB_API_EXIT_ON_FAILURE is set then the macro exits with 1
+# on failure. On success, the ENV variable GITHUB_API_RESPONSE will contain the response from github
+define github_call_api
+	$(eval CMD := $(CURL) -X $(1) \
+		-H "Content-Type: application/json"\
+		-H "Authorization: Bearer ${GITHUB_TOKEN}"\
+		https://api.github.com/repos/$(2) $(if $(3),--data '$(3)',))
+	$(eval GITHUB_API_RESPONSE := $(shell $(CMD) | sed -e 's/#/\\\#/g'))
+	$(if $(GITHUB_API_EXIT_ON_FAILURE), $(if $(GITHUB_API_RESPONSE),,exit 1),)
+endef
+
+# Create the pull request. $(1) is the repo slug, $(2) is the title, $(3) is the head branch and $(4) is the base branch.
+# If the call was successful then the ENV variable PR_NUMBER will contain the pull request number of the created pull request.
+define github_pr_create
+	$(eval JSON := {"title": "$(2)", "head": "$(3)", "base": "$(4)"})
+	$(call github_call_api,POST,$(1)/pulls,$(JSON))
+	$(eval PR_NUMBER := $(filter-out null,$(shell echo '$(GITHUB_API_RESPONSE)' | jq '.number')))
+endef
+
+# Create a comment on a pull request. $(1) is the repo slug, $(2) is the pull request number, and $(3) is the comment
+# body.
+define github_pr_add_comment
+	$(eval JSON := {"body":"$(3)"})
+	$(call github_call_api,POST,$(1)/issues/$(2)/comments,$(JSON))
+endef

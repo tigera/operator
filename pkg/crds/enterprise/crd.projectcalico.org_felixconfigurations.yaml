@@ -1353,6 +1353,14 @@ spec:
                   parameter only takes effect when FlowLogsDynamicAggregationEnabled
                   is set to true.'
                 type: string
+              windowsManageFirewallRules:
+                description: 'WindowsManageFirewallRules configures whether or not
+                  Felix will program Windows Firewall rules. (to allow inbound access
+                  to its own metrics ports) [Default: Disabled]'
+                enum:
+                - Enabled
+                - Disabled
+                type: string
               windowsNetworkName:
                 description: WindowsNetworkName specifies which Windows HNS networks
                   Felix should operate on.  The default is to match networks that

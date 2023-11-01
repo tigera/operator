@@ -205,6 +205,11 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	err = validateTenant(tenant)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Tenant CR is invalid", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
@@ -425,4 +430,31 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
+}
+
+func validateTenant(tenant *operatorv1.Tenant) error {
+	if tenant == nil {
+		return nil
+	}
+
+	declaredDataTypes := make(map[operatorv1.DataType]struct{})
+	for _, index := range tenant.Spec.Indices {
+		_, found := declaredDataTypes[index.DataType]
+		if found {
+			return fmt.Errorf("index %s is declared multiple times", index.DataType)
+		}
+		declaredDataTypes[index.DataType] = struct{}{}
+	}
+
+	for dataType := range operatorv1.DataTypes {
+		if _, ok := declaredDataTypes[dataType]; !ok {
+			return fmt.Errorf("index %s has not been declared on the Tenant CR", dataType)
+		}
+	}
+
+	if len(declaredDataTypes) > len(operatorv1.DataTypes) {
+		return fmt.Errorf("declared indices contains more indices that allowed by Tenant CR")
+	}
+
+	return nil
 }

@@ -298,6 +298,60 @@ var _ = Describe("Linseed rendering tests", func() {
 				},
 				Spec: operatorv1.TenantSpec{
 					ID: "test-tenant",
+					Indices: []operatorv1.Index{
+						{
+							BaseIndexName: "calico_alerts_standard",
+							DataType:      "Alerts",
+						},
+						{
+							BaseIndexName: "calico_auditlogs_standard",
+							DataType:      "AuditLogs",
+						},
+						{
+							BaseIndexName: "calico_bgplogs_standard",
+							DataType:      "BGPLogs",
+						},
+						{
+							BaseIndexName: "calico_compliance_reports_standard",
+							DataType:      "ComplianceReports",
+						},
+						{
+							BaseIndexName: "calico_compliance_benchmarks_standard",
+							DataType:      "ComplianceBenchmarks",
+						},
+						{
+							BaseIndexName: "calico_compliance_snapshots_standard",
+							DataType:      "ComplianceSnapshots",
+						},
+						{
+							BaseIndexName: "calico_dnslogs_standard",
+							DataType:      "DNSLogs",
+						},
+						{
+							BaseIndexName: "calico_flowlogs_standard",
+							DataType:      "FlowLogs",
+						},
+						{
+							BaseIndexName: "calico_l7logs_standard",
+							DataType:      "L7Logs",
+						},
+						{
+							BaseIndexName: "calico_runtime_reports_standard",
+							DataType:      "RuntimeReports",
+						},
+						{
+							BaseIndexName: "calico_threat_feeds_domain_set_standard",
+							DataType:      "ThreatFeedsDomainSet",
+						},
+						{
+							BaseIndexName: "calico_threat_feeds_ip_set_standard",
+							DataType:      "ThreatFeedsIPSet",
+						},
+						{
+							BaseIndexName: "calico_waflogs_standard",
+							DataType:      "WAFLogs",
+						},
+					},
 				},
 			}
 			kp, tokenKP, bundle := getTLS(installation)
@@ -353,6 +407,19 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", cfg.Tenant.Namespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_ALERTS_BASE_INDEX_NAME", Value: "calico_alerts_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_AUDIT_LOGS_BASE_INDEX_NAME", Value: "calico_auditlogs_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_COMPLIANCE_BENCHMARKS_BASE_INDEX_NAME", Value: "calico_compliance_benchmarks_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_COMPLIANCE_REPORTS_BASE_INDEX_NAME", Value: "calico_compliance_reports_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_COMPLIANCE_SNAPSHOTS_BASE_INDEX_NAME", Value: "calico_compliance_snapshots_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_BGP_LOGS_BASE_INDEX_NAME", Value: "calico_bgplogs_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_DNS_LOGS_BASE_INDEX_NAME", Value: "calico_dnslogs_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_FLOW_LOGS_BASE_INDEX_NAME", Value: "calico_flowlogs_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_L7_LOGS_BASE_INDEX_NAME", Value: "calico_l7logs_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_RUNTIME_REPORTS_BASE_INDEX_NAME", Value: "calico_runtime_reports_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_domain_set_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_ip_set_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
 		})
 	})
 })

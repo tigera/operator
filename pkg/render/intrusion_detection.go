@@ -736,9 +736,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	containers := []corev1.Container{
 		intrusionDetectionContainer,
-	}
-	if c.cfg.ManagedCluster {
-		containers = append(containers, c.webhooksControllerContainer())
+		c.webhooksControllerContainer(),
 	}
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -783,13 +781,14 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 		},
 	}
 
-	volumeMounts := append(
-		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
-		corev1.VolumeMount{
-			Name:      LinseedTokenVolumeName,
-			MountPath: LinseedVolumeMountPath,
-		},
-	)
+	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+	if c.cfg.ManagedCluster {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      LinseedTokenVolumeName,
+				MountPath: LinseedVolumeMountPath,
+			})
+	}
 
 	return corev1.Container{
 		Name:            "webhooks-processor",

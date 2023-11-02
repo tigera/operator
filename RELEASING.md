@@ -16,27 +16,37 @@ operator version for the version of Calico or Calient that you are releasing. If
 check [the releases page](https://github.com/tigera/operator/releases) to find the most
 recent Operator release for your Calico or Calient minor version.
 
-Update the image versions and the title field with the appropriate versions in the
+Make sure pins are updated in `go.mod`
+
+Run the following command:
+
+```sh
+make release-prep GIT_PR_BRANCH_BASE=<RELEASE_BRANCH> GIT_REPO_SLUG=tigera/operator CONFIRM=true \
+  VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION> CALICO_ENTERPRISE_VERSION=<CALICO_ENTERPRISE_VERSION> COMMON_VERSION=<COMMON_VERSION>
+```
+
+The command does the following:
+
+- It updates the image version and the title field with the appropriate versions in the
 format `vX.Y.Z` for each of the following files:
+  1. `config/calico_versions.yml` (Calico OSS version)
+  2. `config/enterprise_versions.yml` (Calico Enterprise version)
+  3. `config/common_versions.yaml` (components common to both)
 
-1. `config/calico_versions.yml` (Calico OSS version)
-2. `config/enterprise_versions.yml` (Calico Enterprise version)
-3. `config/common_versions.yaml` (components common to both)
+- It updates the registry reference to `quay.io` from `gcr.io` for each of the following files:
 
-(When updating versions for enterprise, if necessary also update
-the `TigeraRegistry` field in `pkg/components/images.go`.)
+  1. `TigeraRegistry` in `pkg/components/images.go`
+  2. `defaultEnterpriseRegistry` in `hack/gen-versions/main.go`
 
-Then ensure `make gen-versions` has been ran and the resulting updates have been committed.
+- It ensures `make gen-versions` is run and the resulting updates committed.
+- It creates a PR with all the changes
 
-Make sure the branch is in a good state: 
+Go to the PR created and:
 
-1. Update any pins in go.mod
-2. Create a PR for all of the local changes (versions updates, gen-versions, etc)
-3. Ensure tests pass
+1. Ensure tests pass
+2. Update the labels in the PR  to include `docs-not-required` and `release-note-not-required`
 
-You should have no local changes and tests should be passing.
-
-## Releasing 
+## Releasing
 
 1. Merge your PR to the release branch
 

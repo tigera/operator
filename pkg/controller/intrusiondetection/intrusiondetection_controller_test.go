@@ -284,6 +284,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:intrusiondetectionjobinstallerhash"},
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
 						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
+						{Image: "tigera/webhooks-processor", Digest: "sha256:webhooksprocessorhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())

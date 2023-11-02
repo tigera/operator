@@ -782,6 +782,7 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 	}
 
 	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+	volumeMounts = append(volumeMounts, c.cfg.IntrusionDetectionCertSecret.VolumeMount(c.SupportedOSType()))
 	if c.cfg.ManagedCluster {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{

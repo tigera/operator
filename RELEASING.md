@@ -1,37 +1,61 @@
 # Releasing the operator
 
-## Preparing for a release
+## Preparing a new release branch
 
-Checkout the branch from which you want to release. For a major or minor release,
-you will need to create a new `release-vX.Y` branch based on the target minor version.
+For a major or minor release, you will need to create a new
+`release-vX.Y` branch based on the target minor version.
 
-Make sure the appropriate versions have been updated in `config/calico_versions.yml`, `config/enterprise_versions.yml`
-or / and config/common_versions.yaml, make sure both the images have been updated and
-the title field has been updated with the release (the format should be `v<Major>.<Minor>.<Patch>`).
-Then ensure `make gen-versions` has been ran and the resulting updates have been committed. When updating versions
-for enterprise, if necessary also update the `TigeraRegistry` field in `pkg/components/images.go`.
+## Preparing for the release
 
-Make sure the branch is in a good state, e.g. Update any pins in go.mod, create PR, ensure tests pass and merge.
+Review the milestone for this release and ensure it is accurate. https://github.com/tigera/operator/milestones
 
-You should have no local changes and tests should be passing.
+## Updating versions
 
-## Creating release
+Checkout the branch from which you want to release. Ensure that you are using the correct
+operator version for the version of Calico or Calient that you are releasing. If in doubt,
+check [the releases page](https://github.com/tigera/operator/releases) to find the most
+recent Operator release for your Calico or Calient minor version.
 
-1. Review the milestone for this release and ensure it is accurate. https://github.com/tigera/operator/milestones
+Make sure pins are updated in `go.mod`
 
-1. Choose a version e.g. `v1.0.1`
+Run the following command:
 
-1. Ensure the `title:` field in both config/calico_versions.yaml and config/enterprise_versions.yaml match
-   appropriate product release that the operator should install, if not see
-   [Preparing for a release](#preparing-for-a-release).
+```sh
+make release-prep GIT_PR_BRANCH_BASE=<RELEASE_BRANCH> GIT_REPO_SLUG=tigera/operator CONFIRM=true \
+  VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION> CALICO_ENTERPRISE_VERSION=<CALICO_ENTERPRISE_VERSION> COMMON_VERSION=<COMMON_VERSION>
+```
 
-1. Create a tag in git
+The command does the following:
 
-   ```
-   git tag <version>
-   ```
+- It updates the image version and the title field with the appropriate versions in the
+format `vX.Y.Z` for each of the following files:
+  1. `config/calico_versions.yml` (Calico OSS version)
+  2. `config/enterprise_versions.yml` (Calico Enterprise version)
+  3. `config/common_versions.yaml` (components common to both)
 
-1. Push the git tag.
+- It updates the registry reference to `quay.io` from `gcr.io` for each of the following files:
+
+  1. `TigeraRegistry` in `pkg/components/images.go`
+  2. `defaultEnterpriseRegistry` in `hack/gen-versions/main.go`
+
+- It ensures `make gen-versions` is run and the resulting updates committed.
+- It creates a PR with all the changes
+
+Go to the PR created and:
+
+1. Ensure tests pass
+2. Update the labels in the PR  to include `docs-not-required` and `release-note-not-required`
+
+## Releasing
+
+1. Merge your PR to the release branch
+
+1. Create a git tag for the new commit on the release branch and push it:
+
+```
+git tag v1.30.3
+git push --tags
+```
 
 1. Log in to semaphore and trigger a build on the tagged commit. Semaphore will build, test, and publish the release.
 

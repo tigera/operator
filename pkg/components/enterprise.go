@@ -149,6 +149,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentSecurityEventWebhooksProcessor = component{
+		Version:  "master",
+		Image:    "tigera/webhooks-processor",
+		Registry: "",
+	}
+
 	ComponentKibana = component{
 		Version:  "master",
 		Image:    "tigera/kibana",
@@ -334,6 +340,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

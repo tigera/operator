@@ -1008,4 +1008,56 @@ var _ = Describe("Installation validation tests", func() {
 
 		})
 	})
+	Describe("validate CSIDaemonset", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+		})
+
+		It("should validate with container", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
+					Template: &operator.CSINodeDriverDaemonSetPodTemplateSpec{
+						Spec: &operator.CSINodeDriverDaemonSetPodSpec{
+							Containers: []operator.CSINodeDriverDaemonSetContainer{
+								{
+									Name: "csi-node-driver",
+									Resources: &v1.ResourceRequirements{
+										Limits: v1.ResourceList{
+											"cpu": resource.MustParse("2"),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+	})
 })

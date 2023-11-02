@@ -271,11 +271,11 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			cfg.Namespace = tenantANamespace
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tenant-a",
+					Name:      "tenantA",
 					Namespace: tenantANamespace,
 				},
 				Spec: operatorv1.TenantSpec{
-					ID: "tenant-a",
+					ID: "tenant-a-id",
 				},
 			}
 			tenantAPolicyRec := render.PolicyRecommendation(cfg)
@@ -309,16 +309,16 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			d := rtest.GetResource(tenantAResources, "tigera-policy-recommendation", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a-id"}))
 
 			cfg.Namespace = tenantBNamespace
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tenant-b",
+					Name:      "tenantB",
 					Namespace: tenantBNamespace,
 				},
 				Spec: operatorv1.TenantSpec{
-					ID: "tenant-b",
+					ID: "tenant-b-id",
 				},
 			}
 			tenantBPolicyRec := render.PolicyRecommendation(cfg)
@@ -350,7 +350,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			d = rtest.GetResource(tenantBResources, "tigera-policy-recommendation", tenantBNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs = d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantBNamespace}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-b"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-b-id"}))
 
 		})
 	})

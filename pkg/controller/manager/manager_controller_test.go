@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -977,7 +978,61 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				assertSANs(&clusterConnectionInManagerNs, "voltron")
 			})
+
+			It("should upgrade a Voltron tunnel secret if previously owned by a different controller", func() {
+				// Older versions of the tigera-operator controlled this secret from the API server controller.
+				// However, only a single controller is allowed as an owner, so we need to properly clear the old
+				// one before setting the Manager CR as the new owner.
+				clusterConnection := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+				}
+				clusterConnectionInManagerNs := clusterConnection
+				clusterConnectionInManagerNs.Namespace = render.ManagerNamespace
+
+				apiserver := &operatorv1.APIServer{
+					TypeMeta: metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+						UID:  "1234",
+					},
+				}
+				err := controllerutil.SetControllerReference(apiserver, &clusterConnection, scheme)
+				Expect(err).NotTo(HaveOccurred())
+				err = controllerutil.SetControllerReference(apiserver, &clusterConnectionInManagerNs, scheme)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, &clusterConnection)).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, &clusterConnectionInManagerNs)).NotTo(HaveOccurred())
+
+				// Run the controller. It should update the secret to be owned by the Manager CR.
+				// Create the ManagementCluster CR needed to configure
+				// a management cluster for a multi-cluster setup
+				managementCluster := &operatorv1.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+				}
+				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+				// Create the Manager CR needed to jumpstart the reconciliation
+				// for the manager
+				err = c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Reconcile Manager
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+			})
 		})
+
 		Context("Multi-tenant/namespaced reconciliation", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"

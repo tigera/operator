@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -115,6 +116,13 @@ type Config struct {
 
 	// Tenant configuration, if running for a particular tenant.
 	Tenant *operatorv1.Tenant
+
+	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
+	// mTLS is used between Linseed and the external Elastic cluster.
+	ElasticClientSecret *corev1.Secret
+
+	ElasticHost string
+	ElasticPort string
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -151,6 +159,10 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.UsePSP {
 		toCreate = append(toCreate, l.linseedPodSecurityPolicy())
+	}
+	if l.cfg.ElasticClientSecret != nil {
+		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
 	return toCreate, toDelete
 }
@@ -276,8 +288,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
 
 		{Name: "ELASTIC_SCHEME", Value: "https"},
-		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
-		{Name: "ELASTIC_PORT", Value: "9200"},
+		{Name: "ELASTIC_HOST", Value: l.cfg.ElasticHost},
+		{Name: "ELASTIC_PORT", Value: l.cfg.ElasticPort},
 		{
 			Name:      "ELASTIC_USERNAME",
 			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "username", false),
@@ -298,6 +310,28 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.TrustedBundle.VolumeMounts(l.SupportedOSType()),
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
 	)
+
+	if l.cfg.ElasticClientSecret != nil {
+		// Add a volume for the required client certificate and key.
+		volumes = append(volumes, corev1.Volume{
+			Name: logstorage.ExternalCertsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: logstorage.ExternalCertsSecret,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      logstorage.ExternalCertsVolumeName,
+			MountPath: "/certs/elasticsearch/mtls",
+			ReadOnly:  true,
+		})
+
+		// Configure Linseed to use the mounted client certificate and key.
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_MTLS_ENABLED", Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_KEY", Value: "/certs/elasticsearch/mtls/client.key"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_CERT", Value: "/certs/elasticsearch/mtls/client.crt"})
+	}
 
 	if l.cfg.ManagementCluster {
 		envVars = append(envVars,
@@ -323,6 +357,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+	if l.cfg.ElasticClientSecret != nil {
+		annotations["hash.operator.tigera.io/elastic-client-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientSecret)
+	}
 
 	if l.cfg.TokenKeyPair != nil {
 		envVars = append(envVars,

@@ -40,11 +40,14 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/version"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -67,6 +70,10 @@ var (
 	scheme                   = runtime.NewScheme()
 	setupLog                 = ctrl.Log.WithName("setup")
 )
+
+// bootstrapConfigMapName is the name of the ConfigMap that contains cluster-wide
+// configuration for the operator loaded at startup.
+const bootstrapConfigMapName = "operator-bootstrap-config"
 
 func init() {
 	// +kubebuilder:scaffold:scheme
@@ -399,6 +406,21 @@ func main() {
 		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
 	}
 
+	// Laod the operator's bootstrap configmap, if it exists.
+	bootConfig, err := clientset.CoreV1().ConfigMaps(common.OperatorNamespace()).Get(ctx, bootstrapConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to load bootstrap configmap")
+			os.Exit(1)
+		}
+	}
+
+	// Start a watch on our bootstrap configmap so we can restart if it changes.
+	if err = utils.MonitorConfigMap(clientset, bootstrapConfigMapName, bootConfig.Data); err != nil {
+		log.Error(err, "Failed to monitor bootstrap configmap")
+		os.Exit(1)
+	}
+
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
@@ -409,6 +431,13 @@ func main() {
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
+		ElasticExternal:     utils.UseExternalElastic(bootConfig),
+	}
+
+	// Before we start any controllers, make sure our options are valid.
+	if err := verifyConfiguration(ctx, clientset, options); err != nil {
+		setupLog.Error(err, "Invalid configuration")
+		os.Exit(1)
 	}
 
 	err = controllers.AddToManager(mgr, options)
@@ -532,5 +561,29 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 		}
 		log.Info("Waiting for Installation to be fully deleted")
 		time.Sleep(5 * time.Second)
+	}
+}
+
+// verifyConfiguration verifies that the final configuration of the operator is correct before starting any controllers.
+func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.AddOptions) error {
+	if opts.ElasticExternal {
+		// There should not be an internal-es cert
+		if _, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, render.TigeraElasticsearchInternalCertSecret, metav1.GetOptions{}); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("unexpected error encountered when confirming elastic is not currently internal: %v", err)
+		}
+		return fmt.Errorf("refusing to run: configured as external ES but secret/%s found which suggests internal ES", render.TigeraElasticsearchInternalCertSecret)
+	} else {
+		// There should not be an external-es cert
+		_, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, logstorage.ExternalCertsSecret, metav1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("unexpected error encountered when confirming elastic is not currently external: %v", err)
+		}
+		return fmt.Errorf("refusing to run: configured as internal-es but secret/%s found which suggests external ES", logstorage.ExternalCertsSecret)
 	}
 }

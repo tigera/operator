@@ -343,6 +343,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		Openshift:      r.provider == operatorv1.ProviderOpenShift,
 		UsePSP:         r.usePSP,
 		Namespace:      helper.InstallNamespace(),
+		Tenant:         tenant,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

@@ -122,6 +122,7 @@ type IntrusionDetectionConfiguration struct {
 	LogCollector       *operatorv1.LogCollector
 	ESSecrets          []*corev1.Secret
 	Installation       *operatorv1.InstallationSpec
+	ESClusterConfig    *relasticsearch.ClusterConfig
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	ClusterDomain      string
@@ -309,6 +310,13 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
+	container := c.intrusionDetectionJobContainer()
+	envVars := []corev1.EnvVar{
+		relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ESClusterConfig.ClusterName()),
+		relasticsearch.ElasticUserEnvVar(ElasticsearchIntrusionDetectionUserSecret),
+		relasticsearch.ElasticPasswordEnvVar(ElasticsearchIntrusionDetectionUserSecret),
+	}
+	container.Env = append(container.Env, envVars...)
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
@@ -320,8 +328,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.DecorateEnvironment(c.intrusionDetectionJobContainer(), ElasticsearchNamespace, DefaultElasticsearchClusterName,
-					ElasticsearchIntrusionDetectionJobUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux),
+				container,
 			},
 			Volumes:            []corev1.Volume{c.cfg.TrustedCertBundle.Volume()},
 			ServiceAccountName: IntrusionDetectionInstallerJobName,
@@ -700,8 +707,15 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			})
 	}
 
-	container := relasticsearch.DecorateEnvironment(c.intrusionDetectionControllerContainer(), ElasticsearchNamespace, DefaultElasticsearchClusterName,
-		ElasticsearchIntrusionDetectionUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
+	container := c.intrusionDetectionControllerContainer()
+
+	envVars := []corev1.EnvVar{
+		relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ESClusterConfig.ClusterName()),
+		relasticsearch.ElasticUserEnvVar(ElasticsearchIntrusionDetectionUserSecret),
+		relasticsearch.ElasticPasswordEnvVar(ElasticsearchIntrusionDetectionUserSecret),
+	}
+
+	container.Env = append(container.Env, envVars...)
 
 	if c.cfg.ManagedCluster {
 		envVars := []corev1.EnvVar{

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -156,6 +158,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	if err = utils.AddConfigMapWatch(managerController, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
+	}
+
+	if err = utils.AddConfigMapWatch(managerController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err = utils.AddNamespaceWatch(managerController, common.TigeraPrometheusNamespace); err != nil {
@@ -448,6 +454,21 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	var clusterConfig *relasticsearch.ClusterConfig
+	// We only require Elastic cluster configuration when Kibana is enabled. We infer whether Kibana is enabled by checking
+	// FIPS configuration mode and multi-tenancy mode. See manager.go function kibanaEnabled for more details.
+	if !r.multiTenant && !operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
+		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
+			return reconcile.Result{}, err
+		}
+	}
+
 	var esSecrets []*corev1.Secret
 	if !r.multiTenant {
 		// Get secrets used by the manager to authenticate with Elasticsearch. This is used for Kibana login, and isn't
@@ -591,6 +612,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
 		TrustedCertBundle:       trustedBundle,
+		ClusterConfig:           clusterConfig,
 		TLSKeyPair:              tlsSecret,
 		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -191,6 +193,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, render.IntrusionDetectionNamespace); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
@@ -370,6 +376,24 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 	}
 
+	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if isManagedCluster {
+		if esClusterConfig.ClusterName() == render.DefaultElasticsearchClusterName {
+			err = fmt.Errorf("Elasticsearch cluster name must be non-default value in managed clusters")
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	secrets := []string{
 		render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchPerformanceHotspotsUserSecret,
@@ -462,6 +486,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		LogCollector:                 lc,
 		ESSecrets:                    esSecrets,
 		Installation:                 network,
+		ESClusterConfig:              esClusterConfig,
 		PullSecrets:                  pullSecrets,
 		Openshift:                    r.provider == operatorv1.ProviderOpenShift,
 		ClusterDomain:                r.clusterDomain,

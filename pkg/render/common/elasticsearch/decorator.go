@@ -24,8 +24,7 @@ import (
 )
 
 const (
-	elasticsearchSecretsAnnotation   = "hash.operator.tigera.io/elasticsearch-secrets"
-	elasticsearchConfigMapAnnotation = "hash.operator.tigera.io/elasticsearch-configmap"
+	elasticsearchSecretsAnnotation = "hash.operator.tigera.io/elasticsearch-secrets"
 )
 
 type Annotatable interface {
@@ -87,6 +86,69 @@ func DecorateEnvironment(c corev1.Container, namespace string, cluster, esUserSe
 
 	c.Env = append(c.Env, envVars...)
 	return c
+}
+
+func ElasticCuratorBackendCertEnvVar(osType rmeta.OSType) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ES_CURATOR_BACKEND_CERT",
+		Value: elasticCertPath(osType),
+	}
+}
+
+func ElasticCAEnvVar(osType rmeta.OSType) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_CA",
+		Value: elasticCertPath(osType),
+	}
+}
+
+func ElasticSchemeEnvVar(esScheme string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_SCHEME",
+		Value: esScheme,
+	}
+}
+
+func ElasticHostEnvVar(esHost string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_HOST",
+		Value: esHost,
+	}
+}
+
+func ElasticPortEnvVar(esPort string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_PORT",
+		Value: esPort,
+	}
+}
+
+func ElasticIndexSuffixEnvVar(esIdxSuffix string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_INDEX_SUFFIX",
+		Value: esIdxSuffix,
+	}
+}
+
+func ElasticUserEnvVar(esUserSecretName string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:      "ELASTIC_USER",
+		ValueFrom: secret.GetEnvVarSource(esUserSecretName, "username", false),
+	}
+}
+
+func ElasticUsernameEnvVar(esUsernameSecret string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:      "ELASTIC_USERNAME",
+		ValueFrom: secret.GetEnvVarSource(esUsernameSecret, "username", false),
+	}
+}
+
+func ElasticPasswordEnvVar(esUserSecretName string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:      "ELASTIC_PASSWORD",
+		ValueFrom: secret.GetEnvVarSource(esUserSecretName, "password", false),
+	}
 }
 
 func DefaultVolumeMount(osType rmeta.OSType) corev1.VolumeMount {

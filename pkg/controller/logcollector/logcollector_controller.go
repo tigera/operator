@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -149,8 +151,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.FluentdFilterConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", render.FluentdFilterConfigMapName, err)
+	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
+		}
 	}
 
 	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
@@ -528,10 +532,20 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
+	var esClusterConfig *relasticsearch.ClusterConfig
 	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+				esClusterConfig, err = utils.GetElasticsearchClusterConfig(ctx, r.client)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
+						return reconcile.Result{}, nil
+					}
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
+					return reconcile.Result{}, err
+				}
 				eksConfig, err = getEksCloudwatchLogConfig(r.client,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
@@ -553,6 +567,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		S3Credential:         s3Credential,
 		SplkCredential:       splunkCredential,
 		Filters:              filters,
+		ESClusterConfig:      esClusterConfig,
 		EKSConfig:            eksConfig,
 		PullSecrets:          pullSecrets,
 		Installation:         installation,
@@ -603,6 +618,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			S3Credential:         s3Credential,
 			SplkCredential:       splunkCredential,
 			Filters:              filters,
+			ESClusterConfig:      esClusterConfig,
 			EKSConfig:            eksConfig,
 			PullSecrets:          pullSecrets,
 			Installation:         installation,

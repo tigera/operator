@@ -24,6 +24,8 @@ import (
 	"net/http"
 	"time"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	"github.com/olivere/elastic/v7"
 
 	operator "github.com/tigera/operator/api/v1"
@@ -88,6 +90,17 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 		esUserSecrets = append(esUserSecrets, esUserSecret)
 	}
 	return esUserSecrets, nil
+}
+
+// GetElasticsearchClusterConfig retrieves the config map containing the elasticsearch configuration values, such as the
+// the cluster name and replica count.
+func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*relasticsearch.ClusterConfig, error) {
+	configMap := &corev1.ConfigMap{}
+	if err := cli.Get(ctx, client.ObjectKey{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()}, configMap); err != nil {
+		return nil, err
+	}
+
+	return relasticsearch.NewClusterConfigFromConfigMap(configMap)
 }
 
 type ElasticsearchClientCreator func(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (ElasticClient, error)

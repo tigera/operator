@@ -1805,6 +1805,15 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", "calico-apiserver")))
 	})
 
+	It("should render with EKS provider without CNI.Type", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderEKS
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		_, _ = component.Objects()
+	})
+
 	Context("With APIServer Deployment overrides", func() {
 		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{

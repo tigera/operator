@@ -564,6 +564,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!c.kibanaEnabled())},
+		{Name: "VOLTRON_URL", Value: "https://tigera-manager.tigera-manager.svc:9443"},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,

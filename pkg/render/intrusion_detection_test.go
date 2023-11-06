@@ -154,7 +154,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		// Should mount ManagerTLSSecret for non-managed clusters
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		idji := rtest.GetResource(resources, "intrusion-detection-es-job-installer", render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
-		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(2))
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},

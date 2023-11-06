@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/url"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -273,13 +275,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	// Containers for the manager pod.
-	managerContainer := c.managerContainer()
-	esProxyContainer := c.managerEsProxyContainer()
-	if c.cfg.Tenant == nil {
-		// If we're running in multi-tenant mode, we don't need ES credentials as these are used for Kibana login. Otherwise, add them.
-		managerContainer = relasticsearch.ContainerDecorate(managerContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
-		esProxyContainer = relasticsearch.ContainerDecorate(esProxyContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
-	}
 	if c.cfg.InternalTLSKeyPair != nil && c.cfg.InternalTLSKeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.InternalTLSKeyPair.InitContainer(ManagerNamespace))
 	}
@@ -299,10 +294,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
-			Containers:         []corev1.Container{managerContainer, esProxyContainer, c.voltronContainer()},
+			Containers:         []corev1.Container{c.managerContainer(), c.managerEsProxyContainer(), c.voltronContainer()},
 			Volumes:            c.managerVolumes(),
 		},
-	}, c.cfg.ClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", c.cfg.Namespace)
@@ -564,6 +559,21 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!c.kibanaEnabled())},
+	}
+
+	if c.kibanaEnabled() {
+		esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace))
+		esEnvVars := []corev1.EnvVar{
+			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
+			relasticsearch.ElasticSchemeEnvVar(esScheme),
+			relasticsearch.ElasticHostEnvVar(esHost),
+			relasticsearch.ElasticPortEnvVar(esPort),
+			relasticsearch.ElasticUsernameEnvVar(ElasticsearchManagerUserSecret),
+			relasticsearch.ElasticPasswordEnvVar(ElasticsearchManagerUserSecret),
+			relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ClusterConfig.ClusterName()),
+		}
+
+		env = append(env, esEnvVars...)
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,

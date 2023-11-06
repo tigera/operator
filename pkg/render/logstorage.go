@@ -22,6 +22,8 @@ import (
 	"net/url"
 	"strings"
 
+	tigeraurl "github.com/tigera/operator/pkg/url"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -1450,6 +1452,28 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 
 	const schedule = "@hourly"
 
+	container := corev1.Container{
+		Name:            ESCuratorName,
+		Image:           es.curatorImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Env:             es.curatorEnvVars(),
+		LivenessProbe:   elasticCuratorLivenessProbe,
+		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    es.cfg.TrustedBundle.VolumeMounts(es.SupportedOSType()),
+	}
+
+	_, esHost, esPort, _ := tigeraurl.ParseEndpoint(relasticsearch.GatewayEndpoint(es.SupportedOSType(), es.cfg.ClusterDomain, ElasticsearchNamespace))
+
+	envVars := []corev1.EnvVar{
+		relasticsearch.ElasticUserEnvVar(ElasticsearchCuratorUserSecret),
+		relasticsearch.ElasticPasswordEnvVar(ElasticsearchCuratorUserSecret),
+		relasticsearch.ElasticHostEnvVar(esHost),
+		relasticsearch.ElasticPortEnvVar(esPort),
+		relasticsearch.ElasticCuratorBackendCertEnvVar(es.SupportedOSType()),
+	}
+
+	container.Env = append(container.Env, envVars...)
+
 	return &batchv1.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CronJob",
@@ -1479,15 +1503,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 							NodeSelector: es.cfg.Installation.ControlPlaneNodeSelector,
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
-								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:            ESCuratorName,
-									Image:           es.curatorImage,
-									ImagePullPolicy: ImagePullPolicy(),
-									Env:             es.curatorEnvVars(),
-									LivenessProbe:   elasticCuratorLivenessProbe,
-									SecurityContext: securitycontext.NewNonRootContext(),
-									VolumeMounts:    es.cfg.TrustedBundle.VolumeMounts(es.SupportedOSType()),
-								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.cfg.ClusterDomain, es.SupportedOSType()),
+								container,
 							},
 							ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,

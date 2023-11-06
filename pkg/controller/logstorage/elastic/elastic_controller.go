@@ -188,7 +188,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.TigeraLinseedSecret,
 		certificatemanagement.CASecretName,
-		relasticsearch.PublicCertSecret,
 		monitor.PrometheusClientTLSSecretName,
 		render.ElasticsearchAdminUserSecret,
 		render.ElasticsearchCuratorUserSecret,
@@ -201,7 +200,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Establish watches for secrets in the tigera-elasticsearch namespace.
 	for _, secretName := range []string{
-		relasticsearch.PublicCertSecret,
 		render.ElasticsearchAdminUserSecret,
 		render.TigeraElasticsearchInternalCertSecret,
 		render.OIDCUsersESSecretName,
@@ -225,10 +223,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 		}
-	}
-
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {

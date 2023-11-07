@@ -539,17 +539,10 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
 	}
 
-	// Default Windows dataplane is disabled, unless provider is AKS
+	// Default Windows dataplane is disabled
 	winDataplaneDisabled := operator.WindowsDataplaneDisabled
-	winDataplaneHNS := operator.WindowsDataplaneHNS
 	if instance.Spec.CalicoNetwork.WindowsDataplane == nil {
-		if instance.Spec.KubernetesProvider == operator.ProviderAKS {
-			// On AKS, we had the windows upgrade daemonset, which is replaced by the
-			// calico-node-windows daemonset, so default to HNS dataplane in this case.
-			instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplaneHNS
-		} else {
-			instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplaneDisabled
-		}
+		instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplaneDisabled
 	}
 
 	// If Windows is enabled, populate CNI bin, config and log dirs with defaults

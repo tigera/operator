@@ -269,6 +269,21 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			tenant.Name = "default"
 			tenant.Namespace = tenantNS
 			tenant.Spec.ID = "test-tenant-id"
+			tenant.Spec.Indices = []operatorv1.Index{
+				{BaseIndexName: "calico_alerts", DataType: operatorv1.DataTypeAlerts},
+				{BaseIndexName: "calico_auditlogs", DataType: operatorv1.DataTypeAuditLogs},
+				{BaseIndexName: "calico_bgplogs", DataType: operatorv1.DataTypeBGPLogs},
+				{BaseIndexName: "calico_compliance_benchmarks", DataType: operatorv1.DataTypeComplianceBenchmarks},
+				{BaseIndexName: "calico_compliance_reports", DataType: operatorv1.DataTypeComplianceReports},
+				{BaseIndexName: "calico_compliance_snapshots", DataType: operatorv1.DataTypeComplianceSnapshots},
+				{BaseIndexName: "calico_dnslogs", DataType: operatorv1.DataTypeDNSLogs},
+				{BaseIndexName: "calico_flowlogs", DataType: operatorv1.DataTypeFlowLogs},
+				{BaseIndexName: "calico_L7logs", DataType: operatorv1.DataTypeL7Logs},
+				{BaseIndexName: "calico_runtime_reports", DataType: operatorv1.DataTypeRuntimeReports},
+				{BaseIndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreatFeedsDomainSet},
+				{BaseIndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreatFeedsIPSet},
+				{BaseIndexName: "calico_waf", DataType: operatorv1.DataTypeWAFLogs},
+			}
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}
@@ -325,6 +340,42 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
 			Expect(err).Should(HaveOccurred())
 			Expect(err.Error()).Should(ContainSubstring("CA secret"))
+		})
+
+		It("validate tenant CR", func() {
+			// Create the tenant Namespace.
+			tenantNS := "invalid-tenant"
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: tenantNS}})).ShouldNot(HaveOccurred())
+
+			// Create the Tenant object.
+			tenant := &operatorv1.Tenant{}
+			tenant.Name = "default"
+			tenant.Namespace = tenantNS
+			tenant.Spec.ID = "test-tenant-id"
+			tenant.Spec.Indices = []operatorv1.Index{
+				{BaseIndexName: "calico_alerts", DataType: operatorv1.DataTypeAlerts},
+				{BaseIndexName: "calico_auditlogs", DataType: operatorv1.DataTypeAuditLogs},
+				{BaseIndexName: "calico_bgplogs", DataType: operatorv1.DataTypeBGPLogs},
+				{BaseIndexName: "calico_compliance_benchmarks", DataType: operatorv1.DataTypeComplianceBenchmarks},
+				{BaseIndexName: "calico_compliance_reports", DataType: operatorv1.DataTypeComplianceReports},
+				{BaseIndexName: "calico_compliance_snapshots", DataType: operatorv1.DataTypeComplianceSnapshots},
+				{BaseIndexName: "calico_dnslogs", DataType: operatorv1.DataTypeDNSLogs},
+				{BaseIndexName: "calico_flowlogs", DataType: operatorv1.DataTypeFlowLogs},
+				{BaseIndexName: "calico_L7logs", DataType: operatorv1.DataTypeL7Logs},
+				{BaseIndexName: "calico_runtime_reports", DataType: operatorv1.DataTypeRuntimeReports},
+				{BaseIndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreatFeedsDomainSet},
+				{BaseIndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreatFeedsIPSet},
+				{BaseIndexName: "calico_waf", DataType: "Bogus"},
+			}
+			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
+			// Create the reconciler for the test.
+			r, err := NewLinseedControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, true)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Run the reconciler.
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("index WAFLogs has not been declared on the Tenant CR"))
 		})
 
 		It("should not reconcile any resources if no Namespace was given", func() {

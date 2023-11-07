@@ -144,8 +144,10 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 		}
 
 		for _, namespace := range []string{common.OperatorNamespace(), rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)} {
-			if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
-				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+			for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
+				if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
+					return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+				}
 			}
 		}
 
@@ -304,7 +306,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		if managementCluster != nil && !r.multiTenant {
+		// This block depends on the Manager controller having defaulted the ManagementCluster CR and having created the tunnel CA secret.
+		// If these conditions are not met, this controller does not degrade as the Manager controller needs API server to be ready to accomplish the above.
+		if managementCluster != nil && managementCluster.Spec.TLS != nil && !r.multiTenant {
 			// The secret that contains the CA x509 certificate to create client certificates for the managed cluster
 			// is created by the Manager controller in tigera-operator namespace. We will read this secret and make
 			// sure it is available in the same namespace as the API server (tigera-system)
@@ -317,11 +321,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			if tunnelCASecret == nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
-				return reconcile.Result{}, err
+			if tunnelCASecret != nil {
+				tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 			}
-			tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 		}
 
 		if r.amazonCRDExists {

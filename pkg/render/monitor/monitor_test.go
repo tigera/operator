@@ -153,6 +153,9 @@ var _ = Describe("monitor rendering tests", func() {
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
 		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
 		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+		service := rtest.GetResource(toCreate, "prometheus-http-api", "tigera-prometheus", "", "v1", "Service").(*corev1.Service)
+		Expect(service.Labels["k8s-app"]).To(Equal("tigera-prometheus"))
 	})
 
 	It("Should render Prometheus resource Specs correctly", func() {

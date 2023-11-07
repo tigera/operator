@@ -90,9 +90,10 @@ func (pr *policyRecommendationComponent) ResolveImages(is *operatorv1.ImageSet) 
 	reg := pr.cfg.Installation.Registry
 	path := pr.cfg.Installation.ImagePath
 	prefix := pr.cfg.Installation.ImagePrefix
+	suffix := pr.cfg.Installation.ImageSuffix
 
 	var err error
-	pr.image, err = components.GetReference(components.ComponentPolicyRecommendation, reg, path, prefix, is)
+	pr.image, err = components.GetReference(components.ComponentPolicyRecommendation, reg, path, prefix, suffix, is)
 	if err != nil {
 		return err
 	}

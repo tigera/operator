@@ -114,6 +114,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.config.Installation.Registry
 	path := c.config.Installation.ImagePath
 	prefix := c.config.Installation.ImagePrefix
+	suffix := c.config.Installation.ImageSuffix
 
 	if c.config.OsType != c.SupportedOSType() {
 		return fmt.Errorf("layer 7 features are supported only on %s", c.SupportedOSType())
@@ -122,17 +123,17 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	var errMsgs []string
 
-	c.config.proxyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
+	c.config.proxyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.collectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
+	c.config.collectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
+	c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

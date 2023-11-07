@@ -142,21 +142,22 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := mc.cfg.Installation.Registry
 	path := mc.cfg.Installation.ImagePath
 	prefix := mc.cfg.Installation.ImagePrefix
+	suffix := mc.cfg.Installation.ImageSuffix
 
 	errMsgs := []string{}
 	var err error
 
-	mc.alertmanagerImage, err = components.GetReference(components.ComponentPrometheusAlertmanager, reg, path, prefix, is)
+	mc.alertmanagerImage, err = components.GetReference(components.ComponentPrometheusAlertmanager, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	mc.prometheusImage, err = components.GetReference(components.ComponentPrometheus, reg, path, prefix, is)
+	mc.prometheusImage, err = components.GetReference(components.ComponentPrometheus, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
+	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

@@ -79,6 +79,7 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		d.cfg.Installation.Registry,
 		d.cfg.Installation.ImagePath,
 		d.cfg.Installation.ImagePrefix,
+		d.cfg.Installation.ImageSuffix,
 		is)
 	if err != nil {
 		return err

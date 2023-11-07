@@ -34,7 +34,7 @@ type component struct {
 const UseDefault = "UseDefault"
 
 // GetReference returns the fully qualified image to use, including registry and version.
-func GetReference(c component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
+func GetReference(c component, registry, imagePath, imagePrefix, imageSuffix string, is *operator.ImageSet) (string, error) {
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" || registry == UseDefault {
@@ -80,6 +80,9 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 	if imagePath != "" && imagePath != UseDefault {
 		image = ReplaceImagePath(image, imagePath)
 	}
+	if imageSuffix != "" && imageSuffix != UseDefault {
+		image = appendSuffix(image, imageSuffix)
+	}
 
 	if is == nil {
 		return fmt.Sprintf("%s%s:%s", registry, image, c.Version), nil
@@ -110,4 +113,8 @@ func insertPrefix(image, prefix string) string {
 	}
 	subs = append(subs[:len(subs)-1], fmt.Sprintf("%s%s", prefix, subs[len(subs)-1]))
 	return strings.Join(subs, "/")
+}
+
+func appendSuffix(image, suffix string) string {
+	return fmt.Sprintf("%s%s", image, suffix)
 }

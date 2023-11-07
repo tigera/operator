@@ -180,19 +180,20 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var err error
-	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, is)
+	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, suffix, is)
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
+	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
+	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

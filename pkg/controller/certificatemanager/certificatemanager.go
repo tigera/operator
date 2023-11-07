@@ -161,6 +161,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			installation.Registry,
 			installation.ImagePath,
 			installation.ImagePrefix,
+			installation.ImageSuffix,
 			imageSet,
 		)
 		if err != nil {

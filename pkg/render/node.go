@@ -142,6 +142,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var errMsgs []string
 	appendIfErr := func(imageName string, err error) string {
 		if err != nil {
@@ -152,20 +153,20 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIFIPS, reg, path, prefix, is))
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIFIPS, reg, path, prefix, suffix, is))
 		} else {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, suffix, is))
 		}
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolumePrivate, reg, path, prefix, is))
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, suffix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolumePrivate, reg, path, prefix, suffix, is))
 	} else {
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, suffix, is))
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
-			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, suffix, is))
+			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, suffix, is))
 		} else {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
-			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, suffix, is))
+			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, suffix, is))
 		}
 	}
 

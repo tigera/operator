@@ -89,13 +89,14 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.config.Installation.Registry
 	path := c.config.Installation.ImagePath
 	prefix := c.config.Installation.ImagePrefix
+	suffix := c.config.Installation.ImageSuffix
 
 	if c.config.OSType != c.SupportedOSType() {
 		return fmt.Errorf("Egress Gateway is supported only on %s", c.SupportedOSType())
 	}
 
 	var err error
-	c.config.egwImage, err = components.GetReference(components.ComponentEgressGateway, reg, path, prefix, is)
+	c.config.egwImage, err = components.GetReference(components.ComponentEgressGateway, reg, path, prefix, suffix, is)
 	return err
 }
 

@@ -92,9 +92,10 @@ func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) erro
 	reg := pc.cfg.Installation.Registry
 	path := pc.cfg.Installation.ImagePath
 	prefix := pc.cfg.Installation.ImagePrefix
+	suffix := pc.cfg.Installation.ImageSuffix
 
 	var err error
-	pc.image, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
+	pc.image, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, suffix, is)
 	if err != nil {
 		return err
 	}

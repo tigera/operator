@@ -183,15 +183,16 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		var err error
-		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, is)
+		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, suffix, is)
 		return err
 	}
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
+	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, suffix, is)
 	if err != nil {
 		return err
 	}

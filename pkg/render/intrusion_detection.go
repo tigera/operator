@@ -147,16 +147,17 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var errMsgs []string
 	var err error
 	if !c.cfg.ManagedCluster {
-		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, prefix, is)
+		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, prefix, suffix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 	}
 
-	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
+	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

@@ -141,30 +141,31 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var err error
-	c.benchmarkerImage, err = components.GetReference(components.ComponentComplianceBenchmarker, reg, path, prefix, is)
+	c.benchmarkerImage, err = components.GetReference(components.ComponentComplianceBenchmarker, reg, path, prefix, suffix, is)
 
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.snapshotterImage, err = components.GetReference(components.ComponentComplianceSnapshotter, reg, path, prefix, is)
+	c.snapshotterImage, err = components.GetReference(components.ComponentComplianceSnapshotter, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.serverImage, err = components.GetReference(components.ComponentComplianceServer, reg, path, prefix, is)
+	c.serverImage, err = components.GetReference(components.ComponentComplianceServer, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.controllerImage, err = components.GetReference(components.ComponentComplianceController, reg, path, prefix, is)
+	c.controllerImage, err = components.GetReference(components.ComponentComplianceController, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, prefix, is)
+	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

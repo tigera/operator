@@ -251,28 +251,29 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := es.cfg.Installation.Registry
 	path := es.cfg.Installation.ImagePath
 	prefix := es.cfg.Installation.ImagePrefix
+	suffix := es.cfg.Installation.ImageSuffix
 	var err error
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		es.esImage, err = components.GetReference(components.ComponentElasticsearchFIPS, reg, path, prefix, is)
+		es.esImage, err = components.GetReference(components.ComponentElasticsearchFIPS, reg, path, prefix, suffix, is)
 	} else {
-		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
+		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, suffix, is)
 	}
 	errMsgs := make([]string, 0)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, prefix, is)
+	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
+	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, prefix, is)
+	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

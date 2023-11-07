@@ -121,11 +121,12 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := l.cfg.Installation.Registry
 	path := l.cfg.Installation.ImagePath
 	prefix := l.cfg.Installation.ImagePrefix
+	suffix := l.cfg.Installation.ImageSuffix
 	var err error
 	errMsgs := []string{}
 
 	// Calculate the image(s) to use for Linseed, given user registry configuration.
-	l.linseedImage, err = components.GetReference(components.ComponentLinseed, reg, path, prefix, is)
+	l.linseedImage, err = components.GetReference(components.ComponentLinseed, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

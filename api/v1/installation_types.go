@@ -40,7 +40,7 @@ type InstallationSpec struct {
 	// supported to explicitly specify the default registries will be used.
 	//
 	// Image format:
-	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName><imageSuffix>:<image-tag>`
 	//
 	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
@@ -53,7 +53,7 @@ type InstallationSpec struct {
 	// image path will be used for each image.
 	//
 	// Image format:
-	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName><imageSuffix>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePath>` portion of the above format.
 	// +optional
@@ -66,11 +66,24 @@ type InstallationSpec struct {
 	// image prefix will be used for each image.
 	//
 	// Image format:
-	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName><imageSuffix>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePrefix>` portion of the above format.
 	// +optional
 	ImagePrefix string `json:"imagePrefix,omitempty"`
+
+	// ImageSuffix allows for the suffix part of an image to be specified. If specified
+	// then the given value will be appended to each image name. If not specified, or if
+	// specified value is empty, no suffix will be appended.
+	// A special case value, UseDefault, is supported to explicitly specify the default
+	// image suffix will be used for each image.
+	//
+	// Image format:
+	// 		`<registry><imagePath>/<imagePrefix><imageName><imageSuffix>:<image-tag>`
+	//
+	// This option allows configuring the `<imageSuffix>` portion of the above format.
+	// +optional
+	ImageSuffix string `json:"imageSuffix,omitempty"`
 
 	// ImagePullSecrets is an array of references to container registry pull secrets to use. These are
 	// applied to all images to be pulled.

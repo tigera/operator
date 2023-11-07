@@ -63,8 +63,9 @@ func (c *amazonCloudIntegrationComponent) ResolveImages(is *operatorv1.ImageSet)
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var err error
-	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, prefix, is)
+	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, prefix, suffix, is)
 	return err
 }
 

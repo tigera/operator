@@ -92,14 +92,15 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var err error
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
+		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, suffix, is)
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
+			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, suffix, is)
 		} else {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
+			c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, suffix, is)
 		}
 	}
 	if err != nil {

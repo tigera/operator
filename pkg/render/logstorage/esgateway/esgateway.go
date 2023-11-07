@@ -91,10 +91,11 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := e.cfg.Installation.Registry
 	path := e.cfg.Installation.ImagePath
 	prefix := e.cfg.Installation.ImagePrefix
+	suffix := e.cfg.Installation.ImageSuffix
 	var err error
 	errMsgs := []string{}
 
-	e.esGatewayImage, err = components.GetReference(components.ComponentESGateway, reg, path, prefix, is)
+	e.esGatewayImage, err = components.GetReference(components.ComponentESGateway, reg, path, prefix, suffix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

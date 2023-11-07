@@ -133,6 +133,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/internal-manager-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
+			corev1.EnvVar{Name: "VOLTRON_URL", Value: "https://tigera-manager.tigera-manager.svc:9443"},
 		))
 
 		Expect(esProxy.VolumeMounts).To(HaveLen(2))
@@ -986,9 +987,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 			d := rtest.GetResource(tenantAResources, "tigera-manager", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[2].Env
+			esProxyEnv := d.Spec.Template.Spec.Containers[1].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: tenantANamespace}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
+			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenantANamespace)}))
 		})
 	})
 })

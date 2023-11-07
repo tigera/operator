@@ -167,7 +167,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -192,7 +192,7 @@ var _ = Describe("authentication controller tests", func() {
 
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -233,7 +233,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -293,7 +293,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -338,7 +338,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -348,6 +348,26 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(*authentication.Spec.OIDC.EmailVerification).To(Equal(operatorv1.EmailVerificationTypeVerify))
 			Expect(authentication.Spec.UsernamePrefix).To(Equal("u"))
 			Expect(authentication.Spec.GroupsPrefix).To(Equal("g"))
+		})
+	})
+
+	Context("multi-tenant OIDC connector config options", func() {
+		It("should reject non-Tigera OIDC setup", func() {
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+			auth.Spec.OIDC = &operatorv1.AuthenticationOIDC{
+				IssuerURL:      "https://example.com",
+				UsernameClaim:  "email",
+				GroupsClaim:    "group",
+				GroupsPrefix:   "g",
+				UsernamePrefix: "u",
+			}
+			// Apply an authentication spec that triggers all the logic in the updateAuthenticationWithDefaults() func.
+			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
+
+			// Reconcile
+			r := &ReconcileAuthentication{client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: readyFlag, usePSP: true, multiTenant: true}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
 		})
 	})
 
@@ -495,7 +515,7 @@ var _ = Describe("authentication controller tests", func() {
 		}
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true}
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())
@@ -589,22 +609,23 @@ var _ = Describe("authentication controller tests", func() {
 		ldap = &operatorv1.AuthenticationLDAP{UserSearch: &operatorv1.UserSearch{BaseDN: validDN}}
 		oidc = &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email"}
 	)
-	DescribeTable("should validate the authentication spec", func(auth *operatorv1.Authentication, expectPass bool) {
+	DescribeTable("should validate the authentication spec", func(auth *operatorv1.Authentication, multiTenant, expectPass bool) {
 		if expectPass {
-			Expect(validateAuthentication(auth)).NotTo(HaveOccurred())
+			Expect(validateAuthentication(auth, multiTenant)).NotTo(HaveOccurred())
 		} else {
-			Expect(validateAuthentication(auth)).To(HaveOccurred())
+			Expect(validateAuthentication(auth, multiTenant)).To(HaveOccurred())
 		}
 	},
-		Entry("Expect single Openshift config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{Openshift: ocp}}, true),
-		Entry("Expect single LDAP config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{LDAP: ldap}}, true),
-		Entry("Expect single OIDC config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc}}, true),
-		Entry("Expect 0 configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{}}, false),
-		Entry("Expect two configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap}}, false),
-		Entry("Expect three configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap, Openshift: ocp}}, false),
-		Entry("Expect prompt type to be used without other values", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone})}}, true),
-		Entry("Expect prompt type to fail when none is combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone, operatorv1.PromptTypeLogin})}}, false),
-		Entry("Expect prompt type to be able to be combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeSelectAccount, operatorv1.PromptTypeLogin})}}, true),
+		Entry("Expect single Openshift config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{Openshift: ocp}}, false, true),
+		Entry("Expect single LDAP config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{LDAP: ldap}}, false, true),
+		Entry("Expect single OIDC config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc}}, false, true),
+		Entry("Expect DEX OIDC to fail validation for multi-tenant", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc}}, true, false),
+		Entry("Expect 0 configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{}}, false, false),
+		Entry("Expect two configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap}}, false, false),
+		Entry("Expect three configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap, Openshift: ocp}}, false, false),
+		Entry("Expect prompt type to be used without other values", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone})}}, false, true),
+		Entry("Expect prompt type to fail when none is combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone, operatorv1.PromptTypeLogin})}}, false, false),
+		Entry("Expect prompt type to be able to be combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeSelectAccount, operatorv1.PromptTypeLogin})}}, false, true),
 	)
 })
 

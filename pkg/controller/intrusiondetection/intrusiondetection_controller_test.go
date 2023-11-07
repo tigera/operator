@@ -429,7 +429,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 0)).To(BeTrue())
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
 		})
 
 		It("should wait on tigera-ee-installer-elasticsearch-access secret when in a management cluster", func() {
@@ -443,7 +443,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			// The missing secret should force utils.ElasticSearch to return a NotFound error which triggers r.status.SetDegraded.
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 1)
 		})
 	})
 

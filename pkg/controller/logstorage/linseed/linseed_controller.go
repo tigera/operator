@@ -314,6 +314,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	} else {
 		// If we're using an external ES, the Tenant resource must specify the ES endpoint.
 		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.URL == "" {
+			reqLogger.Error(nil, "Elasticsearch URL must be specified for this tenant")
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL must be specified for this tenant", nil, reqLogger)
 			return reconcile.Result{}, nil
 		}
@@ -321,6 +322,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		// Determine the host and port from the URL.
 		url, err := url.Parse(tenant.Spec.Elastic.URL)
 		if err != nil {
+			reqLogger.Error(err, "Elasticsearch URL is invalid")
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL is invalid", err, reqLogger)
 			return reconcile.Result{}, nil
 		}
@@ -329,8 +331,10 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 
 		if tenant.ElasticMTLS() {
 			// If mTLS is enabled, get the secret containing the CA and client certificate.
+			esClientSecret = &corev1.Secret{}
 			err = r.client.Get(ctx, client.ObjectKey{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}, esClientSecret)
 			if err != nil {
+				reqLogger.Error(err, "Failed to read external Elasticsearch client certificate secret")
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch client certificate secret to be available", err, reqLogger)
 				return reconcile.Result{}, err
 			}

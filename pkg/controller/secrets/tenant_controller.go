@@ -78,6 +78,23 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 
 	// TODO Watch all the secrets created by this controller so we can regenerate any that are deleted
 
+	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("tenant-controller failed to watch Installation resource: %w", err)
+	}
+	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("tenant-controller failed to watch cluster scoped CA secret %s: %w", certificatemanagement.CASecretName, err)
+	}
+
+	tenants := operatorv1.TenantList{}
+	if err = r.client.List(context.Background(), &tenants); err != nil {
+		return fmt.Errorf("tenant-controller failed to fetch tenant list to watch tenant CA secrets %w", err)
+	}
+	for _, t := range tenants.Items {
+		if err = utils.AddSecretsWatch(c, certificatemanagement.TenantCASecretName, t.Namespace); err != nil {
+			return fmt.Errorf("tenant-controller failed to watch tenant CA Secret %s in namespace %s: %w", certificatemanagement.TenantCASecretName, t.Namespace, err)
+		}
+	}
+
 	return nil
 }
 

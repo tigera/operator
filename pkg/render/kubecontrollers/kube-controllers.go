@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -528,16 +527,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}
 
-	if c.kubeControllerName == EsKubeController {
-		container = relasticsearch.DecorateEnvironment(
-			container,
-			render.ElasticsearchNamespace,
-			render.DefaultElasticsearchClusterName,
-			ElasticsearchKubeControllersUserSecret,
-			c.cfg.ClusterDomain,
-			rmeta.OSTypeLinux,
-		)
-	}
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace))

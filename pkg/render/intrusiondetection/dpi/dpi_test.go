@@ -37,7 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -164,8 +163,6 @@ var (
 		},
 	}
 
-	esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-
 	pullSecrets = []*corev1.Secret{{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: common.OperatorNamespace()},
@@ -224,7 +221,6 @@ var _ = Describe("DPI rendering tests", func() {
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
-			ESClusterConfig:    esConfigMap,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 		}
@@ -278,7 +274,6 @@ var _ = Describe("DPI rendering tests", func() {
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
-			ESClusterConfig:    esConfigMap,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 			ManagementCluster:  true,
@@ -325,7 +320,6 @@ var _ = Describe("DPI rendering tests", func() {
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
-			ESClusterConfig:    esConfigMap,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 			ManagedCluster:     true,
@@ -372,7 +366,6 @@ var _ = Describe("DPI rendering tests", func() {
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
 			ManagementCluster:  true,
-			ESClusterConfig:    esConfigMap,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 		}
@@ -456,7 +449,6 @@ var _ = Describe("DPI rendering tests", func() {
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -485,7 +477,6 @@ var _ = Describe("DPI rendering tests", func() {
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
 			ManagedCluster:     true,
-			ESClusterConfig:    esConfigMap,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 		}
@@ -494,7 +485,6 @@ var _ = Describe("DPI rendering tests", func() {
 
 		expectedDeleteResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: dpi.DeepPacketInspectionNamespace}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: dpi.DeepPacketInspectionNamespace}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace, Namespace: dpi.DeepPacketInspectionNamespace}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
@@ -522,7 +512,6 @@ var _ = Describe("DPI rendering tests", func() {
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
 			ManagementCluster:  true,
-			ESClusterConfig:    esConfigMap,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 		}
@@ -531,7 +520,6 @@ var _ = Describe("DPI rendering tests", func() {
 
 		expectedDeleteResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: dpi.DeepPacketInspectionNamespace}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: dpi.DeepPacketInspectionNamespace}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionNamespace, Namespace: dpi.DeepPacketInspectionNamespace}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: dpi.DeepPacketInspectionName}},
@@ -555,7 +543,6 @@ var _ = Describe("DPI rendering tests", func() {
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},

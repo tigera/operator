@@ -554,9 +554,7 @@ var _ = Describe("LogStorage controller", func() {
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 				Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
-				Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 				kbDNSNames = []string{"kb.example.com", "192.168.10.11"}
 				kbSecret, err := secret.CreateTLSSecret(testCA,
@@ -812,7 +810,6 @@ var _ = Describe("LogStorage controller", func() {
 								AssociationStatus: cmnv1.AssociationEstablished,
 							},
 						},
-						relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap(),
 						&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						&corev1.ConfigMap{
 							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
@@ -1242,9 +1239,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	esKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
 	Expect(err).NotTo(HaveOccurred())
-	esPublic, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cli.Create(context.Background(), esPublic.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 	var replicas int32 = 2
 	cfg := &render.ElasticsearchConfiguration{
@@ -1291,17 +1285,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
 	}
 	Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
-}
-
-func createPubSecret(name string, ns string, bytes []byte, certName string) client.Object {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: ns,
-		},
-		Data: map[string][]byte{
-			certName: bytes,
-		},
-	}
 }
 
 // CreateLogStorage creates a LogStorage object with the given parameters after filling in defaults,

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -252,4 +253,20 @@ func SupportsPodSecurityPolicies(c kubernetes.Interface) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// UseExternalElastic returns true if this cluster is configured to use an external elasticsearch cluster,
+// and false otherwise.
+func UseExternalElastic(config *corev1.ConfigMap) bool {
+	if config == nil {
+		return false
+	}
+
+	// Load the operator bootstrap configuration from its configmap.
+	if val, ok := config.Data["ELASTIC_EXTERNAL"]; ok && val != "" {
+		if strings.ToLower(val) == "true" {
+			return true
+		}
+	}
+	return false
 }

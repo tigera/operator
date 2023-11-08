@@ -24,6 +24,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/migration/cni"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 const (
@@ -200,8 +201,8 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	type TuningSpec struct {
-		Sysctl *map[operatorv1.SysctlTuningKey]string `json:"sysctl,omitempty"`
-		Type   string                                 `json:"type"`
+		Sysctl []operatorv1.Sysctl `json:"sysctl,omitempty"`
+		Type   string              `json:"type"`
 	}
 
 	// CNI tuning plugin
@@ -217,21 +218,19 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			}
 		}
 
-		// sysctl settings
-		allowedKeys := map[operatorv1.SysctlTuningKey]struct{}{
-			"net.ipv4.tcp_keepalive_intvl":  {},
-			"net.ipv4.tcp_keepalive_probes": {},
-			"net.ipv4.tcp_keepalive_time":   {},
-		}
-		sysctlTuning := make(map[operatorv1.SysctlTuningKey]string)
-		for key, value := range *tuningSpecData.Sysctl {
-			if _, allowed := allowedKeys[key]; allowed {
-				sysctlTuning[key] = value
+		sysctlTuning := []operatorv1.Sysctl{}
+		for _, setting := range tuningSpecData.Sysctl {
+			if _, allowed := utils.AllowedSysctlKeys[setting.Key]; allowed {
+				sysctl := operatorv1.Sysctl{
+					Key:   setting.Key,
+					Value: setting.Value,
+				}
+				sysctlTuning = append(sysctlTuning, sysctl)
 			}
 		}
 
 		if len(sysctlTuning) > 0 {
-			install.Spec.CalicoNetwork.SysctlTuning = &sysctlTuning
+			install.Spec.CalicoNetwork.Sysctl = sysctlTuning
 		}
 	}
 

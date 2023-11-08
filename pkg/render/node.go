@@ -716,9 +716,9 @@ func (c *nodeComponent) createTuningPlugin() map[string]interface{} {
 	// tuning plugin (sysctl)
 	tuningPlugin := map[string]interface{}{
 		"type":   "tuning",
-		"sysctl": map[string]string{},
+		"sysctl": []operatorv1.Sysctl{},
 	}
-	tuningPlugin["sysctl"] = *c.cfg.Installation.CalicoNetwork.SysctlTuning
+	tuningPlugin["sysctl"] = c.cfg.Installation.CalicoNetwork.Sysctl
 
 	return tuningPlugin
 }
@@ -742,7 +742,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 
 	// optional tuning plugin
-	if c.cfg.Installation.CalicoNetwork.SysctlTuning != nil {
+	if c.cfg.Installation.CalicoNetwork.Sysctl != nil {
 		plugins = append(plugins, c.createTuningPlugin())
 	}
 

@@ -28,6 +28,7 @@ import (
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 
@@ -337,26 +338,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
-		type TuningSpec struct {
-			Sysctl *map[operatorv1.SysctlTuningKey]string `json:"sysctl,omitempty"`
-			Type   string                                 `json:"type"`
-		}
-
-		if instance.Spec.CalicoNetwork.SysctlTuning != nil {
+		if instance.Spec.CalicoNetwork.Sysctl != nil {
 			// CNI tuning plugin
-			pluginData := instance.Spec.CalicoNetwork.SysctlTuning
+			pluginData := instance.Spec.CalicoNetwork.Sysctl
 
-			// sysctl settings
-			allowedKeys := map[operatorv1.SysctlTuningKey]struct{}{
-				"net.ipv4.tcp_keepalive_intvl":  {},
-				"net.ipv4.tcp_keepalive_probes": {},
-				"net.ipv4.tcp_keepalive_time":   {},
-			}
-
-			for key, value := range *pluginData {
-				if _, allowed := allowedKeys[key]; !allowed {
-					return fmt.Errorf("value %s not allowed in spec.calicoNetwork.sysctlTuning", value)
-				}
+			if err := utils.VerifySysctl(pluginData); err != nil {
+				return err
 			}
 
 		}

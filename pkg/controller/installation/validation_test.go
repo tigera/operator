@@ -412,10 +412,18 @@ var _ = Describe("Installation validation tests", func() {
 	})
 
 	It("should error on not-allowed CNI sysctl tuning plugin config", func() {
-		instance.Spec.CalicoNetwork.SysctlTuning = &map[operator.SysctlTuningKey]string{
-			"net.ipv4.not_allowed_setting":  "15",
-			"net.ipv4.tcp_keepalive_probes": "6",
-			"net.ipv4.tcp_keepalive_time":   "40",
+		instance.Spec.CalicoNetwork.Sysctl = []operator.Sysctl{
+			{
+				Key:   "net.ipv4.tcp_keepalive_intvl",
+				Value: "15",
+			}, {
+				Key:   "net.ipv4.tcp_keepalive_probes",
+				Value: "6",
+			},
+			{
+				Key:   "net.ipv4.tcp_keepalive_time",
+				Value: "40",
+			},
 		}
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())

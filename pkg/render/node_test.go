@@ -2682,12 +2682,20 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should render cni config with sysctl parameters", func() {
-				sysctl := map[operatorv1.SysctlTuningKey]string{
-					"net.ipv4.tcp_keepalive_intvl":  "15",
-					"net.ipv4.tcp_keepalive_probes": "6",
-					"net.ipv4.tcp_keepalive_time":   "40",
+				sysctl := []operatorv1.Sysctl{
+					{
+						Key:   "net.ipv4.tcp_keepalive_intvl",
+						Value: "15",
+					}, {
+						Key:   "net.ipv4.tcp_keepalive_probes",
+						Value: "6",
+					},
+					{
+						Key:   "net.ipv4.tcp_keepalive_time",
+						Value: "40",
+					},
 				}
-				defaultInstance.CalicoNetwork.SysctlTuning = &sysctl
+				defaultInstance.CalicoNetwork.Sysctl = sysctl
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
@@ -2740,11 +2748,17 @@ var _ = Describe("Node rendering tests", func() {
       "type": "portmap"
     },
     {
-      "sysctl": {
-        "net.ipv4.tcp_keepalive_intvl": "15",
-        "net.ipv4.tcp_keepalive_probes": "6",
-        "net.ipv4.tcp_keepalive_time": "40"
-      },
+      "sysctl": [
+		  {
+			"key": "net.ipv4.tcp_keepalive_intvl",
+			"value": "15"
+		  },
+		  {
+			"key": "net.ipv4.tcp_keepalive_probes",
+			"value": 6
+		  }
+		]
+	  },
       "type": "tuning"
 	}
   ]

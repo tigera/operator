@@ -200,8 +200,8 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	type TuningSpec struct {
-		Sysctl *map[operatorv1.SysctlTuningKey]string `json:"sysctl,omitempty"`
-		Type   string                                 `json:"type"`
+		Sysctl []operatorv1.Sysctl `json:"sysctl,omitempty"`
+		Type   string              `json:"type"`
 	}
 
 	// CNI tuning plugin
@@ -218,20 +218,20 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 
 		// sysctl settings
-		allowedKeys := map[operatorv1.SysctlTuningKey]struct{}{
-			"net.ipv4.tcp_keepalive_intvl":  {},
-			"net.ipv4.tcp_keepalive_probes": {},
-			"net.ipv4.tcp_keepalive_time":   {},
+		allowedKeys := map[string]bool{
+			"net.ipv4.tcp_keepalive_intvl":  true,
+			"net.ipv4.tcp_keepalive_probes": true,
+			"net.ipv4.tcp_keepalive_time":   true,
 		}
-		sysctlTuning := make(map[operatorv1.SysctlTuningKey]string)
-		for key, value := range *tuningSpecData.Sysctl {
-			if _, allowed := allowedKeys[key]; allowed {
-				sysctlTuning[key] = value
+		sysctlTuning := []operatorv1.Sysctl{}
+		for _, setting := range tuningSpecData.Sysctl {
+			if allowedKeys[setting.Key] {
+				return fmt.Errorf("key %s is not allowed in spec.calicoNetwork.sysctl", setting.Key)
 			}
 		}
 
 		if len(sysctlTuning) > 0 {
-			install.Spec.CalicoNetwork.SysctlTuning = &sysctlTuning
+			install.Spec.CalicoNetwork.Sysctl = sysctlTuning
 		}
 	}
 

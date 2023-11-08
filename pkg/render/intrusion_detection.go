@@ -437,6 +437,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobServiceAccount() *cor
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.ClusterRole {
+	stdApiResources := []string{"podtemplates"}
+	if c.deployWebhooksController() {
+		stdApiResources = append(stdApiResources, "secrets", "configmaps")
+	}
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{
@@ -466,7 +470,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		},
 		{
 			APIGroups: []string{""},
-			Resources: []string{"podtemplates", "secrets", "configmaps"},
+			Resources: stdApiResources,
 			Verbs:     []string{"get"},
 		},
 		{
@@ -739,8 +743,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		intrusionDetectionContainer,
 	}
 
-	// deploy webhooks controller container only for managed clusters or stand-alone enterprise clusters
-	if c.cfg.ManagedCluster || (!c.cfg.ManagedCluster && !c.cfg.ManagementCluster) {
+	if c.deployWebhooksController() {
 		containers = append(containers, c.webhooksControllerContainer())
 	}
 
@@ -760,6 +763,12 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			Volumes:            volumes,
 		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+}
+
+func (c *intrusionDetectionComponent) deployWebhooksController() bool {
+	// deploy webhooks controller container only for:
+	return c.cfg.ManagedCluster || // managed clusters or ...
+		(!c.cfg.ManagedCluster && !c.cfg.ManagementCluster) // stand-alone enterprise clusters
 }
 
 func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Container {

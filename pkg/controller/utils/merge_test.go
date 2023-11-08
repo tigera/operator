@@ -479,33 +479,41 @@ var _ = Describe("Installation merge tests", func() {
 				}),
 		)
 
-		_sysctlTuningA := map[opv1.SysctlTuningKey]string{
-			"net.ipv4.tcp_keepalive_time":   "40",
-			"net.ipv4.tcp_keepalive_intvl":  "15",
-			"net.ipv4.tcp_keepalive_probes": "6",
+		_sysctlTuningA := []opv1.Sysctl{
+			{
+				Key:   "net.ipv4.tcp_keepalive_intvl",
+				Value: "15",
+			}, {
+				Key:   "net.ipv4.tcp_keepalive_probes",
+				Value: "6",
+			},
+			{
+				Key:   "net.ipv4.tcp_keepalive_time",
+				Value: "40",
+			},
 		}
-		_sysctlTuningB := map[opv1.SysctlTuningKey]string{}
-		DescribeTable("merge CNI Tuning", func(main, second, expect *map[opv1.SysctlTuningKey]string) {
+		_sysctlTuningB := []opv1.Sysctl{}
+		DescribeTable("merge CNI Tuning", func(main, second, expect []opv1.Sysctl) {
 			m := opv1.InstallationSpec{}
 			s := opv1.InstallationSpec{}
 			if main != nil {
-				m.CalicoNetwork = &opv1.CalicoNetworkSpec{SysctlTuning: main}
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{Sysctl: main}
 			}
 			if second != nil {
-				s.CalicoNetwork = &opv1.CalicoNetworkSpec{SysctlTuning: second}
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{Sysctl: second}
 			}
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
-				Expect(*inst.CalicoNetwork.SysctlTuning).To(Equal(*expect))
+				Expect(inst.CalicoNetwork.Sysctl).To(Equal(expect))
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", &_sysctlTuningA, nil, &_sysctlTuningA),
-			Entry("Second only set", nil, &_sysctlTuningB, &_sysctlTuningB),
-			Entry("Both set equal", &_sysctlTuningA, &_sysctlTuningA, &_sysctlTuningA),
-			Entry("Both set not matching", &_sysctlTuningA, &_sysctlTuningB, &_sysctlTuningB),
+			Entry("Main only set", _sysctlTuningA, nil, _sysctlTuningA),
+			Entry("Second only set", nil, _sysctlTuningB, _sysctlTuningB),
+			Entry("Both set equal", _sysctlTuningA, _sysctlTuningA, _sysctlTuningA),
+			Entry("Both set not matching", _sysctlTuningA, _sysctlTuningB, _sysctlTuningB),
 		)
 
 	})

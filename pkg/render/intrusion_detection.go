@@ -128,6 +128,7 @@ type IntrusionDetectionConfiguration struct {
 	ClusterDomain      string
 	ESLicenseType      ElasticsearchLicenseType
 	ManagedCluster     bool
+	ManagementCluster  bool
 
 	HasNoLicense                 bool
 	TrustedCertBundle            certificatemanagement.TrustedBundle
@@ -736,7 +737,11 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	containers := []corev1.Container{
 		intrusionDetectionContainer,
-		c.webhooksControllerContainer(),
+	}
+
+	// deploy webhooks controller container only for managed clusters or stand-alone enterprise clusters
+	if c.cfg.ManagedCluster || (!c.cfg.ManagedCluster && !c.cfg.ManagementCluster) {
+		containers = append(containers, c.webhooksControllerContainer())
 	}
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

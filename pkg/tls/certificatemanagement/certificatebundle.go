@@ -49,7 +49,7 @@ type trustedBundle struct {
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 func CreateTrustedBundle(certificates ...CertificateInterface) TrustedBundle {
-	bundle, err := createTrustedBundle(false, TrustedCertConfigMapKeyName, certificates...)
+	bundle, err := createTrustedBundle(false, TrustedCertConfigMapName, certificates...)
 	if err != nil {
 		panic(err) // This should never happen.
 	}

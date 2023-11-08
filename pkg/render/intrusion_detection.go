@@ -437,10 +437,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobServiceAccount() *cor
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.ClusterRole {
-	stdApiResources := []string{"podtemplates"}
-	if c.deployWebhooksController() {
-		stdApiResources = append(stdApiResources, "secrets", "configmaps")
-	}
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{
@@ -470,7 +466,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		},
 		{
 			APIGroups: []string{""},
-			Resources: stdApiResources,
+			Resources: []string{"podtemplates"},
 			Verbs:     []string{"get"},
 		},
 		{
@@ -503,17 +499,21 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			},
 			Verbs: []string{"get"},
 		},
-		{
-			APIGroups: []string{
-				"crd.projectcalico.org",
+	}
+
+	if c.deployWebhooksController() {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "configmaps"},
+				Verbs:     []string{"get"},
 			},
-			Resources: []string{
-				"securityeventwebhooks",
+			rbacv1.PolicyRule{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"securityeventwebhooks"},
+				Verbs:     []string{"get", "watch", "update"},
 			},
-			Verbs: []string{
-				"get", "watch", "update",
-			},
-		},
+		)
 	}
 
 	if !c.cfg.ManagedCluster {
@@ -739,10 +739,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		initContainers = append(initContainers, c.cfg.IntrusionDetectionCertSecret.InitContainer(IntrusionDetectionNamespace))
 	}
 
-	containers := []corev1.Container{
-		intrusionDetectionContainer,
-	}
-
+	containers := []corev1.Container{intrusionDetectionContainer}
 	if c.deployWebhooksController() {
 		containers = append(containers, c.webhooksControllerContainer())
 	}
@@ -766,9 +763,8 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 }
 
 func (c *intrusionDetectionComponent) deployWebhooksController() bool {
-	// deploy webhooks controller container only for:
-	return c.cfg.ManagedCluster || // managed clusters or ...
-		(!c.cfg.ManagedCluster && !c.cfg.ManagementCluster) // stand-alone enterprise clusters
+	// deploy webhooks controller container only for managed clusters or stand-alone enterprise clusters
+	return c.cfg.ManagedCluster || !c.cfg.ManagementCluster
 }
 
 func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Container {

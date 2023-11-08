@@ -89,12 +89,17 @@ type CertificateManager interface {
 	// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 	// - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 	CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
+	// CreateMultiTenantTrustedBundleWithSystemRootCertificates is an alternative to CreateTrustedBundleWithSystemRootCertificates that is appropriate for
+	// multi-tenant management clusters.
+	CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
 	// AddToStatusManager lets the status manager monitor pending CSRs if the certificate management is enabled.
 	AddToStatusManager(manager status.StatusManager, namespace string)
 	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
 	KeyPair() certificatemanagement.KeyPairInterface
-	// Loads an existing trusted bundle to pass to render.
+	// LoadTrustedBundle loads an existing trusted bundle to pass to render.
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
+	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
+	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 }
 
 type Option func(cm *certificateManager) error
@@ -488,9 +493,21 @@ func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(cert
 	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
 }
 
+func (cm *certificateManager) CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
+	return certificatemanagement.CreateMultiTenantTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+}
+
 func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
+	return cm.loadTrustedBundle(ctx, client, ns, certificatemanagement.TrustedCertConfigMapName)
+}
+
+func (cm *certificateManager) LoadMultiTenantTrustedBundleWithRootCertificates(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
+	return cm.loadTrustedBundle(ctx, client, ns, certificatemanagement.TrustedCertConfigMapNamePublic)
+}
+
+func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client client.Client, ns string, name string) (certificatemanagement.TrustedBundleRO, error) {
 	obj := &corev1.ConfigMap{}
-	k := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: ns}
+	k := types.NamespacedName{Name: name, Namespace: ns}
 	if err := client.Get(ctx, k, obj); err != nil {
 		return nil, err
 	}

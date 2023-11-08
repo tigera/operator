@@ -403,8 +403,11 @@ const (
 	WindowsDataplaneHNS      WindowsDataplaneOption = "HNS"
 )
 
-// +kubebuilder:validation:Enum=net.ipv4.tcp_keepalive_intvl;net.ipv4.tcp_keepalive_probes;net.ipv4.tcp_keepalive_time
-type SysctlTuningKey string
+type Sysctl struct {
+	// +kubebuilder:validation:Enum=net.ipv4.tcp_keepalive_intvl;net.ipv4.tcp_keepalive_probes;net.ipv4.tcp_keepalive_time
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
@@ -467,9 +470,9 @@ type CalicoNetworkSpec struct {
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
 
-	// SysctlTuning configures sysctl parameters for tuning plugin
+	// Sysctl configures sysctl parameters for tuning plugin
 	// +optional
-	SysctlTuning *map[SysctlTuningKey]string `json:"sysctlTuning,omitempty"`
+	Sysctl []Sysctl `json:"sysctl,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

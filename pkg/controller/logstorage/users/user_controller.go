@@ -274,7 +274,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 
 	// Add a finalizer to the Tenant instance if it exists so that we can clean up the Linseed user when the Tenant
 	// is deleted. The finalizer will be removed by the user cleanup controller when the user is deleted from ES.
-	if tenant != nil && !stringsutil.StringInSlice(userCleanupFinalizer, tenant.GetFinalizers()) {
+	if tenant != nil && tenant.GetDeletionTimestamp().IsZero() && !stringsutil.StringInSlice(userCleanupFinalizer, tenant.GetFinalizers()) {
 		tenant.SetFinalizers(append(tenant.GetFinalizers(), userCleanupFinalizer))
 		if err = r.client.Update(ctx, tenant); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error adding finalizer to Tenant", err, reqLogger)

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate go run gen.go
-
 package applicationlayer
 
 import (
@@ -59,9 +57,11 @@ const (
 	DikastesSyncVolumeName           = "dikastes-sync"
 	DikastesContainerName            = "dikastes"
 	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
+	ModSecurityRulesetVolumePath     = "/etc/modsecurity-ruleset"
 	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
 	CalicoLogsVolumeName             = "var-log-calico"
+	CalicologsVolumePath             = "/var/log/calico"
 )
 
 func ApplicationLayer(
@@ -295,17 +295,24 @@ func (c *component) containers() []corev1.Container {
 		}
 
 		if c.config.WAFEnabled {
-			commandArgs = append(commandArgs, "--rules", "/etc/modsecurity-ruleset")
+			commandArgs = append(
+				commandArgs,
+				"--waf-enabled",
+				"--waf-directive", fmt.Sprintf("Include %s/modsecdefault.conf", ModSecurityRulesetVolumePath),
+				"--waf-directive", fmt.Sprintf("Include %s/crs-setup.conf", ModSecurityRulesetVolumePath),
+				"--waf-directive", fmt.Sprintf("Include %s/tigera.conf", ModSecurityRulesetVolumePath),
+				"--waf-directive", fmt.Sprintf("Include %s/rules/*.conf", ModSecurityRulesetVolumePath),
+			)
 			volMounts = append(
 				volMounts,
 				[]corev1.VolumeMount{
 					{
 						Name:      CalicoLogsVolumeName,
-						MountPath: "/var/log/calico",
+						MountPath: CalicologsVolumePath,
 					},
 					{
 						Name:      ModSecurityRulesetVolumeName,
-						MountPath: "/etc/modsecurity-ruleset",
+						MountPath: ModSecurityRulesetVolumePath,
 						ReadOnly:  true,
 					},
 				}...,

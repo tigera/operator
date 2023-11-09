@@ -170,7 +170,15 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	trustedBundle := cm.CreateTrustedBundle()
 	trustedBundle.AddCertificates(clusterCA)
 
-	// TODO: Provision a trusted bundle that includes system certificates for components that need it.
+	// We also need a trusted bundle that includes the system root certificates in addition to the certificates
+	// listed above, so that components that talk to public endpoints can verify them. In a multi-tenant cluster, this
+	// bundle will co-exist in the same namespace as the default trusted bundle, but with a different name.
+	trustedBundleWithSystemCAs, err := cm.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying system root certificates", err, logc)
+		return reconcile.Result{}, err
+	}
+	trustedBundleWithSystemCAs.AddCertificates(clusterCA)
 
 	component := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:      tenant.Namespace,
@@ -182,10 +190,19 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		KeyPairOptions: keyPairOptions,
 		TrustedBundle:  trustedBundle,
 	})
+	systemRootsComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		Namespace:      tenant.Namespace,
+		TruthNamespace: tenant.Namespace,
+		TrustedBundle:  trustedBundleWithSystemCAs,
+	})
 
 	hdler := utils.NewComponentHandler(logc, r.client, r.scheme, tenant)
 	if err = hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
+		return reconcile.Result{}, err
+	}
+	if err = hdler.CreateOrUpdateOrDelete(ctx, systemRootsComponent, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating trusted bundle with public CAs", err, logc)
 		return reconcile.Result{}, err
 	}
 

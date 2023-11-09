@@ -283,7 +283,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Now that the secret has been created, also provision the user in ES.
-	elasticEndpoint := relasticsearch.ElasticEndpoint()
+	elasticEndpoint := relasticsearch.ECKElasticEndpoint()
 	if tenant.Spec.Elastic != nil && tenant.Spec.Elastic.URL != "" {
 		elasticEndpoint = tenant.Spec.Elastic.URL
 	}

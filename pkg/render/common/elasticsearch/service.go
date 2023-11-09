@@ -16,7 +16,6 @@ package elasticsearch
 
 import (
 	"fmt"
-	"os"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -49,13 +48,8 @@ func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
 	return GatewayEndpoint(osType, clusterDomain, "tigera-elasticsearch")
 }
 
-func ElasticEndpoint() string {
-	if ep := os.Getenv("ELASTIC_ENDPOINT"); ep != "" {
-		// TODO: Some callers don't have access to a Tenant resource. For these,
-		// we still need a global configuration option for the ES endpoint.
-		// This is a temporary workaround while we figure out the right approach so
-		// I don't forget about this.
-		return ep
-	}
+// ECKElasticEndpoint returns the URL of the Elasticsearch provisioned by the ECK operator. This
+// endpoint is only valid when using internal elasticsearch.
+func ECKElasticEndpoint() string {
 	return "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 }

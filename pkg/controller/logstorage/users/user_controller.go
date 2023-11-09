@@ -17,9 +17,9 @@ package users
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -44,6 +44,10 @@ import (
 )
 
 var log = logf.Log.WithName("controller_logstorage_users")
+
+const (
+	userCleanupFinalizer = "tigera.io/es-user-cleanup"
+)
 
 type UserController struct {
 	client          client.Client
@@ -268,6 +272,16 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
+	// Add a finalizer to the Tenant instance if it exists so that we can clean up the Linseed user when the Tenant
+	// is deleted. The finalizer will be removed by the user cleanup controller when the user is deleted from ES.
+	if tenant != nil && !stringsutil.StringInSlice(userCleanupFinalizer, tenant.GetFinalizers()) {
+		tenant.SetFinalizers(append(tenant.GetFinalizers(), userCleanupFinalizer))
+		if err = r.client.Update(ctx, tenant); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error adding finalizer to Tenant", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Now that the secret has been created, also provision the user in ES.
 	elasticEndpoint := relasticsearch.ElasticEndpoint()
 	if tenant.Spec.Elastic != nil && tenant.Spec.Elastic.URL != "" {
@@ -334,18 +348,8 @@ func (r *UsersCleanupController) Reconcile(ctx context.Context, request reconcil
 }
 
 func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger logr.Logger) error {
-	esClient, err := r.esClientFn(r.client, ctx, relasticsearch.ElasticEndpoint())
-	if err != nil {
-		return fmt.Errorf("failed to connect to Elasticsearch - failed to create the Elasticsearch client")
-	}
-
-	allESUsers, err := esClient.GetUsers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to fetch users from Elasticsearch")
-	}
-
 	tenants := operatorv1.TenantList{}
-	err = r.client.List(ctx, &tenants)
+	err := r.client.List(ctx, &tenants)
 	if err != nil {
 		return fmt.Errorf("failed to fetch TenantList")
 	}
@@ -367,23 +371,42 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
 	}
 
-	for _, user := range allESUsers {
-		if strings.HasPrefix(user.Username, fmt.Sprintf("%s_%s_", utils.ElasticsearchUserNameLinseed, clusterID)) {
-			active := false
-			for _, t := range tenants.Items {
-				if strings.Contains(user.Username, t.Spec.ID) {
-					active = true
-					break
-				}
-			}
-			if !active {
+	var t operatorv1.Tenant
+	for _, t = range tenants.Items {
+		// Skip tenants that aren't being deleted.
+		if t.GetDeletionTimestamp().IsZero() {
+			continue
+		}
+
+		// This tenant is terminating - clean up its Linseed user, if it exists.
+		esClient, err := r.esClientFn(r.client, ctx, t.Spec.Elastic.URL)
+		if err != nil {
+			return fmt.Errorf("failed to connect to Elasticsearch - failed to create the Elasticsearch client")
+		}
+
+		allESUsers, err := esClient.GetUsers(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to fetch users from Elasticsearch")
+		}
+
+		lu := utils.LinseedUser(clusterID, t.Spec.ID)
+		for _, user := range allESUsers {
+			if user.Username == lu.Username {
 				err = esClient.DeleteUser(ctx, &user)
 				if err != nil {
 					logger.Error(err, "Failed to delete elastic user")
 				}
+
+				// Remove the finalizer from the tenant to allow it to be deleted.
+				if stringsutil.StringInSlice(userCleanupFinalizer, t.GetFinalizers()) {
+					t.SetFinalizers(stringsutil.RemoveStringInSlice(userCleanupFinalizer, t.GetFinalizers()))
+					if err = r.client.Update(ctx, &t); err != nil {
+						logger.Error(err, "Failed to remove user cleanup finalizer from tenant")
+					}
+				}
+				break
 			}
 		}
 	}
-
 	return nil
 }

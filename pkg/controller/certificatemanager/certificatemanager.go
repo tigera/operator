@@ -506,12 +506,20 @@ func (cm *certificateManager) LoadMultiTenantTrustedBundleWithRootCertificates(c
 }
 
 func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client client.Client, ns string, name string) (certificatemanagement.TrustedBundleRO, error) {
+	// Get the ConfigMap containing the actual certificates.
 	obj := &corev1.ConfigMap{}
 	k := types.NamespacedName{Name: name, Namespace: ns}
 	if err := client.Get(ctx, k, obj); err != nil {
 		return nil, err
 	}
-	a := newReadOnlyTrustedBundle(cm, len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0)
+
+	// Create a new readOnlyTrustedBundle based on the given configuration.
+	includeSystemCerts := len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0
+	useMultiTenantName := name == certificatemanagement.TrustedCertConfigMapNamePublic
+	a := newReadOnlyTrustedBundle(cm, includeSystemCerts, useMultiTenantName)
+
+	// Augment it with annotations from the actual ConfigMap so that we inherit the hash annotations used to
+	// detect changes to the ConfigMap's contents.
 	for key, val := range obj.Annotations {
 		if strings.HasPrefix(key, "hash.operator.tigera.io/") {
 			a.annotations[key] = val
@@ -523,9 +531,13 @@ func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client clie
 // newReadOnlyTrustedBundle creates a new readOnlyTrustedBundle. If system is true, the bundle will include a system root certificate bundle.
 // TrustedBundleRO is useful for mounting a bundle of certificates to trust in a pod without the ability to modify the bundle, and allows
 // one controller to create the bundle and another to mount it.
-func newReadOnlyTrustedBundle(cm CertificateManager, system bool) *readOnlyTrustedBundle {
-	if system {
+func newReadOnlyTrustedBundle(cm CertificateManager, includeSystemCerts, multiTenant bool) *readOnlyTrustedBundle {
+	if includeSystemCerts {
 		bundle, _ := cm.CreateTrustedBundleWithSystemRootCertificates()
+		if multiTenant {
+			// For multi-tenant clusters, the system root certificate bundle uses a different name. Load it instead.
+			bundle, _ = cm.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+		}
 		return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: bundle}
 	}
 	return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: cm.CreateTrustedBundle()}

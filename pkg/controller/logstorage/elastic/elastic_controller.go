@@ -225,6 +225,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
+	}
+
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}

@@ -138,7 +138,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			corev1.EnvVar{Name: "ELASTIC_SCHEME", Value: "https"},
 			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
-			corev1.EnvVar{Name: "ELASTIC_USERNAME", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchManagerUserSecret, "username", false)},
+			corev1.EnvVar{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchManagerUserSecret, "username", false)},
 			corev1.EnvVar{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchManagerUserSecret, "password", false)},
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 			corev1.EnvVar{Name: "VOLTRON_URL", Value: "https://tigera-manager.tigera-manager.svc:9443"},
@@ -704,6 +704,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		var esConfigMap *relasticsearch.ClusterConfig
+		// We only require Elastic cluster configuration when Kibana is enabled. We infer whether Kibana is enabled by checking
+		// FIPS configuration mode and multi-tenancy mode. See manager.go function kibanaEnabled for more details.
+		// In this case we know that the tenant is nil so we only need check the FIPS mode.
 		if !operatorv1.IsFIPSModeEnabled(i.FIPSMode) {
 			esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		}
@@ -1063,6 +1066,8 @@ func renderObjects(roc renderConfig) []client.Object {
 	}
 
 	var esConfigMap *relasticsearch.ClusterConfig
+	// We only require Elastic cluster configuration when Kibana is enabled. We infer whether Kibana is enabled by checking
+	// FIPS configuration mode and multi-tenancy mode. See manager.go function kibanaEnabled for more details.
 	if roc.tenant == nil && !operatorv1.IsFIPSModeEnabled(roc.installation.FIPSMode) {
 		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	}

@@ -564,10 +564,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:         instance,
+		ESClusterConfig:      esClusterConfig,
 		S3Credential:         s3Credential,
 		SplkCredential:       splunkCredential,
 		Filters:              filters,
-		ESClusterConfig:      esClusterConfig,
 		EKSConfig:            eksConfig,
 		PullSecrets:          pullSecrets,
 		Installation:         installation,
@@ -615,10 +615,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
 			LogCollector:         instance,
+			ESClusterConfig:      esClusterConfig,
 			S3Credential:         s3Credential,
 			SplkCredential:       splunkCredential,
 			Filters:              filters,
-			ESClusterConfig:      esClusterConfig,
 			EKSConfig:            eksConfig,
 			PullSecrets:          pullSecrets,
 			Installation:         installation,

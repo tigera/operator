@@ -351,9 +351,22 @@ var _ = Describe("LogStorage controller", func() {
 				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
+				esConfigMapKey := client.ObjectKey{
+					Name:      relasticsearch.ClusterConfigConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				}
+
+				esConfigMap := corev1.ConfigMap{}
+
+				// Verify that the ConfigMap doesn't exist prior to calling Reconcile
+				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).To(HaveOccurred())
+
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 				result, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
+
+				// Check that the ConfigMap was created by the call to Reconcile
+				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).NotTo(HaveOccurred())
 
 				// Expect to be waiting for Elasticsearch and Kibana to be functional
 				Expect(result).Should(Equal(reconcile.Result{}))
@@ -394,9 +407,23 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
+				// Modify ConfigMap we expect to be reverted by a call to Reconcile
+				_, ok := esConfigMap.Data["test-field"]
+				Expect(ok).To(BeFalse())
+
+				esConfigMap.Data = map[string]string{
+					"test-field": "test-data",
+				}
+				Expect(cli.Update(ctx, &esConfigMap)).NotTo(HaveOccurred())
+
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
+
+				// Verify that the ConfigMap was reverted to the original state
+				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).NotTo(HaveOccurred())
+				_, ok = esConfigMap.Data["test-field"]
+				Expect(ok).To(BeFalse())
 
 				// Expect to be waiting for curator secret
 				Expect(result).Should(Equal(reconcile.Result{}))

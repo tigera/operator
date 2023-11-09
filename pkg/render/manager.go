@@ -564,17 +564,14 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	if c.kibanaEnabled() {
 		esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace))
-		esEnvVars := []corev1.EnvVar{
+		env = append(env,
 			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
 			relasticsearch.ElasticSchemeEnvVar(esScheme),
 			relasticsearch.ElasticHostEnvVar(esHost),
 			relasticsearch.ElasticPortEnvVar(esPort),
-			relasticsearch.ElasticUsernameEnvVar(ElasticsearchManagerUserSecret),
+			relasticsearch.ElasticUserEnvVar(ElasticsearchManagerUserSecret),
 			relasticsearch.ElasticPasswordEnvVar(ElasticsearchManagerUserSecret),
-			relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ClusterConfig.ClusterName()),
-		}
-
-		env = append(env, esEnvVars...)
+			relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ClusterConfig.ClusterName()))
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,

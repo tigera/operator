@@ -15,5 +15,6 @@
 package elasticsearch
 
 const (
+	PublicCertSecret = "tigera-secure-es-gateway-http-certs-public"
 	UnusedCertSecret = "tigera-secure-es-http-certs-unused"
 )

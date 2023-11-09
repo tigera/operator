@@ -161,6 +161,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 		))
 
+		Expect(envs).ShouldNot(ContainElements(
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_SCHEME", Value: "https"},
+			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
+			corev1.EnvVar{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "username", false)},
+			corev1.EnvVar{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "password", false)},
+			corev1.EnvVar{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+		))
+
 		container := ds.Spec.Template.Spec.Containers[0]
 
 		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/readiness.sh"}))

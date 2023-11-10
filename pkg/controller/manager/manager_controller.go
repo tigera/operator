@@ -599,8 +599,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
 	if r.multiTenant {
-		// for multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
-		trustedBundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+		// For multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
+		// Multi-tenant managers need the bundle variant that includes system root certificates, in order to verify external auth providers.
+		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, logc)
 			return reconcile.Result{}, err

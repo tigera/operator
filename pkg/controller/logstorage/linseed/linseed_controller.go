@@ -407,26 +407,6 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	if !r.multiTenant {
-		// TODO: For now, install this here. It probably should have its own controller.
-		// I am not very familiar with this component - need to investigate and propose multi-tenant resolution.
-		if err := r.createESMetrics(
-			install,
-			variant,
-			managementClusterConnection,
-			pullSecrets,
-			reqLogger,
-			esClusterConfig,
-			ctx,
-			hdler,
-			trustedBundle,
-			r.usePSP,
-			cm,
-		); err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil

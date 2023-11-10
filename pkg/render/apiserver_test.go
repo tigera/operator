@@ -1385,6 +1385,11 @@ var (
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
+		},
 	}
 	networkAdminPolicyRules = []rbacv1.PolicyRule{
 		{
@@ -1501,6 +1506,11 @@ var (
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
 		},
 	}
 )

@@ -44,8 +44,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var successResult = reconcile.Result{}
-
 func NewTenantControllerWithShims(
 	cli client.Client,
 	scheme *runtime.Scheme,

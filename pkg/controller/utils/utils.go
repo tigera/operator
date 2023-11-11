@@ -647,7 +647,9 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			generationChanged := e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+			// Not all objects use/have a generation, so we can't always rely on that to determine if the
+			// object has changed. The generation will be 0 if it's not set.
+			generationChanged := e.ObjectOld.GetGeneration() == 0 || e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
 
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
 				// No name or namespace match was specified. Match everything, assuming the generation has changed.

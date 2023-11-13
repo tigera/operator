@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -614,12 +614,12 @@ type IPPool struct {
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
 }
 
-func (p *IPPool) ToCRD() *crdv1.IPPool {
+func (p *IPPool) ToProjectCalicoV1() *pcv1.IPPool {
 	name := strings.ReplaceAll(p.CIDR, "/", "-") // TODO: Better name generation. Handle v6.
-	pool := crdv1.IPPool{
+	pool := pcv1.IPPool{
 		TypeMeta:   metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec: crdv1.IPPoolSpec{
+		Spec: pcv1.IPPoolSpec{
 			CIDR: p.CIDR,
 		},
 	}
@@ -627,17 +627,17 @@ func (p *IPPool) ToCRD() *crdv1.IPPool {
 	// Set encap.
 	switch p.Encapsulation {
 	case EncapsulationIPIP:
-		pool.Spec.IPIPMode = crdv1.IPIPModeAlways
-		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+		pool.Spec.IPIPMode = pcv1.IPIPModeAlways
+		pool.Spec.VXLANMode = pcv1.VXLANModeNever
 	case EncapsulationIPIPCrossSubnet:
-		pool.Spec.IPIPMode = crdv1.IPIPModeCrossSubnet
-		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+		pool.Spec.IPIPMode = pcv1.IPIPModeCrossSubnet
+		pool.Spec.VXLANMode = pcv1.VXLANModeNever
 	case EncapsulationVXLAN:
-		pool.Spec.VXLANMode = crdv1.VXLANModeAlways
-		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+		pool.Spec.VXLANMode = pcv1.VXLANModeAlways
+		pool.Spec.IPIPMode = pcv1.IPIPModeNever
 	case EncapsulationVXLANCrossSubnet:
-		pool.Spec.VXLANMode = crdv1.VXLANModeCrossSubnet
-		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+		pool.Spec.VXLANMode = pcv1.VXLANModeCrossSubnet
+		pool.Spec.IPIPMode = pcv1.IPIPModeNever
 	}
 
 	// Set NAT

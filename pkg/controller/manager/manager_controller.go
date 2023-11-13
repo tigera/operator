@@ -166,11 +166,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = utils.AddNamespaceWatch(managerController, common.TigeraPrometheusNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
-
-	if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
 	return nil
 }
 
@@ -186,6 +181,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
+		elasticExternal: opts.ElasticExternal,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -207,7 +203,8 @@ type ReconcileManager struct {
 	usePSP          bool
 
 	// Whether or not the operator is running in multi-tenant mode.
-	multiTenant bool
+	multiTenant     bool
+	elasticExternal bool
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -579,7 +576,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var elasticLicenseType render.ElasticsearchLicenseType
-	if managementClusterConnection == nil {
+	if !r.elasticExternal && managementClusterConnection == nil {
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, logc)
 			return reconcile.Result{}, err

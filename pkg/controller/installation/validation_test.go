@@ -76,6 +76,8 @@ var _ = Describe("Installation validation tests", func() {
 
 	It("should allow IPv6 if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
+		enabled := operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
@@ -116,7 +118,7 @@ var _ = Describe("Installation validation tests", func() {
 			CanReach: "8.8.8.8",
 		}
 		err := validateCustomResource(instance)
-		Expect(err).To(MatchError("bpf dataplane does not support dual stack"))
+		Expect(err).To(MatchError("BPF dataplane does not support dual stack"))
 	})
 
 	It("should allow IPv6 VXLAN", func() {
@@ -947,10 +949,9 @@ var _ = Describe("Installation validation tests", func() {
 	Describe("validate Windows configuration", func() {
 		BeforeEach(func() {
 			winDpHNS := operator.WindowsDataplaneHNS
-			instance.Spec.CalicoNetwork =
-				&operator.CalicoNetworkSpec{
-					WindowsDataplane: &winDpHNS,
-				}
+			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+				WindowsDataplane: &winDpHNS,
+			}
 			instance.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
 			var twentyEight int32 = 28
 			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -978,7 +979,6 @@ var _ = Describe("Installation validation tests", func() {
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled"))
-
 			})
 		})
 		Context("Calico CNI", func() {
@@ -1034,7 +1034,6 @@ var _ = Describe("Installation validation tests", func() {
 				err := validateCustomResource(instance)
 				Expect(err).ToNot(HaveOccurred())
 			})
-
 		})
 	})
 	Describe("validate CSIDaemonset", func() {

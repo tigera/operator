@@ -37,73 +37,55 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 )
 
-const (
-	reconcilePeriod = 5 * time.Minute
-)
-
-const InstallationName string = "calico"
+const tigeraStatusName string = "ippools"
 
 var log = logf.Log.WithName("controller_ippool")
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	ri, err := newReconciler(mgr, opts)
-	if err != nil {
-		return fmt.Errorf("failed to create Core Reconciler: %w", err)
-	}
-	c, err := controller.New("tigera-ippool-controller", mgr, controller.Options{Reconciler: ri})
-	if err != nil {
-		return fmt.Errorf("Failed to create tigera-ippool-controller: %w", err)
-	}
-	return add(c, ri)
-}
-
-func newReconciler(mgr manager.Manager, opts options.AddOptions) (*Reconciler, error) {
-	statusManager := status.New(mgr.GetClient(), "ip-pools", opts.KubernetesVersion)
 	r := &Reconciler{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
-		status:               statusManager,
+		status:               status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
-	return r, nil
-}
 
-// add adds watches for resources that are available at startup
-func add(c controller.Controller, r *Reconciler) error {
+	c, err := controller.New("tigera-ippool-controller", mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return fmt.Errorf("Failed to create tigera-ippool-controller: %w", err)
+	}
+
 	// Watch for changes to primary resource Installation
-	err := c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to TigeraStatus.
-	if err = utils.AddTigeraStatusWatch(c, InstallationName); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch calico Tigerastatus: %w", err)
 	}
 
 	// Watch for changes to IPPool.
-	err = c.Watch(&source.Kind{Type: &crdv1.IPPool{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &pcv1.IPPool{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch IPPool resource: %w", err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
-	err = utils.AddPeriodicReconcile(c, reconcilePeriod)
-	if err != nil {
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to create periodic reconcile watch: %w", err)
 	}
-
 	return nil
 }
 
@@ -129,12 +111,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling IP pools")
 
-	// TODO: Needed?
-	// newActiveCM, err := r.checkActive(reqLogger)
-	// if err != nil {
-	// 	return reconcile.Result{}, err
-	// }
-
 	// Get the Installation object - this is the source of truth for IP pools managed by
 	// this controller.
 	instance := &operator.Installation{}
@@ -147,23 +123,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		reqLogger.Error(err, "An error occurred when querying the Installation resource")
 		return reconcile.Result{}, err
 	}
-
-	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
+	defer r.status.SetMetaData(&instance.ObjectMeta)
 
-	// Get the APIServer. If healthy, we'll use it for managing pools.
-	// Otherwise, we'll use the CRD API for bootstrapping the cluster until the API server is available.
+	// Get the APIServer. If healthy, we'll use the projectcalico.org/v3 API for managing pools.
+	// Otherwise, we'll use the internal v1 API for bootstrapping the cluster until the API server is available.
+	// This controller will never delete pools using the v1 API, as deletion process is complex and only
+	// properly handled when using the v3 API.
 	apiserver, _, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}
 	apiAvailable := apiserver != nil && apiserver.Status.State == v1.TigeraStatusReady
 
-	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&instance.ObjectMeta)
-
 	// Get all IP pools in the cluster.
-	currentPools := &crdv1.IPPoolList{}
+	currentPools := &pcv1.IPPoolList{}
 	err = r.client.List(ctx, currentPools)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
@@ -172,7 +146,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will ignore any IP pools that it itself did not create.
-	ourPools := map[string]crdv1.IPPool{}
+	ourPools := map[string]pcv1.IPPool{}
 	for _, p := range currentPools.Items {
 		// TODO: Check if owned by this installation resource / controller.
 		ourPools[p.Spec.CIDR] = p
@@ -183,9 +157,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, p := range instance.Spec.CalicoNetwork.IPPools {
 		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool, p) {
 			// Create a new pool, or update an existing one.
-			res := p.ToCRD()
+			res := p.ToProjectCalicoV1()
 			if apiAvailable {
-				toCreate = append(toCreate, crdToV3(res))
+				toCreate = append(toCreate, v1ToV3(res))
 			} else {
 				toCreate = append(toCreate, res)
 			}
@@ -205,14 +179,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			}
 		}
 		if !found {
+			// This pool needs to be deleted. We only ever send deletes via the API server,
+			// since deletion requires rather complex logic. If the API server isn't available,
+			// we'll instead just mark the pool as disabled temporarily.
 			reqLogger.WithValues("cidr", cidr).Info("Pool needs to be deleted")
 			if apiAvailable {
-				// No match. Needs delete. We only ever send deletes via the API server,
-				// since deletion requires rather complex logic. If the API server isn't available,
-				// we'll instead just mark the pool as disabled temporarily.
-				toDelete = append(toDelete, crdToV3(&pool))
+				// v3 API is available - send a delete request.
+				toDelete = append(toDelete, v1ToV3(&pool))
 			} else {
-				// API server is not available. Just mark the pool as disabled so that new allocations
+				// v3 API is not available. Just mark the pool as disabled so that new allocations
 				// don't come from this pool. We'll delete it once the API server is available.
 				pool.Spec.Disabled = true
 				toCreate = append(toCreate, &pool)
@@ -254,8 +229,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Update status to include the full set of IP pools. This tells the core controller
 	// that it's good to start installing Calico.
-	// TODO: Re-query so we have the ones we just created!
-	instance.Status.IPPools = crdsToOperator(currentPools.Items)
+	instance.Status.IPPools = v1PoolsToOperator(currentPools.Items)
 	if err := r.client.Status().Update(ctx, instance); err != nil {
 		r.status.SetDegraded(v1.ResourceUpdateError, fmt.Sprintf("Error updating Installation status %s", v1.TigeraStatusReady), err, reqLogger)
 		return reconcile.Result{}, err
@@ -264,30 +238,30 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func crdsToOperator(crds []crdv1.IPPool) []v1.IPPool {
+func v1PoolsToOperator(crds []pcv1.IPPool) []v1.IPPool {
 	pools := []v1.IPPool{}
 	for _, p := range crds {
-		pools = append(pools, crdToOperator(p))
+		pools = append(pools, v1PoolToOperator(p))
 	}
 	return pools
 }
 
-func crdToOperator(crd crdv1.IPPool) v1.IPPool {
+func v1PoolToOperator(crd pcv1.IPPool) v1.IPPool {
 	pool := v1.IPPool{
 		CIDR: crd.Spec.CIDR,
 	}
 
 	// Set encap.
 	switch crd.Spec.IPIPMode {
-	case crdv1.IPIPModeAlways:
+	case pcv1.IPIPModeAlways:
 		pool.Encapsulation = v1.EncapsulationIPIP
-	case crdv1.IPIPModeCrossSubnet:
+	case pcv1.IPIPModeCrossSubnet:
 		pool.Encapsulation = v1.EncapsulationIPIPCrossSubnet
 	}
 	switch crd.Spec.VXLANMode {
-	case crdv1.VXLANModeAlways:
+	case pcv1.VXLANModeAlways:
 		pool.Encapsulation = v1.EncapsulationVXLAN
-	case crdv1.VXLANModeCrossSubnet:
+	case pcv1.VXLANModeCrossSubnet:
 		pool.Encapsulation = v1.EncapsulationVXLANCrossSubnet
 	}
 
@@ -312,16 +286,16 @@ func crdToOperator(crd crdv1.IPPool) v1.IPPool {
 	return pool
 }
 
-func crdToV3(crd *crdv1.IPPool) *v3.IPPool {
-	bs, err := json.Marshal(crd)
+func v1ToV3(v1pool *pcv1.IPPool) *v3.IPPool {
+	bs, err := json.Marshal(v1pool)
 	if err != nil {
 		panic(err)
 	}
 
-	v3p := v3.IPPool{}
-	err = json.Unmarshal(bs, &v3p)
+	v3pool := v3.IPPool{}
+	err = json.Unmarshal(bs, &v3pool)
 	if err != nil {
 		panic(err)
 	}
-	return &v3p
+	return &v3pool
 }

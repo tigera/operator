@@ -19,12 +19,10 @@ import (
 	"fmt"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/externalelasticsearch"
@@ -80,22 +78,6 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	if err = utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("log-storage-external-es-controller failed to watch Installation resource: %w", err)
-	}
-	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("log-storage-external-es-controller failed to watch ImageSet: %w", err)
-	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-external-es-controller failed to watch ManagementCluster resource: %w", err)
-	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-external-es-controller failed to watch ManagementClusterConnection resource: %w", err)
-	}
-	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {
-		return fmt.Errorf("log-storage-external-es-controller failed to watch logstorage Tigerastatus: %w", err)
-	}
-
-	if err = utils.AddConfigMapWatch(c, "cloud-kibana-config", common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-external-es-controller failed to watch the ConfigMap resource: %w", err)
 	}
 	return nil
 }

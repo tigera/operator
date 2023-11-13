@@ -166,13 +166,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = utils.AddNamespaceWatch(managerController, common.TigeraPrometheusNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
-
-	if !opts.ElasticExternal {
-		if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
-			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
-		}
-	}
-
 	return nil
 }
 

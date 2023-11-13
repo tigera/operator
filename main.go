@@ -72,7 +72,8 @@ var (
 )
 
 // bootstrapConfigMapName is the name of the ConfigMap that contains cluster-wide
-// configuration for the operator loaded at startup.
+// configuration for the operator loaded at startup. Note that this is not a formal API and should
+// not be expected to adhere to normal API expectations such as forward or backward compatibility guarantees.
 const bootstrapConfigMapName = "operator-bootstrap-config"
 
 func init() {

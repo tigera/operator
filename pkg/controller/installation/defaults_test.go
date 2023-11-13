@@ -62,7 +62,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
-
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -95,15 +94,15 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		var false_ = false
+		false_ := false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10
-		var logFileMaxSize = resource.MustParse("50Mi")
-		var logSeverity = operator.LogLevelError
+		logFileMaxSize := resource.MustParse("50Mi")
+		logSeverity := operator.LogLevelError
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -141,7 +140,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 						{
 							CIDR:          "fd00::0/64",
-							Encapsulation: "None",
+							Encapsulation: "VXLAN",
 							NATOutgoing:   "Enabled",
 							NodeSelector:  "has(thiskey)",
 							BlockSize:     &oneTwoThree,
@@ -188,14 +187,14 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration (BPF)", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		var false_ = false
+		false_ := false
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10
-		var logFileMaxSize = resource.MustParse("50Mi")
-		var logSeverity = operator.LogLevelError
+		logFileMaxSize := resource.MustParse("50Mi")
+		logSeverity := operator.LogLevelError
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone

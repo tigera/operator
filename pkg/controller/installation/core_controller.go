@@ -610,7 +610,8 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 
 	// Default any fields on IP pools, if needed.
-	for _, pool := range instance.Spec.CalicoNetwork.IPPools {
+	for i := 0; i < len(instance.Spec.CalicoNetwork.IPPools); i++ {
+		pool := &instance.Spec.CalicoNetwork.IPPools[i]
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil && addr.To4() != nil {
 			// This is an IPv4 pool.
@@ -1941,10 +1942,9 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 		v4found := false
 		v6found := false
 
-		// Currently we only support a single IPv4 and a single IPv6 CIDR configured via the operator.
-		// So, grab the 1st IPv4 and IPv6 cidrs we find and use those. This will allow the
-		// operator to work in situations where there are more than one of each.
+		// For each platform CIDR, add it as an IP pool.
 		for _, c := range platformCIDRs {
+			log.Info("Adding IP pool for platform CIDR", "cidr", c)
 			addr, _, err := net.ParseCIDR(c)
 			if err != nil {
 				log.Error(err, "Failed to parse platform's pod network CIDR.")
@@ -1956,18 +1956,13 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 					continue
 				}
 				v6found = true
-				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
-					operator.IPPool{CIDR: c})
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
 			} else {
 				if v4found {
 					continue
 				}
 				v4found = true
-				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools,
-					operator.IPPool{CIDR: c})
-			}
-			if v6found && v4found {
-				break
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
 			}
 		}
 	} else if len(i.Spec.CalicoNetwork.IPPools) == 0 {

@@ -76,6 +76,8 @@ var _ = Describe("Installation validation tests", func() {
 
 	It("should allow IPv6 if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
+		enabled := operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{

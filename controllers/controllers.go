@@ -24,6 +24,13 @@ import (
 )
 
 func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
+	if err := (&IPPoolReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("IPPool"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "IPPool", err)
+	}
 	if err := (&InstallationReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Installation"),

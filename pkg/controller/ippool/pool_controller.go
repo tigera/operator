@@ -157,9 +157,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, p := range instance.Spec.CalicoNetwork.IPPools {
 		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool, p) {
 			// Create a new pool, or update an existing one.
-			res := p.ToProjectCalicoV1()
+			res, err := p.ToProjectCalicoV1()
+			if err != nil {
+				r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 			if apiAvailable {
-				toCreate = append(toCreate, v1ToV3(res))
+				v3res, err := v1ToV3(res)
+				if err != nil {
+					r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				toCreate = append(toCreate, v3res)
 			} else {
 				toCreate = append(toCreate, res)
 			}
@@ -185,7 +194,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			reqLogger.WithValues("cidr", cidr).Info("Pool needs to be deleted")
 			if apiAvailable {
 				// v3 API is available - send a delete request.
-				toDelete = append(toDelete, v1ToV3(&pool))
+				v3res, err := v1ToV3(&pool)
+				if err != nil {
+					r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				toDelete = append(toDelete, v3res)
 			} else {
 				// v3 API is not available. Just mark the pool as disabled so that new allocations
 				// don't come from this pool. We'll delete it once the API server is available.
@@ -286,16 +300,16 @@ func v1PoolToOperator(crd pcv1.IPPool) v1.IPPool {
 	return pool
 }
 
-func v1ToV3(v1pool *pcv1.IPPool) *v3.IPPool {
+func v1ToV3(v1pool *pcv1.IPPool) (*v3.IPPool, error) {
 	bs, err := json.Marshal(v1pool)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	v3pool := v3.IPPool{}
 	err = json.Unmarshal(bs, &v3pool)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return &v3pool
+	return &v3pool, nil
 }

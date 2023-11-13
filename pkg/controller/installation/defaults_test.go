@@ -143,7 +143,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						},
 						{
 							CIDR:          "fd00::0/64",
-							Encapsulation: "None",
+							Encapsulation: "VXLAN",
 							NATOutgoing:   "Enabled",
 							NodeSelector:  "has(thiskey)",
 							BlockSize:     &oneTwoThree,

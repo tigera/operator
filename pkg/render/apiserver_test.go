@@ -1483,7 +1483,7 @@ var (
 		{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers"},
-			Verbs:     []string{"get", "update", "patch", "create"},
+			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		{
 			APIGroups: []string{""},

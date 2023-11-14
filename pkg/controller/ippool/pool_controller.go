@@ -101,6 +101,17 @@ type Reconciler struct {
 	clusterDomain        string
 }
 
+// hasOwner returns true if the given IP pool is owned by the given Installation object, and
+// false otherwise.
+func hasOwner(pool *pcv1.IPPool, installation *operator.Installation) bool {
+	for _, o := range pool.OwnerReferences {
+		if o.Name == installation.Name && o.UID == installation.UID {
+			return true
+		}
+	}
+	return false
+}
+
 // Reconcile reconciles IP pools in the cluster.
 //
 // - Query desired IP pools (from Installation)
@@ -113,8 +124,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Get the Installation object - this is the source of truth for IP pools managed by
 	// this controller.
-	instance := &operator.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+	installation := &operator.Installation{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, installation); err != nil {
 		if apierrors.IsNotFound(err) {
 			reqLogger.Info("Installation config not found")
 			r.status.OnCRNotFound()
@@ -124,7 +135,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
-	defer r.status.SetMetaData(&instance.ObjectMeta)
+	defer r.status.SetMetaData(&installation.ObjectMeta)
 
 	// Get the APIServer. If healthy, we'll use the projectcalico.org/v3 API for managing pools.
 	// Otherwise, we'll use the internal v1 API for bootstrapping the cluster until the API server is available.
@@ -148,13 +159,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// This controller will ignore any IP pools that it itself did not create.
 	ourPools := map[string]pcv1.IPPool{}
 	for _, p := range currentPools.Items {
-		// TODO: Check if owned by this installation resource / controller.
-		ourPools[p.Spec.CIDR] = p
+		if hasOwner(&p, installation) {
+			// This pool is owned by the Installation object, so consider it ours.
+			ourPools[p.Spec.CIDR] = p
+		}
 	}
 
 	// For each pool that is desired, but doesn't exist, create it.
 	toCreate := []client.Object{}
-	for _, p := range instance.Spec.CalicoNetwork.IPPools {
+	for _, p := range installation.Spec.CalicoNetwork.IPPools {
 		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool, p) {
 			// Create a new pool, or update an existing one.
 			res, err := p.ToProjectCalicoV1()
@@ -181,7 +194,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for cidr, pool := range ourPools {
 		reqLogger.WithValues("cidr", cidr).Info("Checking if pool is still valid")
 		found := false
-		for _, p := range instance.Spec.CalicoNetwork.IPPools {
+		for _, p := range installation.Spec.CalicoNetwork.IPPools {
 			if p.CIDR == cidr {
 				found = true
 				break
@@ -216,7 +229,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// - Verify that the pool doesn't overlap with existing IPAM blocks.
 	// We should add this validation to productize this. Ideally, we'd go through the API server (and maybe we should at steady-state).
 	// We only need to use the crd.projectcalico.org API for bootstrapping.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, installation)
 
 	passThru := render.NewPassthrough(toCreate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {
@@ -243,8 +256,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Update status to include the full set of IP pools. This tells the core controller
 	// that it's good to start installing Calico.
-	instance.Status.IPPools = v1PoolsToOperator(currentPools.Items)
-	if err := r.client.Status().Update(ctx, instance); err != nil {
+	installation.Status.IPPools = v1PoolsToOperator(currentPools.Items)
+	if err := r.client.Status().Update(ctx, installation); err != nil {
 		r.status.SetDegraded(v1.ResourceUpdateError, fmt.Sprintf("Error updating Installation status %s", v1.TigeraStatusReady), err, reqLogger)
 		return reconcile.Result{}, err
 	}

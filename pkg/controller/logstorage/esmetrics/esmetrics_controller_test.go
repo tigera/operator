@@ -94,6 +94,9 @@ var _ = Describe("LogStorage Linseed controller", func() {
 		mockStatus.On("Run").Return()
 		mockStatus.On("AddDeployments", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
 
 		var err error
 		r, err = NewESMetricsControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)

@@ -647,11 +647,15 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			objectHasGeneration := objMeta.GetGeneration() != 0
 			generationChanged := e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
 
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
-				// No name or namespace match was specified. Match everything, assuming the generation has changed.
-				return generationChanged
+				// No name or namespace match was specified. Match everything, assuming the generation has changed for objects that have it.
+				if objectHasGeneration {
+					return generationChanged
+				}
+				return true
 			}
 
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
@@ -661,7 +665,11 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			// A name match was specified and the name matches, or this is just a namespace match.
 			// Assuming the generation has changed, return a match if the namespaces also match,
 			// or if no namespace was given to match against.
-			return generationChanged && (e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == "")
+			matched := e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
+			if objectHasGeneration {
+				return generationChanged && matched
+			}
+			return matched
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {

@@ -1750,7 +1750,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers"},
-			Verbs:     []string{"get", "update", "patch", "create"},
+			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		// Allow the user to read services to view WAF configuration.
 		{

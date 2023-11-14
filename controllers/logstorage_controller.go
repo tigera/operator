@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/controller/logstorage/esmetrics"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,6 +75,12 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 	// The elastic controller is responsible for installing the ECK operator an Elasticsearch CR into the cluster.
 	// It will also install Kibana if configured to do so. This controller only runs on management and standalone clusters.
 	if err := elastic.Add(mgr, opts); err != nil {
+		return err
+	}
+
+	// The ES metrics controller installs ES metrics into the cluster. It will only install ES metrics in a single-tenant
+	// management cluster.
+	if err := esmetrics.Add(mgr, opts); err != nil {
 		return err
 	}
 

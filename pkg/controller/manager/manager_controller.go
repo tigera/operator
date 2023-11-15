@@ -419,6 +419,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	} else if authenticationCR != nil && !r.multiTenant {
 		// A multi-tenant setup use TigeraOIDC and do not spin up Dex
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
+	} else if r.multiTenant && authenticationCR != nil && authenticationCR.Spec.OIDC != nil && authenticationCR.Spec.OIDC.Type != operatorv1.OIDCTypeTigera {
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, fmt.Sprintf("Authentication  of type %s is not supported for multi-tenancy", authenticationCR.Spec.OIDC.Type), nil, logc)
+		return reconcile.Result{}, nil
 	}
 
 	bundleMaker := certificateManager.CreateTrustedBundle()

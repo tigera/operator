@@ -492,6 +492,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ClusterDomain:                r.clusterDomain,
 		ESLicenseType:                esLicenseType,
 		ManagedCluster:               isManagedCluster,
+		ManagementCluster:            isManagementCluster,
 		HasNoLicense:                 hasNoLicense,
 		TrustedCertBundle:            trustedBundle,
 		IntrusionDetectionCertSecret: intrusionDetectionKeyPair,

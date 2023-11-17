@@ -1108,7 +1108,9 @@ var _ = Describe("Manager controller tests", func() {
 				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, managerTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+				bundleA, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, bundleA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
 				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
 				Expect(err).NotTo(HaveOccurred())
@@ -1116,7 +1118,9 @@ var _ = Describe("Manager controller tests", func() {
 				managerTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantBNamespace, []string{render.ManagerInternalTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, managerTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
+				bundleB, err := certificateManagerTenantB.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, bundleB.ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
 
 				err = c.Create(ctx, &operatorv1.Manager{
 					ObjectMeta: metav1.ObjectMeta{

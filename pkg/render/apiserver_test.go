@@ -1372,6 +1372,11 @@ var (
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
+		},
 	}
 	networkAdminPolicyRules = []rbacv1.PolicyRule{
 		{
@@ -1483,12 +1488,17 @@ var (
 		{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers"},
-			Verbs:     []string{"get", "update", "patch", "create"},
+			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
 		},
 	}
 )

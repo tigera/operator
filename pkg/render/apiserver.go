@@ -1603,6 +1603,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
@@ -1751,13 +1757,19 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers"},
-			Verbs:     []string{"get", "update", "patch", "create"},
+			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		// Allow the user to read services to view WAF configuration.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
 		},
 	}
 

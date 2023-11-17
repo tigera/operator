@@ -89,12 +89,17 @@ type CertificateManager interface {
 	// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 	// - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 	CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
+	// CreateMultiTenantTrustedBundleWithSystemRootCertificates is an alternative to CreateTrustedBundleWithSystemRootCertificates that is appropriate for
+	// multi-tenant management clusters.
+	CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
 	// AddToStatusManager lets the status manager monitor pending CSRs if the certificate management is enabled.
 	AddToStatusManager(manager status.StatusManager, namespace string)
 	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
 	KeyPair() certificatemanagement.KeyPairInterface
-	// Loads an existing trusted bundle to pass to render.
+	// LoadTrustedBundle loads an existing trusted bundle to pass to render.
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
+	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
+	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 }
 
 type Option func(cm *certificateManager) error
@@ -488,13 +493,33 @@ func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(cert
 	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
 }
 
+func (cm *certificateManager) CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
+	return certificatemanagement.CreateMultiTenantTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+}
+
 func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
+	return cm.loadTrustedBundle(ctx, client, ns, certificatemanagement.TrustedCertConfigMapName)
+}
+
+func (cm *certificateManager) LoadMultiTenantTrustedBundleWithRootCertificates(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
+	return cm.loadTrustedBundle(ctx, client, ns, certificatemanagement.TrustedCertConfigMapNamePublic)
+}
+
+func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client client.Client, ns string, name string) (certificatemanagement.TrustedBundleRO, error) {
+	// Get the ConfigMap containing the actual certificates.
 	obj := &corev1.ConfigMap{}
-	k := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: ns}
+	k := types.NamespacedName{Name: name, Namespace: ns}
 	if err := client.Get(ctx, k, obj); err != nil {
 		return nil, err
 	}
-	a := newReadOnlyTrustedBundle(cm, len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0)
+
+	// Create a new readOnlyTrustedBundle based on the given configuration.
+	includeSystemCerts := len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0
+	useMultiTenantName := name == certificatemanagement.TrustedCertConfigMapNamePublic
+	a := newReadOnlyTrustedBundle(cm, includeSystemCerts, useMultiTenantName)
+
+	// Augment it with annotations from the actual ConfigMap so that we inherit the hash annotations used to
+	// detect changes to the ConfigMap's contents.
 	for key, val := range obj.Annotations {
 		if strings.HasPrefix(key, "hash.operator.tigera.io/") {
 			a.annotations[key] = val
@@ -506,9 +531,13 @@ func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client clie
 // newReadOnlyTrustedBundle creates a new readOnlyTrustedBundle. If system is true, the bundle will include a system root certificate bundle.
 // TrustedBundleRO is useful for mounting a bundle of certificates to trust in a pod without the ability to modify the bundle, and allows
 // one controller to create the bundle and another to mount it.
-func newReadOnlyTrustedBundle(cm CertificateManager, system bool) *readOnlyTrustedBundle {
-	if system {
+func newReadOnlyTrustedBundle(cm CertificateManager, includeSystemCerts, multiTenant bool) *readOnlyTrustedBundle {
+	if includeSystemCerts {
 		bundle, _ := cm.CreateTrustedBundleWithSystemRootCertificates()
+		if multiTenant {
+			// For multi-tenant clusters, the system root certificate bundle uses a different name. Load it instead.
+			bundle, _ = cm.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+		}
 		return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: bundle}
 	}
 	return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: cm.CreateTrustedBundle()}

@@ -1063,8 +1063,6 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 	}
 
-	initContainer.Env = append(initContainer.Env, envVars...)
-
 	container := corev1.Container{
 		Name:            eksLogForwarderName,
 		Image:           c.image,

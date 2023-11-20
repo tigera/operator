@@ -107,6 +107,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady 
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
 		usePSP:         opts.UsePSP,
+		multiTenant:    opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -163,6 +164,7 @@ type ReconcileAuthentication struct {
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
 	usePSP         bool
+	multiTenant    bool
 }
 
 // Reconcile the cluster state with the Authentication object that is found in the cluster.
@@ -208,7 +210,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	updateAuthenticationWithDefaults(authentication)
 
 	// Validate the configuration
-	if err := validateAuthentication(authentication); err != nil {
+	if err := validateAuthentication(authentication, r.multiTenant); err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid Authentication provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -317,10 +319,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	disableDex := false
-	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == oprv1.OIDCTypeTigera {
-		disableDex = true
-	}
+	disableDex := utils.IsDexDisabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
 	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, r.clusterDomain)
@@ -407,7 +406,7 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 }
 
 // validateAuthentication makes sure that the authentication spec is ready for use.
-func validateAuthentication(authentication *oprv1.Authentication) error {
+func validateAuthentication(authentication *oprv1.Authentication, multiTenant bool) error {
 	oidc := authentication.Spec.OIDC
 	ldp := authentication.Spec.LDAP
 	// We support using only one connector at once.
@@ -430,6 +429,9 @@ func validateAuthentication(authentication *oprv1.Authentication) error {
 
 	// If the user has specified the deprecated and the new prefix field, but with different values, we cannot proceed.
 	if oidc != nil {
+		if multiTenant && authentication.Spec.OIDC.Type != oprv1.OIDCTypeTigera {
+			return fmt.Errorf("you set an unsupported authentication for multi-tenant, please set Authentication.Spec.OIDC.Type to Tigera")
+		}
 		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix != "" && authentication.Spec.OIDC.UsernamePrefix != authentication.Spec.UsernamePrefix {
 			return fmt.Errorf("you set username prefix twice, but with different values, please remove Authentication.Spec.OIDC.UsernamePrefix")
 		}

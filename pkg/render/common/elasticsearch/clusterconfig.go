@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,11 +19,9 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	"github.com/tigera/operator/pkg/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/tigera/operator/pkg/common"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -95,10 +93,6 @@ func (c ClusterConfig) Shards() int {
 
 func (c ClusterConfig) FlowShards() int {
 	return c.flowShards
-}
-
-func (c ClusterConfig) Annotation() string {
-	return rmeta.AnnotationHash(c)
 }
 
 func (c ClusterConfig) ConfigMap() *corev1.ConfigMap {

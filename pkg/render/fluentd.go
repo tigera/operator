@@ -1025,6 +1025,8 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		eksCloudwatchLogCredentialHashAnnotation: rmeta.AnnotationHash(c.cfg.EKSConfig),
 	}
 
+	esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.cfg.OSType, c.cfg.ClusterDomain, ElasticsearchNamespace))
+
 	envVars := []corev1.EnvVar{
 		// Meta flags.
 		{Name: "LOG_LEVEL", Value: "info"},
@@ -1040,9 +1042,37 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "AWS_REGION", Value: c.cfg.EKSConfig.AwsRegion},
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
+		relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ESClusterConfig.ClusterName()),
+		relasticsearch.ElasticUserEnvVar(ElasticsearchEksLogForwarderUserSecret),
+		relasticsearch.ElasticPasswordEnvVar(ElasticsearchEksLogForwarderUserSecret),
+		relasticsearch.ElasticSchemeEnvVar(esScheme),
+		relasticsearch.ElasticHostEnvVar(esHost),
+		relasticsearch.ElasticPortEnvVar(esPort),
+		relasticsearch.ElasticCAEnvVar(c.cfg.OSType),
 	}
 
 	var eksLogForwarderReplicas int32 = 1
+
+	initContainer := corev1.Container{
+		Name:            eksLogForwarderName + "-startup",
+		Image:           c.image,
+		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
+		Env:             envVars,
+		SecurityContext: c.securityContext(false),
+		VolumeMounts:    c.eksLogForwarderVolumeMounts(),
+	}
+
+	container := corev1.Container{
+		Name:            eksLogForwarderName,
+		Image:           c.image,
+		ImagePullPolicy: ImagePullPolicy(),
+		Env:             envVars,
+		SecurityContext: c.securityContext(false),
+		VolumeMounts:    c.eksLogForwarderVolumeMounts(),
+	}
+
+	container.Env = append(container.Env, envVars...)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -1076,23 +1106,12 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
-					InitContainers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
-						Name:            eksLogForwarderName + "-startup",
-						Image:           c.image,
-						ImagePullPolicy: ImagePullPolicy(),
-						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
-						Env:             envVars,
-						SecurityContext: c.securityContext(false),
-						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
-					Containers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
-						Name:            eksLogForwarderName,
-						Image:           c.image,
-						ImagePullPolicy: ImagePullPolicy(),
-						Env:             envVars,
-						SecurityContext: c.securityContext(false),
-						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
+					InitContainers: []corev1.Container{
+						initContainer,
+					},
+					Containers: []corev1.Container{
+						container,
+					},
 					Volumes: c.eksLogForwarderVolumes(),
 				},
 			},

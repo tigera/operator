@@ -17,6 +17,9 @@ package render_test
 import (
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/secret"
+
 	"github.com/tigera/operator/pkg/common"
 
 	. "github.com/onsi/ginkgo"
@@ -38,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -157,6 +159,12 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(2))
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchIntrusionDetectionUserSecret, "username", false)},
+			corev1.EnvVar{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchIntrusionDetectionUserSecret, "password", false)},
+			corev1.EnvVar{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			corev1.EnvVar{Name: "ELASTIC_SCHEME", Value: "https"},
+			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
 			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
 			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/intrusion-detection-tls/tls.crt"},
@@ -166,6 +174,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idji.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idji.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchIntrusionDetectionJobUserSecret, "username", false)},
+			corev1.EnvVar{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchIntrusionDetectionJobUserSecret, "password", false)},
 		))
 
 		Expect(*idji.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
@@ -600,7 +610,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 		}
-		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -618,7 +627,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
-		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

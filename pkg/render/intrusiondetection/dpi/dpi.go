@@ -17,6 +17,7 @@ package dpi
 import (
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -58,7 +58,6 @@ type DPIConfig struct {
 	ManagementCluster  bool
 	HasNoLicense       bool
 	HasNoDPIResource   bool
-	ESClusterConfig    *relasticsearch.ClusterConfig
 	ClusterDomain      string
 	DPICertSecret      certificatemanagement.KeyPairInterface
 }
@@ -93,12 +92,15 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	} else {
 		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	}
+
+	// This secret is deprecated in this namespace and should be removed in upgrade scenarios
+	toDelete = append(toDelete, &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
+	})
+
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		toDelete = append(toDelete, d.dpiAllowTigeraPolicy())
-		toDelete = append(toDelete, &corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
-		})
 		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toDelete = append(toDelete,
 			d.dpiServiceAccount(),

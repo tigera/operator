@@ -341,6 +341,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		Openshift:      r.provider == operatorv1.ProviderOpenShift,
 		UsePSP:         r.usePSP,
 		Namespace:      helper.InstallNamespace(),
+		Tenant:         tenant,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -399,7 +400,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 		policyRecommendationCfg.TrustedBundle = trustedBundle
 		policyRecommendationCfg.PolicyRecommendationCertSecret = policyRecommendationKeyPair
-		policyRecommendationCfg.Tenant = tenant
 
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

@@ -32,6 +32,20 @@ spec:
             type: object
           spec:
             properties:
+              elastic:
+                description: Elastic configures per-tenant ElasticSearch and Kibana
+                  parameters. This field is required for clusters using external ES.
+                properties:
+                  kibana_url:
+                    type: string
+                  mutualTLS:
+                    type: boolean
+                  url:
+                    type: string
+                required:
+                - mutualTLS
+                - url
+                type: object
               id:
                 description: ID is the unique identifier for this tenant.
                 type: string
@@ -68,6 +82,9 @@ spec:
                   - dataType
                   type: object
                 type: array
+              name:
+                description: Name is a human readable name for this tenant.
+                type: string
             required:
             - indices
             type: object

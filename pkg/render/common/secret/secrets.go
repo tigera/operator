@@ -30,6 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	IgnoreSecretDataAnnotation = "operator.tigera.io/ignore-secret-data"
+)
+
 // CreateTLSSecret Creates a new TLS secret with the information passed
 //
 //	ca: The ca to use for creating the Cert/Key pair. This is required.

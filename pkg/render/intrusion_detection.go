@@ -205,6 +205,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.globalAlertTemplates()...)
+	objs = append(objs, c.webhooksSecret())
 
 	var objsToDelete []client.Object
 
@@ -1474,5 +1475,22 @@ func (c *intrusionDetectionComponent) adDetectorAllowTigeraPolicy() *v3.NetworkP
 			Name:      ADDetectorPolicyName,
 			Namespace: IntrusionDetectionNamespace,
 		},
+	}
+}
+
+func (c *intrusionDetectionComponent) webhooksSecret() *corev1.Secret {
+	// This secret is created empty as a placeholder for user-supplied credentials for webhooks.
+	// As a result, we don't want the operator to keep the content of the secret in sync...
+	annotations := make(map[string]string)
+	annotations[secret.IgnoreSecretDataAnnotation] = "true"
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "webhooks-secret",
+			Namespace:   IntrusionDetectionNamespace,
+			Annotations: annotations,
+		},
+		Data: make(map[string][]byte),
+		Type: corev1.SecretTypeOpaque,
 	}
 }

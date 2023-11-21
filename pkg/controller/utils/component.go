@@ -157,6 +157,10 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 			}
 			return nil
 		case *v1.Secret:
+			if IgnoreSecretData(cur) {
+				logCtx.Info("Ignoring secret data of annotated object")
+				return nil
+			}
 			objSecret := obj.(*v1.Secret)
 			curSecret := cur.(*v1.Secret)
 			// Secret types are immutable, we need to delete the old version if the type has changed. If the

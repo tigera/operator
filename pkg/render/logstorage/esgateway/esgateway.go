@@ -120,6 +120,7 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
 
+	// The following secret is used by kube controllers and sent to managed clusters. It is also used by manifests in our docs.
 	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
 		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.Installation.CertificateManagement.CACert, elasticsearch.PublicCertSecret, e.cfg.TruthNamespace))
 	} else {

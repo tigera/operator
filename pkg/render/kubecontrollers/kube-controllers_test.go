@@ -54,6 +54,34 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cli          client.Client
 	)
 
+	esEnvs := []corev1.EnvVar{
+		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+		{Name: "ELASTIC_PORT", Value: "9200", ValueFrom: nil},
+		{
+			Name: "ELASTIC_USERNAME", Value: "",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "tigera-ee-kube-controllers-elasticsearch-access",
+					},
+					Key: "username",
+				},
+			},
+		},
+		{
+			Name: "ELASTIC_PASSWORD", Value: "",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "tigera-ee-kube-controllers-elasticsearch-access",
+					},
+					Key: "password",
+				},
+			},
+		},
+		{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+	}
+
 	expectedPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
 	expectedPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")
 	expectedPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed.json")
@@ -301,6 +329,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name: "ENABLED_CONTROLLERS", Value: "authorization,elasticsearchconfiguration",
 		}))
+		Expect(envs).To(ContainElements(esEnvs))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(1))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))

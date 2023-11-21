@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -42,9 +43,14 @@ func (r *ESKubeControllersController) createESGateway(
 	trustedBundle certificatemanagement.TrustedBundleRO,
 	usePSP bool,
 ) error {
-	// Get the ES admin user secret. This is provisioned by the ECK operator as part of installing Elasticsearch,
+	// Get the ES admin user secret. For internal ES, this is provisioned by the ECK operator as part of installing Elasticsearch,
 	// and so may not be immediately available.
-	esAdminUserSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
+	adminSecretNamespace := render.ElasticsearchNamespace
+	if r.elasticExternal {
+		// For external ES, we don't run ECK. Instead, this is provided to us by the cluster provisioner in the tigera-operator namespace.
+		adminSecretNamespace = common.OperatorNamespace()
+	}
+	esAdminUserSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, adminSecretNamespace)
 	if err != nil {
 		reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch admin user secret", err, reqLogger)

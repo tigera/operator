@@ -17,6 +17,8 @@ package esgateway
 import (
 	"context"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -93,6 +95,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: RoleName, Namespace: render.ElasticsearchNamespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: ServiceAccountName, Namespace: render.ElasticsearchNamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: DeploymentName, Namespace: render.ElasticsearchNamespace}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
 				&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-esgateway"}},
 			}
 			createResources, _ := EsGateway(cfg).Objects()
@@ -132,6 +135,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: RoleName, Namespace: render.ElasticsearchNamespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: ServiceAccountName, Namespace: render.ElasticsearchNamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: DeploymentName, Namespace: render.ElasticsearchNamespace}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
 				&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-esgateway"}},
 			}
 			createResources, _ := EsGateway(cfg).Objects()

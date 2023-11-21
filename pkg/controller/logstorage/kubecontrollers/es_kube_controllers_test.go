@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
@@ -291,6 +292,21 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 			Expect(cli.Delete(ctx, &esv1.Elasticsearch{
 				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
 			})).NotTo(HaveOccurred())
+
+			// Create ESGW admin secret. For External ES, this is provisioned by the cluster admin into the
+			// tigera-operator namespace.
+			esAdminUserSecret := &corev1.Secret{}
+			esAdminUserSecret.Name = render.ElasticsearchAdminUserSecret
+			esAdminUserSecret.Namespace = common.OperatorNamespace()
+			esAdminUserSecret.Data = map[string][]byte{"username": []byte("password")}
+			Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+			// Create a dummy secret mocking the client certificates needed for mTLS.
+			esClientSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()},
+				Data:       map[string][]byte{"client.crt": []byte("cert"), "client.key": []byte("key")},
+			}
+			Expect(cli.Create(ctx, esClientSecret)).ShouldNot(HaveOccurred())
 
 			// Update the reconciler to run in external ES mode for these tests.
 			r.elasticExternal = true

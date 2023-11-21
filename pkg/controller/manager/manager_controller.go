@@ -584,7 +584,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var elasticLicenseType render.ElasticsearchLicenseType
+	elasticLicenseType := render.ElasticsearchLicenseTypeBasic
 	if !r.elasticExternal && managementClusterConnection == nil {
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, logc)

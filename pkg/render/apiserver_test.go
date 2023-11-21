@@ -1377,6 +1377,11 @@ var (
 			Resources: []string{"felixconfigurations"},
 			Verbs:     []string{"get", "list"},
 		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list"},
+		},
 	}
 	networkAdminPolicyRules = []rbacv1.PolicyRule{
 		{
@@ -1499,6 +1504,11 @@ var (
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"felixconfigurations"},
 			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},
 	}
 )

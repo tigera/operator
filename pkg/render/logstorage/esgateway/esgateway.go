@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	"github.com/tigera/operator/pkg/ptr"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -32,7 +34,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -119,7 +120,6 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
 
-	// The following secret is used by kube controllers and sent to managed clusters. It is also used by manifests in our docs.
 	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
 		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.Installation.CertificateManagement.CACert, elasticsearch.PublicCertSecret, e.cfg.TruthNamespace))
 	} else {

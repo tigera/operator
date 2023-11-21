@@ -17,6 +17,8 @@ package esmetrics
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/url"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -209,6 +211,8 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 		annotations[e.cfg.ServerTLS.HashAnnotationKey()] = e.cfg.ServerTLS.HashAnnotationValue()
 	}
 
+	_, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(e.SupportedOSType(), e.cfg.ClusterDomain, render.ElasticsearchNamespace))
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -228,36 +232,38 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					ServiceAccountName: ElasticsearchMetricsName,
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
-						relasticsearch.ContainerDecorate(
-							corev1.Container{
-								Name:            ElasticsearchMetricsName,
-								Image:           e.esMetricsImage,
-								ImagePullPolicy: render.ImagePullPolicy(),
-								SecurityContext: securitycontext.NewNonRootContext(),
-								Command:         []string{"/bin/elasticsearch_exporter"},
-								Args: []string{
-									"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
-									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
-									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath),
-								},
-								VolumeMounts: append(
-									e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType()),
-									e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
-								),
-								Env: []corev1.EnvVar{
-									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
-								},
-							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
-							e.cfg.ClusterDomain, e.SupportedOSType(),
-						),
+						{
+							Name:            ElasticsearchMetricsName,
+							Image:           e.esMetricsImage,
+							ImagePullPolicy: render.ImagePullPolicy(),
+							SecurityContext: securitycontext.NewNonRootContext(),
+							Command:         []string{"/bin/elasticsearch_exporter"},
+							Args: []string{
+								"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
+								"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
+								"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
+								"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath),
+							},
+							VolumeMounts: append(
+								e.cfg.TrustedBundle.VolumeMounts(e.SupportedOSType()),
+								e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
+							),
+							Env: []corev1.EnvVar{
+								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
+								relasticsearch.ElasticUsernameEnvVar(ElasticsearchMetricsSecret),
+								relasticsearch.ElasticPasswordEnvVar(ElasticsearchMetricsSecret),
+								relasticsearch.ElasticHostEnvVar(esHost),
+								relasticsearch.ElasticPortEnvVar(esPort),
+								relasticsearch.ElasticCAEnvVar(e.SupportedOSType()),
+							},
+						},
 					},
 					Volumes: []corev1.Volume{
 						e.cfg.ServerTLS.Volume(),
 						e.cfg.TrustedBundle.Volume(),
 					},
 				},
-			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret}).(*corev1.PodTemplateSpec),
+			}, []*corev1.Secret{e.cfg.ESMetricsCredsSecret}).(*corev1.PodTemplateSpec),
 		},
 	}
 }

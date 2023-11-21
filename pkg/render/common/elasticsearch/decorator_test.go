@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,9 +43,9 @@ var _ = Describe("Elasticsearch decorator tests", func() {
 			}},
 		}
 	})
-	Context("relasticsearch.ContainerDecorate", func() {
+	Context("relasticsearch.DecorateEnvironment", func() {
 		DescribeTable("should decorate a container with the ES host and port", func(clusterDomain, expectedESHost string, os rmeta.OSType) {
-			c := ContainerDecorate(container, "test-cluster", "secret", clusterDomain, os)
+			c := DecorateEnvironment(container, "test-ns", "test-cluster", "secret", clusterDomain, os)
 
 			expectedEnvs := []corev1.EnvVar{
 				{Name: "ELASTIC_HOST", Value: expectedESHost},

@@ -36,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -87,7 +86,6 @@ var _ = Describe("compliance rendering tests", func() {
 			ReporterKeyPair:    reporterKP,
 			BenchmarkerKeyPair: benchmarkerKP,
 			SnapshotterKeyPair: snapshotterKP,
-			ESClusterConfig:    relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 			Openshift:          notOpenshift,
 			ClusterDomain:      clusterDomain,
 			TrustedBundle:      bundle,

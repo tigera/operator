@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"strings"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/url"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -33,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -529,15 +531,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	if c.kubeControllerName == EsKubeController {
-		container = relasticsearch.DecorateEnvironment(
-			container,
-			render.ElasticsearchNamespace,
-			render.DefaultElasticsearchClusterName,
-			ElasticsearchKubeControllersUserSecret,
-			c.cfg.ClusterDomain,
-			rmeta.OSTypeLinux,
-		)
+		_, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.ElasticsearchNamespace))
+		container.Env = append(container.Env, []corev1.EnvVar{
+			relasticsearch.ElasticHostEnvVar(esHost),
+			relasticsearch.ElasticPortEnvVar(esPort),
+			relasticsearch.ElasticUsernameEnvVar(ElasticsearchKubeControllersUserSecret),
+			relasticsearch.ElasticPasswordEnvVar(ElasticsearchKubeControllersUserSecret),
+			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
+		}...)
 	}
+
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace))

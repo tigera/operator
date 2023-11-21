@@ -55,23 +55,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	)
 
 	esEnvs := []corev1.EnvVar{
-		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
-		{Name: "ELASTIC_SCHEME", Value: "https"},
 		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 		{Name: "ELASTIC_PORT", Value: "9200", ValueFrom: nil},
-		{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
-		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-		{
-			Name: "ELASTIC_USER", Value: "",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "tigera-ee-kube-controllers-elasticsearch-access",
-					},
-					Key: "username",
-				},
-			},
-		},
 		{
 			Name: "ELASTIC_USERNAME", Value: "",
 			ValueFrom: &corev1.EnvVarSource{
@@ -95,9 +80,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		},
 		{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
-		{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
-		{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 	}
+
 	expectedPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
 	expectedPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")
 	expectedPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed.json")

@@ -29,7 +29,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
@@ -129,12 +128,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
 	if err = utils.AddSecretsWatchWithHandler(c, certificatemanagement.TenantCASecretName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
-	}
-	if err = utils.AddSecretsWatchWithHandler(c, relasticsearch.PublicCertSecret, helper.TruthNamespace(), eventHandler); err != nil {
-		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
-	}
-	if err = utils.AddSecretsWatchWithHandler(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
 	if err = utils.AddSecretsWatchWithHandler(c, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace(), &handler.EnqueueRequestForObject{}); err != nil {

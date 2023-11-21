@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/tigera/operator/pkg/render/common/secret"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -603,7 +605,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			BeforeEach(func() {
 				cfg.CuratorSecrets = []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
 				}
 				cfg.ClusterDomain = dns.DefaultClusterDomain
 			})
@@ -640,7 +641,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsCuratorPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -667,6 +667,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
 					{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(80)},
 					{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(70)},
+					{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchCuratorUserSecret, "username", false)},
+					{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchCuratorUserSecret, "password", false)},
+					{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+					{Name: "ELASTIC_PORT", Value: "9200"},
+					{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 				}))
 
 				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
@@ -1720,7 +1725,6 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 				},
 				CuratorSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
 				},
 				Provider:           operatorv1.ProviderNone,
 				ClusterDomain:      "cluster.local",

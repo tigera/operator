@@ -18,6 +18,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -34,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -158,6 +159,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			},
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
+		))
+
+		Expect(envs).ShouldNot(ContainElements(
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_SCHEME", Value: "https"},
+			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
+			corev1.EnvVar{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "username", false)},
+			corev1.EnvVar{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "password", false)},
+			corev1.EnvVar{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		))
 
 		container := ds.Spec.Template.Spec.Containers[0]
@@ -884,6 +895,15 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}))
 
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
+		Expect(envs).To(ContainElements([]corev1.EnvVar{
+			{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			{Name: "ELASTIC_SCHEME", Value: "https"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+			{Name: "ELASTIC_PORT", Value: "9200"},
+			{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "username", false)},
+			{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "password", false)},
+			{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+		}))
 	})
 
 	Context("allow-tigera rendering", func() {

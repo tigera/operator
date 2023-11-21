@@ -34,7 +34,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -105,7 +104,6 @@ func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 type ComplianceConfiguration struct {
 	ESSecrets                   []*corev1.Secret
 	Installation                *operatorv1.InstallationSpec
-	ESClusterConfig             *relasticsearch.ClusterConfig
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
 	ManagementCluster           *operatorv1.ManagementCluster

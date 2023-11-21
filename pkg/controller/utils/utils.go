@@ -53,6 +53,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -88,6 +89,14 @@ func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
 func IgnoreObject(obj runtime.Object) bool {
 	a := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetAnnotations()
 	if val, ok := a[unsupportedIgnoreAnnotation]; ok && val == "true" {
+		return true
+	}
+	return false
+}
+
+func IgnoreSecretData(obj runtime.Object) bool {
+	a := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetAnnotations()
+	if val, ok := a[secret.IgnoreSecretDataAnnotation]; ok && val == "true" {
 		return true
 	}
 	return false

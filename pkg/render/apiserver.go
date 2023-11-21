@@ -1771,6 +1771,17 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Resources: []string{"felixconfigurations"},
 			Verbs:     []string{"get", "list"},
 		},
+		// Allow the user to patch webhooks-secret secret.
+		{
+			APIGroups: []string{""},
+			Resources: []string{
+				"secrets",
+			},
+			ResourceNames: []string{
+				"webhooks-secret",
+			},
+			Verbs: []string{"patch"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.

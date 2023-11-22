@@ -56,11 +56,11 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.17.13",
+		Version: "7.17.14",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.17.13",
+		Version: "7.17.14",
 	}
 
 	ComponentElasticTseeInstaller = component{
@@ -178,7 +178,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version: "v2.32.0",
+		Version: "v2.47.0",
 	}
 
 	ComponentPrometheus = component{
@@ -192,7 +192,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = component{
-		Version: "v0.23.0",
+		Version: "v0.25.1",
 	}
 
 	ComponentPrometheusAlertmanager = component{

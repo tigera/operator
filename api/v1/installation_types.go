@@ -403,6 +403,12 @@ const (
 	WindowsDataplaneHNS      WindowsDataplaneOption = "HNS"
 )
 
+type Sysctl struct {
+	// +kubebuilder:validation:Enum=net.ipv4.tcp_keepalive_intvl;net.ipv4.tcp_keepalive_probes;net.ipv4.tcp_keepalive_time
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
@@ -463,6 +469,10 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
+
+	// Sysctl configures sysctl parameters for tuning plugin
+	// +optional
+	Sysctl []Sysctl `json:"sysctl,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

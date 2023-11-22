@@ -1483,6 +1483,23 @@ spec:
                           on interfaces that do not match the given regex.
                         type: string
                     type: object
+                  sysctl:
+                    description: Sysctl configures sysctl parameters for tuning plugin
+                    items:
+                      properties:
+                        key:
+                          enum:
+                          - net.ipv4.tcp_keepalive_intvl
+                          - net.ipv4.tcp_keepalive_probes
+                          - net.ipv4.tcp_keepalive_time
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - key
+                      - value
+                      type: object
+                    type: array
                   windowsDataplane:
                     description: 'WindowsDataplane is used to select the dataplane
                       used for Windows nodes. In particular, it causes the operator
@@ -10585,6 +10602,24 @@ spec:
                               on interfaces that do not match the given regex.
                             type: string
                         type: object
+                      sysctl:
+                        description: Sysctl configures sysctl parameters for tuning
+                          plugin
+                        items:
+                          properties:
+                            key:
+                              enum:
+                              - net.ipv4.tcp_keepalive_intvl
+                              - net.ipv4.tcp_keepalive_probes
+                              - net.ipv4.tcp_keepalive_time
+                              type: string
+                            value:
+                              type: string
+                          required:
+                          - key
+                          - value
+                          type: object
+                        type: array
                       windowsDataplane:
                         description: 'WindowsDataplane is used to select the dataplane
                           used for Windows nodes. In particular, it causes the operator

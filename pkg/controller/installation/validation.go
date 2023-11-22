@@ -28,6 +28,7 @@ import (
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 
@@ -335,6 +336,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
 				return fmt.Errorf("spec.calicoNetwork.containerIPForwarding is supported only for Calico CNI")
 			}
+		}
+
+		if instance.Spec.CalicoNetwork.Sysctl != nil {
+			// CNI tuning plugin
+			pluginData := instance.Spec.CalicoNetwork.Sysctl
+
+			if err := utils.VerifySysctl(pluginData); err != nil {
+				return err
+			}
+
 		}
 	}
 

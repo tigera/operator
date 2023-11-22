@@ -727,6 +727,8 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.Logging.CNI.LogFileMaxSize = new(resource.Quantity)
 			*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("100Mi")
 		}
+	} else {
+		instance.Spec.Logging = nil
 	}
 
 	// If not specified by the user, set the default control plane replicas to 2.

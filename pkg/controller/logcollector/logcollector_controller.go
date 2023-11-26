@@ -137,7 +137,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
+		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, render.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
@@ -396,6 +396,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// eksLogForwarderKeyPair is the key pair eks-log-forwarder presents to identify itself
+	eksLogForwarderKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{render.EKSLogForwarderTLSSecretName})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating eks log forwarder TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
@@ -543,22 +550,23 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LogCollector:         instance,
-		ESSecrets:            esSecrets,
-		ESClusterConfig:      esClusterConfig,
-		S3Credential:         s3Credential,
-		SplkCredential:       splunkCredential,
-		Filters:              filters,
-		EKSConfig:            eksConfig,
-		PullSecrets:          pullSecrets,
-		Installation:         installation,
-		ClusterDomain:        r.clusterDomain,
-		OSType:               rmeta.OSTypeLinux,
-		FluentdKeyPair:       fluentdKeyPair,
-		TrustedBundle:        trustedBundle,
-		ManagedCluster:       managedCluster,
-		UsePSP:               r.usePSP,
-		UseSyslogCertificate: useSyslogCertificate,
+		LogCollector:           instance,
+		ESSecrets:              esSecrets,
+		ESClusterConfig:        esClusterConfig,
+		S3Credential:           s3Credential,
+		SplkCredential:         splunkCredential,
+		Filters:                filters,
+		EKSConfig:              eksConfig,
+		PullSecrets:            pullSecrets,
+		Installation:           installation,
+		ClusterDomain:          r.clusterDomain,
+		OSType:                 rmeta.OSTypeLinux,
+		FluentdKeyPair:         fluentdKeyPair,
+		TrustedBundle:          trustedBundle,
+		ManagedCluster:         managedCluster,
+		UsePSP:                 r.usePSP,
+		UseSyslogCertificate:   useSyslogCertificate,
+		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -569,6 +577,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			ServiceAccounts: []string{render.FluentdNodeName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.LogCollectorNamespace,
+			ServiceAccounts: []string{render.EKSNodeName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -594,22 +610,23 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:         instance,
-			ESSecrets:            esSecrets,
-			ESClusterConfig:      esClusterConfig,
-			S3Credential:         s3Credential,
-			SplkCredential:       splunkCredential,
-			Filters:              filters,
-			EKSConfig:            eksConfig,
-			PullSecrets:          pullSecrets,
-			Installation:         installation,
-			ClusterDomain:        r.clusterDomain,
-			OSType:               rmeta.OSTypeWindows,
-			TrustedBundle:        trustedBundle,
-			ManagedCluster:       managedCluster,
-			UsePSP:               r.usePSP,
-			UseSyslogCertificate: useSyslogCertificate,
-			FluentdKeyPair:       fluentdKeyPair,
+			LogCollector:           instance,
+			ESSecrets:              esSecrets,
+			ESClusterConfig:        esClusterConfig,
+			S3Credential:           s3Credential,
+			SplkCredential:         splunkCredential,
+			Filters:                filters,
+			EKSConfig:              eksConfig,
+			PullSecrets:            pullSecrets,
+			Installation:           installation,
+			ClusterDomain:          r.clusterDomain,
+			OSType:                 rmeta.OSTypeWindows,
+			TrustedBundle:          trustedBundle,
+			ManagedCluster:         managedCluster,
+			UsePSP:                 r.usePSP,
+			UseSyslogCertificate:   useSyslogCertificate,
+			FluentdKeyPair:         fluentdKeyPair,
+			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

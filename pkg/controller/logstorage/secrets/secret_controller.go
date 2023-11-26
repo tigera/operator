@@ -473,6 +473,9 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.
 		render.FluentdPrometheusTLSSecretName: common.OperatorNamespace(),
 
+		// Get certificate for eks log forwarder, which Linseed needs to trust in a standalone or management cluster.
+		render.EKSLogForwarderTLSSecretName: common.OperatorNamespace(),
+
 		// Get certificate for intrusion detection controller, which Linseed needs to trust in a standalone or management cluster.
 		render.IntrusionDetectionTLSSecretName: common.OperatorNamespace(),
 

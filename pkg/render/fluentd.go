@@ -623,7 +623,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
 	// namespace. For multi-tenant management clusters, this may vary.
 	linseedNS := ElasticsearchNamespace
-	if c.cfg.Tenant != nil {
+	if c.cfg.Tenant.MultiTenant() {
 		linseedNS = c.cfg.Tenant.Namespace
 	}
 

@@ -600,6 +600,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			},
 			TrustedBundle: trustedBundle,
 		}),
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.LogCollectorNamespace,
+			ServiceAccounts: []string{render.EKSNodeName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
@@ -622,21 +630,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:         instance,
-			ESClusterConfig:      esClusterConfig,
-			S3Credential:         s3Credential,
-			SplkCredential:       splunkCredential,
-			Filters:              filters,
-			EKSConfig:            eksConfig,
-			PullSecrets:          pullSecrets,
-			Installation:         installation,
-			ClusterDomain:        r.clusterDomain,
-			OSType:               rmeta.OSTypeWindows,
-			TrustedBundle:        trustedBundle,
-			ManagedCluster:       managedCluster,
-			UsePSP:               r.usePSP,
-			UseSyslogCertificate: useSyslogCertificate,
-			FluentdKeyPair:       fluentdKeyPair,
+			LogCollector:           instance,
+			ESClusterConfig:        esClusterConfig,
+			S3Credential:           s3Credential,
+			SplkCredential:         splunkCredential,
+			Filters:                filters,
+			EKSConfig:              eksConfig,
+			PullSecrets:            pullSecrets,
+			Installation:           installation,
+			ClusterDomain:          r.clusterDomain,
+			OSType:                 rmeta.OSTypeWindows,
+			TrustedBundle:          trustedBundle,
+			ManagedCluster:         managedCluster,
+			UsePSP:                 r.usePSP,
+			UseSyslogCertificate:   useSyslogCertificate,
+			FluentdKeyPair:         fluentdKeyPair,
+			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

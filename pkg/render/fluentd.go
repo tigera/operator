@@ -94,6 +94,7 @@ const (
 	FluentdNodeName        = "fluentd-node"
 	fluentdNodeWindowsName = "fluentd-node-windows"
 
+	EKSNodeName                  = "eks-log-forwarder-node"
 	eksLogForwarderName          = "eks-log-forwarder"
 	EKSLogForwarderTLSSecretName = "tigera-eks-log-forwarder-tls"
 
@@ -1096,23 +1097,26 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
-					InitContainers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
-						Name:            eksLogForwarderName + "-startup",
-						Image:           c.image,
-						ImagePullPolicy: ImagePullPolicy(),
+					InitContainers: []corev1.Container{{
+						Name: eksLogForwarderName + "-startup",
+						//Image:           c.image,
+						Image:           "gcr.io/tigera-dev/vara/tigera/fluentd:latest_eks7",
+						ImagePullPolicy: corev1.PullAlways,
 						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:             envVars,
-						SecurityContext: c.securityContext(false),
+						SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
-					Containers: []corev1.Container{relasticsearch.ContainerDecorate(corev1.Container{
-						Name:            eksLogForwarderName,
-						Image:           c.image,
-						ImagePullPolicy: ImagePullPolicy(),
+					}},
+					Containers: []corev1.Container{{
+						Name: eksLogForwarderName,
+						//Image:           c.image,
+						//ImagePullPolicy: ImagePullPolicy(),
+						Image:           "gcr.io/tigera-dev/vara/tigera/fluentd:latest_eks7",
+						ImagePullPolicy: corev1.PullAlways,
 						Env:             envVars,
-						SecurityContext: c.securityContext(false),
+						SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
+					}},
 					Volumes: c.eksLogForwarderVolumes(),
 				},
 			},
@@ -1134,7 +1138,7 @@ func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volu
 func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 
 	volumeMounts := []corev1.VolumeMount{
-		relasticsearch.DefaultVolumeMount(c.cfg.OSType),
+		//relasticsearch.DefaultVolumeMount(c.cfg.OSType),
 		{
 			Name:      "plugin-statefile-dir",
 			MountPath: c.path("/fluentd/cloudwatch-logs/"),
@@ -1144,7 +1148,7 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 			MountPath: c.path("/etc/fluentd/elastic/"),
 		},
 	}
-
+	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	if c.cfg.EKSLogForwarderKeyPair != nil {
 		volumeMounts = append(volumeMounts, c.cfg.EKSLogForwarderKeyPair.VolumeMount(c.SupportedOSType()))
 	}

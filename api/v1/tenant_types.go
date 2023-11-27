@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -93,6 +93,20 @@ type Tenant struct {
 
 	Spec   TenantSpec   `json:"spec,omitempty"`
 	Status TenantStatus `json:"status,omitempty"`
+}
+
+// MultiTenant returns true if this management cluster is configured to support multiple tenants, and false otherwise.
+func (t *Tenant) MultiTenant() bool {
+	// In order to support multiple tenants, the tenant CR must not be nil, and it must be assigned to a namespace.
+	return t != nil && t.GetNamespace() != ""
+}
+
+// SingleTenant returns true if this management cluster is scoped to a single tenant, and false if this is
+// either a multi-tenant management cluster or a cluster with no tenancy enabled.
+func (t *Tenant) SingleTenant() bool {
+	// Single-tenant managmenet clusters still use a tenant CR but it is not assigned to a namespace, as
+	// only a single tenant can exist in the management cluster.
+	return t != nil && t.GetNamespace() == ""
 }
 
 // +kubebuilder:object:root=true

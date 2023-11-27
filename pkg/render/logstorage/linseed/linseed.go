@@ -207,7 +207,7 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if l.multiTenant() {
+	if l.cfg.Tenant.MultiTenant() {
 		// These rules are used by Linseed in a management cluster serving multiple tenants in order to appear to managed
 		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
 		// management cluster.
@@ -342,11 +342,11 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		)
 	}
 
-	if l.multiTenant() || l.singleTenant() {
+	if l.cfg.Tenant != nil {
 		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 
-		if l.multiTenant() {
+		if l.cfg.Tenant.MultiTenant() {
 			// For clusters shared between muliple tenants, we need to configure Linseed with the correct namespace information for its tenant.
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
@@ -508,7 +508,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(l.multiTenant(), l.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerEntityRule(),
 		})
 	}
 
@@ -545,7 +545,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.multiTenant(), l.cfg.Namespace).ManagerSourceEntityRule(),
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
@@ -630,15 +630,4 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
-}
-
-// multiTenant returns true if this management cluster is configured to support multiple tenants, and false otherwise.
-func (l *linseed) multiTenant() bool {
-	return l.cfg.Tenant != nil && l.cfg.Tenant.Namespace != ""
-}
-
-// singleTenant returns true if this management cluster is scoped to a single tenant, and false if this is
-// either a multi-tenant management cluster or a cluster with no tenancy enabled.
-func (l *linseed) singleTenant() bool {
-	return l.cfg.Tenant != nil && l.cfg.Tenant.Namespace == ""
 }

@@ -1511,10 +1511,15 @@ var (
 			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},
 		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"create"},
+		},
+		{
 			APIGroups:     []string{""},
 			Resources:     []string{"secrets"},
 			ResourceNames: []string{"webhooks-secret"},
-			Verbs:         []string{"create", "patch"},
+			Verbs:         []string{"patch"},
 		},
 	}
 )

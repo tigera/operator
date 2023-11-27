@@ -1783,7 +1783,15 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},
-		// Allow the user to create and patch webhooks-secret secret.
+		// Allow the user to create secrets.
+		{
+			APIGroups: []string{""},
+			Resources: []string{
+				"secrets",
+			},
+			Verbs: []string{"create"},
+		},
+		// Allow the user to patch webhooks-secret secret.
 		{
 			APIGroups: []string{""},
 			Resources: []string{
@@ -1792,7 +1800,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			ResourceNames: []string{
 				"webhooks-secret",
 			},
-			Verbs: []string{"create", "patch"},
+			Verbs: []string{"patch"},
 		},
 	}
 

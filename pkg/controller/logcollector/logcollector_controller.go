@@ -143,7 +143,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
+		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, render.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
@@ -532,6 +532,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	var eksConfig *render.EksCloudwatchLogConfig
 	var esClusterConfig *relasticsearch.ClusterConfig
+	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
 	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
@@ -555,6 +556,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving EKS Cloudwatch Logs configuration", err, reqLogger)
 					return reconcile.Result{}, err
 				}
+
+				// eksLogForwarderKeyPair is the key pair eks-log-forwarder presents to identify itself
+				eksLogForwarderKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{render.EKSLogForwarderTLSSecretName})
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating eks log forwarder TLS certificate", err, reqLogger)
+					return reconcile.Result{}, err
+				}
 			}
 		}
 	}
@@ -563,22 +571,23 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LogCollector:         instance,
-		ESClusterConfig:      esClusterConfig,
-		S3Credential:         s3Credential,
-		SplkCredential:       splunkCredential,
-		Filters:              filters,
-		EKSConfig:            eksConfig,
-		PullSecrets:          pullSecrets,
-		Installation:         installation,
-		ClusterDomain:        r.clusterDomain,
-		OSType:               rmeta.OSTypeLinux,
-		FluentdKeyPair:       fluentdKeyPair,
-		TrustedBundle:        trustedBundle,
-		ManagedCluster:       managedCluster,
-		UsePSP:               r.usePSP,
-		UseSyslogCertificate: useSyslogCertificate,
-		Tenant:               tenant,
+		LogCollector:           instance,
+		ESClusterConfig:        esClusterConfig,
+		S3Credential:           s3Credential,
+		SplkCredential:         splunkCredential,
+		Filters:                filters,
+		EKSConfig:              eksConfig,
+		PullSecrets:            pullSecrets,
+		Installation:           installation,
+		ClusterDomain:          r.clusterDomain,
+		OSType:                 rmeta.OSTypeLinux,
+		FluentdKeyPair:         fluentdKeyPair,
+		TrustedBundle:          trustedBundle,
+		ManagedCluster:         managedCluster,
+		UsePSP:                 r.usePSP,
+		UseSyslogCertificate:   useSyslogCertificate,
+		Tenant:                 tenant,
+		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -592,6 +601,23 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			},
 			TrustedBundle: trustedBundle,
 		}),
+	}
+
+	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+		if instance.Spec.AdditionalSources != nil {
+			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+				components = append(components,
+					rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+						Namespace:       render.LogCollectorNamespace,
+						ServiceAccounts: []string{render.EKSLogForwarderName},
+						KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+							rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true),
+						},
+						TrustedBundle: trustedBundle,
+					}),
+				)
+			}
+		}
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
@@ -614,21 +640,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:         instance,
-			ESClusterConfig:      esClusterConfig,
-			S3Credential:         s3Credential,
-			SplkCredential:       splunkCredential,
-			Filters:              filters,
-			EKSConfig:            eksConfig,
-			PullSecrets:          pullSecrets,
-			Installation:         installation,
-			ClusterDomain:        r.clusterDomain,
-			OSType:               rmeta.OSTypeWindows,
-			TrustedBundle:        trustedBundle,
-			ManagedCluster:       managedCluster,
-			UsePSP:               r.usePSP,
-			UseSyslogCertificate: useSyslogCertificate,
-			FluentdKeyPair:       fluentdKeyPair,
+			LogCollector:           instance,
+			ESClusterConfig:        esClusterConfig,
+			S3Credential:           s3Credential,
+			SplkCredential:         splunkCredential,
+			Filters:                filters,
+			EKSConfig:              eksConfig,
+			PullSecrets:            pullSecrets,
+			Installation:           installation,
+			ClusterDomain:          r.clusterDomain,
+			OSType:                 rmeta.OSTypeWindows,
+			TrustedBundle:          trustedBundle,
+			ManagedCluster:         managedCluster,
+			UsePSP:                 r.usePSP,
+			UseSyslogCertificate:   useSyslogCertificate,
+			FluentdKeyPair:         fluentdKeyPair,
+			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

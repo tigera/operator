@@ -58,6 +58,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
 		eksSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.FluentdConfiguration{
@@ -893,6 +894,33 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.crt"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.key"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"}))
+
+		// Adding test for Multi tenannt use case
+		// Create the Tenant object.
+		tenant := &operatorv1.Tenant{}
+		tenant.Name = "default"
+		tenant.Namespace = "tenant-namespace"
+		tenant.Spec.ID = "test-tenant-id"
+		cfg.Tenant = tenant
+
+		component = render.Fluentd(cfg)
+		resources, _ = component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		deploy = rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		envs = deploy.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tenant-namespace.svc"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "test-tenant-id"}))
+
+		cfg.Tenant = nil
+		cfg.ManagedCluster = true
+		component = render.Fluentd(cfg)
+		resources, _ = component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		deploy = rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		volumeMounts := deploy.Spec.Template.Spec.Containers[0].VolumeMounts
+		Expect(volumeMounts).To(ContainElement(corev1.VolumeMount{Name: "linseed-token", MountPath: "/var/run/secrets/tigera.io/linseed/"}))
 	})
 
 	Context("allow-tigera rendering", func() {

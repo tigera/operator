@@ -1055,8 +1055,8 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, linseedNS)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
-		{Name: "LINSEED_CLIENT_CERT", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath()},
-		{Name: "LINSEED_CLIENT_KEY", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},
+		{Name: "TLS_CRT_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath()},
+		{Name: "TLS_KEY_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
 	if c.cfg.Tenant != nil {
@@ -1098,23 +1098,20 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers: []corev1.Container{{
-						Name: eksLogForwarderName + "-startup",
-						//Image:           c.image,
-						Image:           "gcr.io/tigera-dev/vara/tigera/fluentd:latest_eks7",
-						ImagePullPolicy: corev1.PullAlways,
+						Name:            eksLogForwarderName + "-startup",
+						Image:           c.image,
+						ImagePullPolicy: ImagePullPolicy(),
 						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:             envVars,
-						SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
+						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}},
 					Containers: []corev1.Container{{
-						Name: eksLogForwarderName,
-						//Image:           c.image,
-						//ImagePullPolicy: ImagePullPolicy(),
-						Image:           "gcr.io/tigera-dev/vara/tigera/fluentd:latest_eks7",
-						ImagePullPolicy: corev1.PullAlways,
+						Name:            eksLogForwarderName,
+						Image:           c.image,
+						ImagePullPolicy: ImagePullPolicy(),
 						Env:             envVars,
-						SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
+						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}},
 					Volumes: c.eksLogForwarderVolumes(),
@@ -1138,7 +1135,6 @@ func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volu
 func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 
 	volumeMounts := []corev1.VolumeMount{
-		//relasticsearch.DefaultVolumeMount(c.cfg.OSType),
 		{
 			Name:      "plugin-statefile-dir",
 			MountPath: c.path("/fluentd/cloudwatch-logs/"),
@@ -1177,6 +1173,7 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 	if c.cfg.EKSLogForwarderKeyPair != nil {
 		volumes = append(volumes, c.cfg.EKSLogForwarderKeyPair.Volume())
 	}
+
 	if c.cfg.ManagedCluster {
 		volumes = append(volumes,
 			corev1.Volume{
@@ -1221,14 +1218,23 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 
 func (c *fluentdComponent) eksLogForwarderClusterRole(usePSP bool) *rbacv1.ClusterRole {
 
-	rules := []rbacv1.PolicyRule{{
-		// Add read access to Linseed APIs.
-		APIGroups: []string{"linseed.tigera.io"},
-		Resources: []string{
-			"auditlogs",
+	rules := []rbacv1.PolicyRule{
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"auditlogs",
+			},
+			Verbs: []string{"get"},
 		},
-		Verbs: []string{"get"},
-	}}
+		{
+			// Add write access to Linseed APIs to flush eks kube audit logs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"kube_auditlogs",
+			},
+			Verbs: []string{"create"},
+		}}
 
 	if usePSP {
 		rules = append(rules, rbacv1.PolicyRule{

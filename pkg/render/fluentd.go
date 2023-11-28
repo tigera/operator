@@ -104,8 +104,7 @@ const (
 	FluentdNodeName        = "fluentd-node"
 	fluentdNodeWindowsName = "fluentd-node-windows"
 
-	EKSNodeName                  = "eks-log-forwarder-node"
-	eksLogForwarderName          = "eks-log-forwarder"
+	EKSLogForwarderName          = "eks-log-forwarder"
 	EKSLogForwarderTLSSecretName = "tigera-eks-log-forwarder-tls"
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
@@ -117,7 +116,7 @@ var FluentdSourceEntityRule = v3.EntityRule{
 	Selector:          networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
 }
 
-var EKSLogForwarderEntityRule = networkpolicy.CreateSourceEntityRule(LogCollectorNamespace, eksLogForwarderName)
+var EKSLogForwarderEntityRule = networkpolicy.CreateSourceEntityRule(LogCollectorNamespace, EKSLogForwarderName)
 
 // Register secret/certs that need Server and Client Key usage
 func init() {
@@ -186,6 +185,7 @@ type FluentdConfiguration struct {
 	// Whether to use User provided certificate or not.
 	UseSyslogCertificate bool
 
+	// EKSLogForwarderKeyPair contains the certificate presented by EKS LogForwarder when communicating with Linseed
 	EKSLogForwarderKeyPair certificatemanagement.KeyPairInterface
 }
 
@@ -1021,7 +1021,7 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: eksLogForwarderName, Namespace: LogCollectorNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: EKSLogForwarderName, Namespace: LogCollectorNamespace},
 	}
 }
 
@@ -1082,10 +1082,10 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      eksLogForwarderName,
+			Name:      EKSLogForwarderName,
 			Namespace: LogCollectorNamespace,
 			Labels: map[string]string{
-				"k8s-app": eksLogForwarderName,
+				"k8s-app": EKSLogForwarderName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -1095,24 +1095,24 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": eksLogForwarderName,
+					"k8s-app": EKSLogForwarderName,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      eksLogForwarderName,
+					Name:      EKSLogForwarderName,
 					Namespace: LogCollectorNamespace,
 					Labels: map[string]string{
-						"k8s-app": eksLogForwarderName,
+						"k8s-app": EKSLogForwarderName,
 					},
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
 					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
-					ServiceAccountName: eksLogForwarderName,
+					ServiceAccountName: EKSLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers: []corev1.Container{{
-						Name:            eksLogForwarderName + "-startup",
+						Name:            EKSLogForwarderName + "-startup",
 						Image:           c.image,
 						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:             envVars,
@@ -1120,7 +1120,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
 					}},
 					Containers: []corev1.Container{{
-						Name:            eksLogForwarderName,
+						Name:            EKSLogForwarderName,
 						Image:           c.image,
 						Env:             envVars,
 						SecurityContext: c.securityContext(false),
@@ -1192,7 +1192,7 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 				Name: LinseedTokenVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: fmt.Sprintf(LinseedTokenSecret, eksLogForwarderName),
+						SecretName: fmt.Sprintf(LinseedTokenSecret, EKSLogForwarderName),
 						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
 					},
 				},
@@ -1202,7 +1202,7 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 }
 
 func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy(eksLogForwarderName)
+	psp := podsecuritypolicy.NewBasePolicy(EKSLogForwarderName)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }
@@ -1211,17 +1211,17 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: eksLogForwarderName,
+			Name: EKSLogForwarderName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     eksLogForwarderName,
+			Name:     EKSLogForwarderName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      eksLogForwarderName,
+				Name:      EKSLogForwarderName,
 				Namespace: LogCollectorNamespace,
 			},
 		},
@@ -1255,14 +1255,14 @@ func (c *fluentdComponent) eksLogForwarderClusterRole(usePSP bool) *rbacv1.Clust
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{eksLogForwarderName},
+			ResourceNames: []string{EKSLogForwarderName},
 		})
 	}
 
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: eksLogForwarderName,
+			Name: EKSLogForwarderName,
 		},
 		Rules: rules,
 	}

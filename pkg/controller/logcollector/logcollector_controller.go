@@ -389,13 +389,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// eksLogForwarderKeyPair is the key pair eks-log-forwarder presents to identify itself
-	eksLogForwarderKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{render.EKSLogForwarderTLSSecretName})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating eks log forwarder TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
@@ -539,6 +532,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	var eksConfig *render.EksCloudwatchLogConfig
 	var esClusterConfig *relasticsearch.ClusterConfig
+	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
 	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
@@ -560,6 +554,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix)
 				if err != nil {
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving EKS Cloudwatch Logs configuration", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+
+				// eksLogForwarderKeyPair is the key pair eks-log-forwarder presents to identify itself
+				eksLogForwarderKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{render.EKSLogForwarderTLSSecretName})
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating eks log forwarder TLS certificate", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			}
@@ -600,14 +601,23 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			},
 			TrustedBundle: trustedBundle,
 		}),
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.LogCollectorNamespace,
-			ServiceAccounts: []string{render.EKSNodeName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
+	}
+
+	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+		if instance.Spec.AdditionalSources != nil {
+			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+				components = append(components,
+					rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+						Namespace:       render.LogCollectorNamespace,
+						ServiceAccounts: []string{render.EKSLogForwarderName},
+						KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+							rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true),
+						},
+						TrustedBundle: trustedBundle,
+					}),
+				)
+			}
+		}
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {

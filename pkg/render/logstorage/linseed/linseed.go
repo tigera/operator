@@ -207,7 +207,10 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if l.cfg.Tenant != nil {
+	if l.cfg.Tenant.MultiTenant() {
+		// These rules are used by Linseed in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
 		rules = append(rules, []rbacv1.PolicyRule{
 			{
 				APIGroups:     []string{""},
@@ -342,11 +345,17 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	if l.cfg.Tenant != nil {
 		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
-		envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
-		for _, index := range l.cfg.Tenant.Spec.Indices {
-			envVars = append(envVars, index.EnvVar())
+
+		if l.cfg.Tenant.MultiTenant() {
+			// For clusters shared between muliple tenants, we need to configure Linseed with the correct namespace information for its tenant.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
+
+			// We also use shared indices for multi-tenant clusters.
+			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
+			for _, index := range l.cfg.Tenant.Spec.Indices {
+				envVars = append(envVars, index.EnvVar())
+			}
 		}
 	}
 
@@ -499,7 +508,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerEntityRule(),
 		})
 	}
 
@@ -536,7 +545,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerSourceEntityRule(),
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

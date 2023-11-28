@@ -2681,6 +2681,93 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 			})
 
+			It("should render cni config with sysctl parameters", func() {
+				sysctl := []operatorv1.Sysctl{
+					{
+						Key:   "net.ipv4.tcp_keepalive_intvl",
+						Value: "15",
+					}, {
+						Key:   "net.ipv4.tcp_keepalive_probes",
+						Value: "6",
+					},
+					{
+						Key:   "net.ipv4.tcp_keepalive_time",
+						Value: "40",
+					},
+				}
+				defaultInstance.CalicoNetwork.Sysctl = sysctl
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+				// Should render the correct resources.
+				cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+				Expect(cniCmResource).ToNot(BeNil())
+				cniCm := cniCmResource.(*corev1.ConfigMap)
+				Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "container_settings": {
+        "allow_ip_forwarding": false
+      },
+      "datastore_type": "kubernetes",
+        "ipam": {
+          "assign_ipv4":  "%t",
+          "assign_ipv6":  "%t",
+          "type": "calico-ipam"
+      },
+      "kubernetes": {
+        "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      },
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
+      "log_file_max_size": 1,
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_level": "Debug",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "policy": {
+        "type": "k8s"
+      },
+      "type": "calico"
+    },
+    {
+      "capabilities": {
+        "bandwidth": true
+      },
+      "type": "bandwidth"
+    },
+    {
+      "capabilities": {
+        "portMappings": true
+      },
+      "snat": true,
+      "type": "portmap"
+    },
+    {
+      "sysctl": [
+		  {
+			"key": "net.ipv4.tcp_keepalive_intvl",
+			"value": "15"
+		  },
+		  {
+			"key": "net.ipv4.tcp_keepalive_probes",
+			"value": "6"
+		  },
+		  {
+			"key": "net.ipv4.tcp_keepalive_time",
+		    "value": "40"
+		  }
+		],
+      "type": "tuning"
+	}
+  ]
+  }`, enableIPv4, enableIPv6)))
+			})
+
 			It("should render a proper 'allow_ip_forwarding' container setting in the cni config", func() {
 				cif := operatorv1.ContainerIPForwardingEnabled
 				defaultInstance.CalicoNetwork.ContainerIPForwarding = &cif

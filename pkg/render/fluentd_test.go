@@ -61,6 +61,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+		eksSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.FluentdConfiguration{
 			LogCollector:  &operatorv1.LogCollector{},
@@ -69,9 +70,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
-			FluentdKeyPair: metricsSecret,
-			TrustedBundle:  certificateManager.CreateTrustedBundle(),
-			UsePSP:         true,
+			FluentdKeyPair:         metricsSecret,
+			EKSLogForwarderKeyPair: eksSecret,
+			TrustedBundle:          certificateManager.CreateTrustedBundle(),
+			UsePSP:                 true,
 		}
 	})
 
@@ -1015,6 +1017,13 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}))
 
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
+
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENABLED", Value: "true"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.crt"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.key"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"}))
 	})
 
 	Context("allow-tigera rendering", func() {

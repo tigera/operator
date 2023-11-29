@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -76,6 +78,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
@@ -1119,6 +1122,128 @@ var _ = Describe("Component handler tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-secret"}, secret)).NotTo(HaveOccurred())
 		Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
+	})
+
+	It("recreates a RoleBinding if roleRef changes", func() {
+		// In a real cluster we get an error if we attempt to update an existing RoleBinding's RoleRef field because
+		// it is immutable. We can't properly check that update isn't called here because the fake client we use
+		// doesn't contain validation logic like that, so it will happily perform an update that would be rejected in
+		// a real cluster. As an indirect way to check that we're running our code that performs a delete/create instead
+		// of an update, we check the resource version of the RoleBinding after the create. If it's 1, we know it was
+		// deleted and recreated
+		rbOldRoleRef := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-rolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "old-roleref",
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				rbOldRoleRef,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-rolebinding"}, rbOldRoleRef)).NotTo(HaveOccurred())
+		Expect(rbOldRoleRef.RoleRef.Name).To(Equal("old-roleref"))
+
+		// Now pretend we're the new operator version, wanting to change the name of the roleRef.
+		rbNewRoleRef := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-rolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "new-roleref",
+			},
+		}
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				rbNewRoleRef,
+			},
+		}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-rolebinding"}, rbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(rbNewRoleRef.RoleRef.Name).To(Equal("new-roleref"))
+
+		// The fake client resets the resource version to 1 on create.
+		Expect(rbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("1"),
+			"Expected recreation of RoleBinding to reset resourceVersion to 1")
+
+		// Finally, make a normal change, this should result in an update rather than a delete/create
+		rbNewRoleRef.Labels = map[string]string{"new": "should-be-added"}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-rolebinding"}, rbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(rbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("2"),
+			"Expected update of RoleBinding to rev resourceversion to 2")
+	})
+
+	It("recreates a ClusterRoleBinding if roleRef changes", func() {
+		// In a real cluster we get an error if we attempt to update an existing ClusterRoleBinding's RoleRef field because
+		// it is immutable. We can't properly check that update isn't called here because the fake client we use
+		// doesn't contain validation logic like that, so it will happily perform an update that would be rejected in
+		// a real cluster. As an indirect way to check that we're running our code that performs a delete/create instead
+		// of an update, we check the resource version of the ClusterRoleBinding after the create. If it's 1, we know it was
+		// deleted and recreated
+		crbOldRoleRef := &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-clusterrolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "old-roleref",
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				crbOldRoleRef,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbOldRoleRef)).NotTo(HaveOccurred())
+		Expect(crbOldRoleRef.RoleRef.Name).To(Equal("old-roleref"))
+
+		// Now pretend we're the new operator version, wanting to change the name of the roleRef.
+		crbNewRoleRef := &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-clusterrolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "new-roleref",
+			},
+		}
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				crbNewRoleRef,
+			},
+		}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(crbNewRoleRef.RoleRef.Name).To(Equal("new-roleref"))
+
+		// The fake client resets the resource version to 1 on create.
+		Expect(crbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("1"),
+			"Expected recreation of ClusterRoleBinding to reset resourceVersion to 1")
+
+		// Finally, make a normal change, this should result in an update rather than a delete/create
+		crbNewRoleRef.Labels = map[string]string{"new": "should-be-added"}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(crbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("2"),
+			"Expected update of ClusterRoleBinding to rev resourceversion to 2")
 	})
 
 	Context("liveness and readiness probes", func() {

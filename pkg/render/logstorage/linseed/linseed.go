@@ -196,7 +196,10 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			// TODO: Move to namespaced role in multi-tenant.
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
-			Verbs:     []string{"list", "watch"},
+			// // The Authentication Proxy in Voltron checks if Linseed (either using impersonation headers for
+			// tigera-linseed service in tigera-elasticsearch namespace or the actual account in a single tenant
+			// setup) can get a managed clusters before sending the request down the tunnel
+			Verbs: []string{"list", "watch", "get"},
 		},
 		// These permissions are necessary to allow the management cluster to monitor secrets that we want to propagate
 		// through to the managed cluster for identity verification such as the Voltron Linseed public certificate

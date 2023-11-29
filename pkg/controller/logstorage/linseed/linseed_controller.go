@@ -411,6 +411,12 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+	if tenant != nil {
+		// In a multi-tenant setup we want to create a cluster role that binds using service account
+		// tigera-linseed from tigera-elasticsearch namespace. The service account from the tenant
+		// namespace will impersonate service tigera-linseed from tigera-elasticsearch
+		bindNamespaces = append(bindNamespaces, "tigera-elasticsearch")
+	}
 
 	cfg := &linseed.Config{
 		Installation:        install,

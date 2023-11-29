@@ -216,6 +216,24 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				}
 				return nil
 			}
+		case *rbacv1.ClusterRoleBinding:
+			curClusterRoleBinding := cur.(*rbacv1.ClusterRoleBinding)
+			objClusterRoleBinding := obj.(*rbacv1.ClusterRoleBinding)
+			if objClusterRoleBinding.RoleRef.Name != curClusterRoleBinding.RoleRef.Name {
+				// RoleRef field of ClusterRoleBinding can't be modified, so delete and recreate the entire ClusterRoleBinding
+				if err = c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to delete ClusterRoleBinding for recreation.")
+					return err
+				}
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err = c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to recreate ClusterRoleBinding")
+					return err
+				}
+				return nil
+			}
 		}
 		if err := c.client.Update(ctx, mobj); err != nil {
 			logCtx.WithValues("key", key).Info("Failed to update object.")

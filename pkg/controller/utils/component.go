@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"sync"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
@@ -192,6 +194,42 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				resetMetadataForCreate(mobj)
 				if err := c.client.Create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate service.", "obj", obj)
+					return err
+				}
+				return nil
+			}
+		case *rbacv1.RoleBinding:
+			curRoleBinding := cur.(*rbacv1.RoleBinding)
+			objRoleBinding := obj.(*rbacv1.RoleBinding)
+			if objRoleBinding.RoleRef.Name != curRoleBinding.RoleRef.Name {
+				// RoleRef field of RoleBinding can't be modified, so delete and recreate the entire RoleBinding
+				if err = c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to delete RoleBinding for recreation.")
+					return err
+				}
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err = c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to recreate RoleBinding")
+					return err
+				}
+				return nil
+			}
+		case *rbacv1.ClusterRoleBinding:
+			curClusterRoleBinding := cur.(*rbacv1.ClusterRoleBinding)
+			objClusterRoleBinding := obj.(*rbacv1.ClusterRoleBinding)
+			if objClusterRoleBinding.RoleRef.Name != curClusterRoleBinding.RoleRef.Name {
+				// RoleRef field of ClusterRoleBinding can't be modified, so delete and recreate the entire ClusterRoleBinding
+				if err = c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to delete ClusterRoleBinding for recreation.")
+					return err
+				}
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err = c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to recreate ClusterRoleBinding")
 					return err
 				}
 				return nil

@@ -58,6 +58,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
 		eksSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.FluentdConfiguration{
@@ -918,7 +919,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		deploy = rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		envs = deploy.Spec.Template.Spec.Containers[0].Env
 		volumeMounts := deploy.Spec.Template.Spec.Containers[0].VolumeMounts
 		Expect(volumeMounts).To(ContainElement(corev1.VolumeMount{Name: "linseed-token", MountPath: "/var/run/secrets/tigera.io/linseed/"}))
 	})

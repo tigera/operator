@@ -49,14 +49,15 @@ import (
 )
 
 const (
-	DeploymentName        = "tigera-linseed"
-	ServiceAccountName    = "tigera-linseed"
-	PodSecurityPolicyName = "tigera-linseed"
-	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
-	PortName              = "tigera-linseed"
-	TargetPort            = 8444
-	Port                  = 443
-	ClusterRoleName       = "tigera-linseed"
+	DeploymentName                                  = "tigera-linseed"
+	ServiceAccountName                              = "tigera-linseed"
+	PodSecurityPolicyName                           = "tigera-linseed"
+	PolicyName                                      = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
+	PortName                                        = "tigera-linseed"
+	TargetPort                                      = 8444
+	Port                                            = 443
+	ClusterRoleName                                 = "tigera-linseed"
+	MultiTenantManagedClustersAccessClusterRoleName = "tigera-linseed-managed-cluster-access"
 )
 
 func Linseed(c *Config) render.Component {
@@ -147,6 +148,9 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
 	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
+	if l.cfg.Tenant != nil {
+		toCreate = append(toCreate, l.multiTenantManagedClustersAccess()...)
+	}
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.UsePSP {
@@ -236,6 +240,50 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 
 func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
 	return rcomponents.ClusterRoleBinding(ClusterRoleName, ClusterRoleName, ServiceAccountName, namespaces)
+}
+
+func (l *linseed) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					// The Authentication Proxy in Voltron checks if Linseed (either using impersonation headers for
+					// tigera-linseed service in tigera-elasticsearch namespace or the actual account in a single tenant
+					// setup) can get a managed clusters before sending the request down the tunnel
+					"get",
+				},
+			},
+		},
+	})
+
+	// In a single tenant setup we want to create a cluster role that binds using service account
+	// tigera-linseed from tigera-elasticsearch namespace. In a multi-tenant setup Linseed from the tenant's
+	// namespace impersonates service tigera-linseed from tigera-elasticsearch namespace
+	objects = append(objects, &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			// requests for Linseed to managed clusters are done using service account tigera-linseed
+			// from tigera-elasticsearch namespace regardless of tenancy mode (single tenant or multi-tenant)
+			{
+				Kind:      "ServiceAccount",
+				Name:      ServiceAccountName,
+				Namespace: render.ElasticsearchNamespace,
+			},
+		},
+	})
+
+	return objects
 }
 
 func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {

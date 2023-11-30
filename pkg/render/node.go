@@ -50,7 +50,6 @@ const (
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
 	bgpBindModeHashAnnotation         = "hash.operator.tigera.io/bgp-bind-mode"
-	CSRLabelCalicoSystem              = "calico-system"
 	BGPLayoutConfigMapName            = "bgp-layout"
 	BGPLayoutConfigMapKey             = "earlyNetworkConfiguration"
 	BGPLayoutVolumeName               = "bgp-layout"

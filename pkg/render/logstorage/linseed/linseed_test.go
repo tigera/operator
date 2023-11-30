@@ -367,6 +367,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       "tenant-test-tenant",
 				Tenant:          tenant,
+				BindNamespaces:  []string{tenant.Namespace, "tigera-elasticsearch"},
 			}
 		})
 
@@ -394,6 +395,33 @@ var _ = Describe("Linseed rendering tests", func() {
 				},
 			}
 			Expect(cr.Rules).To(ContainElements(expectedRules))
+		})
+
+		It("should render managed cluster permissions as part of tigera-linseed-managed-clusters-acess ClusterRole", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			cr := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs: []string{
+						"get",
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
+			rb := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(rb.RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rb.RoleRef.Name).To(Equal(MultiTenantManagedClustersAccessClusterRoleName))
+			Expect(rb.Subjects).To(ContainElements([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ServiceAccountName,
+					Namespace: "tigera-elasticsearch",
+				},
+			}))
 		})
 
 		It("should render multi-tenant environment variables", func() {

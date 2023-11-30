@@ -143,7 +143,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			},
 		})).NotTo(HaveOccurred())
 
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 

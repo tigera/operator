@@ -1,0 +1,290 @@
+package csr
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
+	"encoding/pem"
+	"net"
+	"sync"
+
+	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/monitor"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/dns"
+	certificatesv1 "k8s.io/api/certificates/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	certfake "k8s.io/client-go/kubernetes/typed/certificates/v1/fake"
+	"k8s.io/client-go/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+var _ = Describe("CSR controller tests", func() {
+	var cli client.Client
+	var ctx context.Context
+	var r ReconcileCSR
+	var scheme *runtime.Scheme
+	var mockStatus *status.MockStatus
+	var installation *operatorv1.Installation
+	var certClient certfake.FakeCertificatesV1
+	var certificateManager certificatemanager.CertificateManager
+	var err error
+
+	Context("csr reconciliation", func() {
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(certificatesv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			// Create a client that will have a crud interface of k8s objects.
+			cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+			ctx = context.Background()
+			installation = &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
+			}
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+			certificateManager, err = certificatemanager.Create(cli, &installation.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+			certClient = certfake.FakeCertificatesV1{
+				Fake: &testing.Fake{
+					RWMutex:            sync.RWMutex{},
+					ReactionChain:      nil,
+					WatchReactionChain: nil,
+					ProxyReactionChain: nil,
+					Resources:          nil,
+				},
+			}
+
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+			r = ReconcileCSR{
+				client:             cli,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				clusterDomain:      dns.DefaultClusterDomain,
+				certificatesClient: &certClient,
+				allowedTLSAssets:   allowedAssets(dns.DefaultClusterDomain),
+			}
+			// Create the pod that is requesting a CSR.
+			Expect(cli.Create(ctx, &corev1.Pod{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "prometheus-tigera-prometheus-0",
+					Namespace: "tigera-prometheus",
+					Labels: map[string]string{
+						"k8s-app": "tigera-prometheus",
+					},
+				},
+				Spec: corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					PodIP: "1.2.3.4",
+				},
+			})).NotTo(HaveOccurred())
+		})
+
+		It("should reconcile the CSR controller", func() {
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+
+		It("should reconcile a submitted CSR", func() {
+			csr := newCSR(newX509CertificateRequest())
+			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
+			certClient.AddReactor("update", "certificatesigningrequests", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
+				updateAction, ok := action.(testing.UpdateAction)
+				Expect(ok).To(BeTrue())
+				Expect(updateAction.GetSubresource()).To(BeElementOf("approval", "status"))
+				csr, ok := updateAction.GetObject().(*certificatesv1.CertificateSigningRequest)
+				Expect(ok).To(BeTrue())
+				Expect(r.client.Update(ctx, csr)).NotTo(HaveOccurred())
+				return true, csr, nil
+			})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(r.client.Get(ctx, client.ObjectKey{Name: csr.Name}, csr)).NotTo(HaveOccurred())
+			Expect(csr.Status.Conditions).To(HaveLen(1))
+			Expect(csr.Status.Conditions[0].Type).To(Equal(certificatesv1.CertificateApproved))
+			Expect(csr.Status.Conditions[0].Status).To(Equal(corev1.ConditionTrue))
+			Expect(csr.Status.Certificate).ToNot(BeEmpty())
+		})
+		It("should reject a submitted CSR that does not pass validation", func() {
+			csr := newCSR(newX509CertificateRequest())
+			csr.Spec.Username = "attacker"
+			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
+			certClient.AddReactor("update", "certificatesigningrequests", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
+				updateAction, ok := action.(testing.UpdateAction)
+				Expect(ok).To(BeTrue())
+				Expect(updateAction.GetSubresource()).To(BeElementOf("approval", "status"))
+				csr, ok := updateAction.GetObject().(*certificatesv1.CertificateSigningRequest)
+				Expect(ok).To(BeTrue())
+				Expect(r.client.Update(ctx, csr)).NotTo(HaveOccurred())
+				return true, csr, nil
+			})
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(r.client.Get(ctx, client.ObjectKey{Name: csr.Name}, csr)).NotTo(HaveOccurred())
+			Expect(csr.Status.Conditions).To(HaveLen(1))
+			Expect(csr.Status.Conditions[0].Type).To(Equal(certificatesv1.CertificateDenied))
+			Expect(csr.Status.Conditions[0].Status).To(Equal(corev1.ConditionTrue))
+			Expect(csr.Status.Certificate).To(BeEmpty())
+		})
+	})
+
+	table.DescribeTable("csr validation", func(csrfunc func() *certificatesv1.CertificateSigningRequest, expectError bool) {
+		csr := csrfunc()
+		certificate, err := r.validate(ctx, csr)
+		if expectError {
+			Expect(err).To(HaveOccurred())
+		} else if relevantCSR(csr) {
+			Expect(err).ToNot(HaveOccurred())
+			Expect(certificate.ExtKeyUsage).To(Equal(extKeyUsage))
+			Expect(certificate.DNSNames).To(Equal(monitor.PrometheusTLSServerDNSNames(dns.DefaultClusterDomain)))
+			Expect(certificate.Subject.CommonName).To(Equal(monitor.PrometheusTLSServerDNSNames(dns.DefaultClusterDomain)[0]))
+			Expect(certificate.IPAddresses).To(Equal([]net.IP{net.ParseIP("1.2.3.4").To4()}))
+			Expect(certificate.IsCA).To(BeFalse())
+		}
+	},
+		table.Entry("valid CSR / happy flow", func() *certificatesv1.CertificateSigningRequest {
+			return newCSR(newX509CertificateRequest())
+		}, false),
+		table.Entry("unrecognized csr name", func() *certificatesv1.CertificateSigningRequest {
+			csr := newCSR(newX509CertificateRequest())
+			csr.Name = "fake"
+			return csr
+		},
+			true),
+		table.Entry("invalid requestor", func() *certificatesv1.CertificateSigningRequest {
+			csr := newCSR(newX509CertificateRequest())
+			csr.Spec.Username = "fake"
+			return csr
+		}, true),
+		table.Entry("invalid certificate request", func() *certificatesv1.CertificateSigningRequest {
+			csr := newCSR(newX509CertificateRequest())
+			csr.Spec.Request = []byte("fake")
+			return csr
+		}, true),
+		table.Entry("invalid certificate request public key", func() *certificatesv1.CertificateSigningRequest {
+			csr := newCSR(newX509CertificateRequest())
+			csr.Spec.Request = []byte("fake")
+			return csr
+		}, true),
+		table.Entry("previously denied csr", func() *certificatesv1.CertificateSigningRequest {
+			csr := newCSR(newX509CertificateRequest())
+			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
+				{
+					Type:   certificatesv1.CertificateDenied,
+					Status: corev1.ConditionTrue,
+				},
+			}
+			return csr
+		}, false),
+		table.Entry("previously failed csr", func() *certificatesv1.CertificateSigningRequest {
+			csr := newCSR(newX509CertificateRequest())
+			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
+				{
+					Type:   certificatesv1.CertificateFailed,
+					Status: corev1.ConditionTrue,
+				},
+			}
+			return csr
+		}, false),
+		table.Entry("bad DNS names in x509 certificate request", func() *certificatesv1.CertificateSigningRequest {
+			cr := newX509CertificateRequest()
+			cr.DNSNames = []string{"google.com"}
+			return newCSR(cr)
+		}, true),
+		table.Entry("bad CN in x509 certificate request", func() *certificatesv1.CertificateSigningRequest {
+			cr := newX509CertificateRequest()
+			cr.Subject.CommonName = "google.com"
+			return newCSR(cr)
+		}, true),
+		table.Entry("bad IP in x509 certificate request", func() *certificatesv1.CertificateSigningRequest {
+			cr := newX509CertificateRequest()
+			cr.IPAddresses = []net.IP{net.ParseIP("8.8.8.8")}
+			return newCSR(cr)
+		}, true),
+	)
+})
+
+func newX509CertificateRequest() *x509.CertificateRequest {
+	subj := pkix.Name{
+		CommonName: "prometheus-http-api",
+	}
+	extKeyUsages := []asn1.ObjectIdentifier{
+		// ExtKeyUsageServerAuth
+		{1, 3, 6, 1, 5, 5, 7, 3, 1},
+		// ExtKeyUsageClientAuth
+		{1, 3, 6, 1, 5, 5, 7, 3, 2},
+	}
+
+	extKeyUsagesVal, err := asn1.Marshal(extKeyUsages)
+	Expect(err).NotTo(HaveOccurred())
+	return &x509.CertificateRequest{
+		Subject:            subj,
+		DNSNames:           []string{"prometheus-http-api", "prometheus-http-api.tigera-prometheus", "prometheus-http-api.tigera-prometheus.svc", "prometheus-http-api.tigera-prometheus.svc.cluster.local"},
+		IPAddresses:        []net.IP{net.ParseIP("1.2.3.4")},
+		SignatureAlgorithm: x509.SHA256WithRSA,
+		ExtraExtensions: []pkix.Extension{
+			{
+				Id:    asn1.ObjectIdentifier{2, 5, 29, 37},
+				Value: extKeyUsagesVal,
+			},
+		},
+	}
+}
+
+func newCSR(cr *x509.CertificateRequest) *certificatesv1.CertificateSigningRequest {
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	Expect(err).NotTo(HaveOccurred())
+	buf := bytes.NewBuffer([]byte{})
+	err = pem.Encode(buf, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	Expect(err).NotTo(HaveOccurred())
+	certificateRequest, err := x509.CreateCertificateRequest(rand.Reader, cr, key)
+	Expect(err).NotTo(HaveOccurred())
+
+	csr := &certificatesv1.CertificateSigningRequest{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CertificateSigningRequest",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "calico-node-prometheus-tls:prometheus-tigera-prometheus-0",
+			Labels: map[string]string{
+				"k8s-app":                "tigera-prometheus",
+				"operator.tigera.io/csr": "tigera-prometheus",
+			},
+		},
+		Spec: certificatesv1.CertificateSigningRequestSpec{
+			Request: pem.EncodeToMemory(&pem.Block{
+				Type: "CERTIFICATE REQUEST", Bytes: certificateRequest,
+			}),
+			SignerName: "tigera.io/operator-signer",
+			Username:   "system:serviceaccount:tigera-prometheus:prometheus",
+		},
+		Status: certificatesv1.CertificateSigningRequestStatus{},
+	}
+
+	return csr
+}

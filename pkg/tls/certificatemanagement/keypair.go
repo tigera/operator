@@ -32,6 +32,7 @@ type KeyPair struct {
 	CSRImage       string
 	Name           string
 	Namespace      string
+	PrivateKey     any
 	PrivateKeyPEM  []byte
 	CertificatePEM []byte
 	ClusterDomain  string
@@ -131,6 +132,7 @@ func (k *KeyPair) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
 func (k *KeyPair) InitContainer(namespace string) corev1.Container {
 	initContainer := CreateCSRInitContainer(
 		k.CertificateManagement,
+		k.Name,
 		k.CSRImage,
 		k.GetName(),
 		k.DNSNames[0],

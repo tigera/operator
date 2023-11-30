@@ -14,6 +14,7 @@
 
 // tls package contains tls related helper functions related to generating and modifying certificates and private keys
 // used for tls.
+
 package tls
 
 import (
@@ -23,6 +24,8 @@ import (
 
 	"github.com/openshift/library-go/pkg/crypto"
 )
+
+const DefaultCertificateDuration = 825 * 24 * time.Hour
 
 func SetClientAuth(x *x509.Certificate) error {
 	if x.ExtKeyUsage == nil {

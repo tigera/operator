@@ -60,6 +60,9 @@ const (
 	// This is for development and testing purposes only. Do not use this annotation
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
+	// OperatorCSRSignerName when this value is set as a signer on a CSR, the CSR controller will handle
+	// the request.
+	OperatorCSRSignerName = "tigera.io/operator-signer"
 )
 
 var (

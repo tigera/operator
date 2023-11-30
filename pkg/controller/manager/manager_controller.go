@@ -387,7 +387,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Build a trusted bundle containing all of the certificates of components that communicate with the manager pod.
 	// This bundle contains the root CA used to sign all operator-generated certificates, as well as the explicitly named
 	// certificates, in case the user has provided their own cert in lieu of the default certificate.
-	var authenticationCR *operatorv1.Authentication
+
 	var trustedSecretNames []string
 	if !r.multiTenant {
 		// For multi-tenant systems, we don't support user-provided certs for all components. So, we don't need to include these,
@@ -408,19 +408,21 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			}
 			trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 		}
+	}
 
-		// Fetch the Authentication spec. If present, we use to configure user authentication.
-		authenticationCR, err = utils.GetAuthentication(ctx, r.client)
-		if err != nil && !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, logc)
-			return reconcile.Result{}, err
-		}
-		if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State), nil, logc)
-			return reconcile.Result{}, nil
-		} else if authenticationCR != nil {
-			trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
-		}
+	var authenticationCR *operatorv1.Authentication
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err = utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, logc)
+		return reconcile.Result{}, err
+	}
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State), nil, logc)
+		return reconcile.Result{}, nil
+	} else if authenticationCR != nil && !utils.IsDexDisabled(authenticationCR) {
+		// Do not include DEX TLS Secret Name is authentication CR does not have type Dex
+		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
 	bundleMaker := certificateManager.CreateTrustedBundle()
@@ -587,7 +589,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var elasticLicenseType render.ElasticsearchLicenseType
+	elasticLicenseType := render.ElasticsearchLicenseTypeBasic
 	if !r.elasticExternal && managementClusterConnection == nil {
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, logc)

@@ -353,7 +353,8 @@ var _ = Describe("Linseed rendering tests", func() {
 			}
 			tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-tenant",
+					Name:      "test-tenant",
+					Namespace: "test-tenant-ns",
 				},
 				Spec: operatorv1.TenantSpec{
 					ID: "test-tenant",
@@ -428,6 +429,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				Tenant:          tenant,
 				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
 				ElasticPort:     "9200",
+				BindNamespaces:  []string{tenant.Namespace, "tigera-elasticsearch"},
 			}
 		})
 
@@ -457,6 +459,33 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(cr.Rules).To(ContainElements(expectedRules))
 		})
 
+		It("should render managed cluster permissions as part of tigera-linseed-managed-clusters-acess ClusterRole", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			cr := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs: []string{
+						"get",
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
+			rb := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(rb.RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rb.RoleRef.Name).To(Equal(MultiTenantManagedClustersAccessClusterRoleName))
+			Expect(rb.Subjects).To(ContainElements([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ServiceAccountName,
+					Namespace: "tigera-elasticsearch",
+				},
+			}))
+		})
+
 		It("should render multi-tenant environment variables", func() {
 			cfg.ManagementCluster = true
 			component := Linseed(cfg)
@@ -481,6 +510,92 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_domain_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_ip_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
+		})
+	})
+
+	Context("single-tenant rendering", func() {
+		var installation *operatorv1.InstallationSpec
+		var tenant *operatorv1.Tenant
+		var replicas int32
+		var cfg *Config
+		clusterDomain := "cluster.local"
+		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
+
+		BeforeEach(func() {
+			replicas = 2
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
+			}
+			tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-tenant",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "test-tenant",
+				},
+			}
+			kp, tokenKP, bundle := getTLS(installation)
+			cfg = &Config{
+				Installation: installation,
+				PullSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
+				TrustedBundle:   bundle,
+				ClusterDomain:   clusterDomain,
+				ESClusterConfig: esClusterConfig,
+				Namespace:       "tenant-test-tenant",
+				Tenant:          tenant,
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
+			}
+		})
+
+		It("should NOT render impersonation permissions as part of tigera-linseed ClusterRole", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			cr := rtest.GetResource(resources, ClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{render.LinseedServiceName},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+					},
+				},
+			}
+			Expect(cr.Rules).NotTo(ContainElements(expectedRules))
+		})
+
+		It("should render single-tenant environment variables", func() {
+			cfg.ManagementCluster = true
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+
+			// These are only set for multi-tenant clusters. Make sure they aren't set here.
+			for _, env := range envs {
+				Expect(env.Name).NotTo(Equal("LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT"))
+				Expect(env.Name).NotTo(Equal("LINSEED_TENANT_NAMESPACE"))
+				Expect(env.Name).NotTo(Equal("BACKEND"))
+			}
 		})
 	})
 })

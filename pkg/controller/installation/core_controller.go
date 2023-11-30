@@ -1410,7 +1410,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// we can have the CreateOrUpdate logic handle this for us.
 	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
 	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
-	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)
+	certificateManager.AddToStatusManager(r.status, common.CalicoNamespace)
 
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.

@@ -89,13 +89,6 @@ DOCKER_CONFIG ?= $(HOME)/.docker/config.json
 escapefs = $(subst :,---,$(subst /,___,$(1)))
 unescapefs = $(subst ---,:,$(subst ___,/,$(1)))
 
-# these macros create a list of valid architectures for pushing manifests
-space :=
-space +=
-comma := ,
-prefix_linux = $(addprefix linux/,$(strip $1))
-join_platforms = $(subst $(space),$(comma),$(call prefix_linux,$(strip $1)))
-
 # Targets used when cross building.
 .PHONY: register
 # Enable binfmt adding support for miscellaneous binary formats.
@@ -122,7 +115,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.88
+GO_BUILD_VER?=v0.90
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -203,9 +196,8 @@ sub-push-%:
 
 push-manifests: imagetag  $(addprefix sub-manifest-,$(call escapefs,$(PUSH_MANIFEST_IMAGE_PREFIXES)))
 sub-manifest-%:
-	# Docker login to hub.docker.com required before running this target as we are using $(DOCKER_CONFIG) holds the docker login credentials
-	# path to credentials based on manifest-tool's requirements here https://github.com/estesp/manifest-tool#sample-usage
-	docker run -t --entrypoint /bin/sh -v $(DOCKER_CONFIG):/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(VALIDARCHES)) --template $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))-ARCH --target $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))"
+	docker manifest create $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG)) $(addprefix --amend ,$(addprefix $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))-,$(VALIDARCHES)))
+	docker manifest push --purge $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))
 
 ## push default amd64 arch where multi-arch manifest is not supported
 push-non-manifests: imagetag $(addprefix sub-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))

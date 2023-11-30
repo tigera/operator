@@ -116,6 +116,20 @@ func (t *Tenant) ElasticMTLS() bool {
 	return t != nil && t.Spec.Elastic != nil && t.Spec.Elastic.MutualTLS
 }
 
+// MultiTenant returns true if this management cluster is configured to support multiple tenants, and false otherwise.
+func (t *Tenant) MultiTenant() bool {
+	// In order to support multiple tenants, the tenant CR must not be nil, and it must be assigned to a namespace.
+	return t != nil && t.GetNamespace() != ""
+}
+
+// SingleTenant returns true if this management cluster is scoped to a single tenant, and false if this is
+// either a multi-tenant management cluster or a cluster with no tenancy enabled.
+func (t *Tenant) SingleTenant() bool {
+	// Single-tenant managmenet clusters still use a tenant CR but it is not assigned to a namespace, as
+	// only a single tenant can exist in the management cluster.
+	return t != nil && t.GetNamespace() == ""
+}
+
 // +kubebuilder:object:root=true
 
 // TenantList contains a list of Tenant

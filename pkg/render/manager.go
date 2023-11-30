@@ -392,7 +392,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 
 func (c *managerComponent) kibanaEnabled() bool {
 	enableKibana := !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode)
-	if c.cfg.Tenant != nil {
+	if c.cfg.Tenant.MultiTenant() {
 		enableKibana = false
 	}
 	return enableKibana
@@ -476,7 +476,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		linseedKeyPath, linseedCertPath = c.cfg.VoltronLinseedKeyPair.VolumeMountKeyFilePath(), c.cfg.VoltronLinseedKeyPair.VolumeMountCertificateFilePath()
 	}
 	defaultForwardServer := "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"
-	if c.cfg.Tenant != nil {
+	if c.cfg.Tenant.MultiTenant() {
 		// Use the local namespace instead of tigera-elasticsearch.
 		defaultForwardServer = fmt.Sprintf("tigera-secure-es-gateway-http.%s.svc:9200", c.cfg.Namespace)
 	}
@@ -528,9 +528,12 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 
 	if c.cfg.Tenant != nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Tenant.Namespace)})
+
+		if c.cfg.Tenant.MultiTenant() {
+			env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
+			env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Tenant.Namespace)})
+		}
 	}
 
 	return corev1.Container{
@@ -577,8 +580,13 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,
 	// in which case use the Linseed in the current namespace.
 	if c.cfg.Tenant != nil {
-		env = append(env, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Namespace)})
+		// A tenant was specified, ensur we set the tenant ID.
 		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+
+		if c.cfg.Tenant.MultiTenant() {
+			// This cluster supports multiple tenants. Point the manager at the correct Linseed instance for this tenant.
+			env = append(env, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Namespace)})
+		}
 	}
 
 	volumeMounts := append(
@@ -856,7 +864,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ManagerEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
@@ -867,13 +875,13 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).ESGatewayEntityRule(),
+			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(c.cfg.Tenant != nil, c.cfg.Namespace).LinseedEntityRule(),
+			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

@@ -836,3 +836,11 @@ func compareMap(m1, m2 map[string]string) bool {
 	}
 	return true
 }
+
+func IsDexDisabled(authentication *operatorv1.Authentication) bool {
+	disableDex := false
+	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
+		disableDex = true
+	}
+	return disableDex
+}

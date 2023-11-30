@@ -260,8 +260,11 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	}
 
 	if pr.cfg.Tenant != nil {
-		envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: pr.cfg.Tenant.Namespace})
 		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: pr.cfg.Tenant.Spec.ID})
+
+		if pr.cfg.Tenant.MultiTenant() {
+			envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: pr.cfg.Tenant.Namespace})
+		}
 	}
 
 	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())

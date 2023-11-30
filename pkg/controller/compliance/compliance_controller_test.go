@@ -229,7 +229,7 @@ var _ = Describe("Compliance controller tests", func() {
 		testCA := test.MakeTestCA("compliance-test")
 		newSecret, err := secret.CreateTLSSecret(testCA,
 			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, oldDNSNames...,
+			corev1.TLSCertKey, tls.DefaultCertificateDuration, nil, oldDNSNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -266,7 +266,7 @@ var _ = Describe("Compliance controller tests", func() {
 		dnsNames := append(expectedDNSNames, "compliance.example.com", "192.168.10.13")
 		newSecret, err := secret.CreateTLSSecret(nil,
 			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...,
+			corev1.TLSCertKey, tls.DefaultCertificateDuration, nil, dnsNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -299,7 +299,7 @@ var _ = Describe("Compliance controller tests", func() {
 		testCA := test.MakeTestCA("compliance-test")
 		complianceSecret, err := secret.CreateTLSSecret(testCA,
 			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
-			rmeta.DefaultCertificateDuration, nil, dnsNames...,
+			tls.DefaultCertificateDuration, nil, dnsNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, complianceSecret)).NotTo(HaveOccurred())

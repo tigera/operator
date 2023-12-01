@@ -421,9 +421,19 @@ var _ = Describe("Testing core-controller installation", func() {
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
 						},
+						IPPools: []operator.IPPool{
+							{
+								CIDR:          "192.168.0.0/16",
+								Encapsulation: "IPIP",
+								NATOutgoing:   "Enabled",
+								NodeSelector:  "all()",
+								BlockSize:     &twentySix,
+							},
+						},
 					},
 				})).NotTo(HaveOccurred())
 		})
+
 		AfterEach(func() {
 			cancel()
 		})
@@ -626,6 +636,15 @@ var _ = Describe("Testing core-controller installation", func() {
 			instance := &operator.Installation{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
 			instance.Status.CalicoVersion = "v3.14"
+			instance.Status.IPPools = []operator.IPPool{
+				{
+					CIDR:          "192.168.0.0/16",
+					Encapsulation: "IPIP",
+					NATOutgoing:   "Enabled",
+					NodeSelector:  "all()",
+					BlockSize:     &twentySix,
+				},
+			}
 			Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -795,6 +814,15 @@ var _ = Describe("Testing core-controller installation", func() {
 						// The test is provider agnostic.
 						KubernetesProvider: operator.ProviderNone,
 					},
+					IPPools: []operator.IPPool{
+						{
+							CIDR:          "192.168.0.0/16",
+							Encapsulation: "IPIP",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "all()",
+							BlockSize:     &twentySix,
+						},
+					},
 				},
 			}
 			// We start off with a 'standard' installation, with nothing special
@@ -817,6 +845,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		})
+
 		AfterEach(func() {
 			cancel()
 		})
@@ -984,6 +1013,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -991,6 +1021,17 @@ var _ = Describe("Testing core-controller installation", func() {
 					Variant:               operator.TigeraSecureEnterprise,
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
+				},
+				Status: operator.InstallationStatus{
+					IPPools: []operator.IPPool{
+						{
+							CIDR:          "192.168.0.0/16",
+							Encapsulation: "IPIP",
+							NATOutgoing:   "Enabled",
+							NodeSelector:  "all()",
+							BlockSize:     &twentySix,
+						},
+					},
 				},
 			}
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -1000,6 +1041,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		})
+
 		AfterEach(func() {
 			cancel()
 		})

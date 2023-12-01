@@ -458,7 +458,8 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
-	maxUnavailable := intstr.FromInt(1)
+	// It is not required that Fluentd runs at all times. It is able to catch up from temporary downtime.
+	maxUnavailable := intstr.FromString("100%")
 
 	annots := c.cfg.TrustedBundle.HashAnnotations()
 

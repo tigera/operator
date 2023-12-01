@@ -306,6 +306,11 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		c.fluentdClusterRole(),
 		c.fluentdClusterRoleBinding(),
 	)
+	if c.cfg.ManagedCluster {
+		objs = append(objs, c.externalLinseedRoleBinding())
+	} else {
+		toDelete = append(objs, c.externalLinseedRoleBinding())
+	}
 
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
@@ -318,6 +323,30 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.daemonset())
 
 	return objs, toDelete
+}
+
+func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
+	// in our namespace.
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: LogCollectorNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     TigeraLinseedSecretsClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
 }
 
 func (c *fluentdComponent) Ready() bool {

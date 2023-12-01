@@ -18,6 +18,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -161,6 +162,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			},
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
+		))
+
+		Expect(envs).ShouldNot(ContainElements(
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_SCHEME", Value: "https"},
+			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
+			corev1.EnvVar{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "username", false)},
+			corev1.EnvVar{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "password", false)},
+			corev1.EnvVar{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		))
 
 		container := ds.Spec.Template.Spec.Containers[0]
@@ -1014,7 +1025,38 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
+		expectedEnvVars := []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "info", ValueFrom: nil},
+			{Name: "FLUENT_UID", Value: "0", ValueFrom: nil},
+			{Name: "MANAGED_K8S", Value: "true", ValueFrom: nil},
+			{Name: "K8S_PLATFORM", Value: "eks", ValueFrom: nil},
+			{Name: "FLUENTD_ES_SECURE", Value: "true"},
+			{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: "dummy-eks-cluster-cloudwatch-log-group"},
+			{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: ""},
+			{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"},
+			{Name: "AWS_REGION", Value: "us-west-1", ValueFrom: nil},
+			{Name: "AWS_ACCESS_KEY_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-eks-log-forwarder-secret",
+						},
+						Key: "aws-id",
+					}},
+			},
+			{Name: "AWS_SECRET_ACCESS_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-eks-log-forwarder-secret",
+						},
+						Key:      "aws-key",
+						Optional: nil,
+					}},
+			},
+		}
+
+		Expect(envs).To(Equal(expectedEnvVars))
 	})
 
 	Context("allow-tigera rendering", func() {

@@ -169,23 +169,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 								},
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: "false"},
-									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
-									{Name: "ELASTIC_SCHEME", Value: "https"},
-									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
-									{Name: "ELASTIC_PORT", Value: "9200"},
-									{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
-									{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-									{
-										Name: "ELASTIC_USER",
-										ValueFrom: &corev1.EnvVarSource{
-											SecretKeyRef: &corev1.SecretKeySelector{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: "tigera-ee-elasticsearch-metrics-elasticsearch-access",
-												},
-												Key: "username",
-											},
-										},
-									},
 									{
 										Name: "ELASTIC_USERNAME",
 										ValueFrom: &corev1.EnvVarSource{
@@ -208,9 +191,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 											},
 										},
 									},
+									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+									{Name: "ELASTIC_PORT", Value: "9200"},
 									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
-									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
-									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: append(
 									cfg.TrustedBundle.VolumeMounts(meta.OSTypeLinux),

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
@@ -127,15 +126,6 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}, Status: operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ComplianceFeature}}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()},
-			Data: map[string]string{
-				"clusterName": "cluster",
-				"shards":      "2",
-				"replicas":    "1",
-				"flowShards":  "2",
-			},
-		})).NotTo(HaveOccurred())
 
 		// Create a bunch of empty secrets, such that the reconcile loop will make it to the render functionality.
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceBenchmarkerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
@@ -149,8 +139,6 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		esDNSNames := dns.GetServiceDNSNames(render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-		gwKeyPair, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esDNSNames)
-		Expect(err).NotTo(HaveOccurred())
 		linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -158,7 +146,6 @@ var _ = Describe("Compliance controller tests", func() {
 		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(c, render.VoltronLinseedPublicCert, common.OperatorNamespace(), esDNSNames)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(c.Create(ctx, gwKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 

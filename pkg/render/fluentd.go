@@ -297,7 +297,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
 		objs = append(objs,
-			c.eksLogForwarderClusterRole(c.cfg.UsePSP),
+			c.eksLogForwarderClusterRole(),
 			c.eksLogForwarderClusterRoleBinding())
 
 		if c.cfg.UsePSP {
@@ -1047,7 +1047,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
 	// namespace. For multi-tenant management clusters, this may vary.
 	linseedNS := ElasticsearchNamespace
-	if c.cfg.Tenant != nil {
+	if c.cfg.Tenant.MultiTenant() {
 		linseedNS = c.cfg.Tenant.Namespace
 	}
 
@@ -1228,7 +1228,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 	}
 }
 
-func (c *fluentdComponent) eksLogForwarderClusterRole(usePSP bool) *rbacv1.ClusterRole {
+func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 
 	rules := []rbacv1.PolicyRule{
 		{
@@ -1248,7 +1248,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRole(usePSP bool) *rbacv1.Clust
 			Verbs: []string{"create"},
 		}}
 
-	if usePSP {
+	if c.cfg.UsePSP {
 		rules = append(rules, rbacv1.PolicyRule{
 
 			// Allow access to the pod security policy in case this is enforced on the cluster

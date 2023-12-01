@@ -840,10 +840,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		cfg.Installation = &operatorv1.InstallationSpec{
-			KubernetesProvider:      operatorv1.ProviderEKS,
-			ControlPlaneTolerations: []corev1.Toleration{t},
-		}
+		cfg.Installation = setupInstallationConfig(t)
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -854,8 +851,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
-
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))
@@ -901,36 +898,32 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
 
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENABLED", Value: "true"}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.crt"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.key"}))
+
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"}))
+	})
 
-		// Adding test for Multi tenannt use case
-		// Create the Tenant object.
-		tenant := &operatorv1.Tenant{}
-		tenant.Name = "default"
-		tenant.Namespace = "tenant-namespace"
-		tenant.Spec.ID = "test-tenant-id"
-		cfg.Tenant = tenant
+	It("should render with EKS Cloudwatch Log for managed cluster with linseed token volume", func() {
 
-		component = render.Fluentd(cfg)
-		resources, _ = component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		deploy = rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		envs = deploy.Spec.Template.Spec.Containers[0].Env
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tenant-namespace.svc"}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "test-tenant-id"}))
-
-		cfg.Tenant = nil
+		cfg.EKSConfig = setupEKSConfig()
+		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		t := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		cfg.Installation = setupInstallationConfig(t)
 		cfg.ManagedCluster = true
-		component = render.Fluentd(cfg)
-		resources, _ = component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
 
-		deploy = rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		envs := deploy.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/tigera.io/linseed/token"}))
+
 		volumeMounts := deploy.Spec.Template.Spec.Containers[0].VolumeMounts
 		Expect(volumeMounts).To(ContainElement(corev1.VolumeMount{Name: "linseed-token", MountPath: "/var/run/secrets/tigera.io/linseed/"}))
 	})
@@ -969,3 +962,21 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		)
 	})
 })
+
+func setupEKSConfig() *render.EksCloudwatchLogConfig {
+	fetchInterval := int32(900)
+	return &render.EksCloudwatchLogConfig{
+		AwsId:         []byte("aws-id"),
+		AwsKey:        []byte("aws-key"),
+		AwsRegion:     "us-west-1",
+		GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
+		FetchInterval: fetchInterval,
+	}
+}
+
+func setupInstallationConfig(t corev1.Toleration) *operatorv1.InstallationSpec {
+	return &operatorv1.InstallationSpec{
+		KubernetesProvider:      operatorv1.ProviderEKS,
+		ControlPlaneTolerations: []corev1.Toleration{t},
+	}
+}

@@ -591,33 +591,28 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
-	components := []render.Component{
-		comp,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.LogCollectorNamespace,
-			ServiceAccounts: []string{render.FluentdNodeName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
+
+	certificateComponent := rcertificatemanagement.Config{
+		Namespace:       render.LogCollectorNamespace,
+		ServiceAccounts: []string{render.FluentdNodeName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
+		},
+		TrustedBundle: trustedBundle,
 	}
 
 	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
-				components = append(components,
-					rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-						Namespace:       render.LogCollectorNamespace,
-						ServiceAccounts: []string{render.EKSLogForwarderName},
-						KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-							rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true),
-						},
-						TrustedBundle: trustedBundle,
-					}),
-				)
+				certificateComponent.ServiceAccounts = append(certificateComponent.ServiceAccounts, render.EKSLogForwarderName)
+				certificateComponent.KeyPairOptions = append(certificateComponent.KeyPairOptions, rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true))
 			}
 		}
+	}
+
+	components := []render.Component{
+		comp,
+		rcertificatemanagement.CertificateManagement(&certificateComponent),
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {

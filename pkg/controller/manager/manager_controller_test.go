@@ -494,6 +494,7 @@ var _ = Describe("Manager controller tests", func() {
 					},
 				},
 			}
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
 			compliance = &operatorv1.Compliance{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -560,12 +561,6 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		Context("image reconciliation", func() {
-			BeforeEach(func() {
-				Expect(c.Create(
-					ctx,
-					installation,
-				)).NotTo(HaveOccurred())
-			})
 			It("should use builtin images", func() {
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 				_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -647,12 +642,6 @@ var _ = Describe("Manager controller tests", func() {
 		Context("allow-tigera reconciliation", func() {
 			var readyFlag *utils.ReadyFlag
 			BeforeEach(func() {
-
-				Expect(c.Create(
-					ctx,
-					installation,
-				)).NotTo(HaveOccurred())
-
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -680,13 +669,6 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		Context("compliance reconciliation", func() {
-			BeforeEach(func() {
-				Expect(c.Create(
-					ctx,
-					installation,
-				)).NotTo(HaveOccurred())
-			})
-
 			It("should degrade if license is not present", func() {
 				Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
 				mockStatus = &status.MockStatus{}
@@ -749,12 +731,6 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		Context("Reconcile for Condition status", func() {
-			BeforeEach(func() {
-				Expect(c.Create(
-					ctx,
-					installation,
-				)).NotTo(HaveOccurred())
-			})
 			generation := int64(2)
 			It("should reconcile with creating new status condition with one item", func() {
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -935,12 +911,6 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		Context("Multi-cluster reconciliation", func() {
-			BeforeEach(func() {
-				Expect(c.Create(
-					ctx,
-					installation,
-				)).NotTo(HaveOccurred())
-			})
 			It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
 				// Create the ManagementCluster CR needed to configure
 				// a management cluster for a multi-cluster setup
@@ -1069,10 +1039,6 @@ var _ = Describe("Manager controller tests", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
 			BeforeEach(func() {
-				Expect(c.Create(
-					ctx,
-					installation,
-				)).NotTo(HaveOccurred())
 				r.multiTenant = true
 			})
 
@@ -1216,10 +1182,10 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		Context("FIPS reconciliation", func() {
-			fipsEnabled := operatorv1.FIPSModeEnabled
 			BeforeEach(func() {
+				fipsEnabled := operatorv1.FIPSModeEnabled
 				installation.Spec.FIPSMode = &fipsEnabled
-				Expect(c.Create(
+				Expect(c.Update(
 					ctx,
 					installation,
 				)).NotTo(HaveOccurred())

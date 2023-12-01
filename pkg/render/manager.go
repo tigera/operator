@@ -390,9 +390,9 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 	}
 }
 
-func (c *managerComponent) kibanaEnabled() bool {
-	enableKibana := !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode)
-	if c.cfg.Tenant.MultiTenant() {
+func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
+	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
+	if tenant.MultiTenant() {
 		enableKibana = false
 	}
 	return enableKibana
@@ -412,7 +412,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(c.kibanaEnabled())},
+		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
 		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
 		// and the current license not enabling the feature. The compliance flag that we set on the manager container is a feature
 		// flag, which we should set purely based on whether the compliance CR is present, ignoring the license status.
@@ -561,11 +561,11 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!c.kibanaEnabled())},
+		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
 		{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", c.cfg.Namespace)},
 	}
 
-	if c.kibanaEnabled() {
+	if KibanaEnabled(c.cfg.Tenant, c.cfg.Installation) {
 		esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace))
 		env = append(env,
 			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),

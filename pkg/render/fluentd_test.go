@@ -894,16 +894,38 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
-		Expect(envs).To(ContainElements([]corev1.EnvVar{
-			{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
-			{Name: "ELASTIC_SCHEME", Value: "https"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
-			{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "username", false)},
-			{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource("tigera-eks-log-forwarder-elasticsearch-access", "password", false)},
-			{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
-		}))
+		expectedEnvVars := []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "info", ValueFrom: nil},
+			{Name: "FLUENT_UID", Value: "0", ValueFrom: nil},
+			{Name: "MANAGED_K8S", Value: "true", ValueFrom: nil},
+			{Name: "K8S_PLATFORM", Value: "eks", ValueFrom: nil},
+			{Name: "FLUENTD_ES_SECURE", Value: "true"},
+			{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: "dummy-eks-cluster-cloudwatch-log-group"},
+			{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: ""},
+			{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"},
+			{Name: "AWS_REGION", Value: "us-west-1", ValueFrom: nil},
+			{Name: "AWS_ACCESS_KEY_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-eks-log-forwarder-secret",
+						},
+						Key: "aws-id",
+					}},
+			},
+			{Name: "AWS_SECRET_ACCESS_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-eks-log-forwarder-secret",
+						},
+						Key:      "aws-key",
+						Optional: nil,
+					}},
+			},
+		}
+
+		Expect(envs).To(Equal(expectedEnvVars))
 	})
 
 	Context("allow-tigera rendering", func() {

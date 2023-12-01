@@ -26,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
@@ -1187,6 +1189,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		if prometheusClientCert != nil {
 			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
+		}
+
+		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
+		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
+		// all components within this namespace share a trusted CA bundle. This is necessary because prior to v3.13 secrets were not signed by
+		// a single CA so we need to include each individually.
+		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if esgwCertificate != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
 		}
 
 		calicoVersion = components.EnterpriseRelease

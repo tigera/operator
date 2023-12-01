@@ -461,9 +461,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var clusterConfig *relasticsearch.ClusterConfig
-	// We only require Elastic cluster configuration when Kibana is enabled. We infer whether Kibana is enabled by checking
-	// FIPS configuration mode and multi-tenancy mode. See manager.go function kibanaEnabled for more details.
-	if !r.multiTenant && !operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
+	// We only require Elastic cluster configuration when Kibana is enabled.
+	if render.KibanaEnabled(tenant, installation) {
 		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
 		if err != nil {
 			if errors.IsNotFound(err) {

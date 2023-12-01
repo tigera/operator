@@ -658,7 +658,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(ok).To(BeTrue())
 				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
 
-				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Env).To(ContainElements([]corev1.EnvVar{
+				cronjobExpectedEnvVars := []corev1.EnvVar{
 					{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
 					{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
 					{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
@@ -672,7 +672,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 					{Name: "ELASTIC_PORT", Value: "9200"},
 					{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
-				}))
+				}
+				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Env).To(Equal(cronjobExpectedEnvVars))
 
 				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 				Expect(*cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())

@@ -390,8 +390,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	if isManagedCluster {
 		if esClusterConfig.ClusterName() == render.DefaultElasticsearchClusterName {
+			msg := fmt.Sprintf("%s/%s ConfigMap must contain a 'clusterName' field that is not '%s'", common.OperatorNamespace(), relasticsearch.ClusterConfigConfigMapName, render.DefaultElasticsearchClusterName)
 			err = fmt.Errorf("Elasticsearch cluster name must be non-default value in managed clusters")
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "", err, reqLogger)
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, msg, err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -425,6 +426,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
 	linseedCertLocation := render.TigeraLinseedSecret
 	if isManagedCluster {
@@ -455,7 +466,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	// Intrusion detection controller sometimes needs to make requests to outside sources. Therefore, we include
 	// the system root certificate bundle.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(linseedCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(esgwCertificate, linseedCertificate)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err

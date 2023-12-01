@@ -309,7 +309,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.ManagedCluster {
 		objs = append(objs, c.externalLinseedRoleBinding())
 	} else {
-		toDelete = append(objs, c.externalLinseedRoleBinding())
+		toDelete = append(toDelete, c.externalLinseedRoleBinding())
 	}
 
 	// Windows PSP does not support allowedHostPaths yet.

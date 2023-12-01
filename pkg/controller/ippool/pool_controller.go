@@ -137,6 +137,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.OnCRFound()
 	defer r.status.SetMetaData(&installation.ObjectMeta)
 
+	if installation.Spec.CalicoNetwork == nil || len(installation.Spec.CalicoNetwork.IPPools) == 0 {
+		// No IP pool to manage (or defaulting hasn't ocurred yet) - nothing to do.
+		return reconcile.Result{}, nil
+	}
+
 	// Get the APIServer. If healthy, we'll use the projectcalico.org/v3 API for managing pools.
 	// Otherwise, we'll use the internal v1 API for bootstrapping the cluster until the API server is available.
 	// This controller will never delete pools using the v1 API, as deletion process is complex and only

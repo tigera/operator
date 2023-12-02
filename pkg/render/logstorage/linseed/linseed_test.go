@@ -511,6 +511,25 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_ip_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
 		})
+		It("should override replica with the value from TenantSpec's controlPlaneReplica when available", func() {
+			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
+			component := Linseed(cfg)
+
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
+		})
+
+		It("should render PodAffinity when TenantSpec ControlPlaneReplicas is greater than 1", func() {
+			installation.ControlPlaneReplicas = ptr.Int32ToPtr(1)
+			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
+			component := Linseed(cfg)
+
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Affinity).NotTo(BeNil())
+			Expect(d.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, "tenant-test-tenant")))
+		})
 	})
 
 	Context("single-tenant rendering", func() {

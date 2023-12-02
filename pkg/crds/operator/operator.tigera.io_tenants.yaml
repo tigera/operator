@@ -85,6 +85,12 @@ spec:
               name:
                 description: Name is a human readable name for this tenant.
                 type: string
+              controlPlaneReplicas:
+                description: ControlPlaneReplicas defines how many replicas of the
+                  control plane core components will be deployed in tenant namespace.
+                  Defaults to the controlPlaneReplicas in Installation CR.
+                format: int32
+                type: integer
             required:
             - indices
             type: object

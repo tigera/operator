@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/api/policy/v1beta1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -62,6 +63,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
+		eksSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.FluentdConfiguration{
 			LogCollector:  &operatorv1.LogCollector{},
 			ClusterDomain: dns.DefaultClusterDomain,
@@ -69,9 +72,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
-			FluentdKeyPair: metricsSecret,
-			TrustedBundle:  certificateManager.CreateTrustedBundle(),
-			UsePSP:         true,
+			FluentdKeyPair:         metricsSecret,
+			EKSLogForwarderKeyPair: eksSecret,
+			TrustedBundle:          certificateManager.CreateTrustedBundle(),
+			UsePSP:                 true,
 		}
 	})
 
@@ -917,104 +921,93 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with EKS Cloudwatch Log", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "eks-log-forwarder", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-eks-log-forwarder-secret", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
-			{name: "eks-log-forwarder", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			// Daemonset
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
-		}
-
-		fetchInterval := int32(900)
-		cfg.EKSConfig = &render.EksCloudwatchLogConfig{
-			AwsId:         []byte("aws-id"),
-			AwsKey:        []byte("aws-key"),
-			AwsRegion:     "us-west-1",
-			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
-			FetchInterval: fetchInterval,
-		}
+		expectedResources := getExpectedResourcesForEKS()
+		cfg.EKSConfig = setupEKSConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
 			Key:      "foo",
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		cfg.Installation = &operatorv1.InstallationSpec{
-			KubernetesProvider:      operatorv1.ProviderEKS,
-			ControlPlaneTolerations: []corev1.Toleration{t},
-		}
+		cfg.Installation = setupInstallationConfig(t)
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
-		i := 0
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
+		rtest.ExpectResources(resources, expectedResources)
+		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		assertExpectedResourcesForEKS(deploy, t, cfg)
+
+		// assert envs specific to this test case
+		envs := deploy.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"}))
+	})
+
+	It("should render with EKS Cloudwatch Log with multi tenant envvars", func() {
+
+		expectedResources := getExpectedResourcesForEKS()
+		cfg.EKSConfig = setupEKSConfig()
+		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		t := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
 		}
+		cfg.Installation = setupInstallationConfig(t)
+		// Create the Tenant object.
+		tenant := &operatorv1.Tenant{}
+		tenant.Name = "default"
+		tenant.Namespace = "tenant-namespace"
+		tenant.Spec.ID = "test-tenant-id"
+		cfg.Tenant = tenant
+
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		rtest.ExpectResources(resources, expectedResources)
 
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))
-		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElement(t))
-		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
-
+		assertExpectedResourcesForEKS(deploy, t, cfg)
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: cfg.EKSConfig.AwsRegion}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tenant-namespace.svc"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "test-tenant-id"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"}))
+	})
 
-		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Privileged).To(BeFalse())
-		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
-		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
-		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
-		Expect(deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-		))
-		Expect(deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}))
+	It("should render with EKS Cloudwatch Log for managed cluster with linseed token volume", func() {
 
-		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
-		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
-		Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
-		Expect(deploy.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-		))
-		Expect(deploy.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}))
+		expectedResources := getExpectedResourcesForEKS()
 
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
+		expectedResources = append(expectedResources,
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}})
+
+		cfg.EKSConfig = setupEKSConfig()
+		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		t := corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		cfg.Installation = setupInstallationConfig(t)
+		cfg.ManagedCluster = true
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		rtest.ExpectResources(resources, expectedResources)
+
+		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		assertExpectedResourcesForEKS(deploy, t, cfg)
+		envs := deploy.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/tigera.io/linseed/token"}))
+
+		volumeMounts := deploy.Spec.Template.Spec.Containers[0].VolumeMounts
+		Expect(volumeMounts).To(ContainElement(corev1.VolumeMount{Name: "linseed-token", MountPath: "/var/run/secrets/tigera.io/linseed/"}))
 	})
 
 	Context("allow-tigera rendering", func() {
@@ -1051,3 +1044,95 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		)
 	})
 })
+
+func setupEKSConfig() *render.EksCloudwatchLogConfig {
+	fetchInterval := int32(900)
+	return &render.EksCloudwatchLogConfig{
+		AwsId:         []byte("aws-id"),
+		AwsKey:        []byte("aws-key"),
+		AwsRegion:     "us-west-1",
+		GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
+		FetchInterval: fetchInterval,
+	}
+}
+
+func setupInstallationConfig(t corev1.Toleration) *operatorv1.InstallationSpec {
+	return &operatorv1.InstallationSpec{
+		KubernetesProvider:      operatorv1.ProviderEKS,
+		ControlPlaneTolerations: []corev1.Toleration{t},
+	}
+}
+
+func getExpectedResourcesForEKS() []client.Object {
+	return []client.Object{
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: "tigera-fluentd"}},
+		&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}},
+		&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: render.LogCollectorNamespace}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-eks-log-forwarder-secret", Namespace: render.LogCollectorNamespace}},
+		&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}},
+		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
+		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: render.LogCollectorNamespace}},
+	}
+}
+
+func assertExpectedResourcesForEKS(deploy *appsv1.Deployment, t corev1.Toleration, cfg *render.FluentdConfiguration) {
+	Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+	Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+	Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))
+	Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElement(t))
+	Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+	Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+	envs := deploy.Spec.Template.Spec.Containers[0].Env
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: cfg.EKSConfig.AwsRegion}))
+
+	Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Privileged).To(BeFalse())
+	Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+	Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+	Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+	Expect(deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Capabilities).To(Equal(
+		&corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	))
+	Expect(deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.SeccompProfile).To(Equal(
+		&corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		}))
+
+	Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+	Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+	Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+	Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+	Expect(deploy.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
+		&corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	))
+	Expect(deploy.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
+		&corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		}))
+
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"}))
+
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENABLED", Value: "true"}))
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"}))
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.crt"}))
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.key"}))
+
+}

@@ -103,7 +103,7 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v2.45.0
+    version: v2.47.0
   prometheus:
     image: tigera/prometheus
     version: v3.18.0-2.0

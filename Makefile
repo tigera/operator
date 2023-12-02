@@ -326,7 +326,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# Wait for controller manager to be running and healthy.
 	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
-IMAGE_REGISTRY := docker.io
+FV_IMAGE_REGISTRY := docker.io
 VERSION_TAG := master
 NODE_IMAGE := calico/node
 APISERVER_IMAGE := calico/apiserver
@@ -339,42 +339,42 @@ NODE_DRIVER_REGISTRAR_IMAGE := calico/node-driver-registrar
 
 .PHONY: calico-node.tar
 calico-node.tar:
-	docker pull $(IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(NODE_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-apiserver.tar
 calico-apiserver.tar:
-	docker pull $(IMAGE_REGISTRY)/$(APISERVER_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(APISERVER_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(APISERVER_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-cni.tar
 calico-cni.tar:
-	docker pull $(IMAGE_REGISTRY)/$(CNI_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(CNI_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(CNI_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-pod2daemon-flexvol.tar
 calico-pod2daemon-flexvol.tar:
-	docker pull $(IMAGE_REGISTRY)/$(FLEXVOL_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(FLEXVOL_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(FLEXVOL_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-kube-controllers.tar
 calico-kube-controllers.tar:
-	docker pull $(IMAGE_REGISTRY)/$(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-typha.tar
 calico-typha.tar:
-	docker pull $(IMAGE_REGISTRY)/$(TYPHA_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(TYPHA_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(TYPHA_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-csi.tar
 calico-csi.tar:
-	docker pull $(IMAGE_REGISTRY)/$(CSI_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(CSI_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(CSI_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-node-driver-registrar.tar
 calico-node-driver-registrar.tar:
-	docker pull $(IMAGE_REGISTRY)/$(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
 
 IMAGE_TARS := calico-node.tar \

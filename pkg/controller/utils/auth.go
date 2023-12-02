@@ -16,9 +16,12 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/go-ldap/ldap"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -94,6 +97,7 @@ func GetIDPSecret(ctx context.Context, client client.Client, authentication *ope
 		return nil, fmt.Errorf("missing secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
 	}
 
+	var bindDN, bindPW string
 	for _, field := range requiredFields {
 		data := secret.Data[field]
 		if len(data) == 0 {
@@ -101,10 +105,35 @@ func GetIDPSecret(ctx context.Context, client client.Client, authentication *ope
 		}
 
 		if field == render.BindDNSecretField {
-			if _, err := ldap.ParseDN(string(data)); err != nil {
+			bindDN = string(data)
+			if _, err := ldap.ParseDN(bindDN); err != nil {
 				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", common.OperatorNamespace(), secretName, field)
 			}
+		} else if field == render.BindPWSecretField {
+			bindPW = string(data)
 		}
 	}
+	// When Dex starts, it uses os.ExpandEnv to set up its configuration inside a json formatted string. If we validate
+	// the input in the operator, the user will catch the configuration issue sooner.
+	if bindDN != "" && bindPW != "" {
+		const config = `{"bindDN": "$BIND_DN", "bindPW": "$BIND_PW"}`
+		data := []byte(os.Expand(config, func(s string) string {
+			return map[string]string{
+				"BIND_DN": bindDN,
+				"BIND_PW": bindPW,
+			}[s]
+		}))
+		if err := json.Unmarshal(data, &map[string]any{}); err != nil {
+			return nil, fmt.Errorf("secret %s/%s should have properly escaped data for bindDN and bindPW", common.OperatorNamespace(), secretName)
+		}
+	}
+	rootCA := secret.Data[render.RootCASecretField]
+	if len(rootCA) > 0 {
+		_, err := certificatemanagement.ParseCertificate(rootCA)
+		if err != nil {
+			return nil, fmt.Errorf("secret %s/%s should have a valid certificate for field rootCA", common.OperatorNamespace(), secretName)
+		}
+	}
+
 	return secret, nil
 }

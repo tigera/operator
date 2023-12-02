@@ -17,7 +17,6 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
-	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,6 +55,7 @@ const (
 	// use-case for this credential. However, it is used on all TLS connections served by fluentd.
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
+	FluentdMetricsServiceWindows             = "fluentd-metrics-windows"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
 	FluentdMetricsPort                       = 9081
 	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
@@ -146,11 +146,13 @@ type EksCloudwatchLogConfig struct {
 
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
-	LogCollector    *operatorv1.LogCollector
+	LogCollector   *operatorv1.LogCollector
+	S3Credential   *S3Credential
+	SplkCredential *SplunkCredential
+	Filters        *FluentdFilters
+	// ESClusterConfig is only populated for when EKSConfig
+	// is also defined
 	ESClusterConfig *relasticsearch.ClusterConfig
-	S3Credential    *S3Credential
-	SplkCredential  *SplunkCredential
-	Filters         *FluentdFilters
 	EKSConfig       *EksCloudwatchLogConfig
 	PullSecrets     []*corev1.Secret
 	Installation    *operatorv1.InstallationSpec
@@ -212,6 +214,16 @@ func (c *fluentdComponent) fluentdNodeName() string {
 		return fluentdNodeWindowsName
 	}
 	return FluentdNodeName
+}
+
+// Use different service names depending on the OS type ("fluentd-metrics"
+// vs "fluentd-metrics-windows") in order to help identify which OS daemonset
+// we are referring to.
+func (c *fluentdComponent) fluentdMetricsServiceName() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return FluentdMetricsServiceWindows
+	}
+	return FluentdMetricsService
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
@@ -294,6 +306,11 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		c.fluentdClusterRole(),
 		c.fluentdClusterRoleBinding(),
 	)
+	if c.cfg.ManagedCluster {
+		objs = append(objs, c.externalLinseedRoleBinding())
+	} else {
+		toDelete = append(toDelete, c.externalLinseedRoleBinding())
+	}
 
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
@@ -306,6 +323,30 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.daemonset())
 
 	return objs, toDelete
+}
+
+func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
+	// in our namespace.
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: LogCollectorNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     TigeraLinseedSecretsClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
 }
 
 func (c *fluentdComponent) Ready() bool {
@@ -446,7 +487,8 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
-	maxUnavailable := intstr.FromInt(1)
+	// It is not required that Fluentd runs at all times. It is able to catch up from temporary downtime.
+	maxUnavailable := intstr.FromString("100%")
 
 	annots := c.cfg.TrustedBundle.HashAnnotations()
 
@@ -584,12 +626,12 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      FluentdMetricsService,
+			Name:      c.fluentdMetricsServiceName(),
 			Namespace: LogCollectorNamespace,
-			Labels:    map[string]string{"k8s-app": FluentdNodeName},
+			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": FluentdNodeName},
+			Selector: map[string]string{"k8s-app": c.fluentdNodeName()},
 			// Important: "None" tells Kubernetes that we want a headless service with
 			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
 			// a huge set of iptables rules for this service since there's an instance
@@ -611,7 +653,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
 	// namespace. For multi-tenant management clusters, this may vary.
 	linseedNS := ElasticsearchNamespace
-	if c.cfg.Tenant != nil {
+	if c.cfg.Tenant.MultiTenant() {
 		linseedNS = c.cfg.Tenant.Namespace
 	}
 
@@ -779,29 +821,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
-	envs = append(envs,
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+	envs = append(envs, corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.trustedBundlePath()})
 
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.FlowShards())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-	)
-
-	if c.SupportedOSType() != rmeta.OSTypeWindows {
-		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
-		)
-	}
 	return envs
 }
 

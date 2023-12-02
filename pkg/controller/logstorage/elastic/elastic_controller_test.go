@@ -17,7 +17,6 @@ package elastic
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -75,7 +74,7 @@ var (
 	storageClassName        = "test-storage-class"
 	kbDNSNames              = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 
-	successResult = reconcile.Result{RequeueAfter: 1 * time.Minute}
+	successResult = reconcile.Result{}
 )
 
 func NewReconcilerWithShims(
@@ -199,7 +198,7 @@ var _ = Describe("LogStorage controller", func() {
 
 			Context("LogStorage is nil", func() {
 				// Run the reconciler, expect no error.
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 				_, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
@@ -216,7 +215,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 					mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "LogStorage validation failed - cluster type is managed but LogStorage CR still exists", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -226,8 +225,6 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("finalises the deletion of the LogStorage CR when marked for deletion and continues without error", func() {
-					mockStatus.On("AddDaemonsets", mock.Anything).Return()
-					mockStatus.On("AddDeployments", mock.Anything).Return()
 					mockStatus.On("AddStatefulSets", mock.Anything).Return()
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 					mockStatus.On("AddCronJobs", mock.Anything)
@@ -235,7 +232,7 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("ReadyToMonitor")
 					// mockStatus.On("SetMetaData", mock.Anything).Return()
 
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					ls := &operatorv1.LogStorage{}
@@ -316,8 +313,6 @@ var _ = Describe("LogStorage controller", func() {
 
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("Run").Return()
-				mockStatus.On("AddDaemonsets", mock.Anything)
-				mockStatus.On("AddDeployments", mock.Anything)
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 				mockStatus.On("AddCronJobs", mock.Anything)
@@ -353,7 +348,7 @@ var _ = Describe("LogStorage controller", func() {
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
@@ -468,7 +463,7 @@ var _ = Describe("LogStorage controller", func() {
 					ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersESSecretName},
 				})).ShouldNot(HaveOccurred())
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
@@ -596,7 +591,7 @@ var _ = Describe("LogStorage controller", func() {
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				// Elasticsearch and kibana secrets are good.
@@ -640,7 +635,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Update(ctx, kbSecret)).ShouldNot(HaveOccurred())
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
@@ -724,7 +719,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, rec)).ShouldNot(HaveOccurred())
 				}
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
@@ -764,7 +759,7 @@ var _ = Describe("LogStorage controller", func() {
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
@@ -835,7 +830,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("should use default images", func() {
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					esAdminUserSecret := &corev1.Secret{
@@ -938,7 +933,7 @@ var _ = Describe("LogStorage controller", func() {
 							},
 						},
 					})).ToNot(HaveOccurred())
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					esAdminUserSecret := &corev1.Secret{
@@ -1061,7 +1056,7 @@ var _ = Describe("LogStorage controller", func() {
 					// mockStatus.On("SetMetaData", mock.Anything).Return()
 
 					var err error
-					r, err = NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+					r, err = NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 
@@ -1070,7 +1065,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("should wait if tier watch is not ready", func() {
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, &utils.ReadyFlag{})
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, &utils.ReadyFlag{})
 					Expect(err).ShouldNot(HaveOccurred())
 					utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
 				})
@@ -1115,8 +1110,6 @@ var _ = Describe("LogStorage controller", func() {
 
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("Run").Return()
-				mockStatus.On("AddDaemonsets", mock.Anything)
-				mockStatus.On("AddDeployments", mock.Anything)
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 				mockStatus.On("AddCronJobs", mock.Anything)
@@ -1129,7 +1122,7 @@ var _ = Describe("LogStorage controller", func() {
 			})
 
 			It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				esAdminUserSecret := &corev1.Secret{
@@ -1319,18 +1312,4 @@ func CreateLogStorage(client client.Client, ls *operatorv1.LogStorage) {
 
 	// Create the LogStorage object.
 	ExpectWithOffset(1, client.Create(context.Background(), ls)).ShouldNot(HaveOccurred())
-}
-
-type mockESClient struct{}
-
-func mockESCLICreator(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (utils.ElasticClient, error) {
-	return &mockESClient{}, nil
-}
-
-func (m *mockESClient) CreateUser(ctx context.Context, user *utils.User) error {
-	return fmt.Errorf("CreateUser not implemented in mock client")
-}
-
-func (*mockESClient) SetILMPolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
-	return nil
 }

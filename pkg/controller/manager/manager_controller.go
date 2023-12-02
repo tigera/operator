@@ -17,7 +17,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -35,7 +34,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -90,7 +88,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := octrl.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
+	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
 	if err := utils.AddSecretsWatch(managerController, render.VoltronLinseedTLS, helper.InstallNamespace()); err != nil {
 		return err
@@ -111,7 +109,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Watch for other operator.tigera.io resources.
 	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
-		return fmt.Errorf("manager-controller failed to watch Network resource: %w", err)
+		return fmt.Errorf("manager-controller failed to watch Installation resource: %w", err)
 	}
 	if err = managerController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
@@ -169,8 +167,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
 
-	if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+	if !opts.ElasticExternal {
+		if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
+			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+		}
 	}
 
 	return nil
@@ -188,6 +188,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
+		elasticExternal: opts.ElasticExternal,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -209,7 +210,8 @@ type ReconcileManager struct {
 	usePSP          bool
 
 	// Whether or not the operator is running in multi-tenant mode.
-	multiTenant bool
+	multiTenant     bool
+	elasticExternal bool
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -238,7 +240,7 @@ func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*op
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Perform any common preparation that needs to be done for single-tenant and multi-tenant scenarios.
-	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ManagerNamespace, request.Namespace)
+	helper := utils.NewNamespaceHelper(r.multiTenant, render.ManagerNamespace, request.Namespace)
 	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	logc.Info("Reconciling Manager")
 
@@ -296,14 +298,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, logc)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, logc)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, logc)
 			return reconcile.Result{}, err
@@ -312,7 +314,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, logc)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// TODO: Do we need a license per-tenant in the management cluster?
@@ -320,10 +322,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, logc)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, logc)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -362,7 +364,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Get or create a certificate for the manager pod to use within the cluster.
-	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.InstallNamespace(), r.clusterDomain)
 	internalTrafficSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerInternalTLSSecretName,
@@ -384,7 +386,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Build a trusted bundle containing all of the certificates of components that communicate with the manager pod.
 	// This bundle contains the root CA used to sign all operator-generated certificates, as well as the explicitly named
 	// certificates, in case the user has provided their own cert in lieu of the default certificate.
-	var authenticationCR *operatorv1.Authentication
+
 	var trustedSecretNames []string
 	if !r.multiTenant {
 		// For multi-tenant systems, we don't support user-provided certs for all components. So, we don't need to include these,
@@ -406,19 +408,21 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			}
 			trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 		}
+	}
 
-		// Fetch the Authentication spec. If present, we use to configure user authentication.
-		authenticationCR, err = utils.GetAuthentication(ctx, r.client)
-		if err != nil && !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, logc)
-			return reconcile.Result{}, err
-		}
-		if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State), nil, logc)
-			return reconcile.Result{}, nil
-		} else if authenticationCR != nil {
-			trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
-		}
+	var authenticationCR *operatorv1.Authentication
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err = utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, logc)
+		return reconcile.Result{}, err
+	}
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State), nil, logc)
+		return reconcile.Result{}, nil
+	} else if authenticationCR != nil && !utils.IsDexDisabled(authenticationCR) {
+		// Do not include DEX TLS Secret Name is authentication CR does not have type Dex
+		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
 	bundleMaker := certificateManager.CreateTrustedBundle()
@@ -556,6 +560,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, logc)
 				return reconcile.Result{}, err
 			}
+		} else {
+			// Check controller references and remove any old APIServer ownership, since ownership of this resource has moved
+			// to the manager controller instead. Without this, we will hit an error when trying to update the secret as it will
+			// have two controllers set.
+			for i := 0; i < len(tunnelCASecret.OwnerReferences); i++ {
+				ref := tunnelCASecret.OwnerReferences[i]
+				if ref.Kind == "APIServer" && ref.Controller != nil && *ref.Controller {
+					tunnelCASecret.OwnerReferences = append(tunnelCASecret.OwnerReferences[:i], tunnelCASecret.OwnerReferences[i+1:]...)
+					i--
+				}
+			}
 		}
 
 		// We use the CA as the server cert.
@@ -569,8 +584,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var elasticLicenseType render.ElasticsearchLicenseType
-	if managementClusterConnection == nil {
+	elasticLicenseType := render.ElasticsearchLicenseTypeBasic
+	if !r.elasticExternal && managementClusterConnection == nil {
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, logc)
 			return reconcile.Result{}, err
@@ -590,8 +605,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
 	if r.multiTenant {
-		// for multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
-		trustedBundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+		// For multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
+		// Multi-tenant managers need the bundle variant that includes system root certificates, in order to verify external auth providers.
+		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, logc)
 			return reconcile.Result{}, err

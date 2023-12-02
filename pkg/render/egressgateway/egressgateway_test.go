@@ -141,10 +141,10 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		Expect(len(resToBeDeleted)).To(Equal(len(expectedResToBeDeleted)))
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		for i, expectedResToBeDeleted := range expectedResToBeDeleted {
-			rtest.CompareResource(resToBeDeleted[i], expectedResToBeDeleted.name, expectedResToBeDeleted.ns, expectedResToBeDeleted.group,
+			rtest.ExpectResourceTypeAndObjectMetadata(resToBeDeleted[i], expectedResToBeDeleted.name, expectedResToBeDeleted.ns, expectedResToBeDeleted.group,
 				expectedResToBeDeleted.version, expectedResToBeDeleted.kind)
 		}
 
@@ -297,7 +297,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -326,7 +326,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 })

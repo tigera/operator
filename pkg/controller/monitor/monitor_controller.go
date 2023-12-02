@@ -19,7 +19,6 @@ import (
 	_ "embed"
 	"fmt"
 	"reflect"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -130,7 +129,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch Installation resource: %w", err)
 	}
 
@@ -312,7 +311,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
@@ -403,7 +402,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	instance.Status.State = operatorv1.TigeraStatusReady

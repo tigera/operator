@@ -17,7 +17,6 @@ package linseed
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -48,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
@@ -57,7 +57,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var successResult = reconcile.Result{RequeueAfter: 60 * time.Second}
+var successResult = reconcile.Result{}
 
 func NewLinseedControllerWithShims(
 	cli client.Client,
@@ -259,6 +259,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 
 	Context("Multi-tenant", func() {
 		var tenantNS string
+		var tenant *operatorv1.Tenant
 
 		BeforeEach(func() {
 			// Create the tenant Namespace.
@@ -266,10 +267,25 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: tenantNS}})).ShouldNot(HaveOccurred())
 
 			// Create the Tenant object.
-			tenant := &operatorv1.Tenant{}
+			tenant = &operatorv1.Tenant{}
 			tenant.Name = "default"
 			tenant.Namespace = tenantNS
 			tenant.Spec.ID = "test-tenant-id"
+			tenant.Spec.Indices = []operatorv1.Index{
+				{BaseIndexName: "calico_alerts", DataType: operatorv1.DataTypeAlerts},
+				{BaseIndexName: "calico_auditlogs", DataType: operatorv1.DataTypeAuditLogs},
+				{BaseIndexName: "calico_bgplogs", DataType: operatorv1.DataTypeBGPLogs},
+				{BaseIndexName: "calico_compliance_benchmarks", DataType: operatorv1.DataTypeComplianceBenchmarks},
+				{BaseIndexName: "calico_compliance_reports", DataType: operatorv1.DataTypeComplianceReports},
+				{BaseIndexName: "calico_compliance_snapshots", DataType: operatorv1.DataTypeComplianceSnapshots},
+				{BaseIndexName: "calico_dnslogs", DataType: operatorv1.DataTypeDNSLogs},
+				{BaseIndexName: "calico_flowlogs", DataType: operatorv1.DataTypeFlowLogs},
+				{BaseIndexName: "calico_L7logs", DataType: operatorv1.DataTypeL7Logs},
+				{BaseIndexName: "calico_runtime_reports", DataType: operatorv1.DataTypeRuntimeReports},
+				{BaseIndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreatFeedsDomainSet},
+				{BaseIndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreatFeedsIPSet},
+				{BaseIndexName: "calico_waf", DataType: operatorv1.DataTypeWAFLogs},
+			}
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}
@@ -326,6 +342,42 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
 			Expect(err).Should(HaveOccurred())
 			Expect(err.Error()).Should(ContainSubstring("CA secret"))
+		})
+
+		It("validate tenant CR", func() {
+			// Create the tenant Namespace.
+			tenantNS := "invalid-tenant"
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: tenantNS}})).ShouldNot(HaveOccurred())
+
+			// Create the Tenant object.
+			tenant := &operatorv1.Tenant{}
+			tenant.Name = "default"
+			tenant.Namespace = tenantNS
+			tenant.Spec.ID = "test-tenant-id"
+			tenant.Spec.Indices = []operatorv1.Index{
+				{BaseIndexName: "calico_alerts", DataType: operatorv1.DataTypeAlerts},
+				{BaseIndexName: "calico_auditlogs", DataType: operatorv1.DataTypeAuditLogs},
+				{BaseIndexName: "calico_bgplogs", DataType: operatorv1.DataTypeBGPLogs},
+				{BaseIndexName: "calico_compliance_benchmarks", DataType: operatorv1.DataTypeComplianceBenchmarks},
+				{BaseIndexName: "calico_compliance_reports", DataType: operatorv1.DataTypeComplianceReports},
+				{BaseIndexName: "calico_compliance_snapshots", DataType: operatorv1.DataTypeComplianceSnapshots},
+				{BaseIndexName: "calico_dnslogs", DataType: operatorv1.DataTypeDNSLogs},
+				{BaseIndexName: "calico_flowlogs", DataType: operatorv1.DataTypeFlowLogs},
+				{BaseIndexName: "calico_L7logs", DataType: operatorv1.DataTypeL7Logs},
+				{BaseIndexName: "calico_runtime_reports", DataType: operatorv1.DataTypeRuntimeReports},
+				{BaseIndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreatFeedsDomainSet},
+				{BaseIndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreatFeedsIPSet},
+				{BaseIndexName: "calico_waf", DataType: "Bogus"},
+			}
+			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
+			// Create the reconciler for the test.
+			r, err := NewLinseedControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, true)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Run the reconciler.
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("index WAFLogs has not been declared on the Tenant CR"))
 		})
 
 		It("should not reconcile any resources if no Namespace was given", func() {
@@ -400,6 +452,92 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
 			Expect(linseed).ToNot(BeNil())
 			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentLinseed.Image, "sha256:linseedhash")))
+		})
+
+		Context("External ES mode", func() {
+			BeforeEach(func() {
+				// Delete the Elasticsearch instance, since this is only used for ECK mode.
+				es := &esv1.Elasticsearch{}
+				es.Name = "tigera-secure"
+				es.Namespace = render.ElasticsearchNamespace
+				Expect(cli.Delete(ctx, es)).ShouldNot(HaveOccurred())
+
+				// Set the reconcile to run in external ES mode.
+				r.elasticExternal = true
+				r.multiTenant = true
+
+				// Set the elasticsearch configuration for the tenant.
+				tenant.Spec.Elastic = &operatorv1.TenantElasticSpec{URL: "https://external.elastic:443"}
+				Expect(cli.Update(ctx, tenant)).ShouldNot(HaveOccurred())
+			})
+
+			It("should reconcile resources", func() {
+				// Run the reconciler.
+				result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: tenant.Name, Namespace: tenant.Namespace}})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(result).Should(Equal(successResult))
+
+				// SetDegraded should not have been called.
+				mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
+
+				// Check that Linseed was created as expected. We don't need to check every resource in detail, since
+				// the render package has its own tests which cover this in more detail.
+				linseedDp := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      linseed.DeploymentName,
+						Namespace: tenant.Namespace,
+					},
+				}
+				Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
+
+				// Check that the correct External ES environment variables are set.
+				linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
+				Expect(linseed).ToNot(BeNil())
+				Expect(linseed.Env).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "external.elastic"}))
+				Expect(linseed.Env).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_PORT", Value: "443"}))
+			})
+
+			It("should reconcile with mTLS enabled", func() {
+				// Update the tenant with mTLS
+				tenant.Spec.Elastic.MutualTLS = true
+				Expect(cli.Update(ctx, tenant)).ShouldNot(HaveOccurred())
+
+				// Create a dummy secret mocking the client certificates.
+				esClientSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()},
+					Data:       map[string][]byte{"client.crt": []byte("cert"), "client.key": []byte("key")},
+				}
+				Expect(cli.Create(ctx, esClientSecret)).ShouldNot(HaveOccurred())
+
+				// Run the reconciler.
+				result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: tenant.Name, Namespace: tenant.Namespace}})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).Should(Equal(successResult))
+
+				// SetDegraded should not have been called.
+				mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
+
+				// Check that Linseed was created as expected. We don't need to check every resource in detail, since
+				// the render package has its own tests which cover this in more detail.
+				linseedDp := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      linseed.DeploymentName,
+						Namespace: tenant.Namespace,
+					},
+				}
+				Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
+
+				// Expect the correct volume and mounts to be present.
+				linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
+				Expect(linseed).ToNot(BeNil())
+				Expect(linseed.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+					Name:      "tigera-secure-external-es-certs",
+					MountPath: "/certs/elasticsearch/mtls",
+					ReadOnly:  true,
+				}))
+			})
 		})
 	})
 })

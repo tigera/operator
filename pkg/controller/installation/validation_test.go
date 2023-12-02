@@ -74,7 +74,7 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should prevent IPv6 if BPF is enabled", func() {
+	It("should allow IPv6 if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -85,8 +85,38 @@ var _ = Describe("Installation validation tests", func() {
 				NodeSelector:  "all()",
 			},
 		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+			CanReach: "2001:4860:4860::8888",
+		}
 		err := validateCustomResource(instance)
-		Expect(err).To(MatchError("IPv6 IP pool is specified but eBPF mode does not support IPv6"))
+		Expect(err).To(BeNil())
+	})
+
+	It("should not allow dual stack (both IPv4 and IPv6) if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "1eef::/64",
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				Encapsulation: operator.EncapsulationNone,
+				NodeSelector:  "all()",
+			},
+			{
+				CIDR:          "192.168.0.0/27",
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+			CanReach: "2001:4860:4860::8888",
+		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach: "8.8.8.8",
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("bpf dataplane does not support dual stack"))
 	})
 
 	It("should allow IPv6 VXLAN", func() {
@@ -976,6 +1006,59 @@ var _ = Describe("Installation validation tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+		})
+	})
+	Describe("validate CSIDaemonset", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred(), "Should error because the labels and annotations are invalid")
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			Expect(err).To(HaveOccurred(), "Should error because the minReadySeconds is invalid")
+		})
+
+		It("should validate with container", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
+					Template: &operator.CSINodeDriverDaemonSetPodTemplateSpec{
+						Spec: &operator.CSINodeDriverDaemonSetPodSpec{
+							Containers: []operator.CSINodeDriverDaemonSetContainer{
+								{
+									Name: "csi-node-driver",
+									Resources: &v1.ResourceRequirements{
+										Limits: v1.ResourceList{
+											"cpu": resource.MustParse("2"),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		})
 	})
 })

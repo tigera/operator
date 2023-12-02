@@ -17,17 +17,20 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -62,6 +66,13 @@ var (
 	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
 	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+
+	PeriodicReconcileTime = 5 * time.Minute
+
+	// StandardRetry is the amount of time to wait beofre retrying a request in
+	// most scenarios. Retries should be used sparingly, and only in extraordinary
+	// circumstances. Use this as a default when retries are needed.
+	StandardRetry = 30 * time.Second
 )
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
@@ -82,8 +93,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
-// TODO: Deprecate and delete these functions.
-func AddNetworkWatch(c controller.Controller) error {
+func AddInstallationWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
 
@@ -145,11 +155,8 @@ func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
 	}, &handler.EnqueueRequestForObject{})
 }
 
-func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
-	return c.Watch(
-		&source.Channel{Source: createPeriodicReconcileChannel(period)},
-		&handler.EnqueueRequestForObject{},
-	)
+func AddPeriodicReconcile(c controller.Controller, period time.Duration, handler handler.EventHandler) error {
+	return c.Watch(&source.Channel{Source: createPeriodicReconcileChannel(period)}, handler)
 }
 
 // AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.
@@ -219,7 +226,7 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
-// will be generated.
+// will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
 func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)
@@ -644,13 +651,23 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			// Not all objects use/have a generation, so we can't always rely on that to determine if the
+			// object has changed. The generation will be 0 if it's not set.
+			generationChanged := e.ObjectOld.GetGeneration() == 0 || e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
-				return true
+				// No name or namespace match was specified. Match everything, assuming the generation has changed.
+				return generationChanged
 			}
+
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match it.
 				return false
 			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Assuming the generation has changed, return a match if the namespaces also match,
+			// or if no namespace was given to match against.
+			return generationChanged && (e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == "")
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -755,4 +772,75 @@ func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operat
 	}
 
 	return kubeDNSService.Spec.ClusterIPs, nil
+}
+
+// GetDNSServiceName returns the name and namespace for the DNS service based on the given provider.
+// This is "kube-dns" for most providers, but varies on OpenShift and RKE2.
+func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
+	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+	if provider == operatorv1.ProviderOpenShift {
+		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+	} else if provider == operatorv1.ProviderRKE2 {
+		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
+	}
+	return kubeDNSServiceName
+}
+
+// MonitorConfigMap starts a goroutine which exits if the given configmap's data is changed.
+func MonitorConfigMap(cs kubernetes.Interface, name string, data map[string]string) error {
+	informer := cache.NewSharedInformer(
+		cache.NewListWatchFromClient(
+			cs.CoreV1().RESTClient(),
+			"configmaps",
+			common.OperatorNamespace(),
+			fields.OneTermEqualSelector("metadata.name", name),
+		),
+		&v1.ConfigMap{},
+		0, // no resync period
+	)
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: func(_, newObj interface{}) {
+			if !compareMap(data, newObj.(*v1.ConfigMap).Data) {
+				log.Info("detected config change. rebooting")
+				os.Exit(0)
+			}
+			log.Info("ignoring configmap update as data was not modified")
+		},
+		AddFunc: func(obj interface{}) {
+			if !compareMap(data, obj.(*v1.ConfigMap).Data) {
+				log.Info("detected config creation change. rebooting")
+				os.Exit(0)
+			}
+			log.Info("ignoring configmap creation as data was not modified")
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	go informer.Run(make(chan struct{}))
+	for !informer.HasSynced() {
+		time.Sleep(1 * time.Second)
+	}
+	return nil
+}
+
+func compareMap(m1, m2 map[string]string) bool {
+	if len(m1) != len(m2) {
+		return false
+	}
+	for k, v := range m1 {
+		if m2[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+func IsDexDisabled(authentication *operatorv1.Authentication) bool {
+	disableDex := false
+	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
+		disableDex = true
+	}
+	return disableDex
 }

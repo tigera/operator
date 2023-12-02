@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package controller
+package utils
 
 import (
 	"context"
 
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -39,8 +38,8 @@ func NewNamespaceHelper(mt bool, singleTenantNS, multiTenantNS string) Namespace
 
 type NamespaceHelper interface {
 	// InstallNamespace returns the namespace that components will be installed into.
-	// for single-tenant clusters, this is tigera-manager. For multi-tenancy, this
-	// will be the tenant's namespace.
+	// for single-tenant clusters, this is generally a well-known namespace of the form tigera-*.
+	// For multi-tenant clusters, this is the tenant's namespace.
 	InstallNamespace() string
 
 	// TruthNamespace returns the namespace to use as the source of truth for storing data.
@@ -61,22 +60,22 @@ type namespacer struct {
 }
 
 func (r *namespacer) InstallNamespace() string {
-	if !r.multiTenant {
-		return r.singleTenantNamespace
+	if r.multiTenant {
+		return r.multiTenantNamespace
 	}
-	return r.multiTenantNamespace
+	return r.singleTenantNamespace
 }
 
 func (r *namespacer) TruthNamespace() string {
-	if !r.multiTenant {
-		return common.OperatorNamespace()
+	if r.multiTenant {
+		return r.multiTenantNamespace
 	}
-	return r.multiTenantNamespace
+	return common.OperatorNamespace()
 }
 
 func (r *namespacer) TenantNamespaces(c client.Client) ([]string, error) {
-	if !r.multiTenant {
-		return []string{r.InstallNamespace()}, nil
+	if r.multiTenant {
+		return TenantNamespaces(context.Background(), c)
 	}
-	return utils.TenantNamespaces(context.Background(), c)
+	return []string{r.InstallNamespace()}, nil
 }

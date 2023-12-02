@@ -35,8 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 )
 
-// Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
 func AddConditionsController(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
@@ -71,8 +69,8 @@ func AddConditionsController(mgr manager.Manager, opts options.AddOptions) error
 
 var _ reconcile.Reconciler = &LogStorageConditions{}
 
-// LogStorageConditions initializes a LogStorage object for sub controllers to use
-// by performing validation and defaulting, and marking the resource as available.
+// LogStorageConditions implements a controller that monitors the status of various log storage related TigeraStatus objects and
+// updates the LogStorage object's status conditions accordingly.
 type LogStorageConditions struct {
 	client      client.Client
 	scheme      *runtime.Scheme

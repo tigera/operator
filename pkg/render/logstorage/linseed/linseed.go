@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -49,14 +50,15 @@ import (
 )
 
 const (
-	DeploymentName        = "tigera-linseed"
-	ServiceAccountName    = "tigera-linseed"
-	PodSecurityPolicyName = "tigera-linseed"
-	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
-	PortName              = "tigera-linseed"
-	TargetPort            = 8444
-	Port                  = 443
-	ClusterRoleName       = "tigera-linseed"
+	DeploymentName                                  = "tigera-linseed"
+	ServiceAccountName                              = "tigera-linseed"
+	PodSecurityPolicyName                           = "tigera-linseed"
+	PolicyName                                      = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
+	PortName                                        = "tigera-linseed"
+	TargetPort                                      = 8444
+	Port                                            = 443
+	ClusterRoleName                                 = "tigera-linseed"
+	MultiTenantManagedClustersAccessClusterRoleName = "tigera-linseed-managed-cluster-access"
 )
 
 func Linseed(c *Config) render.Component {
@@ -115,6 +117,13 @@ type Config struct {
 
 	// Tenant configuration, if running for a particular tenant.
 	Tenant *operatorv1.Tenant
+
+	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
+	// mTLS is used between Linseed and the external Elastic cluster.
+	ElasticClientSecret *corev1.Secret
+
+	ElasticHost string
+	ElasticPort string
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -147,10 +156,17 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
 	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
+	if l.cfg.Tenant != nil {
+		toCreate = append(toCreate, l.multiTenantManagedClustersAccess()...)
+	}
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.UsePSP {
 		toCreate = append(toCreate, l.linseedPodSecurityPolicy())
+	}
+	if l.cfg.ElasticClientSecret != nil {
+		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
 	return toCreate, toDelete
 }
@@ -181,6 +197,7 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			// Need to be able to list managed clusters
+			// TODO: Move to namespaced role in multi-tenant.
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
@@ -194,7 +211,10 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if l.cfg.Tenant != nil {
+	if l.cfg.Tenant.MultiTenant() {
+		// These rules are used by Linseed in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
 		rules = append(rules, []rbacv1.PolicyRule{
 			{
 				APIGroups:     []string{""},
@@ -237,6 +257,50 @@ func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
 	return rcomponents.ClusterRoleBinding(ClusterRoleName, ClusterRoleName, ServiceAccountName, namespaces)
 }
 
+func (l *linseed) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					// The Authentication Proxy in Voltron checks if Linseed (either using impersonation headers for
+					// tigera-linseed service in tigera-elasticsearch namespace or the actual account in a single tenant
+					// setup) can get a managed clusters before sending the request down the tunnel
+					"get",
+				},
+			},
+		},
+	})
+
+	// In a single tenant setup we want to create a cluster role that binds using service account
+	// tigera-linseed from tigera-elasticsearch namespace. In a multi-tenant setup Linseed from the tenant's
+	// namespace impersonates service tigera-linseed from tigera-elasticsearch namespace
+	objects = append(objects, &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			// requests for Linseed to managed clusters are done using service account tigera-linseed
+			// from tigera-elasticsearch namespace regardless of tenancy mode (single tenant or multi-tenant)
+			{
+				Kind:      "ServiceAccount",
+				Name:      ServiceAccountName,
+				Namespace: render.ElasticsearchNamespace,
+			},
+		},
+	})
+
+	return objects
+}
+
 func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	return podsecuritypolicy.NewBasePolicy(PodSecurityPolicyName)
 }
@@ -275,8 +339,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
 
 		{Name: "ELASTIC_SCHEME", Value: "https"},
-		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
-		{Name: "ELASTIC_PORT", Value: "9200"},
+		{Name: "ELASTIC_HOST", Value: l.cfg.ElasticHost},
+		{Name: "ELASTIC_PORT", Value: l.cfg.ElasticPort},
 		{
 			Name:      "ELASTIC_USERNAME",
 			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "username", false),
@@ -298,6 +362,28 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
 	)
 
+	if l.cfg.ElasticClientSecret != nil {
+		// Add a volume for the required client certificate and key.
+		volumes = append(volumes, corev1.Volume{
+			Name: logstorage.ExternalCertsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: logstorage.ExternalCertsSecret,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      logstorage.ExternalCertsVolumeName,
+			MountPath: "/certs/elasticsearch/mtls",
+			ReadOnly:  true,
+		})
+
+		// Configure Linseed to use the mounted client certificate and key.
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_MTLS_ENABLED", Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_KEY", Value: "/certs/elasticsearch/mtls/client.key"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_CERT", Value: "/certs/elasticsearch/mtls/client.crt"})
+	}
+
 	if l.cfg.ManagementCluster {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: common.OperatorNamespace()},
@@ -307,7 +393,18 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	if l.cfg.Tenant != nil {
 		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
-		envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
+
+		if l.cfg.Tenant.MultiTenant() {
+			// For clusters shared between muliple tenants, we need to configure Linseed with the correct namespace information for its tenant.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
+
+			// We also use shared indices for multi-tenant clusters.
+			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
+			for _, index := range l.cfg.Tenant.Spec.Indices {
+				envVars = append(envVars, index.EnvVar())
+			}
+		}
 	}
 
 	var initContainers []corev1.Container
@@ -317,6 +414,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+	if l.cfg.ElasticClientSecret != nil {
+		annotations["hash.operator.tigera.io/elastic-client-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientSecret)
+	}
 
 	if l.cfg.TokenKeyPair != nil {
 		envVars = append(envVars,
@@ -456,7 +556,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerEntityRule(),
 		})
 	}
 
@@ -493,7 +593,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerSourceEntityRule(),
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

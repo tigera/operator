@@ -88,7 +88,7 @@ func CreateEntityRule(namespace string, deploymentName string, ports ...uint16) 
 func CreateSourceEntityRule(namespace string, deploymentName string) v3.EntityRule {
 	return v3.EntityRule{
 		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
-		NamespaceSelector: fmt.Sprintf("name == '%s'", namespace),
+		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
 	}
 }
 

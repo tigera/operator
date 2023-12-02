@@ -17,7 +17,6 @@ package managedcluster
 import (
 	"context"
 	"fmt"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
@@ -73,8 +72,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch LogStorage resource: %w", err)
 	}
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("log-storage-managedcluster-controller failed to watch Network resource: %w", err)
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("log-storage-managedcluster-controller failed to watch Installation resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch ManagementCluster resource: %w", err)
@@ -88,6 +87,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch Secret resource: %w", err)
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("log-storage-managedcluster-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	return nil
@@ -148,5 +154,5 @@ func (r *LogStorageManagedClusterController) Reconcile(ctx context.Context, requ
 		return reconcile.Result{}, err
 	}
 
-	return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
+	return reconcile.Result{}, nil
 }

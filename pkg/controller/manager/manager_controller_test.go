@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -703,6 +704,17 @@ var _ = Describe("Manager controller tests", func() {
 			})
 
 			DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("IsAvailable").Return(true)
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("AddDeployments", mock.Anything)
+				mockStatus.On("ClearDegraded")
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+				mockStatus.On("ReadyToMonitor")
+				mockStatus.On("SetMetaData", mock.Anything).Return()
+				r.status = mockStatus
+
 				if !crPresent {
 					Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
 				}
@@ -966,7 +978,68 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				assertSANs(&clusterConnectionInManagerNs, "voltron")
 			})
+
+			It("should upgrade a Voltron tunnel secret if previously owned by a different controller", func() {
+				// Older versions of the tigera-operator controlled this secret from the API server controller.
+				// However, only a single controller is allowed as an owner, so we need to properly clear the old
+				// one before setting the Manager CR as the new owner.
+				clusterConnection := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+				}
+				clusterConnectionInManagerNs := clusterConnection
+				clusterConnectionInManagerNs.Namespace = render.ManagerNamespace
+
+				apiserver := &operatorv1.APIServer{
+					TypeMeta: metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+						UID:  "1234",
+					},
+				}
+				err := controllerutil.SetControllerReference(apiserver, &clusterConnection, scheme)
+				Expect(err).NotTo(HaveOccurred())
+				err = controllerutil.SetControllerReference(apiserver, &clusterConnectionInManagerNs, scheme)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, &clusterConnection)).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, &clusterConnectionInManagerNs)).NotTo(HaveOccurred())
+
+				// Run the controller. It should update the secret to be owned by the Manager CR.
+				// Create the ManagementCluster CR needed to configure
+				// a management cluster for a multi-cluster setup
+				managementCluster := &operatorv1.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+				}
+				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+				// Create the Manager CR needed to jumpstart the reconciliation
+				// for the manager
+				manager := &operatorv1.Manager{
+					TypeMeta: metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: common.OperatorNamespace(),
+					},
+				}
+				err = c.Create(ctx, manager)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Reconcile Manager
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// Check the owner reference on the secret has updated.
+				Expect(c.Get(ctx, types.NamespacedName{Name: render.VoltronTunnelSecretName, Namespace: common.OperatorNamespace()}, &clusterConnection)).NotTo(HaveOccurred())
+				Expect(len(clusterConnection.OwnerReferences)).To(Equal(1))
+				Expect(clusterConnection.OwnerReferences[0].Kind).To(Equal("Manager"))
+			})
 		})
+
 		Context("Multi-tenant/namespaced reconciliation", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
@@ -1006,7 +1079,9 @@ var _ = Describe("Manager controller tests", func() {
 				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, managerTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+				bundleA, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, bundleA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
 				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
 				Expect(err).NotTo(HaveOccurred())
@@ -1014,7 +1089,9 @@ var _ = Describe("Manager controller tests", func() {
 				managerTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantBNamespace, []string{render.ManagerInternalTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, managerTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
+				bundleB, err := certificateManagerTenantB.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, bundleB.ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
 
 				err = c.Create(ctx, &operatorv1.Manager{
 					ObjectMeta: metav1.ObjectMeta{

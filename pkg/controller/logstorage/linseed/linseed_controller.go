@@ -17,7 +17,7 @@ package linseed
 import (
 	"context"
 	"fmt"
-	"time"
+	"net/url"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	octrl "github.com/tigera/operator/pkg/controller"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -48,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -57,14 +58,15 @@ import (
 var log = logf.Log.WithName("controller_logstorage_linseed")
 
 type LinseedSubController struct {
-	client         client.Client
-	scheme         *runtime.Scheme
-	status         status.StatusManager
-	clusterDomain  string
-	tierWatchReady *utils.ReadyFlag
-	dpiAPIReady    *utils.ReadyFlag
-	usePSP         bool
-	multiTenant    bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	clusterDomain   string
+	tierWatchReady  *utils.ReadyFlag
+	dpiAPIReady     *utils.ReadyFlag
+	usePSP          bool
+	multiTenant     bool
+	elasticExternal bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -74,13 +76,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &LinseedSubController{
-		client:         mgr.GetClient(),
-		scheme:         mgr.GetScheme(),
-		clusterDomain:  opts.ClusterDomain,
-		tierWatchReady: &utils.ReadyFlag{},
-		dpiAPIReady:    &utils.ReadyFlag{},
-		multiTenant:    opts.MultiTenant,
-		status:         status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clusterDomain:   opts.ClusterDomain,
+		tierWatchReady:  &utils.ReadyFlag{},
+		dpiAPIReady:     &utils.ReadyFlag{},
+		multiTenant:     opts.MultiTenant,
+		status:          status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -102,7 +105,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-access-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-access-controller failed to watch Network resource: %w", err)
+		return fmt.Errorf("log-storage-access-controller failed to watch Installation resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch ManagementCluster resource: %w", err)
@@ -111,7 +114,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-access-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, "log-storage-access"); err != nil {
-		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
+		return fmt.Errorf("logstorage-access-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
 		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
@@ -122,7 +125,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
 	// For single-tenant, everything is installed in the tigera-manager namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := octrl.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
+	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
 
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
@@ -176,11 +179,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
 	go utils.WaitToAddResourceWatch(c, k8sClient, log, r.dpiAPIReady, []client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
+	if err != nil {
+		return fmt.Errorf("log-storage-elastic-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
 func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := utils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Linseed")
 
@@ -198,6 +208,11 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	} else if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	err = validateTenant(tenant)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Tenant CR is invalid", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -220,7 +235,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if logStorage.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Get Installation resource.
@@ -237,19 +252,19 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	if !r.dpiAPIReady.IsReady() {
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
@@ -281,15 +296,49 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Wait for Elasticsearch to be installed and available.
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	// Determine where to access elasticsearch.
+	elasticHost := "tigera-secure-es-http.tigera-elasticsearch.svc"
+	elasticPort := "9200"
+	var esClientSecret *corev1.Secret
+	if !r.elasticExternal {
+		// Wait for Elasticsearch to be installed and available.
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+	} else {
+		// If we're using an external ES, the Tenant resource must specify the ES endpoint.
+		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.URL == "" {
+			reqLogger.Error(nil, "Elasticsearch URL must be specified for this tenant")
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL must be specified for this tenant", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+
+		// Determine the host and port from the URL.
+		url, err := url.Parse(tenant.Spec.Elastic.URL)
+		if err != nil {
+			reqLogger.Error(err, "Elasticsearch URL is invalid")
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL is invalid", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		elasticHost = url.Hostname()
+		elasticPort = url.Port()
+
+		if tenant.ElasticMTLS() {
+			// If mTLS is enabled, get the secret containing the CA and client certificate.
+			esClientSecret = &corev1.Secret{}
+			err = r.client.Get(ctx, client.ObjectKey{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}, esClientSecret)
+			if err != nil {
+				reqLogger.Error(err, "Failed to read external Elasticsearch client certificate secret")
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch client certificate secret to be available", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
 	}
 
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
@@ -347,7 +396,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed credential Secret %s", key), err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	dpiList := &v3.DeepPacketInspectionList{}
@@ -364,19 +413,22 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	cfg := &linseed.Config{
-		Installation:      install,
-		PullSecrets:       pullSecrets,
-		Namespace:         helper.InstallNamespace(),
-		BindNamespaces:    bindNamespaces,
-		TrustedBundle:     trustedBundle,
-		ClusterDomain:     r.clusterDomain,
-		KeyPair:           linseedKeyPair,
-		TokenKeyPair:      tokenKeyPair,
-		UsePSP:            r.usePSP,
-		ESClusterConfig:   esClusterConfig,
-		HasDPIResource:    hasDPIResource,
-		ManagementCluster: managementCluster != nil,
-		Tenant:            tenant,
+		Installation:        install,
+		PullSecrets:         pullSecrets,
+		Namespace:           helper.InstallNamespace(),
+		BindNamespaces:      bindNamespaces,
+		TrustedBundle:       trustedBundle,
+		ClusterDomain:       r.clusterDomain,
+		KeyPair:             linseedKeyPair,
+		TokenKeyPair:        tokenKeyPair,
+		UsePSP:              r.usePSP,
+		ESClusterConfig:     esClusterConfig,
+		HasDPIResource:      hasDPIResource,
+		ManagementCluster:   managementCluster != nil,
+		Tenant:              tenant,
+		ElasticHost:         elasticHost,
+		ElasticPort:         elasticPort,
+		ElasticClientSecret: esClientSecret,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 
@@ -397,27 +449,34 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	if !r.multiTenant {
-		// TODO: For now, install this here. It probably should have its own controller.
-		// I am not very familiar with this component - need to investigate and propose multi-tenant resolution.
-		if err := r.createESMetrics(
-			install,
-			variant,
-			managementClusterConnection,
-			pullSecrets,
-			reqLogger,
-			esClusterConfig,
-			ctx,
-			hdler,
-			trustedBundle,
-			r.usePSP,
-			cm,
-		); err != nil {
-			return reconcile.Result{}, err
+	r.status.ReadyToMonitor()
+	r.status.ClearDegraded()
+	return reconcile.Result{}, nil
+}
+
+func validateTenant(tenant *operatorv1.Tenant) error {
+	if tenant == nil {
+		return nil
+	}
+
+	declaredDataTypes := make(map[operatorv1.DataType]struct{})
+	for _, index := range tenant.Spec.Indices {
+		_, found := declaredDataTypes[index.DataType]
+		if found {
+			return fmt.Errorf("index %s is declared multiple times", index.DataType)
+		}
+		declaredDataTypes[index.DataType] = struct{}{}
+	}
+
+	for dataType := range operatorv1.DataTypes {
+		if _, ok := declaredDataTypes[dataType]; !ok {
+			return fmt.Errorf("index %s has not been declared on the Tenant CR", dataType)
 		}
 	}
 
-	r.status.ReadyToMonitor()
-	r.status.ClearDegraded()
-	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
+	if len(declaredDataTypes) > len(operatorv1.DataTypes) {
+		return fmt.Errorf("declared indices contains more indices that allowed by Tenant CR")
+	}
+
+	return nil
 }

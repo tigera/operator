@@ -17,7 +17,6 @@ package secrets
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -67,7 +66,7 @@ var (
 	esGatewayDNSNmes = dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	kbDNSNames       = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 
-	successResult = reconcile.Result{RequeueAfter: 60 * time.Second}
+	successResult = reconcile.Result{}
 )
 
 func NewSecretControllerWithShims(

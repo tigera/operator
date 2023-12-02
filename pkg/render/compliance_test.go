@@ -172,7 +172,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
@@ -329,7 +329,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
@@ -446,7 +446,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
 			for i, expectedRes := range expectedResources {
-				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "inventory", "", "projectcalico.org", "v3", "GlobalReportType"), "inventory")
@@ -588,7 +588,7 @@ var _ = Describe("compliance rendering tests", func() {
 			}
 
 			for i, expectedRes := range expectedResources {
-				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 

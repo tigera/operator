@@ -17,13 +17,85 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func init() {
+	SchemeBuilder.Register(&Tenant{}, &TenantList{})
+}
+
+// DataType represent the type of data stored
+// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreatFeedsIPSet;WAFLogs
+type DataType string
+
+const (
+	DataTypeAlerts               DataType = "Alerts"
+	DataTypeAuditLogs            DataType = "AuditLogs"
+	DataTypeBGPLogs              DataType = "BGPLogs"
+	DataTypeComplianceBenchmarks DataType = "ComplianceBenchmarks"
+	DataTypeComplianceReports    DataType = "ComplianceReports"
+	DataTypeComplianceSnapshots  DataType = "ComplianceSnapshots"
+	DataTypeDNSLogs              DataType = "DNSLogs"
+	DataTypeFlowLogs             DataType = "FlowLogs"
+	DataTypeL7Logs               DataType = "L7Logs"
+	DataTypeRuntimeReports       DataType = "RuntimeReports"
+	DataTypeThreatFeedsDomainSet DataType = "ThreatFeedsDomainSet"
+	DataTypeThreatFeedsIPSet     DataType = "ThreatFeedsIPSet"
+	DataTypeWAFLogs              DataType = "WAFLogs"
+)
+
+// DataTypes is a set of all data types stored mapped to
+// their corresponding environment variables
+var DataTypes = map[DataType]string{
+	DataTypeAlerts:               "ELASTIC_ALERTS_BASE_INDEX_NAME",
+	DataTypeAuditLogs:            "ELASTIC_AUDIT_LOGS_BASE_INDEX_NAME",
+	DataTypeBGPLogs:              "ELASTIC_BGP_LOGS_BASE_INDEX_NAME",
+	DataTypeComplianceBenchmarks: "ELASTIC_COMPLIANCE_BENCHMARKS_BASE_INDEX_NAME",
+	DataTypeComplianceReports:    "ELASTIC_COMPLIANCE_REPORTS_BASE_INDEX_NAME",
+	DataTypeComplianceSnapshots:  "ELASTIC_COMPLIANCE_SNAPSHOTS_BASE_INDEX_NAME",
+	DataTypeDNSLogs:              "ELASTIC_DNS_LOGS_BASE_INDEX_NAME",
+	DataTypeFlowLogs:             "ELASTIC_FLOW_LOGS_BASE_INDEX_NAME",
+	DataTypeL7Logs:               "ELASTIC_L7_LOGS_BASE_INDEX_NAME",
+	DataTypeRuntimeReports:       "ELASTIC_RUNTIME_REPORTS_BASE_INDEX_NAME",
+	DataTypeThreatFeedsDomainSet: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_BASE_INDEX_NAME",
+	DataTypeThreatFeedsIPSet:     "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME",
+	DataTypeWAFLogs:              "ELASTIC_WAF_LOGS_BASE_INDEX_NAME",
+}
 
 type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
 	// +required
 	ID string `json:"id,omitempty"`
+
+	// Name is a human readable name for this tenant.
+	Name string `json:"name,omitempty"`
+
+	// Indices defines the how to store a tenant's data
+	Indices []Index `json:"indices"`
+
+	// Elastic configures per-tenant ElasticSearch and Kibana parameters.
+	// This field is required for clusters using external ES.
+	Elastic *TenantElasticSpec `json:"elastic,omitempty"`
+}
+
+// Index defines how to store a tenant's data
+type Index struct {
+	// BaseIndexName defines the name of the index
+	// that will be used to store data (this name
+	// excludes the numerical identifier suffix)
+	BaseIndexName string `json:"baseIndexName"`
+
+	// DataType represents the type of data stored in the defined index
+	DataType DataType `json:"dataType"`
+}
+
+type TenantElasticSpec struct {
+	URL       string `json:"url"`
+	KibanaURL string `json:"kibana_url,omitempty"`
+	MutualTLS bool   `json:"mutualTLS"`
 }
 
 type TenantStatus struct{}
@@ -40,6 +112,24 @@ type Tenant struct {
 	Status TenantStatus `json:"status,omitempty"`
 }
 
+func (t *Tenant) ElasticMTLS() bool {
+	return t != nil && t.Spec.Elastic != nil && t.Spec.Elastic.MutualTLS
+}
+
+// MultiTenant returns true if this management cluster is configured to support multiple tenants, and false otherwise.
+func (t *Tenant) MultiTenant() bool {
+	// In order to support multiple tenants, the tenant CR must not be nil, and it must be assigned to a namespace.
+	return t != nil && t.GetNamespace() != ""
+}
+
+// SingleTenant returns true if this management cluster is scoped to a single tenant, and false if this is
+// either a multi-tenant management cluster or a cluster with no tenancy enabled.
+func (t *Tenant) SingleTenant() bool {
+	// Single-tenant managmenet clusters still use a tenant CR but it is not assigned to a namespace, as
+	// only a single tenant can exist in the management cluster.
+	return t != nil && t.GetNamespace() == ""
+}
+
 // +kubebuilder:object:root=true
 
 // TenantList contains a list of Tenant
@@ -49,6 +139,14 @@ type TenantList struct {
 	Items           []Tenant `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&Tenant{}, &TenantList{})
+func (i *Index) EnvVar() corev1.EnvVar {
+	return corev1.EnvVar{Name: i.DataType.IndexEnvName(), Value: i.BaseIndexName}
+}
+
+func (t DataType) IndexEnvName() string {
+	envName, ok := DataTypes[t]
+	if !ok {
+		panic(fmt.Sprintf("Unexpected data type %s", t))
+	}
+	return envName
 }

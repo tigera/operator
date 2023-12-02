@@ -603,11 +603,55 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			numBlocks := strings.Count(bundle, "-----BEGIN CERTIFICATE-----")
 			Expect(numBlocks > 1).To(BeTrue()) // We expect tens of them most likely.
 		})
+
+		It("should load the system certificates into a multi-tenant bundle", func() {
+			if runtime.GOOS != "linux" {
+				Skip("Skip for users that run this test outside of a container on incompatible systems.")
+			}
+			trustedBundle, err := certificateManager.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+			Expect(err).NotTo(HaveOccurred())
+
+			configMap := trustedBundle.ConfigMap(appNs)
+			Expect(configMap.Name).To(Equal("tigera-ca-bundle-system-certs"))
+
+			Expect(configMap.Namespace).To(Equal(appNs))
+			Expect(configMap.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
+			Expect(configMap.Annotations).To(HaveKey("hash.operator.tigera.io/system"))
+			Expect(configMap.TypeMeta).To(Equal(metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}))
+
+			By("counting the number of pem blocks in the configmap")
+			bundle := configMap.Data[certificatemanagement.RHELRootCertificateBundleName]
+			numBlocks := strings.Count(bundle, "-----BEGIN CERTIFICATE-----")
+			Expect(numBlocks > 1).To(BeTrue()) // We expect tens of them most likely.
+
+			By("verifying the volume is correct")
+			volume := trustedBundle.Volume()
+			Expect(volume.ConfigMap).NotTo(BeNil())
+			Expect(volume.Name).To(Equal("tigera-ca-bundle-system-certs"))
+			Expect(volume.VolumeSource.ConfigMap.Name).To(Equal("tigera-ca-bundle-system-certs"))
+
+			By("verifying the volume mount is correct")
+			mounts := trustedBundle.VolumeMounts(rmeta.OSTypeLinux)
+			Expect(mounts).To(HaveLen(2))
+			Expect(mounts).To(Equal([]corev1.VolumeMount{
+				{
+					Name:      "tigera-ca-bundle-system-certs",
+					MountPath: "/etc/pki/tls/certs",
+					ReadOnly:  true,
+				},
+				{
+					Name:      "tigera-ca-bundle-system-certs",
+					MountPath: "/etc/pki/tls/cert.pem",
+					SubPath:   "ca-bundle.crt",
+					ReadOnly:  true,
+				},
+			}))
+		})
 	})
 })
 
 func x509FromSecret(secret *corev1.Secret) (*x509.Certificate, error) {
-	_, certPEM := certificatemanager.GetKeyCertPEM(secret)
+	_, certPEM := certificatemanagement.GetKeyCertPEM(secret)
 	x509Cert, err := certificatemanagement.ParseCertificate(certPEM)
 	if err != nil {
 		return nil, err

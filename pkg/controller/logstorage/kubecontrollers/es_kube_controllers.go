@@ -17,7 +17,6 @@ package kubecontrollers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
@@ -34,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/tigera/operator/pkg/common"
-	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -50,11 +48,12 @@ import (
 var log = logf.Log.WithName("controller_logstorage_kube-controllers")
 
 type ESKubeControllersController struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	clusterDomain string
-	usePSP        bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	clusterDomain   string
+	usePSP          bool
+	elasticExternal bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -68,10 +67,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &ESKubeControllersController{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		clusterDomain: opts.ClusterDomain,
-		status:        status.New(mgr.GetClient(), "log-storage-kubecontrollers", opts.KubernetesVersion),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clusterDomain:   opts.ClusterDomain,
+		status:          status.New(mgr.GetClient(), "log-storage-kubecontrollers", opts.KubernetesVersion),
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -89,7 +89,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch LogStorage resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
-		return fmt.Errorf("log-storage-kubecontrollers failed to watch Network resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch Installation resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch ManagementCluster resource: %w", err)
@@ -122,11 +122,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
 
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
+	if err != nil {
+		return fmt.Errorf("log-storage-kubecontrollers failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
 func (r *ESKubeControllersController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := octrl.NewNamespaceHelper(false, common.CalicoNamespace, request.Namespace)
+	helper := utils.NewNamespaceHelper(false, common.CalicoNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - ESKubeControllers")
 
@@ -149,7 +156,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if logStorage.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Get Installation resource.
@@ -180,15 +187,17 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// Wait for Elasticsearch to be installed and available
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	if !r.elasticExternal {
+		// Wait for Elasticsearch to be installed and available
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
 	}
 
 	// Get secrets needed for kube-controllers to talk to elastic.
@@ -234,7 +243,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// via this gateway. However, in multi-tenant mode we disable the elasticsearch controller and so this isn't needed.
 	if err := r.createESGateway(
 		ctx,
-		octrl.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace),
+		utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace),
 		install,
 		variant,
 		pullSecrets,
@@ -289,5 +298,5 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-	return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
+	return reconcile.Result{}, nil
 }

@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: master
   eck-kibana:
-    version: 7.17.13
+    version: 7.17.14
   kibana:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 7.17.13
+    version: 7.17.14
   elasticsearch:
     image: tigera/elasticsearch
     version: master
@@ -63,6 +63,9 @@ components:
     version: master
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
+    version: master
+  security-event-webhooks-processor:
+    image: tigera/webhooks-processor
     version: master
   compliance-controller:
     image: tigera/compliance-controller

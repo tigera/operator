@@ -18,21 +18,14 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"time"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	apps "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
-
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
@@ -51,11 +44,15 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
+	apps "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -90,6 +87,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
+	if opts.ElasticExternal {
+		// This controller installs the Elastic operator and an Elasticsearch instance, which is not
+		// needed when using an external Elastic cluster.
+		return nil
+	}
 
 	// Create the reconciler
 	r := &ElasticSubController{
@@ -120,8 +122,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch LogStorage resource: %w", err)
 	}
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to watch Network resource: %w", err)
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("log-storage-elastic-controller failed to watch Installation resource: %w", err)
 	}
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ImageSet: %w", err)
@@ -249,6 +251,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch the Service resource: %w", err)
 	}
 
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("log-storage-elastic-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -282,7 +291,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	// Set or remove the finalizer from the LogStorage object as needed.
 	if err = r.handleLogStorageFinalizer(ctx, ls, reqLogger); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating LogStorage finalizer", err, reqLogger)
+		// Note: we don't set degraded status here because handleLogStorageFinalizer() already does that.
 		return reconcile.Result{}, err
 	}
 
@@ -304,14 +313,14 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
@@ -582,11 +591,12 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	// TODO: In multi-tenant mode, and probably single-tenant as well, ILM programming should be handled by someone other than the operator.
-	// Either out of band, or by Linseed.
-	if err := r.applyILMPolicies(ls, reqLogger, ctx); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
-		return reconcile.Result{}, err
+	// In multi-tenant mode, ILM programming is created out of band
+	if !r.multiTenant {
+		if err := r.applyILMPolicies(ls, reqLogger, ctx); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error applying ILM policies", nil, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	if kibanaEnabled && esLicenseType == render.ElasticsearchLicenseTypeBasic {
@@ -601,7 +611,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-	return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
+	return reconcile.Result{}, nil
 }
 
 // isTerminating returns true if the LogStorage instance is terminating.
@@ -673,14 +683,12 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 
 func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) error {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
-	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ElasticEndpoint())
+	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ECKElasticEndpoint())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return err
 	}
 
 	if err = esClient.SetILMPolicies(ctx, ls); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch lifecycle policies", err, reqLogger)
 		return err
 	}
 	return nil

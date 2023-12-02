@@ -17,7 +17,6 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
-	"time"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
@@ -118,6 +117,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		dpiAPIReady:     dpiAPIReady,
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -154,8 +154,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %w", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch Installation resource: %v", err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -237,6 +237,7 @@ type ReconcileIntrusionDetection struct {
 	dpiAPIReady     *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
+	elasticExternal bool
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -309,7 +310,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !isManagedCluster {
+	if !isManagedCluster && !r.elasticExternal {
 		// check es-gateway to be available
 		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 		if err != nil {
@@ -318,21 +319,21 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
@@ -341,17 +342,17 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Query for the installation object.
@@ -456,7 +457,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !r.dpiAPIReady.IsReady() {
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Intrusion detection controller sometimes needs to make requests to outside sources. Therefore, we include
@@ -500,6 +501,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ClusterDomain:                r.clusterDomain,
 		ESLicenseType:                esLicenseType,
 		ManagedCluster:               isManagedCluster,
+		ManagementCluster:            isManagementCluster,
 		HasNoLicense:                 hasNoLicense,
 		TrustedCertBundle:            trustedBundle,
 		IntrusionDetectionCertSecret: intrusionDetectionKeyPair,
@@ -598,7 +600,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.

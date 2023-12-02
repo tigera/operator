@@ -270,7 +270,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	checkPacketCaptureResources := func(resources []client.Object, useCSR, enableOIDC bool) {
 		for i, expectedRes := range expectedResources(useCSR, enableOIDC) {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources(useCSR, enableOIDC))))
 

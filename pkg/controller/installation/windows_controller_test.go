@@ -172,7 +172,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			var degradedMsg []string
 			var degradedErr []string
 			var dsWin appsv1.DaemonSet
-			var winNode *corev1.Node
 
 			BeforeEach(func() {
 				// Delete the default installation
@@ -193,24 +192,6 @@ var _ = Describe("windows-controller installation tests", func() {
 						Namespace: common.CalicoNamespace,
 					},
 				}
-
-				// Windows node
-				winNode = &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "nodewin1",
-						Labels: map[string]string{
-							"kubernetes.io/os": "windows",
-						},
-					},
-					Status: corev1.NodeStatus{
-						NodeInfo: corev1.NodeSystemInfo{
-							ContainerRuntimeVersion: "containerd://1.6.8",
-						},
-					},
-				}
-
-				// Delete the windows node if it exists
-				_ = c.Delete(ctx, winNode)
 
 				cr.Status = operator.InstallationStatus{
 					Variant: operator.Calico,
@@ -236,9 +217,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			})
 
 			It("should not render the Windows daemonset when it is disabled in the installation resource", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
@@ -253,9 +231,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			})
 
 			It("should not render the Windows daemonset when it is explicitly disabled in the installation resource", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				disabled := operator.WindowsDataplaneDisabled
 				cr.Spec.CalicoNetwork.WindowsDataplane = &disabled
 
@@ -272,6 +247,41 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(degradedErr).To(ConsistOf([]string{}))
 			})
 
+			It("should not render the Windows daemonset when Installation.Status is empty", func() {
+				// Create the installation resource with no status
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+				cr.Spec.WindowsNodes = nil
+				cr.Status = operator.InstallationStatus{}
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err.Error()).To(Equal("InstallationStatus is empty"))
+
+				// The calico-node-windows daemonset should not be rendered
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{"InstallationStatus is empty"}))
+				Expect(degradedErr).To(ConsistOf([]string{"InstallationStatus is empty"}))
+			})
+
+			It("should not render the Windows daemonset when Spec.WindowsNodes is nil (as when core_controller hasn't still initialized the defaults)", func() {
+				// Create the installation resource with no WindowsNodes
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+				cr.Spec.WindowsNodes = nil
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err.Error()).To(Equal("Installation.Spec.WindowsNodes is nil"))
+
+				// The calico-node-windows daemonset should not be rendered
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{"Installation.Spec.WindowsNodes is nil"}))
+				Expect(degradedErr).To(ConsistOf([]string{"Installation.Spec.WindowsNodes is nil"}))
+			})
+
 			It("should render the Windows daemonset when configuration is complete and valid", func() {
 				hns := operator.WindowsDataplaneHNS
 				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
@@ -279,15 +289,11 @@ var _ = Describe("windows-controller installation tests", func() {
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
-				// The calico-node-windows daemonset should not be rendered as there
-				// are no Windows nodes
+				// The calico-node-windows daemonset should not be rendered
 				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
 				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
 				Expect(degradedMsg).To(ConsistOf([]string{}))
 				Expect(degradedErr).To(ConsistOf([]string{}))
-
-				// Create the Windows nodes
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
@@ -302,9 +308,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			It("should not render the Windows daemonset when the kubernetes-service-endpoint configmap does not exist", func() {
 				hns := operator.WindowsDataplaneHNS
 				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
-
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
 
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -333,9 +336,6 @@ var _ = Describe("windows-controller installation tests", func() {
 				hns := operator.WindowsDataplaneHNS
 				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
 
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				// Create the installation resource
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
@@ -363,9 +363,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			})
 
 			It("should not render the Windows daemonset when the encapsulation is VXLANCrossSubnet (not supported)", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				// VXLANCrossSubnet is not supported
 				cr.Spec.CalicoNetwork.IPPools[0].Encapsulation = "VXLANCrossSubnet"
 
@@ -387,9 +384,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			})
 
 			It("should not render the Windows daemonset when the kube-dns service cannot be found", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				// Create dns service which is autodetected by windows-controller
 				Expect(c.Delete(ctx,
 					&corev1.Service{
@@ -418,9 +412,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			})
 
 			It("should not render the Windows daemonset when FelixConfiguration.Spec.VXLANVNI is nil", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				// Delete existing default FelixConfig and recreate with no VXLANVNI
 				Expect(c.Delete(ctx,
 					&crdv1.FelixConfiguration{
@@ -454,9 +445,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			})
 
 			It("should not render the Windows daemonset when IPAMConfiguration StrictAffinity is not true", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				// Delete existing default IPAMConfiguration and recreate with StrictAffinity false
 				Expect(c.Delete(ctx,
 					&v3.IPAMConfiguration{
@@ -491,9 +479,6 @@ var _ = Describe("windows-controller installation tests", func() {
 			})
 
 			It("should not render the Windows daemonset with no ServiceCIDRs", func() {
-				// Create the Windows node
-				Expect(c.Create(ctx, winNode)).ToNot(HaveOccurred())
-
 				cr.Spec.ServiceCIDRs = []string{}
 
 				hns := operator.WindowsDataplaneHNS
@@ -575,24 +560,6 @@ var _ = Describe("windows-controller installation tests", func() {
 						})).ToNot(HaveOccurred())
 
 					if enableWindows {
-						// Create a Windows node so that the calico-node-windows daemonset is rendered
-						node := &corev1.Node{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "nodewin1",
-								Labels: map[string]string{
-									"kubernetes.io/os": "windows",
-								},
-							},
-						}
-
-						node.Status = corev1.NodeStatus{
-							NodeInfo: corev1.NodeSystemInfo{
-								ContainerRuntimeVersion: "containerd://1.6.8",
-							},
-						}
-
-						Expect(c.Create(ctx, node)).ToNot(HaveOccurred())
-
 						// Create the k8s service endpoint configmap (required for windows)
 						endPointCM := &corev1.ConfigMap{
 							ObjectMeta: metav1.ObjectMeta{

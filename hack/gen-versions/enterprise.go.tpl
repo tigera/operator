@@ -170,6 +170,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "security-event-webhooks-processor" }}
+	ComponentSecurityEventWebhooksProcessor = component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = component{
 		Version:  "{{ .Version }}",
@@ -384,6 +391,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

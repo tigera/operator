@@ -19,7 +19,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'tigera-secure'",
-          "namespaceSelector": "name == 'tigera-kibana'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-kibana'"
         },
         "destination": {
           "ports": [
@@ -32,7 +32,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'tigera-secure-es-gateway'",
-          "namespaceSelector": "name == 'tigera-elasticsearch'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'"
         },
         "destination": {
           "ports": [
@@ -45,7 +45,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'tigera-linseed'",
-          "namespaceSelector": "name == 'tigera-elasticsearch'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'"
         },
         "destination": {
           "ports": [
@@ -64,7 +64,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'elastic-operator'",
-          "namespaceSelector": "name == 'tigera-eck-operator'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-eck-operator'"
         }
       },
       {

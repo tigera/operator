@@ -24,7 +24,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crypto"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -45,7 +44,7 @@ const (
 // are generated and stored in the user secret, a hashed version of the credentials is stored in the tigera-elasticsearch namespace for ES Gateway to retrieve and use to compare
 // the gateway credentials, and a secret containing real admin level credentials is created and stored in the tigera-elasticsearch namespace to be swapped in once
 // ES Gateway has confirmed that the gateway credentials match.
-func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client, h octrl.NamespaceHelper) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
+func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client, h utils.NamespaceHelper) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
 	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, h.TruthNamespace())
 	if err != nil {
 		return nil, nil, nil, err

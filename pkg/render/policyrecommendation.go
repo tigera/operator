@@ -70,6 +70,9 @@ type PolicyRecommendationConfiguration struct {
 	// Whether the cluster supports pod security policies.
 	UsePSP    bool
 	Namespace string
+
+	// Whether or not to run the rendered components in multi-tenant mode.
+	Tenant *operatorv1.Tenant
 }
 
 type policyRecommendationComponent struct {
@@ -254,6 +257,14 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Name:  "LINSEED_TOKEN",
 			Value: GetLinseedTokenPath(false),
 		},
+	}
+
+	if pr.cfg.Tenant != nil {
+		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: pr.cfg.Tenant.Spec.ID})
+
+		if pr.cfg.Tenant.MultiTenant() {
+			envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: pr.cfg.Tenant.Namespace})
+		}
 	}
 
 	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())

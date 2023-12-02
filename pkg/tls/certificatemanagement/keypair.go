@@ -158,13 +158,44 @@ func (k *KeyPair) GetIssuer() CertificateInterface {
 	return k.Issuer
 }
 
+func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
+	const (
+		legacySecretCertName  = "cert" // Formerly known as certificatemanagement.ManagerSecretCertName
+		legacySecretKeyName   = "key"  // Formerly known as certificatemanagement.ManagerSecretKeyName
+		legacySecretKeyName2  = "apiserver.key"
+		legacySecretCertName2 = "apiserver.crt"
+		legacySecretKeyName3  = "key.key"             // Formerly used for Felix and Typha.
+		legacySecretCertName3 = "cert.crt"            // Formerly used for Felix and Typha.
+		legacySecretKeyName4  = "managed-cluster.key" // Used for tunnel secrets
+		legacySecretCertName4 = "managed-cluster.crt"
+		legacySecretKeyName5  = "management-cluster.key"
+		legacySecretCertName5 = "management-cluster.crt"
+	)
+	data := secret.Data
+	for keyField, certField := range map[string]string{
+		corev1.TLSPrivateKeyKey: corev1.TLSCertKey,
+		legacySecretKeyName:     legacySecretCertName,
+		legacySecretKeyName2:    legacySecretCertName2,
+		legacySecretKeyName3:    legacySecretCertName3,
+		legacySecretKeyName4:    legacySecretCertName4,
+		legacySecretKeyName5:    legacySecretCertName5,
+	} {
+		key, cert := data[keyField], data[certField]
+		if len(cert) > 0 {
+			return key, cert
+		}
+	}
+	return nil, nil
+}
+
 // NewKeyPair returns a KeyPair, which wraps a Secret object that contains a private key and a certificate. Whether certificate
 // management is configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
 func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) KeyPairInterface {
+	key, cert := GetKeyCertPEM(secret)
 	return &KeyPair{
 		Name:           secret.Name,
-		PrivateKeyPEM:  secret.Data[corev1.TLSPrivateKeyKey],
-		CertificatePEM: secret.Data[corev1.TLSCertKey],
+		PrivateKeyPEM:  key,
+		CertificatePEM: cert,
 		DNSNames:       dnsNames,
 		ClusterDomain:  clusterDomain,
 	}

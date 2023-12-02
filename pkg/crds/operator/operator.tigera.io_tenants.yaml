@@ -32,9 +32,61 @@ spec:
             type: object
           spec:
             properties:
+              elastic:
+                description: Elastic configures per-tenant ElasticSearch and Kibana
+                  parameters. This field is required for clusters using external ES.
+                properties:
+                  kibana_url:
+                    type: string
+                  mutualTLS:
+                    type: boolean
+                  url:
+                    type: string
+                required:
+                - mutualTLS
+                - url
+                type: object
               id:
                 description: ID is the unique identifier for this tenant.
                 type: string
+              indices:
+                description: Indices defines the how to store a tenant's data
+                items:
+                  description: Index defines how to store a tenant's data
+                  properties:
+                    baseIndexName:
+                      description: BaseIndexName defines the name of the index that
+                        will be used to store data (this name excludes the numerical
+                        identifier suffix)
+                      type: string
+                    dataType:
+                      description: DataType represents the type of data stored in
+                        the defined index
+                      enum:
+                      - Alerts
+                      - AuditLogs
+                      - BGPLogs
+                      - ComplianceBenchmarks
+                      - ComplianceReports
+                      - ComplianceSnapshots
+                      - DNSLogs
+                      - FlowLogs
+                      - L7Logs
+                      - RuntimeReports
+                      - ThreatFeedsDomainSet
+                      - ThreatFeedsIPSet
+                      - WAFLogs
+                      type: string
+                  required:
+                  - baseIndexName
+                  - dataType
+                  type: object
+                type: array
+              name:
+                description: Name is a human readable name for this tenant.
+                type: string
+            required:
+            - indices
             type: object
           status:
             type: object

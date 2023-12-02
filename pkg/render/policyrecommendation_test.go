@@ -17,6 +17,8 @@ package render_test
 import (
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -108,7 +110,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
 		// Should mount ManagerTLSSecret for non-managed clusters
@@ -267,6 +269,15 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		tenantBNamespace := "tenant-b"
 		It("should render expected components inside expected namespace for each policyrecommendation instance", func() {
 			cfg.Namespace = tenantANamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantA",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
 			tenantAPolicyRec := render.PolicyRecommendation(cfg)
 
 			tenantAResources, _ := tenantAPolicyRec.Objects()
@@ -292,10 +303,24 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(len(tenantAResources)).To(Equal(len(tenantAExpectedResources)))
 
 			for i, expectedRes := range tenantAExpectedResources {
-				rtest.CompareResource(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
+			d := rtest.GetResource(tenantAResources, "tigera-policy-recommendation", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a-id"}))
+
 			cfg.Namespace = tenantBNamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantB",
+					Namespace: tenantBNamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-b-id",
+				},
+			}
 			tenantBPolicyRec := render.PolicyRecommendation(cfg)
 
 			tenantBResources, _ := tenantBPolicyRec.Objects()
@@ -319,10 +344,14 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			}
 
 			Expect(len(tenantBResources)).To(Equal(len(tenantBExpectedResources)))
-
 			for i, expectedRes := range tenantBExpectedResources {
-				rtest.CompareResource(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
+			d = rtest.GetResource(tenantBResources, "tigera-policy-recommendation", tenantBNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs = d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantBNamespace}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-b-id"}))
+
 		})
 	})
 })

@@ -17,12 +17,10 @@ package secrets
 import (
 	"context"
 	"fmt"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/common"
-	octrl "github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -32,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
@@ -55,11 +54,12 @@ var log = logf.Log.WithName("controller_logstorage_secrets")
 // SecretSubController is a sub controller for managing secrets related to Elasticsearch and log storage components.
 // It provisions secrets and the trusted bundle into the requisite namespace(s) for other controllers to consume.
 type SecretSubController struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	clusterDomain string
-	multiTenant   bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	clusterDomain   string
+	multiTenant     bool
+	elasticExternal bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -69,11 +69,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &SecretSubController{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		clusterDomain: opts.ClusterDomain,
-		multiTenant:   opts.MultiTenant,
-		status:        status.New(mgr.GetClient(), "log-storage-secrets", opts.KubernetesVersion),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clusterDomain:   opts.ClusterDomain,
+		multiTenant:     opts.MultiTenant,
+		status:          status.New(mgr.GetClient(), "log-storage-secrets", opts.KubernetesVersion),
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -94,8 +95,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch LogStorage resource: %w", err)
 	}
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("log-storage-secrets-controller failed to watch Network resource: %w", err)
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("log-storage-secrets-controller failed to watch Installation resource: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch ManagementCluster resource: %w", err)
@@ -113,7 +114,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := octrl.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
+	// In multi-tenant mode, we need to watch all namespaces for secrets. In single-tenant mode,
+	// we only need to watch the elasticsearch namespace. Both need tigera-operator.
+	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
 
 	// Watch all the elasticsearch user secrets in the truth namespace.
 	if err = utils.AddSecretWatchWithLabel(c, helper.TruthNamespace(), logstoragecommon.TigeraElasticsearchUserSecretLabel); err != nil {
@@ -158,11 +161,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err := utils.AddServiceWatch(c, render.LinseedServiceName, helper.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Service: %w", err)
 	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
+	if err != nil {
+		return fmt.Errorf("log-storage-secrets-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
 func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := octrl.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := utils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage Secrets")
 
@@ -198,7 +209,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
 	if ls.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Get Installation resource.
@@ -272,13 +283,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// Provision secrets and the trusted bundle into the cluster.
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 
-	// Before we can create secrets, we need to ensure the tigera-elasticsearch namespace exists.
-	esNamespace := render.CreateNamespace(render.ElasticsearchNamespace, install.KubernetesProvider, render.PSSPrivileged)
-	if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(esNamespace), r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Create Elasticsearch secrets.
 	esTrustedBundle := elasticKeys.trustedBundle(clusterCM)
 	if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.component(esTrustedBundle), r.status); err != nil {
@@ -287,13 +291,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if kibanaEnabled {
-		// Create the Namespace.
-		kbNamespace := render.CreateNamespace(render.KibanaNamespace, install.KubernetesProvider, render.PSSBaseline)
-		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
 		// Render the key pair and trusted bundle into the Kibana namespace.
 		if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.kibanaComponent(esTrustedBundle), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
@@ -328,7 +325,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 	r.status.ClearDegraded()
-	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
+	return reconcile.Result{}, nil
 }
 
 // generateClusterSecrets generates secrets that are cluster-scoped in a multi-tenant environment
@@ -337,41 +334,43 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 func (r *SecretSubController) generateClusterSecrets(log logr.Logger, kibana bool, cm certificatemanager.CertificateManager) (*elasticKeyPairCollection, error) {
 	collection := elasticKeyPairCollection{log: log}
 
-	// Generate a keypair for elasticsearch.
-	//
-	// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
-	// It will be provisioned into the cluster in the render stage later on.
-	// Elasticsearch is always in the tigera-elasticsearch namespace, and is shared across tenants, so should always be stored in the
-	// tigera-operator namespace.
-	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
-	elasticKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
-		return nil, err
-	}
-	collection.elastic = elasticKeyPair
+	if !r.elasticExternal {
+		// Generate a keypair for elasticsearch.
+		//
+		// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+		// It will be provisioned into the cluster in the render stage later on.
+		// Elasticsearch is always in the tigera-elasticsearch namespace, and is shared across tenants, so should always be stored in the
+		// tigera-operator namespace.
+		esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+		elasticKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
+			return nil, err
+		}
+		collection.elastic = elasticKeyPair
 
-	if !r.multiTenant {
-		if kibana {
-			// Generate a keypair for Kibana.
-			//
-			// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
-			// It will be provisioned into the cluster in the render stage later on.
-			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-			kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
-			if err != nil {
-				log.Error(err, err.Error())
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
-				return nil, err
-			}
-			collection.kibana = kibanaKeyPair
+		if !r.multiTenant {
+			if kibana {
+				// Generate a keypair for Kibana.
+				//
+				// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+				// It will be provisioned into the cluster in the render stage later on.
+				kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+				kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+				if err != nil {
+					log.Error(err, err.Error())
+					r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
+					return nil, err
+				}
+				collection.kibana = kibanaKeyPair
 
-			// Add the es-proxy certificate to the collection. This is needed in case the user has enabled Kibana with mTLS.
-			cert, err := cm.GetCertificate(r.client, render.ManagerInternalTLSSecretName, render.ManagerNamespace)
-			if err != nil && !errors.IsNotFound(err) {
-				return nil, err
-			} else {
-				collection.upstreamCerts = append(collection.upstreamCerts, cert)
+				// Add the es-proxy certificate to the collection. This is needed in case the user has enabled Kibana with mTLS.
+				cert, err := cm.GetCertificate(r.client, render.ManagerInternalTLSSecretName, render.ManagerNamespace)
+				if err != nil && !errors.IsNotFound(err) {
+					return nil, err
+				} else {
+					collection.upstreamCerts = append(collection.upstreamCerts, cert)
+				}
 			}
 		}
 	}
@@ -380,6 +379,7 @@ func (r *SecretSubController) generateClusterSecrets(log logr.Logger, kibana boo
 	if r.multiTenant {
 		// For multi-tenant systems, linseed runs in multiple namespaces, so we need to collect the certificates from all namespaces
 		// that have a tenant.
+		var err error
 		linseedNamespaces, err = utils.TenantNamespaces(context.Background(), r.client)
 		if err != nil {
 			return nil, err
@@ -399,7 +399,7 @@ func (r *SecretSubController) generateClusterSecrets(log logr.Logger, kibana boo
 }
 
 // generateNamespacedSecrets creates keypairs for components that are provisioned per-tenant in a multi-tenant system.
-func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper octrl.NamespaceHelper, cm certificatemanager.CertificateManager, managementCluster *operatorv1.ManagementCluster) (*keyPairCollection, error) {
+func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper utils.NamespaceHelper, cm certificatemanager.CertificateManager, managementCluster *operatorv1.ManagementCluster) (*keyPairCollection, error) {
 	// Start by collecting upstream certificates that we need to trust, before generating keypairs.
 	collection, err := r.collectUpstreamCerts(log, helper, cm)
 	if err != nil {
@@ -457,7 +457,7 @@ func (r *SecretSubController) generateNamespacedSecrets(log logr.Logger, helper 
 
 // collectUpstreamCerts collects certificates generated by upstream components to be added to the trusted bundle
 // provisioned by this controller.
-func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper octrl.NamespaceHelper, cm certificatemanager.CertificateManager) (*keyPairCollection, error) {
+func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils.NamespaceHelper, cm certificatemanager.CertificateManager) (*keyPairCollection, error) {
 	collection := keyPairCollection{log: log}
 
 	// Get upstream certificates that we depend on, but aren't created by this controller. Some of these are
@@ -499,6 +499,14 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper octrl
 
 		// es-gateay and Linseed need to trust certificates signed by the root tigera-operator CA.
 		certificatemanagement.CASecretName: common.OperatorNamespace(),
+	}
+
+	if r.elasticExternal {
+		// For external ES, we don't need to generate a keypair for ES itself. Instead, a public certificate
+		// for the external ES and Kibana instances must be provided. Load and include in these into
+		// the trusted bundle for Linseed and es-gateway.
+		certs[logstorage.ExternalESPublicCertName] = common.OperatorNamespace()
+		certs[logstorage.ExternalKBPublicCertName] = common.OperatorNamespace()
 	}
 
 	for certName, certNamespace := range certs {
@@ -591,7 +599,7 @@ func (c *keyPairCollection) trustedBundle(cm certificatemanager.CertificateManag
 	return cm.CreateTrustedBundle(certs...)
 }
 
-func (c keyPairCollection) component(bundle certificatemanagement.TrustedBundle, request octrl.NamespaceHelper) render.Component {
+func (c keyPairCollection) component(bundle certificatemanagement.TrustedBundle, request utils.NamespaceHelper) render.Component {
 	// Create a render.Component to provision or update key pairs and the trusted bundle.
 	kpos := []rcertificatemanagement.KeyPairOption{}
 

@@ -37,6 +37,8 @@ const (
 )
 
 type trustedBundle struct {
+	// name is the name of the bundle. This is used to name the configmap and thus also used in the volume mount.
+	name string
 	// systemCertificates is a bundle of certificates loaded from the host systems root location.
 	systemCertificates []byte
 	// certificates is a map of key: hash, value: certificate.
@@ -47,7 +49,7 @@ type trustedBundle struct {
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 func CreateTrustedBundle(certificates ...CertificateInterface) TrustedBundle {
-	bundle, err := createTrustedBundle(false, certificates...)
+	bundle, err := createTrustedBundle(false, TrustedCertConfigMapName, certificates...)
 	if err != nil {
 		panic(err) // This should never happen.
 	}
@@ -59,11 +61,17 @@ func CreateTrustedBundle(certificates ...CertificateInterface) TrustedBundle {
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 // - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 func CreateTrustedBundleWithSystemRootCertificates(certificates ...CertificateInterface) (TrustedBundle, error) {
-	return createTrustedBundle(true, certificates...)
+	return createTrustedBundle(true, TrustedCertConfigMapName, certificates...)
+}
+
+// CreateMultiTenantTrustedBundleWithSystemRootCertificates creates a TrustedBundle with system root certificates that is
+// appropraite for a multi-tenant cluster, in which each tenant needs multiple trusted bundles.
+func CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...CertificateInterface) (TrustedBundle, error) {
+	return createTrustedBundle(true, TrustedCertConfigMapNamePublic, certificates...)
 }
 
 // createTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
-func createTrustedBundle(includeSystemBundle bool, certificates ...CertificateInterface) (TrustedBundle, error) {
+func createTrustedBundle(includeSystemBundle bool, name string, certificates ...CertificateInterface) (TrustedBundle, error) {
 	var systemCertificates []byte
 	var err error
 	if includeSystemBundle {
@@ -74,6 +82,7 @@ func createTrustedBundle(includeSystemBundle bool, certificates ...CertificateIn
 	}
 
 	bundle := &trustedBundle{
+		name:               name,
 		systemCertificates: systemCertificates,
 		certificates:       make(map[string]CertificateInterface),
 	}
@@ -130,7 +139,7 @@ func (t *trustedBundle) VolumeMounts(osType rmeta.OSType) []corev1.VolumeMount {
 	// golang stdlib reads this path
 	mounts := []corev1.VolumeMount{
 		{
-			Name:      TrustedCertConfigMapName,
+			Name:      t.name,
 			MountPath: path.Join(mountPath, sslCertDir),
 			ReadOnly:  true,
 		},
@@ -139,7 +148,7 @@ func (t *trustedBundle) VolumeMounts(osType rmeta.OSType) []corev1.VolumeMount {
 		// apps linking libssl need this file (SSL_CERT_FILE)
 		mounts = append(mounts,
 			corev1.VolumeMount{
-				Name:      TrustedCertConfigMapName,
+				Name:      t.name,
 				MountPath: path.Join(mountPath, SSLCertFile),
 				SubPath:   RHELRootCertificateBundleName,
 				ReadOnly:  true,
@@ -151,10 +160,10 @@ func (t *trustedBundle) VolumeMounts(osType rmeta.OSType) []corev1.VolumeMount {
 
 func (t *trustedBundle) Volume() corev1.Volume {
 	return corev1.Volume{
-		Name: TrustedCertConfigMapName,
+		Name: t.name,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{Name: TrustedCertConfigMapName},
+				LocalObjectReference: corev1.LocalObjectReference{Name: t.name},
 			},
 		},
 	}
@@ -179,7 +188,7 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TrustedCertConfigMapName,
+			Name:      t.name,
 			Namespace: namespace,
 
 			// Include the hash annotations on the configmap, so that downstrream controllers

@@ -55,6 +55,13 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
 		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 	}
+
+	// If we're terminating, we don't want to delete the namespace right away.
+	// It will be cleaned up by Kubernetes when the Installation object is finally released.
+	if c.cfg.Terminating {
+		ns = []client.Object{}
+	}
+
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
 		ns = append(ns, CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted))

@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"time"
-
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,9 +56,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var (
-	logw = logf.Log.WithName("controller_windows")
-)
+var logw = logf.Log.WithName("controller_windows")
 
 // Add creates a new Tiers Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -122,6 +118,12 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("tigera-windows-controller failed to watch ImageSet: %w", err)
 	}
 
+	// Watch kube DNS service.
+	dnsService := utils.GetDNSServiceName(opts.DetectedProvider)
+	if err = utils.AddServiceWatch(c, dnsService.Name, dnsService.Namespace); err != nil {
+		return fmt.Errorf("tigera-windows-controller failed to watch Service: %w", err)
+	}
+
 	for _, t := range secondaryResources() {
 		pred := predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
@@ -161,17 +163,19 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddResourceWatch(c, k8sClient, logw, ri.ipamConfigWatchReady, []client.Object{&apiv3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: apiv3.KindIPAMConfiguration}}})
 
 	if ri.enterpriseCRDsExist {
-		if err = utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), err)
-		}
-		if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), err)
+		for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
+			if err = utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, ns); err != nil {
+				return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", render.NodePrometheusTLSServerSecret, ns, err)
+			}
+			if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, ns); err != nil {
+				return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusClientTLSSecretName, ns, err)
+			}
 		}
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
-	err = utils.AddPeriodicReconcile(c, reconcilePeriod)
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to create periodic reconcile watch: %w", err)
 	}
@@ -288,7 +292,12 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	// We rely on the core controller for defaulting, so wait until it has done so before continuing
 	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
 		err := fmt.Errorf("InstallationStatus is empty")
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "InstallationStatus is empty", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "InstallationStatus is empty", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if instance.Spec.WindowsNodes == nil {
+		err := fmt.Errorf("Installation.Spec.WindowsNodes is nil")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Installation.Spec.WindowsNodes is nil", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -317,7 +326,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	if instance.Spec.CNI.Type == operatorv1.PluginCalico && instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico {
 		if !r.ipamConfigWatchReady.IsReady() {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for IPAMConfiguration watch to be established", nil, logw)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		ipamConfiguration := &apiv3.IPAMConfiguration{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, ipamConfiguration)
@@ -363,23 +372,16 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		// The key pair is created by the core controller, so if it isn't set, requeue to wait until it is
-		nodePrometheusTLS, err = certificateManager.GetKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
+		nodePrometheusTLS, err = certificateManager.GetKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error getting TLS certificate", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+			return reconcile.Result{}, err
 		}
 	}
 
 	var component render.Component
 
-	// Retrieve DNS server addresses from DNS service ("kube-dns" in most providers, particular values on OpenShift and RKE2)
-	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
-	if r.autoDetectedProvider == operatorv1.ProviderOpenShift {
-		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
-	} else if r.autoDetectedProvider == operatorv1.ProviderRKE2 {
-		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
-	}
-
+	kubeDNSServiceName := utils.GetDNSServiceName(r.autoDetectedProvider)
 	kubeDNSService := &corev1.Service{}
 	err = r.client.Get(ctx, kubeDNSServiceName, kubeDNSService)
 	if err != nil {
@@ -388,7 +390,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error querying %s service", kubeDNSServiceName.Name), err, reqLogger)
 		}
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{}, err
 	}
 	kubeDNSIPs := kubeDNSService.Spec.ClusterIPs
 
@@ -396,7 +398,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	if felixConfiguration.Spec.VXLANVNI == nil {
 		err = fmt.Errorf("VXLANVNI not specified in FelixConfigurationSpec")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading VXLANVNI from FelixConfiguration", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{}, err
 	}
 
 	windowsCfg := render.WindowsConfiguration{
@@ -444,7 +446,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	reqLogger.V(1).Info("Finished reconciling windows installation")

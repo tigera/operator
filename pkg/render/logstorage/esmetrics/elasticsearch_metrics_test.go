@@ -111,7 +111,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			}
 			Expect(resources).To(HaveLen(len(expectedResources)))
 			for i, expectedRes := range expectedResources {
-				rtest.CompareResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			deploy := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			service := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service").(*corev1.Service)

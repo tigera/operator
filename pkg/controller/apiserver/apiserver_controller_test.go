@@ -715,6 +715,52 @@ var _ = Describe("apiserver controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
+			It("Should create management-cluster certificate with old cert keys", func() {
+				// Create the tunnel secret in operator namespace
+				// In a production cluster, this would be created by Manager controller in tigera-operator namespace
+				err := cli.Create(ctx, &corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+					Data: map[string][]byte{
+						"cert": []byte("certvalue"),
+						"key":  []byte("keyvalue"),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         false,
+				}
+
+				// Reconcile the API server
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				clusterConnectionInAppNs := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: "tigera-system",
+					},
+				}
+
+				// Ensure that the tunnel secret was copied in tigera-system namespace
+				err = test.GetResource(cli, &clusterConnectionInAppNs)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				Expect(clusterConnectionInAppNs.Data).Should(HaveKeyWithValue("tls.crt", []byte("certvalue")))
+				Expect(clusterConnectionInAppNs.Data).Should(HaveKeyWithValue("tls.key", []byte("keyvalue")))
+			})
+
 			It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
 				// Create the tunnel secret in operator namespace
 				// In a production cluster, this would be created by Manager controller in tigera-operator namespace

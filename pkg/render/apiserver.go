@@ -197,20 +197,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
-	if c.cfg.ManagementCluster != nil {
-		if c.cfg.MultiTenant {
-			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
-			// per-tenant guardian certificates when creating ManagedClusters.
-			globalObjects = append(globalObjects, c.multiTenantSecretsRBAC()...)
-		} else {
-			globalObjects = append(globalObjects, c.secretsRBAC()...)
-		}
-	} else {
-		// If we're not a management cluster, the API server doesn't need permissions to access secrets.
-		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
-		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
-	}
-
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
 	// deleted, since they will be garbage collected on namespace deletion.
 	namespacedObjects := []client.Object{}
@@ -246,6 +232,20 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tieredPolicyPassthruClusterRolebinding(),
 		c.uiSettingsPassthruClusterRole(),
 		c.uiSettingsPassthruClusterRolebinding(),
+	}
+
+	if c.cfg.ManagementCluster != nil {
+		if c.cfg.MultiTenant {
+			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
+			// per-tenant guardian certificates when creating ManagedClusters.
+			globalEnterpriseObjects = append(globalEnterpriseObjects, c.multiTenantSecretsRBAC()...)
+		} else {
+			globalEnterpriseObjects = append(globalEnterpriseObjects, c.secretsRBAC()...)
+		}
+	} else {
+		// If we're not a management cluster, the API server doesn't need permissions to access secrets.
+		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
+		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
 	}
 
 	// Namespaced enterprise-only objects.
@@ -1023,6 +1023,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 func (c *apiServerComponent) hostNetwork() bool {
 	hostNetwork := c.cfg.ForceHostNetwork
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		c.cfg.Installation.CNI != nil &&
 		c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS, because the control plane nodes don't run
@@ -1049,7 +1050,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	if c.cfg.MultiTenant {
-		env = append(env, corev1.EnvVar{Name: "MULTITENANT_ENABLED", Value: "true"}) // TODO: This is a temporary flag to enable multi-tenancy for PoC.
+		env = append(env, corev1.EnvVar{Name: "MULTI_TENANT_ENABLED", Value: "true"})
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
@@ -1312,6 +1313,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"uisettings",
 				"externalnetworks",
 				"egressgatewaypolicies",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{
 				"get",
@@ -1557,6 +1559,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				"globalalerttemplates",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{"get", "watch", "list"},
 		},
@@ -1599,6 +1602,18 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch"},
+		},
+		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Allow the user to only view securityeventwebhooks.
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list"},
 		},
 	}
 
@@ -1718,6 +1733,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"globalalerttemplates",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
@@ -1747,13 +1763,44 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers"},
-			Verbs:     []string{"get", "update", "patch", "create"},
+			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		// Allow the user to read services to view WAF configuration.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Allow the user to perform CRUD operations on securityeventwebhooks.
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
+		},
+		// Allow the user to create secrets.
+		{
+			APIGroups: []string{""},
+			Resources: []string{
+				"secrets",
+			},
+			Verbs: []string{"create"},
+		},
+		// Allow the user to patch webhooks-secret secret.
+		{
+			APIGroups: []string{""},
+			Resources: []string{
+				"secrets",
+			},
+			ResourceNames: []string{
+				"webhooks-secret",
+			},
+			Verbs: []string{"patch"},
 		},
 	}
 

@@ -17,7 +17,6 @@ package secrets
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
 
@@ -69,6 +68,13 @@ func AddClusterCAController(mgr manager.Manager, opts options.AddOptions) error 
 		return fmt.Errorf("cluster-ca-controller failed to watch CA secret: %w", err)
 	}
 
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("cluster-ca-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -107,5 +113,5 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
+	return reconcile.Result{}, nil
 }

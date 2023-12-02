@@ -63,12 +63,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version:  "7.17.13",
+		Version:  "7.17.14",
 		Registry: "",
 	}
 
 	ComponentEckKibana = component{
-		Version:  "7.17.13",
+		Version:  "7.17.14",
 		Registry: "",
 	}
 
@@ -146,6 +146,12 @@ var (
 	ComponentIntrusionDetectionController = component{
 		Version:  "master",
 		Image:    "tigera/intrusion-detection-controller",
+		Registry: "",
+	}
+
+	ComponentSecurityEventWebhooksProcessor = component{
+		Version:  "master",
+		Image:    "tigera/webhooks-processor",
 		Registry: "",
 	}
 
@@ -334,6 +340,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

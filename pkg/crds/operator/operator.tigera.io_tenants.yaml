@@ -32,6 +32,12 @@ spec:
             type: object
           spec:
             properties:
+              controlPlaneReplicas:
+                description: ControlPlaneReplicas defines how many replicas of the
+                  control plane core components will be deployed in tenant namespace.
+                  Defaults to the controlPlaneReplicas in Installation CR
+                format: int32
+                type: integer
               elastic:
                 description: Elastic configures per-tenant ElasticSearch and Kibana
                   parameters. This field is required for clusters using external ES.

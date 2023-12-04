@@ -54,9 +54,9 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
 
@@ -132,7 +132,7 @@ var _ = Describe("LogStorage controller", func() {
 		certificateManager, err = certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -550,7 +550,7 @@ var _ = Describe("LogStorage controller", func() {
 				testCA := test.MakeTestCA("logstorage-test")
 				esSecret, err := secret.CreateTLSSecret(testCA,
 					render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), "tls.key", "tls.crt",
-					rmeta.DefaultCertificateDuration, nil, esDNSNames...,
+					tls.DefaultCertificateDuration, nil, esDNSNames...,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -560,7 +560,7 @@ var _ = Describe("LogStorage controller", func() {
 
 				kbDNSNames = []string{"kb.example.com", "192.168.10.11"}
 				kbSecret, err := secret.CreateTLSSecret(testCA,
-					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt", rmeta.DefaultCertificateDuration, nil, kbDNSNames...,
+					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt", tls.DefaultCertificateDuration, nil, kbDNSNames...,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Update(ctx, kbSecret)).ShouldNot(HaveOccurred())
@@ -630,7 +630,7 @@ var _ = Describe("LogStorage controller", func() {
 				testCA := test.MakeTestCA("logstorage-test")
 				kbSecret, err := secret.CreateTLSSecret(testCA,
 					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
-					rmeta.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
+					tls.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Update(ctx, kbSecret)).ShouldNot(HaveOccurred())
@@ -710,7 +710,7 @@ var _ = Describe("LogStorage controller", func() {
 				dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 				kbSecret, err := secret.CreateTLSSecret(testCA,
 					render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
-					rmeta.DefaultCertificateDuration, nil, dnsNames...,
+					tls.DefaultCertificateDuration, nil, dnsNames...,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				resources = append(resources, kbSecret)

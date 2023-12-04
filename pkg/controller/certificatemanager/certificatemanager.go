@@ -17,7 +17,9 @@ package certificatemanager
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"strings"
 	"time"
@@ -100,6 +102,9 @@ type CertificateManager interface {
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
 	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
+	// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
+	// public key of the requestor is already being set in the certificate template.
+	SignCertificate(certificate *x509.Certificate) ([]byte, error)
 }
 
 type Option func(cm *certificateManager) error
@@ -129,8 +134,10 @@ func WithTenant(t *operatorv1.Tenant) Option {
 // brings their own secrets, CertificateManager will preserve and return them.
 func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
 	var (
-		cryptoCA                      *crypto.CA
-		csrImage                      string
+		cryptoCA *crypto.CA
+		csrImage string
+		// the private key is the
+		privateKey                    any
 		privateKeyPEM, certificatePEM []byte
 		certificateManagement         *operatorv1.CertificateManagement
 		err                           error
@@ -202,11 +209,24 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			if err := cryptoCA.Config.WriteCertConfig(crtContent, keyContent); err != nil {
 				return nil, err
 			}
-			privateKeyPEM, certificatePEM = keyContent.Bytes(), crtContent.Bytes()
+			privateKey, privateKeyPEM, certificatePEM = cryptoCA.Config.Key, keyContent.Bytes(), crtContent.Bytes()
 		} else {
 			// Found an existing CA - use that.
 			cm.log.V(2).Info("Found an existing CA secret")
 			privateKeyPEM, certificatePEM = caSecret.Data[corev1.TLSPrivateKeyKey], caSecret.Data[corev1.TLSCertKey]
+			privateKeyDER, _ := pem.Decode(privateKeyPEM)
+			if privateKeyDER == nil {
+				return nil, fmt.Errorf("cannot parse private tls.key PEM from the CA bundle")
+			}
+			// Parse in order of likelihood of format. If the tigera-ca-private secret is not replaced with a custom one,
+			// the certificate is PKCS1 formatted. (The x509 package also uses parsing as the way to identifying the type.)
+			if privateKey, err = x509.ParsePKCS1PrivateKey(privateKeyDER.Bytes); err != nil {
+				if privateKey, err = x509.ParsePKCS8PrivateKey(privateKeyDER.Bytes); err != nil {
+					if privateKey, err = x509.ParseECPrivateKey(privateKeyDER.Bytes); err != nil {
+						return nil, fmt.Errorf("cannot parse private key from the CA bundle")
+					}
+				}
+			}
 			cryptoCA, err = crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
 			if err != nil {
 				return nil, err
@@ -227,6 +247,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	cm.keyPair = &certificatemanagement.KeyPair{
 		Name:                  caSecretName,
 		Namespace:             ns,
+		PrivateKey:            privateKey,
 		PrivateKeyPEM:         privateKeyPEM,
 		CertificatePEM:        certificatePEM,
 		CSRImage:              csrImage,
@@ -272,7 +293,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}
 
 	// If we reach here, it means we need to create a new KeyPair.
-	tlsCfg, err := cm.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	tlsCfg, err := cm.MakeServerCertForDuration(sets.NewString(dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create signed cert pair: %s", err)
 	}
@@ -289,6 +310,22 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 		CertificatePEM: crtContent.Bytes(),
 		DNSNames:       dnsNames,
 	}, nil
+}
+
+// SignCertificate signs a certificate using the certificateManager's private key. The function is assuming that the
+// public key of the requestor is already being set in the certificate template.
+func (cm *certificateManager) SignCertificate(certificateTemplate *x509.Certificate) ([]byte, error) {
+	derBytes, err := x509.CreateCertificate(rand.Reader, certificateTemplate, cm.Certificate, certificateTemplate.PublicKey, cm.keyPair.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	pemBytes := bytes.NewBuffer([]byte{})
+	err = pem.Encode(pemBytes, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	if err != nil {
+		log.Error(err, "error encoding certificate PEM")
+		return nil, err
+	}
+	return pemBytes.Bytes(), nil
 }
 
 // This type will be returned for errors that do not have the correct Ext Key usage types
@@ -467,6 +504,7 @@ func certificateManagementKeyPair(ca *certificateManager, secretName, ns string,
 		DNSNames:              dnsNames,
 		CSRImage:              ca.keyPair.CSRImage,
 		Namespace:             ns,
+		CertificatePEM:        ca.CertificateManagement().CACert,
 	}
 }
 

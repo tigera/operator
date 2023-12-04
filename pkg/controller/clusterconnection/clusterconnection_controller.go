@@ -92,7 +92,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	for _, secretName := range []string{
 		render.PacketCaptureServerCert,
-		monitor.PrometheusTLSSecretName,
+		monitor.PrometheusServerTLSSecretName,
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
@@ -150,8 +150,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert, err)
 	}
 	// Watch for changes to the secrets associated with Prometheus.
-	if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusTLSSecretName, err)
+	if err = utils.AddSecretsWatch(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusServerTLSSecretName, err)
 	}
 
 	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
@@ -288,7 +288,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	for _, secretName := range []string{render.PacketCaptureServerCert, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)} {
+	for _, secretName := range []string{render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)

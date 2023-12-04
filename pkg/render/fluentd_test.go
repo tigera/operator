@@ -104,13 +104,14 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with a default configuration", func() {
-		expectedResources := []struct {
+		type resource struct {
 			name    string
 			ns      string
 			group   string
 			version string
 			kind    string
-		}{
+		}
+		expectedResources := []resource{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
@@ -122,15 +123,24 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
+		expectedDeleteResources := []resource{
+			{name: "tigera-linseed", ns: "tigera-fluentd", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+		}
 
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		resources, objectsToDelete := component.Objects()
+		Expect(resources).To(HaveLen(len(expectedResources)))
+		Expect(objectsToDelete).To(HaveLen(1))
 
 		i := 0
 		for _, expectedRes := range expectedResources {
 			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+		i = 0
+		for _, expectedRes := range expectedDeleteResources {
+			rtest.ExpectResourceTypeAndObjectMetadata(objectsToDelete[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 

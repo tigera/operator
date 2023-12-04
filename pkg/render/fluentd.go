@@ -1044,13 +1044,6 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		eksCloudwatchLogCredentialHashAnnotation: rmeta.AnnotationHash(c.cfg.EKSConfig),
 	}
 
-	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
-	// namespace. For multi-tenant management clusters, this may vary.
-	linseedNS := ElasticsearchNamespace
-	if c.cfg.Tenant.MultiTenant() {
-		linseedNS = c.cfg.Tenant.Namespace
-	}
-
 	envVars := []corev1.EnvVar{
 		// Meta flags.
 		{Name: "LOG_LEVEL", Value: "info"},
@@ -1067,16 +1060,12 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, linseedNS)},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_CRT_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "TLS_KEY_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
-	if c.cfg.Tenant != nil {
-		envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
-	}
-
 	var eksLogForwarderReplicas int32 = 1
 
 	return &appsv1.Deployment{

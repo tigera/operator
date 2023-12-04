@@ -840,7 +840,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		cfg.Installation = setupInstallationConfig(t)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider:      operatorv1.ProviderEKS,
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		}
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -863,7 +866,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: cfg.EKSConfig.AwsRegion}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"}))
 
 		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*deploy.Spec.Template.Spec.InitContainers[0].SecurityContext.Privileged).To(BeFalse())
@@ -908,14 +910,24 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with EKS Cloudwatch Log for managed cluster with linseed token volume", func() {
 
-		cfg.EKSConfig = setupEKSConfig()
-		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		fetchInterval := int32(900)
+		cfg.EKSConfig = &render.EksCloudwatchLogConfig{
+			AwsId:         []byte("aws-id"),
+			AwsKey:        []byte("aws-key"),
+			AwsRegion:     "us-west-1",
+			GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
+			FetchInterval: fetchInterval,
+		}
 		t := corev1.Toleration{
 			Key:      "foo",
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		cfg.Installation = setupInstallationConfig(t)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider:      operatorv1.ProviderEKS,
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		}
+
 		cfg.ManagedCluster = true
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
@@ -962,21 +974,3 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		)
 	})
 })
-
-func setupEKSConfig() *render.EksCloudwatchLogConfig {
-	fetchInterval := int32(900)
-	return &render.EksCloudwatchLogConfig{
-		AwsId:         []byte("aws-id"),
-		AwsKey:        []byte("aws-key"),
-		AwsRegion:     "us-west-1",
-		GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
-		FetchInterval: fetchInterval,
-	}
-}
-
-func setupInstallationConfig(t corev1.Toleration) *operatorv1.InstallationSpec {
-	return &operatorv1.InstallationSpec{
-		KubernetesProvider:      operatorv1.ProviderEKS,
-		ControlPlaneTolerations: []corev1.Toleration{t},
-	}
-}

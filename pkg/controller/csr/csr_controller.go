@@ -88,7 +88,6 @@ type tlsAsset struct {
 	validDNSNames           []string
 }
 
-// newReconciler returns a new *reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reconciler, error) {
 	// We need to construct a certificatesV1 client, as this API has methods we rely upon that are not present in the generic client.
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
@@ -107,12 +106,20 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reco
 	return r, nil
 }
 
+// allowedAssets In order to prevent any abuse of this controller in order to obtain a fraudulent certificate, this controller
+// will only approve a pre-defined list of assets, based on their 'requestor', dns names and namespaces.
+// Some of the information a CSR will contain:
+//   - Requestor: this is the user identity tied to the request. This will be matched against the sa + namespace.
+//   - Name: The name is based on the secret name + a pod suffix. Because this is deterministic, we can use it as the key
+//     to index of this map.
+//   - DNS names: these will be checked against pre-defined dns names for that specific secret name.
+//
+// The combination of this information (among other checks) will help us reject/approve requests.
 func allowedAssets(clusterDomain string) map[string]tlsAsset {
 	return map[string]tlsAsset{
 		rmonitor.PrometheusServerTLSSecretName: {
 			rmonitor.PrometheusServiceAccountName,
 			rmonitor.TigeraPrometheusObjectName,
-
 			monitor.PrometheusTLSServerDNSNames(clusterDomain),
 		},
 	}
@@ -121,7 +128,9 @@ func allowedAssets(clusterDomain string) map[string]tlsAsset {
 // blank assignment to verify that ReconcileCompliance implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileCSR{}
 
-// ReconcileCSR reconciles CSRs objects
+// ReconcileCSR Components created by this operator may submit certificate signing requests against k8s under certain
+// conditions for signer name "tigera.io/operator-signer". This is the controller that monitors, approves and signs
+// these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid any abuse.
 type ReconcileCSR struct {
 	client             client.Client
 	scheme             *runtime.Scheme
@@ -166,25 +175,25 @@ func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) 
 		reqLogger.Info("Inspecting CSR with name : %v.", csr.Name)
 		certificateTemplate, err := r.validate(ctx, &csr)
 		if err != nil {
-			if errors.As(err, &systemError{}) {
-				// Validation failed due to an error unrelated to the CSR itself.
-				return reconcile.Result{}, err
-			}
+			if errors.As(err, &invalidCertificateRequestError{}) {
+				csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
+					{
+						Type:    certificatesv1.CertificateDenied,
+						Message: err.Error(),
+						Reason:  err.Error(),
+						Status:  corev1.ConditionTrue,
+					},
+				}
+				reqLogger.Error(err, "Rejecting the CSR.")
+				_, err = r.certificatesClient.CertificateSigningRequests().UpdateStatus(ctx, &csr, metav1.UpdateOptions{})
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				continue
 
-			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
-				{
-					Type:    certificatesv1.CertificateDenied,
-					Message: err.Error(),
-					Reason:  err.Error(),
-					Status:  corev1.ConditionTrue,
-				},
 			}
-			reqLogger.Error(err, "Rejecting the CSR.")
-			_, err = r.certificatesClient.CertificateSigningRequests().UpdateStatus(ctx, &csr, metav1.UpdateOptions{})
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			continue
+			// Validation failed due to an error unrelated to the CSR itself.
+			return reconcile.Result{}, err
 		}
 		csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
 			{
@@ -201,7 +210,7 @@ func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) 
 		}
 		reqLogger.Info("Approved CSR with name : %v.", csr.Name)
 
-		certificatePEM, err := certificateManager.SignCertificate(certificateTemplate, certificateTemplate.PublicKey)
+		certificatePEM, err := certificateManager.SignCertificate(certificateTemplate)
 		if err != nil {
 			reqLogger.Error(err, "error signing certificate request")
 			return reconcile.Result{}, err
@@ -218,21 +227,23 @@ func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) 
 	return reconcile.Result{}, nil
 }
 
-type systemError struct {
+// invalidCertificateRequestError is an error that indicates a problem with the CSR and can help us differentiate with
+// other (unforeseen) system / client library errors.
+type invalidCertificateRequestError struct {
 	message string
 }
 
-func (v systemError) Error() string {
+func (v invalidCertificateRequestError) Error() string {
 	return v.message
 }
 
 func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (*x509.Certificate, error) {
 	firstBlock, restBlocks := pem.Decode(csr.Spec.Request)
 	if firstBlock == nil {
-		return nil, fmt.Errorf("cannot parse certificate request for CSR with name %s", csr.Name)
+		return nil, invalidCertificateRequestError{fmt.Sprintf("cannot parse certificate request for CSR with name %s", csr.Name)}
 	}
 	if len(restBlocks) != 0 {
-		return nil, fmt.Errorf("unexpected (multiple) pem blocks for CSR with name %s", csr.Name)
+		return nil, invalidCertificateRequestError{fmt.Sprintf("unexpected (multiple) pem blocks for CSR with name %s", csr.Name)}
 	}
 
 	certificateRequest, err := x509.ParseCertificateRequest(firstBlock.Bytes)
@@ -240,7 +251,7 @@ func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.Certific
 		return nil, err
 	}
 	if err = certificateRequest.CheckSignature(); err != nil {
-		return nil, err
+		return nil, invalidCertificateRequestError{err.Error()}
 	}
 
 	// The CSRName is formatted as "<secretName>:<podName>".
@@ -249,12 +260,12 @@ func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.Certific
 	// Validate whether this is a CSR we monitor at all.
 	asset, ok := r.allowedTLSAssets[secretName]
 	if !ok {
-		return nil, fmt.Errorf("this controller is not configured to sign secretName: %s", secretName)
+		return nil, invalidCertificateRequestError{fmt.Sprintf("this controller is not configured to sign secretName: %s", secretName)}
 	}
 
 	// Validate whether the requestor of the CSR is registered for the given CSR
 	if fmt.Sprintf("system:serviceaccount:%s:%s", asset.serviceaccountNamespace, asset.serviceaccountName) != csr.Spec.Username {
-		return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
+		return nil, invalidCertificateRequestError{fmt.Sprintf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)}
 	}
 
 	// Validate whether the DNS names are permitted for the request.
@@ -267,7 +278,7 @@ func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.Certific
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("invalid dns name \"%s\" found in CSR with name %s", name, csr.Name)
+			return nil, invalidCertificateRequestError{fmt.Sprintf("invalid dns name \"%s\" found in CSR with name %s", name, csr.Name)}
 		}
 	}
 
@@ -275,29 +286,25 @@ func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.Certific
 		// Validate the IP address that is requested in the CSR matches the pod IP of the requestor.
 		label, ok := csr.Labels[render.AppLabelName]
 		if !ok {
-			return nil, fmt.Errorf("unable to find expected k8s-app label for CSR with name %s", csr.Name)
+			return nil, invalidCertificateRequestError{fmt.Sprintf("unable to find expected k8s-app label for CSR with name %s", csr.Name)}
 		}
 		podList := &corev1.PodList{}
-		err = r.client.List(ctx, podList, &client.ListOptions{
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				render.AppLabelName: label,
-			}),
-			Namespace: asset.serviceaccountNamespace})
+		err = r.client.List(ctx, podList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(map[string]string{render.AppLabelName: label}), Namespace: asset.serviceaccountNamespace})
 		if err != nil {
-			return nil, systemError{fmt.Sprintf("unexpected server error while listing pods by label for CSR %s", csr.Name)}
+			return nil, fmt.Errorf("unexpected server error while listing pods by label for CSR %s", csr.Name)
 		}
-		var foundIp bool
+		var foundIP bool
 		for _, pod := range podList.Items {
 			if pod.Status.PodIP == certificateRequest.IPAddresses[0].String() {
-				foundIp = true
+				foundIP = true
 				break
 			}
 		}
-		if !foundIp {
-			return nil, fmt.Errorf("invalid pod IP for CSR with name %s", csr.Name)
+		if !foundIP {
+			return nil, invalidCertificateRequestError{fmt.Sprintf("invalid pod IP for CSR with name %s", csr.Name)}
 		}
 	} else if len(certificateRequest.IPAddresses) > 1 {
-		return nil, fmt.Errorf("unable request more than 1 IP for CSR with name %s", csr.Name)
+		return nil, invalidCertificateRequestError{fmt.Sprintf("unable request more than 1 IP for CSR with name %s", csr.Name)}
 	}
 
 	bigint, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))

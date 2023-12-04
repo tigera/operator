@@ -922,14 +922,17 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with EKS Cloudwatch Log", func() {
 		expectedResources := getExpectedResourcesForEKS()
-		cfg.EKSConfig = setupEKSConfig()
+		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
 			Key:      "foo",
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		cfg.Installation = setupInstallationConfig(t)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider:      operatorv1.ProviderEKS,
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		}
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -993,14 +996,17 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	It("should render with EKS Cloudwatch Log with multi tenant envvars", func() {
 
 		expectedResources := getExpectedResourcesForEKS()
-		cfg.EKSConfig = setupEKSConfig()
+		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
 			Key:      "foo",
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		cfg.Installation = setupInstallationConfig(t)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider:      operatorv1.ProviderEKS,
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		}
 		// Create the Tenant object.
 		tenant := &operatorv1.Tenant{}
 		tenant.Name = "default"
@@ -1029,14 +1035,17 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		expectedResources = append(expectedResources,
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}})
 
-		cfg.EKSConfig = setupEKSConfig()
+		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
 			Key:      "foo",
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		cfg.Installation = setupInstallationConfig(t)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider:      operatorv1.ProviderEKS,
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		}
 		cfg.ManagedCluster = true
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
@@ -1087,7 +1096,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 })
 
-func setupEKSConfig() *render.EksCloudwatchLogConfig {
+func setupEKSCloudwatchLogConfig() *render.EksCloudwatchLogConfig {
 	fetchInterval := int32(900)
 	return &render.EksCloudwatchLogConfig{
 		AwsId:         []byte("aws-id"),
@@ -1095,13 +1104,6 @@ func setupEKSConfig() *render.EksCloudwatchLogConfig {
 		AwsRegion:     "us-west-1",
 		GroupName:     "dummy-eks-cluster-cloudwatch-log-group",
 		FetchInterval: fetchInterval,
-	}
-}
-
-func setupInstallationConfig(t corev1.Toleration) *operatorv1.InstallationSpec {
-	return &operatorv1.InstallationSpec{
-		KubernetesProvider:      operatorv1.ProviderEKS,
-		ControlPlaneTolerations: []corev1.Toleration{t},
 	}
 }
 

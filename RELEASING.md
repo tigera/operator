@@ -73,7 +73,9 @@ git push --tags
 
 1. Close the milestone for this release. https://github.com/tigera/operator/milestones
 
-1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist (e.g., next patch release)
+1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist
+   - Create the next patch version
+   - If a new minor was released (`.0`) then the next minor also needs to be created
 
 ## Updates for new Calico CRDs
 

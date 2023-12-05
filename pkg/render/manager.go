@@ -213,15 +213,20 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Tenant == nil {
 		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
 		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted))
+
+		// For multi-tenant environments, the management cluster itself isn't shown in the UI so we only need to create these
+		// when there is no tenant.
+		objs = append(objs,
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
 	}
 
 	objs = append(objs,
 		managerClusterRoleBinding(c.cfg.BindingNamespaces),
 		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
 
 	if c.cfg.UsePSP {

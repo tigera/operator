@@ -226,12 +226,19 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.kubeControllerMgrTierGetterClusterRoleBinding(),
 		c.uisettingsgroupGetterClusterRole(),
 		c.kubeControllerMgrUisettingsgroupGetterClusterRoleBinding(),
-		c.tigeraUserClusterRole(),
-		c.tigeraNetworkAdminClusterRole(),
 		c.tieredPolicyPassthruClusterRole(),
 		c.tieredPolicyPassthruClusterRolebinding(),
 		c.uiSettingsPassthruClusterRole(),
 		c.uiSettingsPassthruClusterRolebinding(),
+	}
+
+	if !c.cfg.MultiTenant {
+		// These resources are only installed in zero-tenant clusters. Multi-tenant clusters don't use the default
+		// RBAC resources.
+		globalEnterpriseObjects = append(globalEnterpriseObjects,
+			c.tigeraUserClusterRole(),
+			c.tigeraNetworkAdminClusterRole(),
+		)
 	}
 
 	if c.cfg.ManagementCluster != nil {

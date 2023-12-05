@@ -151,6 +151,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
+		render.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)

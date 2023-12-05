@@ -116,9 +116,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reco
 func allowedAssets(clusterDomain string) map[string]tlsAsset {
 	return map[string]tlsAsset{
 		rmonitor.PrometheusServerTLSSecretName: {
-			rmonitor.PrometheusServiceAccountName,
-			rmonitor.TigeraPrometheusObjectName,
-			monitor.PrometheusTLSServerDNSNames(clusterDomain),
+			serviceaccountName:      rmonitor.PrometheusServiceAccountName,
+			serviceaccountNamespace: rmonitor.TigeraPrometheusObjectName,
+			validDNSNames:           monitor.PrometheusTLSServerDNSNames(clusterDomain),
 		},
 	}
 }

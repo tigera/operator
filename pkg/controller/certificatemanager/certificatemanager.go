@@ -43,6 +43,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// OperatorCSRSignerName when this value is set as a signer on a CSR, the CSR controller will handle
+// the request.
+const OperatorCSRSignerName = "tigera.io/operator-signer"
+
 var log = logf.Log.WithName("tls")
 
 func ErrInvalidCertDNSNames(secretName, secretNamespace string) error {

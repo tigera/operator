@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
-	"sync"
 
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
@@ -27,8 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	certfake "k8s.io/client-go/kubernetes/typed/certificates/v1/fake"
-	"k8s.io/client-go/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -42,7 +39,6 @@ var _ = Describe("CSR controller tests", func() {
 		scheme             *runtime.Scheme
 		mockStatus         *status.MockStatus
 		installation       *operatorv1.Installation
-		certClient         certfake.FakeCertificatesV1
 		certificateManager certificatemanager.CertificateManager
 		err                error
 		validPod           *corev1.Pod
@@ -68,26 +64,14 @@ var _ = Describe("CSR controller tests", func() {
 		certificateManager, err = certificatemanager.Create(cli, &installation.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-
-		certClient = certfake.FakeCertificatesV1{
-			Fake: &testing.Fake{
-				RWMutex:            sync.RWMutex{},
-				ReactionChain:      nil,
-				WatchReactionChain: nil,
-				ProxyReactionChain: nil,
-				Resources:          nil,
-			},
-		}
-
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("OnCRFound").Return()
 		r = ReconcileCSR{
-			client:             cli,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			clusterDomain:      dns.DefaultClusterDomain,
-			certificatesClient: &certClient,
-			allowedTLSAssets:   allowedAssets(dns.DefaultClusterDomain),
+			client:           cli,
+			scheme:           scheme,
+			provider:         operatorv1.ProviderNone,
+			clusterDomain:    dns.DefaultClusterDomain,
+			allowedTLSAssets: allowedAssets(dns.DefaultClusterDomain),
 		}
 		// Create the valid pod that is requesting a CSR.
 		validPod = &corev1.Pod{
@@ -119,15 +103,6 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
 			csr := newCSR(newX509CertificateRequest(), validPod)
 			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
-			certClient.AddReactor("update", "certificatesigningrequests", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
-				updateAction, ok := action.(testing.UpdateAction)
-				Expect(ok).To(BeTrue())
-				Expect(updateAction.GetSubresource()).To(BeElementOf("approval", "status"))
-				csr, ok := updateAction.GetObject().(*certificatesv1.CertificateSigningRequest)
-				Expect(ok).To(BeTrue())
-				Expect(r.client.Update(ctx, csr)).NotTo(HaveOccurred())
-				return true, csr, nil
-			})
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(r.client.Get(ctx, client.ObjectKey{Name: csr.Name}, csr)).NotTo(HaveOccurred())
@@ -136,19 +111,39 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(csr.Status.Conditions[0].Status).To(Equal(corev1.ConditionTrue))
 			Expect(csr.Status.Certificate).ToNot(BeEmpty())
 		})
+
+		It("should reconcile 2 submitted CSRs", func() {
+			validPod2 := validPod.DeepCopy()
+			validPod2.Name = validPod2.Name + "2"
+			Expect(cli.Create(ctx, validPod2)).NotTo(HaveOccurred())
+			csr2 := newCSR(newX509CertificateRequest(), validPod2)
+			csr2.Name = csr2.Name + "2"
+			Expect(cli.Create(ctx, csr2)).NotTo(HaveOccurred())
+
+			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
+			csr := newCSR(newX509CertificateRequest(), validPod)
+			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(r.client.Get(ctx, client.ObjectKey{Name: csr.Name}, csr)).NotTo(HaveOccurred())
+			Expect(csr.Status.Conditions).To(HaveLen(1))
+			Expect(csr.Status.Conditions[0].Type).To(Equal(certificatesv1.CertificateApproved))
+			Expect(csr.Status.Conditions[0].Status).To(Equal(corev1.ConditionTrue))
+			Expect(csr.Status.Certificate).ToNot(BeEmpty())
+
+			Expect(r.client.Get(ctx, client.ObjectKey{Name: csr2.Name}, csr2)).NotTo(HaveOccurred())
+			Expect(csr2.Status.Conditions).To(HaveLen(1))
+			Expect(csr2.Status.Conditions[0].Type).To(Equal(certificatesv1.CertificateApproved))
+			Expect(csr2.Status.Conditions[0].Status).To(Equal(corev1.ConditionTrue))
+			Expect(csr2.Status.Certificate).ToNot(BeEmpty())
+		})
+
 		It("should reject a submitted CSR that does not pass validation", func() {
 			csr := newCSR(newX509CertificateRequest(), validPod)
 			csr.Spec.Username = "attacker"
 			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
-			certClient.AddReactor("update", "certificatesigningrequests", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
-				updateAction, ok := action.(testing.UpdateAction)
-				Expect(ok).To(BeTrue())
-				Expect(updateAction.GetSubresource()).To(BeElementOf("approval", "status"))
-				csr, ok := updateAction.GetObject().(*certificatesv1.CertificateSigningRequest)
-				Expect(ok).To(BeTrue())
-				Expect(r.client.Update(ctx, csr)).NotTo(HaveOccurred())
-				return true, csr, nil
-			})
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(r.client.Get(ctx, client.ObjectKey{Name: csr.Name}, csr)).NotTo(HaveOccurred())
@@ -161,7 +156,7 @@ var _ = Describe("CSR controller tests", func() {
 
 	table.DescribeTable("csr validation", func(csrfunc func() *certificatesv1.CertificateSigningRequest, expectError bool) {
 		csr := csrfunc()
-		certificate, err := r.validate(csr, &corev1.Pod{Status: corev1.PodStatus{PodIP: "1.2.3.4"}})
+		certificate, err := r.validate(csr, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-calico-node-prometheus-0"}, Status: corev1.PodStatus{PodIP: "1.2.3.4"}})
 		if expectError {
 			Expect(err).To(HaveOccurred())
 		} else if relevantCSR(csr) {
@@ -311,7 +306,7 @@ func newCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.Certif
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-node-prometheus-tls:prometheus-tigera-prometheus-0",
+			Name: "calico-node-prometheus-tls:prometheus-calico-node-prometheus-0",
 			Labels: map[string]string{
 				"k8s-app":                "tigera-prometheus",
 				"operator.tigera.io/csr": "tigera-prometheus",
@@ -324,7 +319,7 @@ func newCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.Certif
 			SignerName: "tigera.io/operator-signer",
 			Username:   "system:serviceaccount:tigera-prometheus:prometheus",
 			Extra: map[string]certificatesv1.ExtraValue{
-				"authentication.kubernetes.io/pod-name": []string{"prometheus-calico-node-prometheus-0"},
+				"authentication.kubernetes.io/pod-name": []string{pod.Name},
 				"authentication.kubernetes.io/pod-uid":  []string{fmt.Sprintf("%s", pod.UID)},
 			},
 		},

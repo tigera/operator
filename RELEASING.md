@@ -5,6 +5,10 @@
 For a major or minor release, you will need to create a new
 `release-vX.Y` branch based on the target minor version.
 
+Create the next minor release's first milestone at https://github.com/tigera/operator/milestones.
+This would mean if the branch release-v1.30 is being created, then the milestone v1.31.0 should be created too.
+This ensures that new PRs against master will be automatically given the correct tag.
+
 ## Preparing for the release
 
 Review the milestone for this release and ensure it is accurate. https://github.com/tigera/operator/milestones
@@ -73,7 +77,9 @@ git push --tags
 
 1. Close the milestone for this release. https://github.com/tigera/operator/milestones
 
-1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist (e.g., next patch release)
+1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist
+   - Create the next patch version
+   - If a new minor was released (`.0`), also ensure the next minor has been created (this should have already been created as part of [Preparing a new release branch](#preparing-a-new-release-branch))
 
 ## Updates for new Calico CRDs
 

@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -19,7 +18,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	certificatesv1 "k8s.io/api/certificates/v1"
@@ -29,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	typedcertificatesv1 "k8s.io/client-go/kubernetes/typed/certificates/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -88,7 +87,6 @@ type tlsAsset struct {
 	validDNSNames           []string
 }
 
-// newReconciler returns a new *reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reconciler, error) {
 	// We need to construct a certificatesV1 client, as this API has methods we rely upon that are not present in the generic client.
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
@@ -107,12 +105,19 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reco
 	return r, nil
 }
 
+// allowedAssets To prevent any abuse of this controller for obtaining a fraudulent certificate, this controller
+// will only approve a pre-defined list of assets, based on their 'requestor', dns names and namespaces.
+// Some of the information a CSR will contain:
+//   - Name: The name is based on the secret name + a pod suffix. We use the secret name as the key to index the map.
+//   - Requestor: this is the user identity tied to the request. This will be matched against the sa + namespace.
+//   - DNS names: these will be checked against pre-defined dns names for that specific secret name.
+//
+// The combination of this information (among other checks) will help us reject/approve requests.
 func allowedAssets(clusterDomain string) map[string]tlsAsset {
 	return map[string]tlsAsset{
 		rmonitor.PrometheusServerTLSSecretName: {
 			rmonitor.PrometheusServiceAccountName,
 			rmonitor.TigeraPrometheusObjectName,
-
 			monitor.PrometheusTLSServerDNSNames(clusterDomain),
 		},
 	}
@@ -121,7 +126,9 @@ func allowedAssets(clusterDomain string) map[string]tlsAsset {
 // blank assignment to verify that ReconcileCompliance implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileCSR{}
 
-// ReconcileCSR reconciles CSRs objects
+// ReconcileCSR Components created by the operator may submit certificate signing requests against k8s under certain
+// conditions for signer name "tigera.io/operator-signer". This is the controller that monitors, approves and signs
+// these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid malicious requests.
 type ReconcileCSR struct {
 	client             client.Client
 	scheme             *runtime.Scheme
@@ -164,13 +171,12 @@ func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) 
 			continue
 		}
 		reqLogger.Info("Inspecting CSR with name : %v.", csr.Name)
-		certificateTemplate, err := r.validate(ctx, &csr)
+		pod, err := r.getPod(ctx, &csr)
 		if err != nil {
-			if errors.As(err, &systemError{}) {
-				// Validation failed due to an error unrelated to the CSR itself.
-				return reconcile.Result{}, err
-			}
-
+			return reconcile.Result{}, err
+		}
+		certificateTemplate, err := r.validate(&csr, pod)
+		if err != nil {
 			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
 				{
 					Type:    certificatesv1.CertificateDenied,
@@ -201,7 +207,7 @@ func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) 
 		}
 		reqLogger.Info("Approved CSR with name : %v.", csr.Name)
 
-		certificatePEM, err := certificateManager.SignCertificate(certificateTemplate, certificateTemplate.PublicKey)
+		certificatePEM, err := certificateManager.SignCertificate(certificateTemplate)
 		if err != nil {
 			reqLogger.Error(err, "error signing certificate request")
 			return reconcile.Result{}, err
@@ -218,15 +224,15 @@ func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) 
 	return reconcile.Result{}, nil
 }
 
-type systemError struct {
-	message string
-}
-
-func (v systemError) Error() string {
-	return v.message
-}
-
-func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (*x509.Certificate, error) {
+// validate Criteria include:
+// - Verify that the x509 request can be parsed and contains one request block.
+// - Verify that the request name matches the deterministic name format that we expect. (More for practical reasons, than for security reasons.)
+// - Verify that the service account is allowed to request the common name and/or SANs.
+// - Verify that the issuer of the CSR (the pod) indeed is the pod that belongs to the IP in the CSR.
+// - Verify that the CSR was not previously denied or failed.
+// - Verify that the public key matches the signature on the CSR for the provider algorithm.
+// - Key usages are fixed, so the CSR won't be able to affect these settings.
+func (r ReconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod) (*x509.Certificate, error) {
 	firstBlock, restBlocks := pem.Decode(csr.Spec.Request)
 	if firstBlock == nil {
 		return nil, fmt.Errorf("cannot parse certificate request for CSR with name %s", csr.Name)
@@ -272,32 +278,14 @@ func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.Certific
 	}
 
 	if len(certificateRequest.IPAddresses) == 1 {
-		// Validate the IP address that is requested in the CSR matches the pod IP of the requestor.
-		label, ok := csr.Labels[render.AppLabelName]
-		if !ok {
-			return nil, fmt.Errorf("unable to find expected k8s-app label for CSR with name %s", csr.Name)
+		if pod == nil {
+			return nil, fmt.Errorf("pod IP in CSR, but no matching pod can be found for CSR with name %s", csr.Name)
 		}
-		podList := &corev1.PodList{}
-		err = r.client.List(ctx, podList, &client.ListOptions{
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				render.AppLabelName: label,
-			}),
-			Namespace: asset.serviceaccountNamespace})
-		if err != nil {
-			return nil, systemError{fmt.Sprintf("unexpected server error while listing pods by label for CSR %s", csr.Name)}
-		}
-		var foundIp bool
-		for _, pod := range podList.Items {
-			if pod.Status.PodIP == certificateRequest.IPAddresses[0].String() {
-				foundIp = true
-				break
-			}
-		}
-		if !foundIp {
+		if pod.Status.PodIP != certificateRequest.IPAddresses[0].String() {
 			return nil, fmt.Errorf("invalid pod IP for CSR with name %s", csr.Name)
 		}
 	} else if len(certificateRequest.IPAddresses) > 1 {
-		return nil, fmt.Errorf("unable request more than 1 IP for CSR with name %s", csr.Name)
+		return nil, fmt.Errorf("unable to request more than 1 IP for CSR with name %s", csr.Name)
 	}
 
 	bigint, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
@@ -318,4 +306,47 @@ func (r ReconcileCSR) validate(ctx context.Context, csr *certificatesv1.Certific
 		IPAddresses: certificateRequest.IPAddresses,
 	}
 	return certTemplate, nil
+}
+
+// getPod fetches the pod that issued a CSR based on the information in the CSR.
+// A CSR will contain immutable identity info set by k8s such as:
+//
+//	spec:
+//	 extra:
+//	   authentication.kubernetes.io/pod-name:
+//	   - prometheus-calico-node-prometheus-0
+//	   authentication.kubernetes.io/pod-uid:
+//	   - 0993ca7a-3b0b-4e27-ba25-c4296620ea8d
+//	 uid: 28610c0a-a4a4-4dc3-9e1d-e8564ce217f6
+//	 username: system:serviceaccount:tigera-prometheus:prometheus
+func (r ReconcileCSR) getPod(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (*corev1.Pod, error) {
+	username := csr.Spec.Username
+	if !strings.HasPrefix(username, "system:serviceaccount:") || strings.Count(username, ":") != 3 {
+		// This CSR was not requested by a service account.
+		return nil, nil
+	}
+	namespace := strings.Split(username, ":")[2]
+	serviceaccountName := strings.Split(username, ":")[3]
+
+	pod := &corev1.Pod{}
+	podName, found := csr.Spec.Extra["authentication.kubernetes.io/pod-name"]
+	if !found || len(podName) != 1 {
+		return nil, nil
+	}
+	podUID, found := csr.Spec.Extra["authentication.kubernetes.io/pod-uid"]
+	if !found || len(podUID) != 1 {
+		return nil, nil
+	}
+
+	if err := r.client.Get(ctx, types.NamespacedName{Name: podName[0], Namespace: namespace}, pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if podUID[0] == fmt.Sprintf("%s", pod.UID) && serviceaccountName == pod.Spec.ServiceAccountName {
+		return pod, nil
+	}
+
+	return nil, nil
 }

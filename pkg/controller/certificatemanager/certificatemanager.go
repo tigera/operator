@@ -102,9 +102,9 @@ type CertificateManager interface {
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
 	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
-	// SignCertificate signs a certificate using its own private key. The currently supported public key types are
-	// *rsa.PublicKey, *ecdsa.PublicKey and ed25519.PublicKey. (See x509 package)
-	SignCertificate(certificate *x509.Certificate, publicKey any) ([]byte, error)
+	// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
+	// public key of the requestor is already set in the certificate template.
+	SignCertificate(certificate *x509.Certificate) ([]byte, error)
 }
 
 type Option func(cm *certificateManager) error
@@ -134,8 +134,9 @@ func WithTenant(t *operatorv1.Tenant) Option {
 // brings their own secrets, CertificateManager will preserve and return them.
 func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
 	var (
-		cryptoCA                      *crypto.CA
-		csrImage                      string
+		cryptoCA *crypto.CA
+		csrImage string
+		// The private key is of type any, as this is the interface used in the x509 package for all private key types.
 		privateKey                    any
 		privateKeyPEM, certificatePEM []byte
 		certificateManagement         *operatorv1.CertificateManagement
@@ -217,6 +218,8 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			if privateKeyDER == nil {
 				return nil, fmt.Errorf("cannot parse private tls.key PEM from the CA bundle")
 			}
+			// Parse in order of likelihood of format. If the tigera-ca-private secret is not replaced with a custom one,
+			// the certificate is PKCS1 formatted. (The x509 package also uses parsing as the way to identifying the type.)
 			if privateKey, err = x509.ParsePKCS1PrivateKey(privateKeyDER.Bytes); err != nil {
 				if privateKey, err = x509.ParsePKCS8PrivateKey(privateKeyDER.Bytes); err != nil {
 					if privateKey, err = x509.ParseECPrivateKey(privateKeyDER.Bytes); err != nil {
@@ -309,10 +312,10 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}, nil
 }
 
-// SignCertificate signs a certificate using its own private key. The currently supported public key types are
-// *rsa.PublicKey, *ecdsa.PublicKey and ed25519.PublicKey. (See x509 package)
-func (cm *certificateManager) SignCertificate(certificateTemplate *x509.Certificate, publicKey any) ([]byte, error) {
-	derBytes, err := x509.CreateCertificate(rand.Reader, certificateTemplate, cm.Certificate, publicKey, cm.keyPair.PrivateKey)
+// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
+// public key of the requestor is already set in the certificate template.
+func (cm *certificateManager) SignCertificate(certificateTemplate *x509.Certificate) ([]byte, error) {
+	derBytes, err := x509.CreateCertificate(rand.Reader, certificateTemplate, cm.Certificate, certificateTemplate.PublicKey, cm.keyPair.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +328,7 @@ func (cm *certificateManager) SignCertificate(certificateTemplate *x509.Certific
 	return pemBytes.Bytes(), nil
 }
 
-// This type will be returned for errors that do not have the correct Ext Key usage types
+// CertExtKeyUsageError This type will be returned for errors that do not have the correct Ext Key usage types
 // for a specific secert certificate.
 type CertExtKeyUsageError struct {
 	msg string

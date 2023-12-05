@@ -1062,7 +1062,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
 	// namespace. For multi-tenant management clusters, this may vary.
 	linseedNS := ElasticsearchNamespace
-	if c.cfg.Tenant.MultiTenant() {
+	if c.cfg.Tenant != nil {
 		linseedNS = c.cfg.Tenant.Namespace
 	}
 

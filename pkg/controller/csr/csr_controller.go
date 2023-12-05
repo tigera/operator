@@ -87,7 +87,7 @@ type tlsAsset struct {
 }
 
 func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
-	r := &ReconcileCSR{
+	r := &reconcileCSR{
 		client:           mgr.GetClient(),
 		scheme:           mgr.GetScheme(),
 		provider:         opts.DetectedProvider,
@@ -116,12 +116,12 @@ func allowedAssets(clusterDomain string) map[string]tlsAsset {
 }
 
 // blank assignment to verify that ReconcileCompliance implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileCSR{}
+var _ reconcile.Reconciler = &reconcileCSR{}
 
-// ReconcileCSR Components created by the operator may submit certificate signing requests against k8s under certain
+// reconcileCSR Components created by the operator may submit certificate signing requests against k8s under certain
 // conditions for signer name "tigera.io/operator-signer". This is the controller that monitors, approves and signs
 // these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid malicious requests.
-type ReconcileCSR struct {
+type reconcileCSR struct {
 	client           client.Client
 	scheme           *runtime.Scheme
 	provider         operatorv1.Provider
@@ -129,7 +129,7 @@ type ReconcileCSR struct {
 	allowedTLSAssets map[string]tlsAsset
 }
 
-func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling CSR Controller")
 	csrList := &certificatesv1.CertificateSigningRequestList{}
@@ -220,7 +220,7 @@ func (r ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) 
 // - Verify that the CSR was not previously denied or failed.
 // - Verify that the public key matches the signature on the CSR for the provider algorithm.
 // - Key usages are fixed, so the CSR won't be able to affect these settings.
-func (r ReconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod) (*x509.Certificate, error) {
+func (r *reconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod) (*x509.Certificate, error) {
 	if pod == nil {
 		return nil, fmt.Errorf("invalid: no pod can be associated with CSR %s", csr.Name)
 	}
@@ -311,7 +311,7 @@ func (r ReconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, po
 //	   - 0993ca7a-3b0b-4e27-ba25-c4296620ea8d
 //	 uid: 28610c0a-a4a4-4dc3-9e1d-e8564ce217f6
 //	 username: system:serviceaccount:tigera-prometheus:prometheus
-func (r ReconcileCSR) getPod(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (*corev1.Pod, error) {
+func (r *reconcileCSR) getPod(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (*corev1.Pod, error) {
 	username := csr.Spec.Username
 	if !strings.HasPrefix(username, "system:serviceaccount:") || strings.Count(username, ":") != 3 {
 		// This CSR was not requested by a service account.
@@ -320,23 +320,23 @@ func (r ReconcileCSR) getPod(ctx context.Context, csr *certificatesv1.Certificat
 	namespace := strings.Split(username, ":")[2]
 	serviceaccountName := strings.Split(username, ":")[3]
 
-	pod := &corev1.Pod{}
-	podName, found := csr.Spec.Extra["authentication.kubernetes.io/pod-name"]
-	if !found || len(podName) != 1 {
+	podNames, found := csr.Spec.Extra["authentication.kubernetes.io/pod-name"]
+	if !found || len(podNames) != 1 {
 		return nil, nil
 	}
-	podUID, found := csr.Spec.Extra["authentication.kubernetes.io/pod-uid"]
-	if !found || len(podUID) != 1 {
+	podUIDs, found := csr.Spec.Extra["authentication.kubernetes.io/pod-uid"]
+	if !found || len(podUIDs) != 1 {
 		return nil, nil
 	}
 
-	if err := r.client.Get(ctx, types.NamespacedName{Name: podName[0], Namespace: namespace}, pod); err != nil {
+	pod := &corev1.Pod{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: podNames[0], Namespace: namespace}, pod); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	if podUID[0] == fmt.Sprintf("%s", pod.UID) && serviceaccountName == pod.Spec.ServiceAccountName {
+	if podUIDs[0] == fmt.Sprintf("%s", pod.UID) && serviceaccountName == pod.Spec.ServiceAccountName {
 		return pod, nil
 	}
 

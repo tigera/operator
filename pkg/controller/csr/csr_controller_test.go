@@ -35,13 +35,12 @@ var _ = Describe("CSR controller tests", func() {
 	var (
 		cli                client.Client
 		ctx                context.Context
-		r                  ReconcileCSR
+		r                  reconcileCSR
 		scheme             *runtime.Scheme
 		mockStatus         *status.MockStatus
 		installation       *operatorv1.Installation
 		certificateManager certificatemanager.CertificateManager
 		err                error
-		validPod           *corev1.Pod
 	)
 
 	BeforeEach(func() {
@@ -66,30 +65,12 @@ var _ = Describe("CSR controller tests", func() {
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("OnCRFound").Return()
-		r = ReconcileCSR{
+		r = reconcileCSR{
 			client:           cli,
 			scheme:           scheme,
 			provider:         operatorv1.ProviderNone,
 			clusterDomain:    dns.DefaultClusterDomain,
 			allowedTLSAssets: allowedAssets(dns.DefaultClusterDomain),
-		}
-		// Create the valid pod that is requesting a CSR.
-		validPod = &corev1.Pod{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "prometheus-calico-node-prometheus-0",
-				Namespace: "tigera-prometheus",
-				Labels: map[string]string{
-					"k8s-app": "tigera-prometheus",
-				},
-				UID: "uid",
-			},
-			Spec: corev1.PodSpec{
-				ServiceAccountName: "prometheus",
-			},
-			Status: corev1.PodStatus{
-				PodIP: "1.2.3.4",
-			},
 		}
 	})
 
@@ -100,8 +81,8 @@ var _ = Describe("CSR controller tests", func() {
 		})
 
 		It("should reconcile a submitted CSR", func() {
-			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
-			csr := newCSR(newX509CertificateRequest(), validPod)
+			Expect(cli.Create(ctx, validPod())).NotTo(HaveOccurred())
+			csr := validCSR(validX509CR(), validPod())
 			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -113,15 +94,15 @@ var _ = Describe("CSR controller tests", func() {
 		})
 
 		It("should reconcile 2 submitted CSRs", func() {
-			validPod2 := validPod.DeepCopy()
+			validPod2 := validPod()
 			validPod2.Name = validPod2.Name + "2"
 			Expect(cli.Create(ctx, validPod2)).NotTo(HaveOccurred())
-			csr2 := newCSR(newX509CertificateRequest(), validPod2)
+			csr2 := validCSR(validX509CR(), validPod2)
 			csr2.Name = csr2.Name + "2"
 			Expect(cli.Create(ctx, csr2)).NotTo(HaveOccurred())
 
-			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
-			csr := newCSR(newX509CertificateRequest(), validPod)
+			Expect(cli.Create(ctx, validPod())).NotTo(HaveOccurred())
+			csr := validCSR(validX509CR(), validPod())
 			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -141,7 +122,7 @@ var _ = Describe("CSR controller tests", func() {
 		})
 
 		It("should reject a submitted CSR that does not pass validation", func() {
-			csr := newCSR(newX509CertificateRequest(), validPod)
+			csr := validCSR(validX509CR(), validPod())
 			csr.Spec.Username = "attacker"
 			Expect(cli.Create(ctx, csr)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -154,83 +135,40 @@ var _ = Describe("CSR controller tests", func() {
 		})
 	})
 
-	table.DescribeTable("csr validation", func(csrfunc func() *certificatesv1.CertificateSigningRequest, expectError bool) {
-		csr := csrfunc()
-		certificate, err := r.validate(csr, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-calico-node-prometheus-0"}, Status: corev1.PodStatus{PodIP: "1.2.3.4"}})
+	table.DescribeTable("csr validation", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectError, expectRelevant bool) {
+		certificate, err := r.validate(csr, pod)
 		if expectError {
 			Expect(err).To(HaveOccurred())
-		} else if relevantCSR(csr) {
+		} else if expectRelevant {
+			Expect(relevantCSR(csr)).To(BeTrue())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(certificate.ExtKeyUsage).To(Equal(extKeyUsage))
 			Expect(certificate.DNSNames).To(Equal(monitor.PrometheusTLSServerDNSNames(dns.DefaultClusterDomain)))
 			Expect(certificate.Subject.CommonName).To(Equal(monitor.PrometheusTLSServerDNSNames(dns.DefaultClusterDomain)[0]))
-			Expect(certificate.IPAddresses).To(Equal([]net.IP{net.ParseIP("1.2.3.4").To4()}))
+			Expect(certificate.IPAddresses).To(Equal([]net.IP{net.ParseIP(pod.Status.PodIP).To4()}))
 			Expect(certificate.IsCA).To(BeFalse())
+		} else {
+			Expect(relevantCSR(csr)).To(BeFalse())
 		}
 	},
-		table.Entry("valid CSR / happy flow", func() *certificatesv1.CertificateSigningRequest {
-			return newCSR(newX509CertificateRequest(), validPod)
-		}, false),
-		table.Entry("unrecognized csr name", func() *certificatesv1.CertificateSigningRequest {
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			csr.Name = "fake"
-			return csr
-		},
-			true),
-		table.Entry("invalid requestor", func() *certificatesv1.CertificateSigningRequest {
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			csr.Spec.Username = "fake"
-			return csr
-		}, true),
-		table.Entry("invalid certificate request", func() *certificatesv1.CertificateSigningRequest {
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			csr.Spec.Request = []byte("fake")
-			return csr
-		}, true),
-		table.Entry("invalid certificate request public key", func() *certificatesv1.CertificateSigningRequest {
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			csr.Spec.Request = []byte("fake")
-			return csr
-		}, true),
-		table.Entry("previously denied csr", func() *certificatesv1.CertificateSigningRequest {
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
-				{
-					Type:   certificatesv1.CertificateDenied,
-					Status: corev1.ConditionTrue,
-				},
-			}
-			return csr
-		}, false),
-		table.Entry("previously failed csr", func() *certificatesv1.CertificateSigningRequest {
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
-				{
-					Type:   certificatesv1.CertificateFailed,
-					Status: corev1.ConditionTrue,
-				},
-			}
-			return csr
-		}, false),
-		table.Entry("bad DNS names in x509 certificate request", func() *certificatesv1.CertificateSigningRequest {
-			cr := newX509CertificateRequest()
-			cr.DNSNames = []string{"google.com"}
-			return newCSR(cr, validPod)
-		}, true),
-		table.Entry("bad CN in x509 certificate request", func() *certificatesv1.CertificateSigningRequest {
-			cr := newX509CertificateRequest()
-			cr.Subject.CommonName = "google.com"
-			return newCSR(cr, validPod)
-		}, true),
-		table.Entry("bad IP in x509 certificate request", func() *certificatesv1.CertificateSigningRequest {
-			cr := newX509CertificateRequest()
-			cr.IPAddresses = []net.IP{net.ParseIP("8.8.8.8")}
-			return newCSR(cr, validPod)
-		}, true),
+		table.Entry("valid CSR / happy flow", validCSR(validX509CR(), validPod()), validPod(), false, true),
+		table.Entry("valid CSR / no pod", validCSR(validX509CR(), validPod()), nil, true, true),
+		table.Entry("unrecognized csr name", invalidCSR(validX509CR(), validPod(), invalidName), validPod(), true, true),
+		table.Entry("invalid username", invalidCSR(validX509CR(), validPod(), invalidUserName), validPod(), true, true),
+		table.Entry("invalid certificate request", invalidCSR(validX509CR(), validPod(), invalidRequest), validPod(), true, true),
+		table.Entry("previously denied csr", invalidCSR(validX509CR(), validPod(), invalidDenied), validPod(), false, false),
+		table.Entry("previously failed csr", invalidCSR(validX509CR(), validPod(), invalidFailed), validPod(), false, false),
+		table.Entry("bad DNS names in x509 certificate request", invalidCSR(invalidX509CR(invalidDNSNames), validPod()), validPod(), true, true),
+		table.Entry("bad CN in x509 certificate request", invalidCSR(invalidX509CR(invalidCN), validPod()), validPod(), true, true),
+		table.Entry("bad IP in x509 certificate request", invalidCSR(invalidX509CR(invalidIP), validPod()), validPod(), true, true),
+		table.Entry("irrelevant signer name", invalidCSR(invalidX509CR(), validPod(), invalidSignername), validPod(), false, false),
 	)
 
-	table.DescribeTable("getPod", func(preconditions func() *certificatesv1.CertificateSigningRequest, expectPodNil bool) {
-		foundPod, err := r.getPod(ctx, preconditions())
+	table.DescribeTable("getPod", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectPodNil bool) {
+		if pod != nil {
+			Expect(cli.Create(ctx, pod)).NotTo(HaveOccurred())
+		}
+		foundPod, err := r.getPod(ctx, csr)
 		Expect(err).NotTo(HaveOccurred())
 		if expectPodNil {
 			Expect(foundPod).To(BeNil())
@@ -238,34 +176,19 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(foundPod).NotTo(BeNil())
 		}
 	},
-		table.Entry("Valid CSR, pod found", func() *certificatesv1.CertificateSigningRequest {
-			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
-			return newCSR(newX509CertificateRequest(), validPod)
-		}, false),
-		table.Entry("Valid CSR, nod pod found", func() *certificatesv1.CertificateSigningRequest {
-			return newCSR(newX509CertificateRequest(), validPod)
-		}, true),
-		table.Entry("Valid CSR, nod match pod found due to different uid", func() *certificatesv1.CertificateSigningRequest {
-			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
-			validPod.UID = "nope"
-			return newCSR(newX509CertificateRequest(), validPod)
-		}, true),
-		table.Entry("Valid CSR, nod match pod found due to different pod name", func() *certificatesv1.CertificateSigningRequest {
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			validPod.Name = "nope"
-			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
-			return csr
-		}, true),
-		table.Entry("Valid CSR, nod match pod found due to different csr username", func() *certificatesv1.CertificateSigningRequest {
-			Expect(cli.Create(ctx, validPod)).NotTo(HaveOccurred())
-			csr := newCSR(newX509CertificateRequest(), validPod)
-			csr.Spec.Username = "nope"
-			return csr
-		}, true),
+		table.Entry("Valid CSR, pod found", validCSR(validX509CR(), validPod()), validPod(), false),
+		table.Entry("Valid CSR, no pod found", validCSR(validX509CR(), validPod()), nil, true),
+		table.Entry("Valid CSR, no matching pod found due to different uid", validCSR(validX509CR(), validPod()), invalidPod(invalidUID), true),
+		table.Entry("Valid CSR, no matching pod found due to different pod name", validCSR(validX509CR(), validPod()), invalidPod(invalidName), true),
+		table.Entry("Valid CSR, no matching pod found due to different csr username", invalidCSR(validX509CR(), validPod(), invalidUserName), validPod(), true),
+		table.Entry("Invalid CSR, irrelevant pod names", invalidCSR(invalidX509CR(), validPod(), invalidExtraPodNames), validPod(), true),
+		table.Entry("Invalid CSR, irrelevant pod names len", invalidCSR(invalidX509CR(), validPod(), invalidExtraPodNamesLen), validPod(), true),
+		table.Entry("Invalid CSR, irrelevant pod UIDs", invalidCSR(invalidX509CR(), validPod(), invalidExtraPodUIDs), validPod(), true),
+		table.Entry("Invalid CSR, irrelevant pod UIDs len", invalidCSR(invalidX509CR(), validPod(), invalidExtraPodUIDsLen), validPod(), true),
 	)
 })
 
-func newX509CertificateRequest() *x509.CertificateRequest {
+func validX509CR() *x509.CertificateRequest {
 	subj := pkix.Name{
 		CommonName: "prometheus-http-api",
 	}
@@ -291,8 +214,7 @@ func newX509CertificateRequest() *x509.CertificateRequest {
 		},
 	}
 }
-
-func newCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.CertificateSigningRequest {
+func validCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.CertificateSigningRequest {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	Expect(err).NotTo(HaveOccurred())
 	buf := bytes.NewBuffer([]byte{})
@@ -327,4 +249,112 @@ func newCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.Certif
 	}
 
 	return csr
+}
+
+type invalidation int
+
+func validPod() *corev1.Pod {
+	return &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus-calico-node-prometheus-0",
+			Namespace: "tigera-prometheus",
+			Labels: map[string]string{
+				"k8s-app": "tigera-prometheus",
+			},
+			UID: "uid",
+		},
+		Spec: corev1.PodSpec{
+			ServiceAccountName: "prometheus",
+		},
+		Status: corev1.PodStatus{
+			PodIP: "1.2.3.4",
+		},
+	}
+}
+
+const (
+	invalidUID invalidation = iota
+	invalidName
+	invalidUserName
+	invalidRequest
+	invalidDenied
+	invalidFailed
+	invalidDNSNames
+	invalidCN
+	invalidIP
+	invalidSignername
+	invalidExtraPodNames
+	invalidExtraPodNamesLen
+	invalidExtraPodUIDs
+	invalidExtraPodUIDsLen
+)
+
+func invalidCSR(cr *x509.CertificateRequest, pod *corev1.Pod, invalidations ...invalidation) *certificatesv1.CertificateSigningRequest {
+	csr := validCSR(cr, pod)
+	for _, i := range invalidations {
+		switch i {
+		case invalidUserName:
+			csr.Spec.Username = "invalid"
+		case invalidName:
+			csr.Name = "invalid"
+		case invalidRequest:
+			csr.Spec.Request = []byte("invalid")
+		case invalidDenied:
+			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
+				{
+					Type:   certificatesv1.CertificateDenied,
+					Status: corev1.ConditionTrue,
+				},
+			}
+		case invalidFailed:
+			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
+				{
+					Type:   certificatesv1.CertificateFailed,
+					Status: corev1.ConditionTrue,
+				},
+			}
+		case invalidSignername:
+			csr.Spec.SignerName = "not.relevant/signerName"
+		case invalidExtraPodNames:
+			csr.Spec.Extra["authentication.kubernetes.io/pod-name"] = []string{"a"}
+		case invalidExtraPodNamesLen:
+			csr.Spec.Extra["authentication.kubernetes.io/pod-name"] = []string{"prometheus-calico-node-prometheus-0", "b"}
+		case invalidExtraPodUIDs:
+			csr.Spec.Extra["authentication.kubernetes.io/pod-uid"] = []string{"a"}
+		case invalidExtraPodUIDsLen:
+			csr.Spec.Extra["authentication.kubernetes.io/pod-uid"] = []string{"uid", "b"}
+		}
+	}
+	return csr
+}
+
+func invalidPod(invalidations ...invalidation) *corev1.Pod {
+	pod := validPod()
+
+	for _, i := range invalidations {
+		switch i {
+		case invalidUID:
+			pod.UID = "invalid"
+		case invalidName:
+			pod.Name = "invalid"
+		}
+	}
+	return pod
+}
+
+func invalidX509CR(invalidations ...invalidation) *x509.CertificateRequest {
+	cr := validX509CR()
+	for _, i := range invalidations {
+		switch i {
+		case invalidDNSNames:
+			cr.DNSNames = []string{"google.com"}
+		case invalidCN:
+			cr.Subject.CommonName = "google.com"
+		case invalidIP:
+			cr.IPAddresses = []net.IP{net.ParseIP("8.8.8.8")}
+		}
+	}
+	return cr
+
 }

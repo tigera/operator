@@ -145,7 +145,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: render.EsCuratorPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: render.KibanaPolicyName, Namespace: render.KibanaNamespace},
 		{Name: render.ECKOperatorPolicyName, Namespace: render.ECKOperatorNamespace},
 		{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace},
@@ -196,7 +195,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		relasticsearch.PublicCertSecret,
 		monitor.PrometheusClientTLSSecretName,
 		render.ElasticsearchAdminUserSecret,
-		render.ElasticsearchCuratorUserSecret,
 		render.TigeraElasticsearchInternalCertSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -395,7 +393,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	var clusterConfig *relasticsearch.ClusterConfig
 	var applyTrial bool
 	var keyStoreSecret *corev1.Secret
-	var curatorSecrets []*corev1.Secret
 	var esAdminUserSecret *corev1.Secret
 
 	flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
@@ -430,13 +427,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 				return reconcile.Result{}, err
 			}
 		}
-	}
-
-	// Curator secrets are created by es-kube-controllers
-	curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get curator credentials", err, reqLogger)
-		return reconcile.Result{}, err
 	}
 
 	// Get the admin user secret to copy to the operator namespace.
@@ -548,7 +538,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		KibanaKeyPair:           kibanaKeyPair,
 		PullSecrets:             pullSecrets,
 		Provider:                r.provider,
-		CuratorSecrets:          curatorSecrets,
 		ESService:               esService,
 		KbService:               kbService,
 		ClusterDomain:           r.clusterDomain,
@@ -583,11 +572,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	} else if kibanaEnabled && kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana association to be established", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
-	if !r.multiTenant && len(curatorSecrets) == 0 {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

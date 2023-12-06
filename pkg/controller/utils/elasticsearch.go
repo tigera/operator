@@ -368,7 +368,7 @@ func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]policy
 	minorPctOfTotalDisk := 0.1
 	pctOfDisk := minorPctOfTotalDisk / float64(numOfIndicesWithMinorSpace)
 
-	// Retention is not set in LogStorage for l7, benchmark and events logs, set default values used by curator
+	// Retention is not set in LogStorage for l7, benchmark and events logs
 	return map[string]policyDetail{
 		"tigera_secure_ee_flows": buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.85, int(*ls.Spec.Retention.Flows)),
 		"tigera_secure_ee_dns":   buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.DNSLogs)),
@@ -479,7 +479,7 @@ func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskFor
 // calculateRolloverAge returns max_age to rollover
 // max_age to rollover an index is retention period set in LogStorage divided by ElasticsearchRetentionFactor
 // If retention is < ElasticsearchRetentionFactor, set rollover age to 1 day
-// if retention is 0 days, rollover every 1 hr - we dont want to rollover index every few ms/s set it to 1hr similar to curator cronjob interval
+// if retention is 0 days, rollover every 1 hr - we dont want to rollover index every few ms/s set it to 1hr
 func calculateRolloverAge(retention int) string {
 	var age string
 	if retention <= 0 {

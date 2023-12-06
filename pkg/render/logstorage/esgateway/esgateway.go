@@ -398,12 +398,6 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ESCuratorSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
 					Destination: esgatewayIngressDestinationEntityRule,
 				},

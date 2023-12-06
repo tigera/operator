@@ -336,7 +336,7 @@ func (r *reconcileCSR) getPod(ctx context.Context, csr *certificatesv1.Certifica
 		}
 		return nil, err
 	}
-	if podUIDs[0] == fmt.Sprintf("%s", pod.UID) && serviceaccountName == pod.Spec.ServiceAccountName {
+	if podUIDs[0] == string(pod.UID) && serviceaccountName == pod.Spec.ServiceAccountName {
 		return pod, nil
 	}
 

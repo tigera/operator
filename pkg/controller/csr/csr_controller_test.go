@@ -9,7 +9,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
-	"fmt"
 	"net"
 
 	. "github.com/onsi/ginkgo"
@@ -242,7 +241,7 @@ func validCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.Cert
 			Username:   "system:serviceaccount:tigera-prometheus:prometheus",
 			Extra: map[string]certificatesv1.ExtraValue{
 				"authentication.kubernetes.io/pod-name": []string{pod.Name},
-				"authentication.kubernetes.io/pod-uid":  []string{fmt.Sprintf("%s", pod.UID)},
+				"authentication.kubernetes.io/pod-uid":  []string{string(pod.UID)},
 			},
 		},
 		Status: certificatesv1.CertificateSigningRequestStatus{},

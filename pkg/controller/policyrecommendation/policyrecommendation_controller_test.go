@@ -181,6 +181,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			res := test.GetResource(c, &d)
 			Expect(res).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To((Equal(map[string]string{"kubernetes.io/os": "linux"})))
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",

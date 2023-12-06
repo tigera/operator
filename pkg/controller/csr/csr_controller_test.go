@@ -1,3 +1,17 @@
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package csr
 
 import (
@@ -9,7 +23,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
-	"fmt"
 	"net"
 
 	. "github.com/onsi/ginkgo"
@@ -242,7 +255,7 @@ func validCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.Cert
 			Username:   "system:serviceaccount:tigera-prometheus:prometheus",
 			Extra: map[string]certificatesv1.ExtraValue{
 				"authentication.kubernetes.io/pod-name": []string{pod.Name},
-				"authentication.kubernetes.io/pod-uid":  []string{fmt.Sprintf("%s", pod.UID)},
+				"authentication.kubernetes.io/pod-uid":  []string{string(pod.UID)},
 			},
 		},
 		Status: certificatesv1.CertificateSigningRequestStatus{},

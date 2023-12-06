@@ -72,7 +72,7 @@ const (
 	PrometheusPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + "prometheus"
 	PrometheusProxyPort           = 9095
 	PrometheusServiceAccountName  = "prometheus"
-	PrometheusTLSSecretName       = "calico-node-prometheus-tls"
+	PrometheusServerTLSSecretName = "calico-node-prometheus-tls"
 
 	AlertManagerPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + CalicoNodeAlertmanager
 	AlertmanagerConfigSecret   = "alertmanager-calico-node-alertmanager"
@@ -482,6 +482,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
+					Labels: map[string]string{
+						"k8s-app": TigeraPrometheusObjectName,
+					},
+				},
 				Containers: []corev1.Container{
 					{
 						Name:            "authn-proxy",

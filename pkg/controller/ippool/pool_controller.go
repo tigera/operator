@@ -98,7 +98,6 @@ type Reconciler struct {
 	watches              map[runtime.Object]struct{}
 	autoDetectedProvider operator.Provider
 	status               status.StatusManager
-	clusterDomain        string
 }
 
 // hasOwner returns true if the given IP pool is owned by the given Installation object, and

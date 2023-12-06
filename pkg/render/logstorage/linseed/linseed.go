@@ -342,7 +342,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		)
 	}
 
-	linseedReplica := l.cfg.Installation.ControlPlaneReplicas
+	replicas := l.cfg.Installation.ControlPlaneReplicas
 	if l.cfg.Tenant != nil {
 		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
@@ -359,7 +359,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			}
 
 			if l.cfg.Tenant.Spec.ControlPlaneReplicas != nil {
-				linseedReplica = l.cfg.Tenant.Spec.ControlPlaneReplicas
+				replicas = l.cfg.Tenant.Spec.ControlPlaneReplicas
 			}
 		}
 	}
@@ -429,8 +429,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if (l.cfg.Installation.ControlPlaneReplicas != nil && *l.cfg.Installation.ControlPlaneReplicas > 1) ||
-		(l.cfg.Tenant.MultiTenant() && l.cfg.Tenant.Spec.ControlPlaneReplicas != nil && *l.cfg.Tenant.Spec.ControlPlaneReplicas > 1) {
+	if replicas != nil && *replicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
 	}
 
@@ -452,7 +451,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				},
 			},
 			Template: *podTemplate,
-			Replicas: linseedReplica,
+			Replicas: replicas,
 		},
 	}
 }

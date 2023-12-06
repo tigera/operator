@@ -34,7 +34,7 @@ spec:
             properties:
               controlPlaneReplicas:
                 description: ControlPlaneReplicas defines how many replicas of the
-                  control plane core components will be deployed in tenant namespace.
+                  control plane core components will be deployed in the Tenant's namespace.
                   Defaults to the controlPlaneReplicas in Installation CR
                 format: int32
                 type: integer

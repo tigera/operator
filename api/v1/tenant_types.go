@@ -81,7 +81,7 @@ type TenantSpec struct {
 	Elastic *TenantElasticSpec `json:"elastic,omitempty"`
 
 	// ControlPlaneReplicas defines how many replicas of the control plane core components will be deployed
-	// in tenant namespace. Defaults to the controlPlaneReplicas in Installation CR
+	// in the Tenant's namespace. Defaults to the controlPlaneReplicas in Installation CR
 	// +optional
 	ControlPlaneReplicas *int32 `json:"controlPlaneReplicas,omitempty"`
 }

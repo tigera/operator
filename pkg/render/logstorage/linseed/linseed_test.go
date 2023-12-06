@@ -483,7 +483,8 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_ip_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
 		})
-		It("should override replica with the value from TenantSpec's controlPlaneReplica when available", func() {
+
+		It("should override replicas with the value from TenantSpec's controlPlaneReplicas when available", func() {
 			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
 			component := Linseed(cfg)
 

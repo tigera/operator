@@ -40,8 +40,9 @@ type ExternalPrometheusConfiguration struct {
 	// +optional
 	ServiceMonitor *ServiceMonitor `json:"serviceMonitor,omitempty"`
 
-	// Namespace is the namespace where the operator will create resources for your Prometheus instance.
-	// Default: default
+	// Namespace is the namespace where the operator will create resources for your Prometheus instance. As long as the
+	// namespace does not exist, nothing will be rendered.
+	// +required
 	Namespace string `json:"namespace"`
 }
 

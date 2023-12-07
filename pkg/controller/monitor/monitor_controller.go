@@ -157,6 +157,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
+	// Namespaces are watched in cause external monitoring config is used.
+	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
+	}
+
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
@@ -236,6 +242,21 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	if err = r.client.Patch(ctx, instance.DeepCopy(), preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+	if instance.Spec.ExternalPrometheusConfiguration != nil {
+		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheusConfiguration.Namespace}, &corev1.Namespace{}); err != nil {
+			if errors.IsNotFound(err) {
+				// We set ExternalPrometheusConfiguration to nil, and proceed to render the other configuration.
+				// When the namespace is created, we will reconcile the ExternalPrometheusConfiguration.
+				reqLogger.V(3).
+					WithValues("namespace", instance.Spec.ExternalPrometheusConfiguration.Namespace).
+					Info("will skip external prometheus configuration, namespace does not exist")
+				instance.Spec.ExternalPrometheusConfiguration = nil
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get external prometheus namespace", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
@@ -449,10 +470,6 @@ func validateMonitorResource(instance *operatorv1.Monitor) error {
 func fillDefaults(instance *operatorv1.Monitor) {
 	if instance.Spec.ExternalPrometheusConfiguration == nil {
 		return
-	}
-
-	if instance.Spec.ExternalPrometheusConfiguration.Namespace == "" {
-		instance.Spec.ExternalPrometheusConfiguration.Namespace = "default"
 	}
 
 	if instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor == nil {

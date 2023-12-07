@@ -797,9 +797,6 @@ type InstallationStatus struct {
 	// +optional
 	ImageSet string `json:"imageSet,omitempty"`
 
-	// IPPools is the set of IP pools that exist in the cluster.
-	IPPools []IPPool `json:"ipPools,omitempty"`
-
 	// Computed is the final installation including overlaid resources.
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`

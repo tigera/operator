@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 
 	. "github.com/onsi/ginkgo"
@@ -968,7 +969,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		})
 
 		It("should render multi-tenant environment variables", func() {
-			tenantAResources := renderObjects(renderConfig{
+			resources := renderObjects(renderConfig{
 				oidc:                    false,
 				managementCluster:       nil,
 				installation:            installation,
@@ -985,7 +986,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					},
 				},
 			})
-			d := rtest.GetResource(tenantAResources, "tigera-manager", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			d := rtest.GetResource(resources, "tigera-manager", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[2].Env
 			esProxyEnv := d.Spec.Template.Spec.Containers[1].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: tenantANamespace}))
@@ -993,6 +994,33 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenantANamespace)}))
+		})
+
+		It("should not install UISettings / UISettingsGroups", func() {
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantBNamespace,
+				bindingNamespaces:       []string{tenantANamespace, tenantBNamespace},
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tenant",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{
+						ID: "tenant-a",
+					},
+				},
+			})
+
+			// Expect no UISettings / UISettingsGroups to be installed.
+			for _, res := range resources {
+				Expect(reflect.TypeOf(res)).NotTo(Equal(reflect.TypeOf(&v3.UISettings{})), "Unexpected UISettings in multi-tenant mode")
+				Expect(reflect.TypeOf(res)).NotTo(Equal(reflect.TypeOf(&v3.UISettingsGroup{})), "Unexpected UISettingsGroup in multi-tenant mode")
+			}
 		})
 	})
 

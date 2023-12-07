@@ -127,9 +127,9 @@ var _ = Describe("Testing core-controller installation", func() {
 	table.DescribeTable("Installation and Openshift should be merged and defaulted by mergeAndFillDefaults",
 		func(i *operator.Installation, on *osconfigv1.Network, expectSuccess bool, calicoNet *operator.CalicoNetworkSpec) {
 			if expectSuccess {
-				Expect(mergeAndFillDefaults(i, on, nil, nil)).To(BeNil())
+				Expect(mergeAndFillDefaults(i, on, nil)).To(BeNil())
 			} else {
-				Expect(mergeAndFillDefaults(i, on, nil, nil)).ToNot(BeNil())
+				Expect(mergeAndFillDefaults(i, on, nil)).ToNot(BeNil())
 				return
 			}
 
@@ -421,15 +421,6 @@ var _ = Describe("Testing core-controller installation", func() {
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
 						},
-						IPPools: []operator.IPPool{
-							{
-								CIDR:          "192.168.0.0/16",
-								Encapsulation: "IPIP",
-								NATOutgoing:   "Enabled",
-								NodeSelector:  "all()",
-								BlockSize:     &twentySix,
-							},
-						},
 					},
 				})).NotTo(HaveOccurred())
 		})
@@ -635,25 +626,21 @@ var _ = Describe("Testing core-controller installation", func() {
 		It("should update version", func() {
 			instance := &operator.Installation{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+
 			instance.Status.CalicoVersion = "v3.14"
-			instance.Status.IPPools = []operator.IPPool{
-				{
-					CIDR:          "192.168.0.0/16",
-					Encapsulation: "IPIP",
-					NATOutgoing:   "Enabled",
-					NodeSelector:  "all()",
-					BlockSize:     &twentySix,
-				},
-			}
 			Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
 			Expect(instance.Status.CalicoVersion).To(Equal(components.EnterpriseRelease))
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+
 			instance.Status.CalicoVersion = "v3.23"
 			instance.Spec.Variant = operator.Calico
 			Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
@@ -668,7 +655,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					KubernetesProvider: operator.ProviderDockerEE,
 				},
 			}
-			Expect(mergeAndFillDefaults(installation, nil, nil, nil)).To(BeNil())
+			Expect(mergeAndFillDefaults(installation, nil, nil)).To(BeNil())
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface).Should(Equal("^br-.*"))
 		})
 	})
@@ -680,7 +667,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					KubernetesProvider: provider,
 				},
 			}
-			Expect(mergeAndFillDefaults(installation, nil, nil, nil)).To(BeNil())
+			Expect(mergeAndFillDefaults(installation, nil, nil)).To(BeNil())
 			if expected {
 				Expect(installation.Spec.TyphaAffinity).ToNot(BeNil())
 				Expect(installation.Spec.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).Should(Equal(result))
@@ -813,15 +800,6 @@ var _ = Describe("Testing core-controller installation", func() {
 						Registry: "my-reg",
 						// The test is provider agnostic.
 						KubernetesProvider: operator.ProviderNone,
-					},
-					IPPools: []operator.IPPool{
-						{
-							CIDR:          "192.168.0.0/16",
-							Encapsulation: "IPIP",
-							NATOutgoing:   "Enabled",
-							NodeSelector:  "all()",
-							BlockSize:     &twentySix,
-						},
 					},
 				},
 			}
@@ -1022,17 +1000,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 				},
-				Status: operator.InstallationStatus{
-					IPPools: []operator.IPPool{
-						{
-							CIDR:          "192.168.0.0/16",
-							Encapsulation: "IPIP",
-							NATOutgoing:   "Enabled",
-							NodeSelector:  "all()",
-							BlockSize:     &twentySix,
-						},
-					},
-				},
+				Status: operator.InstallationStatus{},
 			}
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())

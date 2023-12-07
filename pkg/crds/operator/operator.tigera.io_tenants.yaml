@@ -42,7 +42,7 @@ spec:
                 description: Elastic configures per-tenant ElasticSearch and Kibana
                   parameters. This field is required for clusters using external ES.
                 properties:
-                  kibana_url:
+                  kibanaURL:
                     type: string
                   mutualTLS:
                     type: boolean

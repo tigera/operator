@@ -732,7 +732,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	pluginsArray, _ := json.Marshal(plugins)
 
 	config := fmt.Sprintf(`{
-			  "name": "k8s-pod-network",
+			  "name": "calico",
 			  "cniVersion": "0.3.1",
 			  "plugins": %s
 			}`, string(pluginsArray))

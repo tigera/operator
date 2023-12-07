@@ -96,7 +96,7 @@ var _ = Describe("Parser", func() {
 			},
 			{
 				Name:  "CNI_NETWORK_CONFIG",
-				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam":{"type":"calico-ipam"}, "mtu": __CNI_MTU__}`,
+				Value: `{"type": "calico", "name": "calico", "ipam":{"type":"calico-ipam"}, "mtu": __CNI_MTU__}`,
 			},
 		}
 
@@ -128,7 +128,7 @@ var _ = Describe("Parser", func() {
 					{
 						Name: "CNI_NETWORK_CONFIG",
 						Value: `{
-							"name": "k8s-pod-network",
+							"name": "calico",
 							"cniVersion": "0.3.1",
 							"plugins": [
 							  {

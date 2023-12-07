@@ -35,7 +35,7 @@ func emptyNodeSpec() *appsv1.DaemonSet {
 						Name: "install-cni",
 						Env: []corev1.EnvVar{{
 							Name:  "CNI_NETWORK_CONFIG",
-							Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
+							Value: `{"type": "calico", "name": "calico", "ipam": {"type": "calico-ipam"}}`,
 						}},
 					}},
 					Containers: []corev1.Container{{

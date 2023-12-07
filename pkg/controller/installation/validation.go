@@ -145,47 +145,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 
 		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
-			// Verify the CIDR is valid.
-			isIPv4 := !strings.Contains(pool.CIDR, ":")
-			_, cidr, err := net.ParseCIDR(pool.CIDR)
-			if err != nil {
-				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", pool.CIDR, err)
-			}
-
-			// Verify NAT outgoing values.
-			switch pool.NATOutgoing {
-			case operatorv1.NATOutgoingEnabled, operatorv1.NATOutgoingDisabled:
-			default:
-				return fmt.Errorf("%s is invalid for ipPool.natOutgoing, should be one of %s",
-					pool.NATOutgoing, strings.Join(operatorv1.NATOutgoingTypesString, ","))
-			}
-
-			// Verify the node selector.
-			if pool.NodeSelector == "" {
-				return fmt.Errorf("ipPool.nodeSelector should not be empty")
-			}
-			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-				if pool.NodeSelector != "all()" {
-					return fmt.Errorf("ipPool.nodeSelector (%s) should be 'all()' when using non-Calico CNI plugin", pool.NodeSelector)
-				}
-			}
-
 			// Perform validation based on IP address family.
+			isIPv4 := !strings.Contains(pool.CIDR, ":")
 			if isIPv4 {
 				if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
 					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
-				}
-
-				if pool.BlockSize != nil {
-					if *pool.BlockSize > 32 || *pool.BlockSize < 20 {
-						return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
-					}
-
-					// Verify that the CIDR contains the blocksize.
-					ones, _ := cidr.Mask.Size()
-					if int32(ones) > *pool.BlockSize {
-						return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
-					}
 				}
 			} else {
 				// This is an IPv6 pool.
@@ -195,18 +159,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 				if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
 					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV6 is required for the BPF dataplane")
-				}
-
-				if pool.BlockSize != nil {
-					if *pool.BlockSize > 128 || *pool.BlockSize < 116 {
-						return fmt.Errorf("ipPool.blockSize must be greater than 115 and less than or equal to 128")
-					}
-
-					// Verify that the CIDR contains the blocksize.
-					ones, _ := cidr.Mask.Size()
-					if int32(ones) > *pool.BlockSize {
-						return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
-					}
 				}
 			}
 

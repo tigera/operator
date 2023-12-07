@@ -298,10 +298,11 @@ func (c *component) containers() []corev1.Container {
 			commandArgs = append(
 				commandArgs,
 				"--waf-enabled",
-				"--waf-directive", fmt.Sprintf("Include %s/modsecdefault.conf", ModSecurityRulesetVolumePath),
-				"--waf-directive", fmt.Sprintf("Include %s/crs-setup.conf", ModSecurityRulesetVolumePath),
-				"--waf-directive", fmt.Sprintf("Include %s/tigera.conf", ModSecurityRulesetVolumePath),
-				"--waf-directive", fmt.Sprintf("Include %s/rules/*.conf", ModSecurityRulesetVolumePath),
+				"--waf-ruleset-base-dir", ModSecurityRulesetVolumePath,
+				"--waf-directive", "Include modsecdefault.conf",
+				"--waf-directive", "Include crs-setup.conf",
+				"--waf-directive", "Include tigera.conf",
+				"--waf-directive", "Include rules/*.conf",
 			)
 			volMounts = append(
 				volMounts,

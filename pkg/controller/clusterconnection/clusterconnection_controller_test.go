@@ -42,7 +42,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
-
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
@@ -101,7 +100,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
-		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
+		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
 		queryServerSecret, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{"a"})

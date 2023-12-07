@@ -146,7 +146,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secret := range []string{
 		certificatemanagement.CASecretName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		monitor.PrometheusTLSSecretName,
+		monitor.PrometheusServerTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
@@ -262,7 +262,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
+	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -413,6 +413,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// PrometheusTLSServerDNSNames returns all the DNS names valid for the prometheus server TLS asset.
+func PrometheusTLSServerDNSNames(clusterDomain string) []string {
+	return dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, clusterDomain)
 }
 
 //go:embed alertmanager-config.yaml

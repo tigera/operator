@@ -18,12 +18,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"reflect"
+	"strings"
 	"time"
 
+	configv1 "github.com/openshift/api/config/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
+	operator "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
+
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,15 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
-	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
 )
 
 const tigeraStatusName string = "ippools"
@@ -70,15 +77,33 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("tigera-ippool-controller failed to watch primary resource: %w", err)
 	}
 
+	// Watch for changes to APIServer
+	err = c.Watch(&source.Kind{Type: &operator.APIServer{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		log.V(5).Info("Failed to create APIServer watch", "err", err)
+		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
+	}
+
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch calico Tigerastatus: %w", err)
 	}
 
 	// Watch for changes to IPPool.
-	err = c.Watch(&source.Kind{Type: &pcv1.IPPool{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &crdv1.IPPool{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch IPPool resource: %w", err)
+	}
+
+	if r.autoDetectedProvider == operator.ProviderOpenShift {
+		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
+		// merge this configuration with our own and the write back the status object.
+		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %w", err)
+			}
+		}
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -102,13 +127,301 @@ type Reconciler struct {
 
 // hasOwner returns true if the given IP pool is owned by the given Installation object, and
 // false otherwise.
-func hasOwner(pool *pcv1.IPPool, installation *operator.Installation) bool {
+func hasOwner(pool *crdv1.IPPool, installation *operator.Installation) bool {
+	// Check the v1 object metadata.
 	for _, o := range pool.OwnerReferences {
 		if o.Name == installation.Name && o.UID == installation.UID {
 			return true
 		}
 	}
+
+	// Check the metadata annotation. This annotation includes the v3 object metadata.
+	if pool.Annotations != nil {
+		raw := pool.Annotations["projectcalico.org/metadata"]
+		meta := metav1.ObjectMeta{}
+		if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+			log.Error(err, "Failed to parse IPPool metadata annotation")
+			return false
+		}
+
+		for _, o := range meta.OwnerReferences {
+			if o.Name == installation.Name && o.UID == installation.UID {
+				return true
+			}
+		}
+	}
 	return false
+}
+
+func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) error {
+	// If IPPools is nil, add IPPool with CIDRs detected from platform configuration.
+	if i.Spec.CalicoNetwork.IPPools == nil {
+		if len(platformCIDRs) == 0 {
+			// If the platform has no CIDRs defined as well, then return and let the
+			// normal defaulting happen.
+			return nil
+		}
+		v4found := false
+		v6found := false
+
+		// For each platform CIDR, add it as an IP pool.
+		for _, c := range platformCIDRs {
+			log.Info("Adding IP pool for platform CIDR", "cidr", c)
+			addr, _, err := net.ParseCIDR(c)
+			if err != nil {
+				log.Error(err, "Failed to parse platform's pod network CIDR.")
+				continue
+			}
+
+			if addr.To4() == nil {
+				if v6found {
+					continue
+				}
+				v6found = true
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
+			} else {
+				if v4found {
+					continue
+				}
+				v4found = true
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
+			}
+		}
+	} else if len(i.Spec.CalicoNetwork.IPPools) == 0 {
+		// Empty IPPools list so nothing to do.
+		return nil
+	} else {
+		// Pools are configured on the Installation. Make sure they are compatible with
+		// the configuration set in the underlying Kubernetes platform.
+		for _, pool := range i.Spec.CalicoNetwork.IPPools {
+			within := false
+			for _, c := range platformCIDRs {
+				within = within || cidrWithinCidr(c, pool.CIDR)
+			}
+			if !within {
+				return fmt.Errorf("IPPool %v is not within the platform's configured pod network CIDR(s) %v", pool.CIDR, platformCIDRs)
+			}
+		}
+	}
+	return nil
+}
+
+// cidrWithinCidr checks that all IPs in the pool passed in are within the
+// passed in CIDR
+func cidrWithinCidr(cidr, pool string) bool {
+	_, cNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return false
+	}
+	_, pNet, err := net.ParseCIDR(pool)
+	if err != nil {
+		return false
+	}
+	ipMin := pNet.IP
+	pOnes, _ := pNet.Mask.Size()
+	cOnes, _ := cNet.Mask.Size()
+
+	// If the cidr contains the network (1st) address of the pool and the
+	// prefix on the pool is larger than or equal to the cidr prefix (the pool size is
+	// smaller than the cidr) then the pool network is within the cidr network.
+	if cNet.Contains(ipMin) && pOnes >= cOnes {
+		return true
+	}
+	return false
+}
+
+func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1.Network) error {
+	// If CNI plugin is specified and not Calico then skip any CalicoNetwork initialization
+	if i.Spec.CNI != nil && i.Spec.CNI.Type != operator.PluginCalico {
+		return nil
+	}
+	if i.Spec.CalicoNetwork == nil {
+		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+	}
+
+	platformCIDRs := []string{}
+	for _, c := range o.Spec.ClusterNetwork {
+		platformCIDRs = append(platformCIDRs, c.CIDR)
+	}
+	return mergePlatformPodCIDRs(i, platformCIDRs)
+}
+
+func updateInstallationForKubeadm(i *operator.Installation, c *corev1.ConfigMap) error {
+	// If CNI plugin is specified and not Calico then skip any CalicoNetwork initialization
+	if i.Spec.CNI != nil && i.Spec.CNI.Type != operator.PluginCalico {
+		return nil
+	}
+	if i.Spec.CalicoNetwork == nil {
+		i.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+	}
+
+	platformCIDRs, err := extractKubeadmCIDRs(c)
+	if err != nil {
+		return err
+	}
+	return mergePlatformPodCIDRs(i, platformCIDRs)
+}
+
+// validate validates the IP pools specified in the Installation object.
+func validate(instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
+	cidrs := map[string]bool{}
+	for _, pool := range instance.Spec.CalicoNetwork.IPPools {
+		_, cidr, err := net.ParseCIDR(pool.CIDR)
+		if err != nil {
+			return fmt.Errorf("IP pool CIDR (%s) is invalid: %s", pool.CIDR, err)
+		}
+
+		// Validate that there is only a single instance of each CIDR.
+		if cidrs[pool.CIDR] {
+			return fmt.Errorf("IP pool %v is specified more than once", pool.CIDR)
+		}
+		cidrs[pool.CIDR] = true
+
+		// Verify NAT outgoing values.
+		switch pool.NATOutgoing {
+		case operator.NATOutgoingEnabled, operator.NATOutgoingDisabled:
+		default:
+			return fmt.Errorf("%s is invalid for natOutgoing, should be one of %s",
+				pool.NATOutgoing, strings.Join(operator.NATOutgoingTypesString, ","))
+		}
+
+		// Verify the node selector.
+		if pool.NodeSelector == "" {
+			return fmt.Errorf("IP pool nodeSelector should not be empty")
+		}
+		if instance.Spec.CNI.Type != operator.PluginCalico {
+			if pool.NodeSelector != "all()" {
+				return fmt.Errorf("IP pool nodeSelector (%s) should be 'all()' when using non-Calico CNI plugin", pool.NodeSelector)
+			}
+		}
+
+		// Verify per-address-family settings.
+		isIPv4 := !strings.Contains(pool.CIDR, ":")
+		if isIPv4 {
+			// This is an IPv4 pool.
+			if pool.BlockSize != nil {
+				if *pool.BlockSize > 32 || *pool.BlockSize < 20 {
+					return fmt.Errorf("IPv4 pool block size must be greater than 19 and less than or equal to 32")
+				}
+
+				// Verify that the CIDR contains the blocksize.
+				ones, _ := cidr.Mask.Size()
+				if int32(ones) > *pool.BlockSize {
+					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+				}
+			}
+		} else {
+			// This is an IPv6 pool.
+			if pool.BlockSize != nil {
+				if *pool.BlockSize > 128 || *pool.BlockSize < 116 {
+					return fmt.Errorf("IPv6 pool block size must be greater than 115 and less than or equal to 128")
+				}
+
+				// Verify that the CIDR contains the blocksize.
+				ones, _ := cidr.Mask.Size()
+				if int32(ones) > *pool.BlockSize {
+					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// fillDefaults fills in IP pool defaults on the Installation object. Defaulting of fields other than IP pools occurs
+// in pkg/controller/installation/
+func fillDefaults(ctx context.Context, client client.Client, instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
+	if currentPools == nil || len(currentPools.Items) == 0 {
+		// Only add default CIDRs if there are no existing pools in the cluster. If there are existing pools in the cluster,
+		// then we assume that the user has configured them correctly out-of-band and we should not install any others.
+		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+			// If configured to run in openshift, then also fetch the openshift configuration API.
+			openshiftConfig := &configv1.Network{}
+			openshiftNetworkConfig := "cluster"
+			if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig); err != nil {
+				return fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
+			}
+
+			// Merge in OpenShift configuration.
+			if err := updateInstallationForOpenshiftNetwork(instance, openshiftConfig); err != nil {
+				return fmt.Errorf("Could not resolve CalicoNetwork IPPool and OpenShift network: %s", err.Error())
+			}
+		} else {
+			// Check if we're running on kubeadm by getting the config map.
+			kubeadmConfig := &corev1.ConfigMap{}
+			key := types.NamespacedName{Name: kubeadmConfigMap, Namespace: metav1.NamespaceSystem}
+			if err := client.Get(ctx, key, kubeadmConfig); err == nil {
+				// We found the configmap - merge in kubeadm configuration.
+				if err := updateInstallationForKubeadm(instance, kubeadmConfig); err != nil {
+					return fmt.Errorf("Could not resolve CalicoNetwork IPPool and kubeadm configuration: %s", err.Error())
+				}
+			} else if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("Unable to read kubeadm config map: %s", err.Error())
+			}
+		}
+
+		// Only default IP pools if explicitly nil; we use the empty slice to mean "no IP pools".
+		// Only default IP pools if we're using Calico IPAM, otherwise there's no-one to use the IP pool.
+		if instance.Spec.CalicoNetwork.IPPools == nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico {
+			switch instance.Spec.KubernetesProvider {
+			case operator.ProviderEKS:
+				// On EKS, default to a CIDR that doesn't overlap with the host range,
+				// and also use VXLAN encap by default.
+				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+					{
+						CIDR:          "172.16.0.0/16",
+						Encapsulation: operator.EncapsulationVXLAN,
+					},
+				}
+			default:
+				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+					{CIDR: "192.168.0.0/16"},
+				}
+			}
+		}
+	}
+
+	// Default any fields on each IP pool declared in the Installation object.
+	for i := 0; i < len(instance.Spec.CalicoNetwork.IPPools); i++ {
+		pool := &instance.Spec.CalicoNetwork.IPPools[i]
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err == nil && addr.To4() != nil {
+			// This is an IPv4 pool.
+			if pool.Encapsulation == "" {
+				if instance.Spec.CNI.Type == operator.PluginCalico {
+					pool.Encapsulation = operator.EncapsulationIPIP
+				} else {
+					pool.Encapsulation = operator.EncapsulationNone
+				}
+			}
+			if pool.NATOutgoing == "" {
+				pool.NATOutgoing = operator.NATOutgoingEnabled
+			}
+			if pool.NodeSelector == "" {
+				pool.NodeSelector = operator.NodeSelectorDefault
+			}
+			if pool.BlockSize == nil {
+				var twentySix int32 = 26
+				pool.BlockSize = &twentySix
+			}
+		} else if err == nil && addr.To16() != nil {
+			// This is an IPv6 pool.
+			if pool.Encapsulation == "" {
+				pool.Encapsulation = operator.EncapsulationNone
+			}
+			if pool.NATOutgoing == "" {
+				pool.NATOutgoing = operator.NATOutgoingDisabled
+			}
+			if pool.NodeSelector == "" {
+				pool.NodeSelector = operator.NodeSelectorDefault
+			}
+			if pool.BlockSize == nil {
+				var oneTwentyTwo int32 = 122
+				pool.BlockSize = &oneTwentyTwo
+			}
+		}
+	}
+	return nil
 }
 
 // Reconcile reconciles IP pools in the cluster.
@@ -136,9 +449,46 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.OnCRFound()
 	defer r.status.SetMetaData(&installation.ObjectMeta)
 
-	if installation.Spec.CalicoNetwork == nil || len(installation.Spec.CalicoNetwork.IPPools) == 0 {
-		// No IP pool to manage (or defaulting hasn't ocurred yet) - nothing to do.
+	// This controller relies on the core Installation controller to perform initial defaulting before it can continue.
+	// Finalizers are set by the core controller as part of the defaulting process. Wait for them to be set as an indicator
+	// that defaulting has occurred.
+	if installation.Finalizers == nil || len(installation.Finalizers) == 0 {
+		// TODO: Should check for exact finalizer name here instead.
+		r.status.SetDegraded(operator.InvalidConfigurationError, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
+		r.status.SetDegraded(operator.InvalidConfigurationError, "Waiting for CNI type to be defaulted", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	// If the installation is terminating, do nothing.
+	if installation.DeletionTimestamp != nil {
+		reqLogger.Info("Installation is terminating, skipping reconciliation")
+		return reconcile.Result{}, nil
+	}
+
+	// Get all IP pools currently in the cluster.
+	currentPools := &crdv1.IPPoolList{}
+	err := r.client.List(ctx, currentPools)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Write default IP pool configuration back to the Installation object using patch.
+	preDefaultPatchFrom := client.MergeFrom(installation.DeepCopy())
+	if err = fillDefaults(ctx, r.client, installation, currentPools); err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "error filling IP pool defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err = validate(installation, currentPools); err != nil {
+		r.status.SetDegraded(operator.InvalidConfigurationError, "error validating IP pool configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err := r.client.Patch(ctx, installation, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operator.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Get the APIServer. If healthy, we'll use the projectcalico.org/v3 API for managing pools.
@@ -147,47 +497,54 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// properly handled when using the v3 API.
 	apiserver, _, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil && !apierrors.IsNotFound(err) {
+		r.status.SetDegraded(operator.ResourceNotReady, "Error querying APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	apiAvailable := apiserver != nil && apiserver.Status.State == v1.TigeraStatusReady
 
-	// Get all IP pools in the cluster.
-	currentPools := &pcv1.IPPoolList{}
-	err = r.client.List(ctx, currentPools)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will ignore any IP pools that it itself did not create.
-	ourPools := map[string]pcv1.IPPool{}
+	ourPools := map[string]crdv1.IPPool{}
 	for _, p := range currentPools.Items {
 		if hasOwner(&p, installation) {
 			// This pool is owned by the Installation object, so consider it ours.
 			ourPools[p.Spec.CIDR] = p
 		}
 	}
+	reqLogger.Info("Found IP pools owned by us", "count", len(ourPools))
 
 	// For each pool that is desired, but doesn't exist, create it.
-	toCreate := []client.Object{}
+	// We will install pools at start-of-day using the CRD API, but otherwise
+	// we require the v3 API to be running. This is so that we properly leverage the v3 API's validation.
+	toCreateOrUpdate := []client.Object{}
 	for _, p := range installation.Spec.CalicoNetwork.IPPools {
 		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool, p) {
-			// Create a new pool, or update an existing one.
-			res, err := p.ToProjectCalicoV1()
+			// The pool either doesn't exist, or it does exist but needs to be updated.
+			v1res, err := p.ToProjectCalicoV1()
 			if err != nil {
 				r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
 				return reconcile.Result{}, err
 			}
+
 			if apiAvailable {
-				v3res, err := v1ToV3(res)
+				// The v3 API is available, so use it to create / update the pool.
+				v3res, err := v1ToV3(v1res)
 				if err != nil {
 					r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
 					return reconcile.Result{}, err
 				}
-				toCreate = append(toCreate, v3res)
+				toCreateOrUpdate = append(toCreateOrUpdate, v3res)
+			} else if len(currentPools.Items) == 0 {
+				// The v3 API is not available, but there are no pools in the cluster. Create them using the v1 API, as they are needed for bootstrapping.
+				// Once the v3 API is available, we'll use that instead. Note that this is an imperfect solution - it still bypasses apiserver validation for
+				// the initial creation of IP pools (although we expect them to be valid due to operator validation). If the bootstrap pools
+				// are invalid and do not enable the Calico apiserver to launch successfully, then manual intervention will be required.
+				toCreateOrUpdate = append(toCreateOrUpdate, v1res)
 			} else {
-				toCreate = append(toCreate, res)
+				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
+				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.
+				r.status.SetDegraded(operator.ResourceNotReady, "Unable to modify IP pools while API server is unavailable", nil, reqLogger)
+				return reconcile.Result{}, nil
 			}
 		}
 	}
@@ -195,7 +552,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Check existing pools owned by this controller that are no longer in
 	// the Installation resource.
 	toDelete := []client.Object{}
-	for cidr, pool := range ourPools {
+	for cidr, v1res := range ourPools {
 		reqLogger.WithValues("cidr", cidr).Info("Checking if pool is still valid")
 		found := false
 		for _, p := range installation.Spec.CalicoNetwork.IPPools {
@@ -211,7 +568,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			reqLogger.WithValues("cidr", cidr).Info("Pool needs to be deleted")
 			if apiAvailable {
 				// v3 API is available - send a delete request.
-				v3res, err := v1ToV3(&pool)
+				v3res, err := v1ToV3(&v1res)
 				if err != nil {
 					r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
 					return reconcile.Result{}, err
@@ -220,22 +577,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			} else {
 				// v3 API is not available. Just mark the pool as disabled so that new allocations
 				// don't come from this pool. We'll delete it once the API server is available.
-				pool.Spec.Disabled = true
-				toCreate = append(toCreate, &pool)
+				v1res.Spec.Disabled = true
+				toCreateOrUpdate = append(toCreateOrUpdate, &v1res)
 			}
 		}
 	}
 
-	// Update pools in the cluster.
-	// TODO: This is bypassing a lot of validaiton! For example:
-	// - Verify that the pool doesn't overlap with an existing pool.
-	// - Verify that the block size hasn't changed.
-	// - Verify that the pool doesn't overlap with existing IPAM blocks.
-	// We should add this validation to productize this. Ideally, we'd go through the API server (and maybe we should at steady-state).
-	// We only need to use the crd.projectcalico.org API for bootstrapping.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, installation)
 
-	passThru := render.NewPassthrough(toCreate...)
+	passThru := render.NewPassthrough(toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating IPPools", err, log)
 		return reconcile.Result{}, err
@@ -258,41 +608,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Update status to include the full set of IP pools. This tells the core controller
-	// that it's good to start installing Calico.
-	installation.Status.IPPools = v1PoolsToOperator(currentPools.Items)
-	if err := r.client.Status().Update(ctx, installation); err != nil {
-		r.status.SetDegraded(v1.ResourceUpdateError, fmt.Sprintf("Error updating Installation status %s", v1.TigeraStatusReady), err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	return reconcile.Result{}, nil
 }
 
-func v1PoolsToOperator(crds []pcv1.IPPool) []v1.IPPool {
+func CRDPoolsToOperator(crds []crdv1.IPPool) []v1.IPPool {
 	pools := []v1.IPPool{}
 	for _, p := range crds {
-		pools = append(pools, v1PoolToOperator(p))
+		pools = append(pools, crdPoolToOperator(p))
 	}
 	return pools
 }
 
-func v1PoolToOperator(crd pcv1.IPPool) v1.IPPool {
-	pool := v1.IPPool{
-		CIDR: crd.Spec.CIDR,
-	}
+func crdPoolToOperator(crd crdv1.IPPool) v1.IPPool {
+	pool := v1.IPPool{CIDR: crd.Spec.CIDR}
 
 	// Set encap.
 	switch crd.Spec.IPIPMode {
-	case pcv1.IPIPModeAlways:
+	case crdv1.IPIPModeAlways:
 		pool.Encapsulation = v1.EncapsulationIPIP
-	case pcv1.IPIPModeCrossSubnet:
+	case crdv1.IPIPModeCrossSubnet:
 		pool.Encapsulation = v1.EncapsulationIPIPCrossSubnet
 	}
 	switch crd.Spec.VXLANMode {
-	case pcv1.VXLANModeAlways:
+	case crdv1.VXLANModeAlways:
 		pool.Encapsulation = v1.EncapsulationVXLAN
-	case pcv1.VXLANModeCrossSubnet:
+	case crdv1.VXLANModeCrossSubnet:
 		pool.Encapsulation = v1.EncapsulationVXLANCrossSubnet
 	}
 
@@ -317,7 +657,7 @@ func v1PoolToOperator(crd pcv1.IPPool) v1.IPPool {
 	return pool
 }
 
-func v1ToV3(v1pool *pcv1.IPPool) (*v3.IPPool, error) {
+func v1ToV3(v1pool *crdv1.IPPool) (*v3.IPPool, error) {
 	bs, err := json.Marshal(v1pool)
 	if err != nil {
 		return nil, err

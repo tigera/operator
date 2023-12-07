@@ -148,7 +148,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		for _, secretName := range []string{
 			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
-			render.ManagerInternalTLSSecretName, monitor.PrometheusTLSSecretName, certificatemanagement.CASecretName,
+			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(managerController, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -395,7 +395,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// any of them haven't been signed by the root CA.
 		trustedSecretNames = []string{
 			render.PacketCaptureServerCert,
-			monitor.PrometheusTLSSecretName,
+			monitor.PrometheusServerTLSSecretName,
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
 		}

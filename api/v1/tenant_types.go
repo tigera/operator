@@ -99,7 +99,7 @@ type Index struct {
 
 type TenantElasticSpec struct {
 	URL       string `json:"url"`
-	KibanaURL string `json:"kibana_url,omitempty"`
+	KibanaURL string `json:"kibanaURL,omitempty"`
 	MutualTLS bool   `json:"mutualTLS"`
 }
 

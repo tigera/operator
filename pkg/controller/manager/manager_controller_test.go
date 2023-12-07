@@ -51,10 +51,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
+	tigeratls "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
 
@@ -215,7 +215,7 @@ var _ = Describe("Manager controller tests", func() {
 			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
@@ -299,7 +299,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			userSecret, err := secret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -337,7 +337,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			userSecret, err := secret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -379,7 +379,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			customSecret, err := rsecret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Update the existing operator managed cert secret with bytes from
@@ -519,7 +519,7 @@ var _ = Describe("Manager controller tests", func() {
 			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})

@@ -39,6 +39,7 @@ const (
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
 func CreateCSRInitContainer(
 	certificateManagement *operatorv1.CertificateManagement,
+	secretName,
 	image string,
 	mountName string,
 	commonName string,
@@ -54,6 +55,10 @@ func CreateCSRInitContainer(
 		},
 		Env: []corev1.EnvVar{
 			{Name: "CERTIFICATE_PATH", Value: "/certs-share/"},
+			// SecretName, when defined, is used as a prefix for the CSR name. This avoids CSR name clashes if the same
+			// pod issues more than one CSR. Even though the CSRs are issued and read in sequence, there are edge-cases
+			// where a pod can get stuck in init.
+			{Name: "SECRET_NAME", Value: secretName},
 			{Name: "SIGNER", Value: certificateManagement.SignerName},
 			{Name: "COMMON_NAME", Value: commonName},
 			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", certificateManagement.KeyAlgorithm)},

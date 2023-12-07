@@ -305,7 +305,7 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.KubernetesProvider = operator.ProviderEKS
 
 		// Fill in defaults and validate the result.
-		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
@@ -499,8 +499,9 @@ var _ = Describe("Installation validation tests", func() {
 				disabled := operator.BGPDisabled
 				instance.Spec.CalicoNetwork.BGP = &disabled
 			})
+
 			It("with empty CalicoNetwork validates", func() {
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -514,7 +515,7 @@ var _ = Describe("Installation validation tests", func() {
 						NodeSelector:  "all()",
 					},
 				}
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -522,7 +523,7 @@ var _ = Describe("Installation validation tests", func() {
 			It("with BGP enabled validates", func() {
 				enable := operator.BGPEnabled
 				instance.Spec.CalicoNetwork.BGP = &enable
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -542,79 +543,87 @@ var _ = Describe("Installation validation tests", func() {
 						NodeSelector:  "all()",
 					},
 				}
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
+
 		Describe("should validate CNILogging", func() {
 			BeforeEach(func() {
 				instance.Spec.Logging = &operator.Logging{
 					CNI: &operator.CNILogging{},
 				}
 			})
+
 			It("with nil LogSeverity", func() {
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
 			})
+
 			It("with nil LogFileMaxAgeDays", func() {
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
 			})
+
 			It("with invalid LogFileMaxAgeDays", func() {
 				instance.Spec.Logging.CNI.LogFileMaxAgeDays = new(uint32)
 				*instance.Spec.Logging.CNI.LogFileMaxAgeDays = 0
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxAgeDays should be a positive non-zero integer"))
 			})
+
 			It("with nil LogFileMaxCount", func() {
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
 			})
+
 			It("with invalid LogFileMaxCount", func() {
 				instance.Spec.Logging.CNI.LogFileMaxCount = new(uint32)
 				*instance.Spec.Logging.CNI.LogFileMaxCount = 0
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.loggingConfig.cni.logFileMaxCount value should be greater than zero"))
 			})
+
 			It("with nil LogFileMaxSize", func() {
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
 			})
+
 			It("with invalid LogFileMaxSize", func() {
 				instance.Spec.Logging.CNI.LogFileMaxSize = new(resource.Quantity)
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("1")
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
 
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("0")
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err = validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
 
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("-1")
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err = validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
 
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("1M")
-				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 				err = validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
@@ -625,10 +634,12 @@ var _ = Describe("Installation validation tests", func() {
 		BeforeEach(func() {
 			instance.Spec.CNI = &operator.CNISpec{}
 		})
+
 		It("should not allow empty CNI", func() {
 			err := validateCustomResource(instance)
 			Expect(err).To(HaveOccurred())
 		})
+
 		It("should not allow invalid CNI Type", func() {
 			instance.Spec.CNI.Type = "bad"
 			err := validateCustomResource(instance)
@@ -642,7 +653,7 @@ var _ = Describe("Installation validation tests", func() {
 		DescribeTable("test allowed plugins", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance.Spec.CNI.Type = plugin
 			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
-			Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+			Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 			err := validateCustomResource(instance)
 			Expect(err).NotTo(HaveOccurred())
 		}, nonCalicoCNIEntries...)
@@ -863,7 +874,7 @@ var _ = Describe("Installation validation tests", func() {
 			Host: "1.2.3.4",
 			Port: "6443",
 		}
-		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -1041,18 +1052,21 @@ var _ = Describe("Installation validation tests", func() {
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				}
 			})
+
 			It("should return an error if the k8s service endpoint configmap is not configured correctly", func() {
 				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
 			})
+
 			It("should return an error if instance.Spec.ServiceCIDRs is not configured", func() {
 				instance.Spec.ServiceCIDRs = []string{}
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
 			})
+
 			It("should return an error if IP pool encapsulation is IPIP", func() {
 				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationIPIP
 				var enabled operator.BGPOption = operator.BGPEnabled
@@ -1061,6 +1075,7 @@ var _ = Describe("Installation validation tests", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"))
 			})
+
 			It("should return an error if IP pool encapsulation is VXLANCrossSubnet", func() {
 				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLANCrossSubnet
 				err := validateCustomResource(instance)
@@ -1076,12 +1091,14 @@ var _ = Describe("Installation validation tests", func() {
 				}
 				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationNone
 			})
+
 			It("should return an error if the k8s service endpoint configmap is not configured correctly", func() {
 				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
 			})
+
 			It("should not return an error if instance.Spec.ServiceCIDRs is not configured", func() {
 				instance.Spec.ServiceCIDRs = []string{}
 				err := validateCustomResource(instance)

@@ -709,10 +709,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		var esConfigMap *relasticsearch.ClusterConfig
-		// We only require Elastic cluster configuration when Kibana is enabled. We infer whether Kibana is enabled by checking
-		// FIPS configuration mode and multi-tenancy mode. See manager.go function kibanaEnabled for more details.
-		// In this case we know that the tenant is nil so we only need check the FIPS mode.
-		if !operatorv1.IsFIPSModeEnabled(i.FIPSMode) {
+		// We only require Elastic cluster configuration when Kibana is enabled.
+		if render.KibanaEnabled(nil, i) {
 			esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		}
 		cfg := &render.ManagerConfiguration{
@@ -1106,9 +1104,8 @@ func renderObjects(roc renderConfig) []client.Object {
 	}
 
 	var esConfigMap *relasticsearch.ClusterConfig
-	// We only require Elastic cluster configuration when Kibana is enabled. We infer whether Kibana is enabled by checking
-	// FIPS configuration mode and multi-tenancy mode. See manager.go function kibanaEnabled for more details.
-	if roc.tenant == nil && !operatorv1.IsFIPSModeEnabled(roc.installation.FIPSMode) {
+	// We only require Elastic cluster configuration when Kibana is enabled.
+	if render.KibanaEnabled(roc.tenant, roc.installation) {
 		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	}
 	cfg := &render.ManagerConfiguration{

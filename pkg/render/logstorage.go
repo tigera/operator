@@ -2129,7 +2129,8 @@ func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Servic
 func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.ClusterRole, []*rbacv1.RoleBinding) {
 	// Create separate ClusterRoles for necessary configmap and secret operations, then bind them to the namespaces
 	// where they are required so that we're only granting exactly which permissions we need in the namespaces in which
-	// they're required
+	// they're required. Other controllers may also bind this cluster role to their own namespace if they require
+	// linseed access tokens.
 	secretsRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: TigeraLinseedSecretsClusterRole,
@@ -2158,12 +2159,12 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 		},
 	}
 
-	// Bind the secrets permission to the tigera-fluentd namespace. Other controllers may also bind
-	// this cluster role to their own namespace if they require linseed access tokens.
+	// Bind the secrets permission to the operator namespace. This binding now adds permissions for Linseed to create
+	// its public cert secret in the tigera-operator namespace
 	secretBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-linseed",
-			Namespace: fluentdName,
+			Namespace: common.OperatorNamespace(),
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -2199,5 +2200,5 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 		},
 	}
 
-	return []*rbacv1.ClusterRole{secretsRole, configMapsRole}, []*rbacv1.RoleBinding{secretBinding, configMapBinding}
+	return []*rbacv1.ClusterRole{secretsRole, configMapsRole}, []*rbacv1.RoleBinding{configMapBinding, secretBinding}
 }

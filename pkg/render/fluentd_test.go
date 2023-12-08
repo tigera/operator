@@ -1002,12 +1002,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: "dummy-eks-cluster-cloudwatch-log-group"},
 			{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: ""},
 			{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"},
-			{Name: "LINSEED_ENABLED", Value: "true"},
-			{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
-			{Name: "TLS_CRT_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.crt"},
-			{Name: "TLS_KEY_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.key"},
-			{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
-			{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 			{Name: "AWS_REGION", Value: "us-west-1", ValueFrom: nil},
 			{Name: "AWS_ACCESS_KEY_ID",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1028,6 +1022,12 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						Optional: nil,
 					}},
 			},
+			{Name: "LINSEED_ENABLED", Value: "true"},
+			{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			{Name: "TLS_CRT_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.crt"},
+			{Name: "TLS_KEY_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.key"},
+			{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 		}
 
 		Expect(envs).To(Equal(expectedEnvVars))

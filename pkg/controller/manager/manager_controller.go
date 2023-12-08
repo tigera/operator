@@ -620,6 +620,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+	if tenant.MultiTenant() {
+		// In a multi-tenant environment, we need to grant access to the canonical tigera-manager:tigera-manager service account
+		// so that es-proxy passes Voltron's authorization checks when accessing managed clusters. This is because per-tenant manager instances
+		// impersonate as this serviceaccount on these flows.
+		namespaces = append(namespaces, render.ManagerNamespace)
+	}
 
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,

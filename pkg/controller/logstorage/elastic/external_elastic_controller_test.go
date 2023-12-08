@@ -155,7 +155,15 @@ var _ = Describe("External ES Controller", func() {
 		Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
 		// Create the ExternalCertsSecret which contains the client certificate for connecting to the external ES cluster.
-		externalCertsSecret := createPubSecret(logstorage.ExternalCertsSecret, common.OperatorNamespace(), []byte{}, "tls.crt")
+		externalCertsSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      logstorage.ExternalCertsSecret,
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"tls.crt": {},
+			},
+		}
 		Expect(cli.Create(ctx, externalCertsSecret)).ShouldNot(HaveOccurred())
 
 		Expect(cli.Create(

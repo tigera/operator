@@ -22,6 +22,8 @@ import (
 	"net/url"
 	"strings"
 
+	tigeraurl "github.com/tigera/operator/pkg/url"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -1480,7 +1482,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 							NodeSelector: es.cfg.Installation.ControlPlaneNodeSelector,
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
-								relasticsearch.ContainerDecorate(corev1.Container{
+								{
 									Name:            ESCuratorName,
 									Image:           es.curatorImage,
 									ImagePullPolicy: ImagePullPolicy(),
@@ -1488,7 +1490,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 									LivenessProbe:   elasticCuratorLivenessProbe,
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts:    es.cfg.TrustedBundle.VolumeMounts(es.SupportedOSType()),
-								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.cfg.ClusterDomain, es.SupportedOSType()),
+								},
 							},
 							ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
@@ -1512,6 +1514,9 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 		}
 		return fmt.Sprint(*i)
 	}
+
+	_, esHost, esPort, _ := tigeraurl.ParseEndpoint(relasticsearch.GatewayEndpoint(es.SupportedOSType(), es.cfg.ClusterDomain, ElasticsearchNamespace))
+
 	return []corev1.EnvVar{
 		{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.Flows)},
 		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.AuditReports)},
@@ -1521,6 +1526,11 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: safeAccess(es.cfg.LogStorage.Spec.Retention.BGPLogs)},
 		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
 		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
+		relasticsearch.ElasticUserEnvVar(ElasticsearchCuratorUserSecret),
+		relasticsearch.ElasticPasswordEnvVar(ElasticsearchCuratorUserSecret),
+		relasticsearch.ElasticHostEnvVar(esHost),
+		relasticsearch.ElasticPortEnvVar(esPort),
+		relasticsearch.ElasticCuratorBackendCertEnvVar(es.SupportedOSType()),
 	}
 }
 

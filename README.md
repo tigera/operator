@@ -128,7 +128,7 @@ These are the steps:
 
 These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either
 https://docs.projectcalico.org or https://docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`.
-You should see an existing deployment. Install [kubefwd](kubefwd.com).
+You should see an existing deployment. Install [kubefwd](https://kubefwd.com/).
 
 1. Scale down the operator, so it does not interfere with your own:
 ```bash

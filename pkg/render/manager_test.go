@@ -994,6 +994,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenantANamespace)}))
+			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
+			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
 		})
 
 		It("should not install UISettings / UISettingsGroups", func() {
@@ -1049,11 +1051,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
 
 			// Make sure we don't render multi-tenant environment variables
 			for _, env := range envs {
 				Expect(env.Name).NotTo(Equal("VOLTRON_TENANT_NAMESPACE"))
 				Expect(env.Name).NotTo(Equal("VOLTRON_LINSEED_ENDPOINT"))
+			}
+			for _, env := range esProxyEnv {
+				Expect(env.Name).NotTo(Equal("TENANT_NAMESPACE"))
 			}
 		})
 	})

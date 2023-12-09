@@ -84,6 +84,9 @@ type TenantSpec struct {
 	// in the Tenant's namespace. Defaults to the controlPlaneReplicas in Installation CR
 	// +optional
 	ControlPlaneReplicas *int32 `json:"controlPlaneReplicas,omitempty"`
+
+	// LinseedDeployment configures the linseed Deployment.
+	LinseedDeployment *LinseedDeployment `json:"linseedDeployment,omitempty"`
 }
 
 // Index defines how to store a tenant's data

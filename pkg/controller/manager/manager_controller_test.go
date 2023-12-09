@@ -1141,6 +1141,12 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: tenantBNamespace,
 					},
 				}
+				clusterRoleBinding := rbacv1.ClusterRoleBinding{
+					TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: render.ManagerClusterRoleBinding,
+					},
+				}
 
 				// We called Reconcile without specifying a namespace, so neither of these namespaced deployments should
 				// exist yet
@@ -1183,6 +1189,12 @@ var _ = Describe("Manager controller tests", func() {
 
 				err = test.GetResource(c, &tenantBDeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				// Ensure a cluster role binding was created that binds both tenants, as well as the
+				// canonical manager service account.
+				err = test.GetResource(c, &clusterRoleBinding)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				Expect(clusterRoleBinding.Subjects).To(HaveLen(3))
 			})
 		})
 	})

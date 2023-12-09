@@ -587,6 +587,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		if c.cfg.Tenant.MultiTenant() {
 			// This cluster supports multiple tenants. Point the manager at the correct Linseed instance for this tenant.
 			env = append(env, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Namespace)})
+			env = append(env, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Namespace})
 		}
 	}
 

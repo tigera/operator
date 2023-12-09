@@ -481,7 +481,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
 	}
 
-	return &appsv1.Deployment{
+	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
@@ -502,6 +502,14 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Replicas: replicas,
 		},
 	}
+
+	if l.cfg.Tenant.MultiTenant() {
+		if overrides := l.cfg.Tenant.Spec.LinseedDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(&d, overrides)
+		}
+	}
+
+	return &d
 }
 
 func (l *linseed) linseedServiceAccount() *corev1.ServiceAccount {

@@ -81,6 +81,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			PolicyRecommendationCertSecret: keyPair,
 			UsePSP:                         true,
 			Namespace:                      render.PolicyRecommendationNamespace,
+			BindingNamespaces:              []string{render.PolicyRecommendationNamespace},
 		}
 	})
 
@@ -121,6 +122,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/policy-recommendation-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/policy-recommendation-tls/tls.key"},
+			corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: "https://tigera-manager.tigera-manager.svc:9443"},
 		))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
@@ -144,6 +146,11 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys", "managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
@@ -278,6 +285,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					ID: "tenant-a-id",
 				},
 			}
+			cfg.BindingNamespaces = []string{tenantANamespace}
 			tenantAPolicyRec := render.PolicyRecommendation(cfg)
 
 			tenantAResources, _ := tenantAPolicyRec.Objects()
@@ -306,10 +314,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				rtest.ExpectResourceTypeAndObjectMetadata(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			d := rtest.GetResource(tenantAResources, "tigera-policy-recommendation", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
-			envs := d.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a-id"}))
+			verifyTenantResources(tenantAResources, tenantANamespace, "tenant-a-id")
 
 			cfg.Namespace = tenantBNamespace
 			cfg.Tenant = &operatorv1.Tenant{
@@ -321,6 +326,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					ID: "tenant-b-id",
 				},
 			}
+			cfg.BindingNamespaces = []string{tenantBNamespace}
 			tenantBPolicyRec := render.PolicyRecommendation(cfg)
 
 			tenantBResources, _ := tenantBPolicyRec.Objects()
@@ -347,11 +353,30 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			for i, expectedRes := range tenantBExpectedResources {
 				rtest.ExpectResourceTypeAndObjectMetadata(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
-			d = rtest.GetResource(tenantBResources, "tigera-policy-recommendation", tenantBNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
-			envs = d.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantBNamespace}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-b-id"}))
-
+			verifyTenantResources(tenantBResources, tenantBNamespace, "tenant-b-id")
 		})
 	})
 })
+
+func verifyTenantResources(createdResources []client.Object, namespace string, tenantID string) {
+	d := rtest.GetResource(createdResources, "tigera-policy-recommendation", namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+	envs := d.Spec.Template.Spec.Containers[0].Env
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: namespace}))
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: tenantID}))
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", namespace)}))
+	Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", namespace)}))
+
+	clusterRoleBinding := rtest.GetResource(createdResources, render.PolicyRecommendationName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+	Expect(clusterRoleBinding.RoleRef).To(Equal(
+		rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     render.PolicyRecommendationName,
+		}))
+	Expect(clusterRoleBinding.Subjects).To(ConsistOf(
+		rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      render.PolicyRecommendationName,
+			Namespace: namespace,
+		}))
+}

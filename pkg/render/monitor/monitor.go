@@ -35,7 +35,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -62,6 +61,9 @@ const (
 	TigeraPrometheusRole                  = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding           = "tigera-prometheus-role-binding"
 	TigeraPrometheusPodSecurityPolicyName = "tigera-prometheus"
+
+	// TigeraExternalPrometheus is the name of the objects created when Monitor.Spec.ExternalPrometheus is enabled.
+	TigeraExternalPrometheus = "tigera-external-prometheus"
 
 	PrometheusAPIPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
 	PrometheusClientTLSSecretName = "calico-node-prometheus-client-tls"
@@ -118,6 +120,7 @@ func MonitorPolicy(cfg *Config) render.Component {
 
 // Config contains all the config information needed to render the Monitor component.
 type Config struct {
+	Monitor                  operatorv1.MonitorSpec
 	Installation             *operatorv1.InstallationSpec
 	PullSecrets              []*corev1.Secret
 	AlertmanagerConfigSecret *corev1.Secret
@@ -129,6 +132,7 @@ type Config struct {
 	Openshift                bool
 	KubeControllerPort       int
 	UsePSP                   bool
+	ExternalPrometheus       bool
 }
 
 type monitorComponent struct {
@@ -220,6 +224,17 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 
 	if mc.cfg.UsePSP {
 		toCreate = append(toCreate, mc.prometheusOperatorPodSecurityPolicy())
+	}
+
+	if mc.cfg.Monitor.ExternalPrometheus != nil {
+		toCreate = append(toCreate, mc.externalConfigMap())
+		if mc.cfg.ExternalPrometheus && mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor != nil {
+			externalServiceMonitor, needsRBAC := mc.externalServiceMonitor()
+			toCreate = append(toCreate, externalServiceMonitor)
+			if needsRBAC {
+				toCreate = append(toCreate, mc.externalPrometheusRole(), mc.externalPrometheusRoleBinding(), mc.externalServiceAccount(), mc.externalPrometheusTokenSecret())
+			}
+		}
 	}
 
 	var toDelete []client.Object
@@ -381,7 +396,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
-			Replicas:           ptr.Int32ToPtr(3),
+			Replicas:           mc.cfg.Installation.ControlPlaneReplicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        mc.cfg.Installation.ControlPlaneTolerations,
@@ -1198,4 +1213,152 @@ func (mc *monitorComponent) serviceMonitorCalicoKubeControllers() *monitoringv1.
 			},
 		},
 	}
+}
+
+// externalPrometheusRole creates the permissions for the external prometheus server to scrape ours.
+func (mc *monitorComponent) externalPrometheusRole() client.Object {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraExternalPrometheus,
+			Namespace: mc.cfg.Monitor.ExternalPrometheus.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// When prometheus was first introduced it was accessed through k8s services/proxy and so to this day,
+				// the following resources are used to authorize access to the prometheus metrics.
+				APIGroups: []string{""},
+				Resources: []string{"services/proxy"},
+				ResourceNames: []string{
+					"https:tigera-api:8080", "calico-node-prometheus:9090",
+				},
+				Verbs: []string{"get", "create"},
+			},
+		},
+	}
+}
+
+// externalPrometheusRoleBinding creates the permissions for the external prometheus server to scrape ours.
+func (mc *monitorComponent) externalPrometheusRoleBinding() client.Object {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraExternalPrometheus,
+			Namespace: mc.cfg.Monitor.ExternalPrometheus.Namespace,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      TigeraExternalPrometheus,
+				Namespace: mc.cfg.Monitor.ExternalPrometheus.Namespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     TigeraExternalPrometheus,
+		},
+	}
+}
+
+// externalPrometheusTokenSecret creates the bearer token on which behalf requests will be made from the external prometheus
+// server to ours.
+func (mc *monitorComponent) externalPrometheusTokenSecret() client.Object {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraExternalPrometheus,
+			Namespace: mc.cfg.Monitor.ExternalPrometheus.Namespace,
+			// The annotation below will result in the auto-creation of spec.data.token.
+			Annotations: map[string]string{
+				"kubernetes.io/service-account.name": TigeraExternalPrometheus,
+			},
+		},
+		Type: "kubernetes.io/service-account-token",
+	}
+}
+
+// externalServiceAccount creates the service account on which behalf requests will be made from the external prometheus
+// server to ours.
+func (mc *monitorComponent) externalServiceAccount() client.Object {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceAccount",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraExternalPrometheus,
+			Namespace: mc.cfg.Monitor.ExternalPrometheus.Namespace,
+		},
+	}
+}
+
+// externalConfigMap creates the configmap with the TLS certificate required to scrape our prometheus server.
+func (mc *monitorComponent) externalConfigMap() client.Object {
+	return render.CreateCertificateConfigMap(
+		string(mc.cfg.ServerTLSSecret.GetCertificatePEM()),
+		TigeraExternalPrometheus,
+		mc.cfg.Monitor.ExternalPrometheus.Namespace,
+	)
+}
+
+// externalServiceMonitor creates the serviceMonitor to scrape our prometheus server.
+// returns true if we need to create a bearer token secret + rbac objects.
+func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
+	var needsRBAC bool
+	endpoints := make([]monitoringv1.Endpoint, len(mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor.Endpoints))
+	for i, ep := range mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor.Endpoints {
+		endpoints[i] = monitoringv1.Endpoint{
+			Port:          "web",
+			Path:          "/federate",
+			Scheme:        "https",
+			Params:        ep.Params,
+			Interval:      ep.Interval,
+			ScrapeTimeout: ep.ScrapeTimeout,
+			TLSConfig: &monitoringv1.TLSConfig{
+				SafeTLSConfig: monitoringv1.SafeTLSConfig{
+					CA: monitoringv1.SecretOrConfigMap{
+						ConfigMap: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: TigeraPrometheusObjectName,
+							},
+							Key: corev1.TLSCertKey,
+						},
+					},
+				},
+			},
+			BearerTokenSecret:    ep.BearerTokenSecret,
+			HonorLabels:          ep.HonorLabels,
+			HonorTimestamps:      ep.HonorTimestamps,
+			MetricRelabelConfigs: ep.MetricRelabelConfigs,
+			RelabelConfigs:       ep.RelabelConfigs,
+		}
+		// By default, we will render the service account token and cluster roles. But if the user chooses to override
+		// the bearer token, it is up to the user to provide the required access. See also api/v1/monitor_types.go.
+		if ep.BearerTokenSecret.LocalObjectReference.Name == TigeraExternalPrometheus {
+			needsRBAC = true
+		}
+	}
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraExternalPrometheus,
+			Namespace: mc.cfg.Monitor.ExternalPrometheus.Namespace,
+			Labels:    mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor.Labels,
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Endpoints: endpoints,
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{TigeraPrometheusObjectName},
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					render.AppLabelName: TigeraPrometheusObjectName,
+				},
+			},
+		},
+	}, needsRBAC
 }

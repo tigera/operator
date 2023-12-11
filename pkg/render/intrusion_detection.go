@@ -788,10 +788,6 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 			Name:  "LINSEED_TOKEN",
 			Value: GetLinseedTokenPath(c.cfg.ManagedCluster),
 		},
-		{
-			Name:  "LINSEED_CLUSTER",
-			Value: c.cfg.ESClusterConfig.ClusterName(),
-		},
 	}
 
 	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())

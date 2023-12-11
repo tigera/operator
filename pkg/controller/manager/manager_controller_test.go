@@ -21,6 +21,7 @@ import (
 	"encoding/pem"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 
 	. "github.com/onsi/ginkgo"
@@ -50,7 +51,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
@@ -218,10 +218,7 @@ var _ = Describe("Manager controller tests", func() {
 			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
@@ -432,6 +429,7 @@ var _ = Describe("Manager controller tests", func() {
 		var licenseKey *v3.LicenseKey
 		var compliance *operatorv1.Compliance
 		var certificateManager certificatemanager.CertificateManager
+		var installation *operatorv1.Installation
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -479,25 +477,25 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
-			Expect(c.Create(
-				ctx,
-				&operatorv1.Installation{
-					ObjectMeta: metav1.ObjectMeta{Name: "default"},
-					Spec: operatorv1.InstallationSpec{
-						ControlPlaneReplicas: &replicas,
-						Variant:              operatorv1.TigeraSecureEnterprise,
-						Registry:             "some.registry.org/",
-					},
-					Status: operatorv1.InstallationStatus{
-						Variant: operatorv1.TigeraSecureEnterprise,
-						Computed: &operatorv1.InstallationSpec{
-							Registry: "some.registry.org/",
-							// The test is provider agnostic.
-							KubernetesProvider: operatorv1.ProviderNone,
-						},
+
+			installation = &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
+					Registry:             "some.registry.org/",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.TigeraSecureEnterprise,
+					Computed: &operatorv1.InstallationSpec{
+						Registry: "some.registry.org/",
+						// The test is provider agnostic.
+						KubernetesProvider: operatorv1.ProviderNone,
 					},
 				},
-			)).NotTo(HaveOccurred())
+			}
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
 			compliance = &operatorv1.Compliance{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Status: operatorv1.ComplianceStatus{
@@ -524,10 +522,7 @@ var _ = Describe("Manager controller tests", func() {
 			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
@@ -1195,6 +1190,29 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &clusterRoleBinding)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				Expect(clusterRoleBinding.Subjects).To(HaveLen(3))
+			})
+		})
+
+		Context("FIPS reconciliation", func() {
+			BeforeEach(func() {
+				fipsEnabled := operatorv1.FIPSModeEnabled
+				installation.Spec.FIPSMode = &fipsEnabled
+				Expect(c.Update(
+					ctx,
+					installation,
+				)).NotTo(HaveOccurred())
+			})
+			It("should not require presence of ElasticSearch ConfigMap", func() {
+				Expect(c.Delete(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+				elasticConfigMapKey := client.ObjectKey{
+					Name:      relasticsearch.ClusterConfigConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				}
+				elasticConfigMap := corev1.ConfigMap{}
+				Expect(c.Get(ctx, elasticConfigMapKey, &elasticConfigMap)).To(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
 	})

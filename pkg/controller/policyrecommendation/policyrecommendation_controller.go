@@ -35,7 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -114,7 +113,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Watch the given secrets in each both the policy-recommendation and operator namespaces
 	for _, namespace := range watchNamespaces {
 		for _, secretName := range []string{
-			relasticsearch.PublicCertSecret,
 			render.ElasticsearchPolicyRecommendationUserSecret,
 			certificatemanagement.CASecretName,
 			render.ManagerInternalTLSSecretName,

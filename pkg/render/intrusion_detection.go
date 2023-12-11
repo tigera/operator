@@ -328,13 +328,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			RestartPolicy:    corev1.RestartPolicyNever,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.cfg.ESClusterConfig.ClusterName(),
-					ElasticsearchIntrusionDetectionJobUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux),
+				c.intrusionDetectionJobContainer(),
 			},
 			Volumes:            []corev1.Volume{c.cfg.TrustedCertBundle.Volume()},
 			ServiceAccountName: IntrusionDetectionInstallerJobName,
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
@@ -410,6 +409,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Name:  "FIPS_MODE_ENABLED",
 				Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 			},
+			relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ESClusterConfig.ClusterName()),
+			relasticsearch.ElasticUserEnvVar(ElasticsearchIntrusionDetectionJobUserSecret),
+			relasticsearch.ElasticPasswordEnvVar(ElasticsearchIntrusionDetectionJobUserSecret),
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
@@ -723,10 +725,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			})
 	}
 
-	intrusionDetectionContainer := relasticsearch.ContainerDecorateIndexCreator(
-		relasticsearch.ContainerDecorate(c.intrusionDetectionControllerContainer(), c.cfg.ESClusterConfig.ClusterName(),
-			ElasticsearchIntrusionDetectionUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux),
-		c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards())
+	intrusionDetectionContainer := c.intrusionDetectionControllerContainer()
 
 	if c.cfg.ManagedCluster {
 		envVars := []corev1.EnvVar{
@@ -759,7 +758,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			Containers:         containers,
 			Volumes:            volumes,
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 }
 
 func (c *intrusionDetectionComponent) deployWebhooksController() bool {
@@ -816,6 +815,7 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() corev1.Container {
+	esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace))
 	envs := []corev1.EnvVar{
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
@@ -845,6 +845,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Name:  "LINSEED_TOKEN",
 			Value: GetLinseedTokenPath(c.cfg.ManagedCluster),
 		},
+		relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ESClusterConfig.ClusterName()),
+		relasticsearch.ElasticUserEnvVar(ElasticsearchIntrusionDetectionUserSecret),
+		relasticsearch.ElasticPasswordEnvVar(ElasticsearchIntrusionDetectionUserSecret),
+		relasticsearch.ElasticHostEnvVar(esHost),
+		relasticsearch.ElasticPortEnvVar(esPort),
+		relasticsearch.ElasticSchemeEnvVar(esScheme),
+		relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
 	}
 
 	sc := securitycontext.NewNonRootContext()

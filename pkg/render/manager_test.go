@@ -19,6 +19,9 @@ import (
 	"reflect"
 	"strconv"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/secret"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -44,7 +47,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -130,12 +132,23 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		))
 
 		// es-proxy container
-		Expect(esProxy.Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
-			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/internal-manager-tls/tls.crt"},
-			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
-			corev1.EnvVar{Name: "VOLTRON_URL", Value: "https://tigera-manager.tigera-manager.svc:9443"},
-		))
+		esProxyExpectedEnvVars := []corev1.EnvVar{
+			{Name: "ELASTIC_LICENSE_TYPE", Value: "enterprise_trial"},
+			{Name: "ELASTIC_KIBANA_ENDPOINT", Value: "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:5601"},
+			{Name: "FIPS_MODE_ENABLED", Value: "false"},
+			{Name: "LINSEED_CLIENT_CERT", Value: "/internal-manager-tls/tls.crt"},
+			{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
+			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
+			{Name: "VOLTRON_URL", Value: "https://tigera-manager.tigera-manager.svc:9443"},
+			{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+			{Name: "ELASTIC_SCHEME", Value: "https"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+			{Name: "ELASTIC_PORT", Value: "9200"},
+			{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchManagerUserSecret, "username", false)},
+			{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchManagerUserSecret, "password", false)},
+			{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+		}
+		Expect(esProxy.Env).To(Equal(esProxyExpectedEnvVars))
 
 		Expect(esProxy.VolumeMounts).To(HaveLen(2))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
@@ -696,9 +709,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// renderManager passes in as few parameters as possible to render.Manager without it
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
+		var esConfigMap *relasticsearch.ClusterConfig
+		// We only require Elastic cluster configuration when Kibana is enabled.
+		if render.KibanaEnabled(nil, i) {
+			esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		}
 		cfg := &render.ManagerConfiguration{
 			TrustedCertBundle:     bundle,
-			ClusterConfig:         &relasticsearch.ClusterConfig{},
+			ClusterConfig:         esConfigMap,
 			TLSKeyPair:            kp,
 			VoltronLinseedKeyPair: voltronLinseedKP,
 			Installation:          i,
@@ -1119,7 +1137,11 @@ func renderObjects(roc renderConfig) []client.Object {
 		roc.bindingNamespaces = []string{roc.ns}
 	}
 
-	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+	var esConfigMap *relasticsearch.ClusterConfig
+	// We only require Elastic cluster configuration when Kibana is enabled.
+	if render.KibanaEnabled(roc.tenant, roc.installation) {
+		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+	}
 	cfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      dexCfg,
 		TrustedCertBundle:       bundle,

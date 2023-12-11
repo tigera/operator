@@ -28,6 +28,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -68,8 +69,9 @@ type PolicyRecommendationConfiguration struct {
 	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.
-	UsePSP    bool
-	Namespace string
+	UsePSP            bool
+	Namespace         string
+	BindingNamespaces []string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
 	Tenant *operatorv1.Tenant
@@ -147,16 +149,6 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"licensekeys", "managedclusters"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
 				"tiers",
 				"policyrecommendationscopes",
@@ -179,6 +171,21 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 		},
 	}
 
+	if !pr.cfg.ManagedCluster {
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys", "managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		}...)
+	}
+
 	if pr.cfg.UsePSP {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -198,27 +205,7 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 }
 
 func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "rbac.authorization.k8s.io/v1",
-			Kind:       "ClusterRoleBinding",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: PolicyRecommendationName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     PolicyRecommendationName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      PolicyRecommendationName,
-				Namespace: pr.cfg.Namespace,
-			},
-		},
-	}
+	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationNamespace, pr.cfg.BindingNamespaces)
 }
 
 func (pr *policyRecommendationComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -238,8 +225,12 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Value: pr.cfg.TrustedBundle.MountPath(),
 		},
 		{
+			Name:  "MULTI_CLUSTER_FORWARDING_ENDPOINT",
+			Value: ManagerService(pr.cfg.Tenant),
+		},
+		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain, ElasticsearchNamespace),
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain, LinseedNamespace(pr.cfg.Tenant)),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -340,7 +331,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
+			Destination: networkpolicy.Helper(pr.cfg.Tenant.MultiTenant(), pr.cfg.Namespace).ManagerEntityRule(),
 		},
 	}
 
@@ -348,7 +339,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
+			Destination: networkpolicy.Helper(pr.cfg.Tenant.MultiTenant(), pr.cfg.Namespace).LinseedEntityRule(),
 		})
 	}
 

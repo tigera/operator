@@ -84,6 +84,10 @@ type CertificateManager interface {
 	GetKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
+	// CreateCSRKeyPair returns a KeyPair that relies on issuing Certificate Signing Requests to the kubernetes api to be
+	// signed by OperatorCSRSignerName. This means that pkg/controller/csr/csr_controller.go will end up signing the CSR
+	// using the private key of the certificate manager.
+	CreateCSRKeyPair(secretName, secretNamespace string, dnsNames []string) certificatemanagement.KeyPairInterface
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
 	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
@@ -273,6 +277,20 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 		statusManager.AddCertificateSigningRequests(namespace, map[string]string{"k8s-app": namespace})
 	} else {
 		statusManager.RemoveCertificateSigningRequests(namespace)
+	}
+}
+
+func (cm *certificateManager) CreateCSRKeyPair(secretName, namespace string, dnsNames []string) certificatemanagement.KeyPairInterface {
+	return &certificatemanagement.KeyPair{
+		Name: secretName,
+		CertificateManagement: &operatorv1.CertificateManagement{
+			CACert:     cm.keyPair.CertificatePEM,
+			SignerName: OperatorCSRSignerName,
+		},
+		DNSNames:       dnsNames,
+		CSRImage:       cm.keyPair.CSRImage,
+		Namespace:      namespace,
+		CertificatePEM: cm.keyPair.CertificatePEM,
 	}
 }
 

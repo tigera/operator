@@ -36,10 +36,10 @@ spec:
             properties:
               externalPrometheus:
                 description: ExternalPrometheus optionally configures integration
-                  with an external Prometheus for scraping Calico metrics. If specified,
-                  the operator will render resources in the provided namespace. As
-                  an example, this option makes it possible to configure scraping
-                  from git-ops tools without the need of post-installation steps.
+                  with an external Prometheus for scraping Calico metrics. When specified,
+                  the operator will render resources in the defined namespace. This
+                  option can be useful for configuring scraping from git-ops tools
+                  without the need of post-installation steps.
                 properties:
                   namespace:
                     description: Namespace is the namespace where the operator will

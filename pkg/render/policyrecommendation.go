@@ -17,8 +17,6 @@ package render
 import (
 	"crypto/x509"
 
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,6 +28,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -112,8 +111,8 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	objs := []client.Object{
 		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted),
 		pr.serviceAccount(),
-		pr.clusterRole(pr.cfg.ManagedCluster),
-		pr.clusterRoleBinding(pr.cfg.BindingNamespaces),
+		pr.clusterRole(),
+		pr.clusterRoleBinding(),
 		networkpolicy.AllowTigeraDefaultDeny(pr.cfg.Namespace),
 	}
 
@@ -141,7 +140,7 @@ func (pr *policyRecommendationComponent) Ready() bool {
 	return true
 }
 
-func (pr *policyRecommendationComponent) clusterRole(managedCluster bool) client.Object {
+func (pr *policyRecommendationComponent) clusterRole() client.Object {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -172,7 +171,7 @@ func (pr *policyRecommendationComponent) clusterRole(managedCluster bool) client
 		},
 	}
 
-	if !managedCluster {
+	if !pr.cfg.ManagedCluster {
 		rules = append(rules, []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -205,8 +204,8 @@ func (pr *policyRecommendationComponent) clusterRole(managedCluster bool) client
 	}
 }
 
-func (pr *policyRecommendationComponent) clusterRoleBinding(namespaces []string) client.Object {
-	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationNamespace, namespaces)
+func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
+	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationNamespace, pr.cfg.BindingNamespaces)
 }
 
 func (pr *policyRecommendationComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {

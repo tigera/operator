@@ -335,9 +335,12 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
 
 	// Determine the namespaces to which we must bind the cluster role.
-	bindNamespaces, err := helper.TenantNamespaces(r.client)
-	if err != nil {
-		return reconcile.Result{}, err
+	var bindNamespaces = []string{ResourceName}
+	if tenant.MultiTenant() {
+		bindNamespaces, err = helper.TenantNamespaces(r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	logc.V(3).Info("rendering components")

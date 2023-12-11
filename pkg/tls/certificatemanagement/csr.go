@@ -147,7 +147,7 @@ func CertificateVolumeSource(certificateManagement *operatorv1.CertificateManage
 	if certificateManagement != nil {
 		return corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{
-				// Writing the TLS assets to memory.
+				// Writing the TLS assets to memory. This is more secure and less accessible.
 				Medium: corev1.StorageMediumMemory,
 			},
 		}

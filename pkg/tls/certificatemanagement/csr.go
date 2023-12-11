@@ -19,14 +19,13 @@ import (
 	"fmt"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -101,7 +100,7 @@ func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.Image
 }
 
 // CSRClusterRole returns a role with the necessary permissions to create certificate signing requests.
-func CSRClusterRole() client.Object {
+func CSRClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,7 +146,10 @@ func CertificateVolumeSource(certificateManagement *operatorv1.CertificateManage
 	var defaultMode int32 = 420
 	if certificateManagement != nil {
 		return corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				// Writing the TLS assets to memory.
+				Medium: corev1.StorageMediumMemory,
+			},
 		}
 	} else {
 		return corev1.VolumeSource{

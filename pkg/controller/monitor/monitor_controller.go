@@ -121,7 +121,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	return r
 }
 
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(_ manager.Manager, c controller.Controller) error {
 	var err error
 
 	// watch for primary resource changes
@@ -157,7 +157,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
-	// Namespaces are watched in cause external monitoring config is used.
+	// Namespaces are watched in case external monitoring config is used.
 	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
@@ -239,23 +239,25 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 	// Patch the monitor resource with defaults added.
-	if err = r.client.Patch(ctx, instance.DeepCopy(), preDefaultPatchFrom); err != nil {
+	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if instance.Spec.ExternalPrometheusConfiguration != nil {
-		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheusConfiguration.Namespace}, &corev1.Namespace{}); err != nil {
-			if errors.IsNotFound(err) {
-				// We set ExternalPrometheusConfiguration to nil, and proceed to render the other configuration.
-				// When the namespace is created, we will reconcile the ExternalPrometheusConfiguration.
-				reqLogger.V(3).
-					WithValues("namespace", instance.Spec.ExternalPrometheusConfiguration.Namespace).
-					Info("will skip external prometheus configuration, namespace does not exist")
-				instance.Spec.ExternalPrometheusConfiguration = nil
-			} else {
+	var externalPrometheus bool
+	if instance.Spec.ExternalPrometheus != nil {
+		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheus.Namespace}, &corev1.Namespace{}); err != nil {
+			if !errors.IsNotFound(err) {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get external prometheus namespace", err, reqLogger)
 				return reconcile.Result{}, err
 			}
+			// We set ExternalPrometheus to nil, and proceed to render the other configuration.
+			// When the namespace is created, we will reconcile the ExternalPrometheus.
+			reqLogger.V(3).
+				WithValues("namespace", instance.Spec.ExternalPrometheus.Namespace).
+				Info("will skip external prometheus configuration, namespace does not exist")
+			instance.Spec.ExternalPrometheus = nil
+		} else {
+			externalPrometheus = true
 		}
 	}
 
@@ -297,7 +299,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var serverTLSSecret certificatemanagement.KeyPairInterface
-	if instance.Spec.ExternalPrometheusConfiguration == nil || install.CertificateManagement != nil {
+	if !externalPrometheus || install.CertificateManagement != nil {
 		serverTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
@@ -399,6 +401,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		Openshift:                r.provider == operatorv1.ProviderOpenShift,
 		KubeControllerPort:       kubeControllersMetricsPort,
 		UsePSP:                   r.usePSP,
+		ExternalPrometheus:       externalPrometheus,
 	}
 
 	// Render prometheus component
@@ -459,50 +462,43 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 }
 
 func validateMonitorResource(instance *operatorv1.Monitor) error {
-	if instance.Spec.ExternalPrometheusConfiguration != nil && instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor != nil {
-		if instance.Spec.ExternalPrometheusConfiguration.Namespace != instance.Spec.ExternalPrometheusConfiguration.Namespace {
-			return fmt.Errorf("invalid Monitor resource: Spec.ExternalPrometheusConfiguration.Namespace must be equal to Spec.ExternalPrometheusConfiguration.Namespace")
+	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
+		if instance.Spec.ExternalPrometheus.Namespace != instance.Spec.ExternalPrometheus.Namespace {
+			return fmt.Errorf("invalid Monitor resource: Spec.ExternalPrometheus.Namespace must be equal to Spec.ExternalPrometheus.Namespace")
 		}
 	}
 	return nil
 }
 
 func fillDefaults(instance *operatorv1.Monitor) {
-	if instance.Spec.ExternalPrometheusConfiguration == nil {
-		return
-	}
+	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
 
-	if instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor == nil {
-		return
-	}
-
-	if len(instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Labels) == 0 {
-		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Labels = map[string]string{
-			render.AppLabelName: monitor.TigeraPrometheusObjectName,
-		}
-	}
-
-	if len(instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Endpoints) == 0 {
-		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Endpoints = []operatorv1.Endpoint{{}}
-	}
-
-	for i, ep := range instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Endpoints {
-		if len(ep.Params) == 0 {
-			// The following params let us scrape all metrics.
-			ep.Params = map[string][]string{"match[]": {"{__name__=~\".+\"}"}}
-		}
-		if ep.BearerTokenSecret.Key == "" || ep.BearerTokenSecret.Name == "" {
-			ep.BearerTokenSecret = corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: monitor.TigeraExternalPrometheus,
-				},
-				Key: "token",
+		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {
+			instance.Spec.ExternalPrometheus.ServiceMonitor.Labels = map[string]string{
+				render.AppLabelName: monitor.TigeraPrometheusObjectName,
 			}
 		}
-		instance.Spec.ExternalPrometheusConfiguration.ServiceMonitor.Endpoints[i] = ep
-	}
 
-	return
+		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints) == 0 {
+			instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints = []operatorv1.Endpoint{{}}
+		}
+
+		for i, ep := range instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints {
+			if len(ep.Params) == 0 {
+				// The following params let us scrape all metrics.
+				ep.Params = map[string][]string{"match[]": {"{__name__=~\".+\"}"}}
+			}
+			if ep.BearerTokenSecret.Key == "" || ep.BearerTokenSecret.Name == "" {
+				ep.BearerTokenSecret = corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: monitor.TigeraExternalPrometheus,
+					},
+					Key: "token",
+				}
+			}
+			instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints[i] = ep
+		}
+	}
 }
 
 // PrometheusTLSServerDNSNames returns all the DNS names valid for the prometheus server TLS asset.

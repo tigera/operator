@@ -34,26 +34,28 @@ spec:
           spec:
             description: MonitorSpec defines the desired state of Tigera monitor.
             properties:
-              externalPrometheusConfiguration:
-                description: ExternalPrometheusConfiguration if not nil, the operator
-                  will create a ServiceMonitor and/or other resources in the namespace
-                  for your convenience. For example, this makes it possible to configure
-                  scraping from git-ops tools, without needing extra tools.
+              externalPrometheus:
+                description: ExternalPrometheus optionally configures integration
+                  with an external Prometheus for scraping Calico metrics. If specified,
+                  the operator will render resources in the provided namespace. As
+                  an example, this option makes it possible to configure scraping
+                  from git-ops tools without the need of post-installation steps.
                 properties:
                   namespace:
-                    description: 'Namespace is the namespace where the operator will
-                      create resources for your Prometheus instance. Default: default'
+                    description: Namespace is the namespace where the operator will
+                      create resources for your Prometheus instance. As long as the
+                      namespace does not exist, nothing will be rendered.
                     type: string
                   serviceMonitor:
-                    description: 'ServiceMonitor if not nil, the operator will create
-                      a ServiceMonitor object in the namespace. It is important that
-                      you configure labels if you want your prometheus instance to
-                      pick up the configuration automatically. The operator will configure
-                      1 endpoint by default: - Params to scrape all metrics available
-                      in Calico Enterprise. - BearerTokenSecret (If not overridden,
-                      the operator will also create corresponding RBAC that allows
-                      authz to the metrics.) - TLSConfig, containing the caFile and
-                      serverName.'
+                    description: 'ServiceMonitor when specified, the operator will
+                      create a ServiceMonitor object in the namespace. It is recommended
+                      that you configure labels if you want your prometheus instance
+                      to pick up the configuration automatically. The operator will
+                      configure 1 endpoint by default: - Params to scrape all metrics
+                      available in Calico Enterprise. - BearerTokenSecret (If not
+                      overridden, the operator will also create corresponding RBAC
+                      that allows authz to the metrics.) - TLSConfig, containing the
+                      caFile and serverName.'
                     properties:
                       endpoints:
                         description: The endpoints to scrape. This struct contains
@@ -271,7 +273,7 @@ spec:
                       labels:
                         additionalProperties:
                           type: string
-                        description: 'Labels are the labels of your prometheus instance.
+                        description: 'Labels are the metadata.labels of the ServiceMonitor.
                           When combined with spec.serviceMonitorSelector.matchLabels
                           on your prometheus instance, the service monitor will automatically
                           be picked up. Default: k8s-app=tigera-prometheus'

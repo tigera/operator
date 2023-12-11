@@ -24,14 +24,14 @@ import (
 
 // MonitorSpec defines the desired state of Tigera monitor.
 type MonitorSpec struct {
-	// ExternalPrometheusConfiguration if not nil, the operator will create a ServiceMonitor and/or other resources in
-	// the namespace for your convenience. For example, this makes it possible to configure scraping from git-ops tools
-	// without needing post-installation steps.
-	ExternalPrometheusConfiguration *ExternalPrometheusConfiguration `json:"externalPrometheusConfiguration,omitempty"`
+	// ExternalPrometheus optionally configures integration with an external Prometheus for scraping Calico metrics. When
+	// specified, the operator will render resources in the defined namespace. This option can be useful for configuring
+	// scraping from git-ops tools without the need of post-installation steps.
+	ExternalPrometheus *ExternalPrometheus `json:"externalPrometheus,omitempty"`
 }
 
-type ExternalPrometheusConfiguration struct {
-	// ServiceMonitor if not nil, the operator will create a ServiceMonitor object in the namespace. It is recommended
+type ExternalPrometheus struct {
+	// ServiceMonitor when specified, the operator will create a ServiceMonitor object in the namespace. It is recommended
 	// that you configure labels if you want your prometheus instance to pick up the configuration automatically.
 	// The operator will configure 1 endpoint by default:
 	// - Params to scrape all metrics available in Calico Enterprise.
@@ -51,6 +51,7 @@ type ServiceMonitor struct {
 	// on your prometheus instance, the service monitor will automatically be picked up.
 	// Default: k8s-app=tigera-prometheus
 	Labels map[string]string `json:"labels,omitempty"`
+
 	// The endpoints to scrape. This struct contains a subset of the Endpoint as defined in the prometheus docs. Fields
 	// related to connecting to our Prometheus server are automatically set by the operator.
 	Endpoints []Endpoint `json:"endpoints,omitempty"`
@@ -61,21 +62,28 @@ type Endpoint struct {
 	// Optional HTTP URL parameters
 	// Default: scrape all metrics.
 	Params map[string][]string `json:"params,omitempty"`
+
 	// Secret to mount to read bearer token for scraping targets.
 	// Recommended: when unset, the operator will create a Secret, a ClusterRole and a ClusterRoleBinding.
 	BearerTokenSecret corev1.SecretKeySelector `json:"bearerTokenSecret,omitempty"`
+
 	// Interval at which metrics should be scraped.
 	// If not specified Prometheus' global scrape interval is used.
 	Interval v1.Duration `json:"interval,omitempty"`
+
 	// Timeout after which the scrape is ended.
 	// If not specified, the Prometheus global scrape timeout is used unless it is less than `Interval` in which the latter is used.
 	ScrapeTimeout v1.Duration `json:"scrapeTimeout,omitempty"`
+
 	// HonorLabels chooses the metric's labels on collisions with target labels.
 	HonorLabels bool `json:"honorLabels,omitempty"`
+
 	// HonorTimestamps controls whether Prometheus respects the timestamps present in scraped data.
 	HonorTimestamps *bool `json:"honorTimestamps,omitempty"`
+
 	// MetricRelabelConfigs to apply to samples before ingestion.
 	MetricRelabelConfigs []*v1.RelabelConfig `json:"metricRelabelings,omitempty"`
+
 	// RelabelConfigs to apply to samples before scraping.
 	// Prometheus Operator automatically adds relabelings for a few standard Kubernetes fields.
 	// The original scrape job's name is available via the `__tmp_prometheus_job_name` label.

@@ -79,6 +79,11 @@ type TenantSpec struct {
 	// Elastic configures per-tenant ElasticSearch and Kibana parameters.
 	// This field is required for clusters using external ES.
 	Elastic *TenantElasticSpec `json:"elastic,omitempty"`
+
+	// ControlPlaneReplicas defines how many replicas of the control plane core components will be deployed
+	// in the Tenant's namespace. Defaults to the controlPlaneReplicas in Installation CR
+	// +optional
+	ControlPlaneReplicas *int32 `json:"controlPlaneReplicas,omitempty"`
 }
 
 // Index defines how to store a tenant's data
@@ -94,7 +99,7 @@ type Index struct {
 
 type TenantElasticSpec struct {
 	URL       string `json:"url"`
-	KibanaURL string `json:"kibana_url,omitempty"`
+	KibanaURL string `json:"kibanaURL,omitempty"`
 	MutualTLS bool   `json:"mutualTLS"`
 }
 

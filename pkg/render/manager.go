@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/url"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -210,18 +212,23 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{}
 
-	if c.cfg.Tenant == nil {
+	if !c.cfg.Tenant.MultiTenant() {
 		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
 		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted))
+
+		// For multi-tenant environments, the management cluster itself isn't shown in the UI so we only need to create these
+		// when there is no tenant.
+		objs = append(objs,
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
 	}
 
 	objs = append(objs,
 		managerClusterRoleBinding(c.cfg.BindingNamespaces),
 		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
 
 	if c.cfg.UsePSP {
@@ -273,13 +280,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	// Containers for the manager pod.
-	managerContainer := c.managerContainer()
-	esProxyContainer := c.managerEsProxyContainer()
-	if c.cfg.Tenant == nil {
-		// If we're running in multi-tenant mode, we don't need ES credentials as these are used for Kibana login. Otherwise, add them.
-		managerContainer = relasticsearch.ContainerDecorate(managerContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
-		esProxyContainer = relasticsearch.ContainerDecorate(esProxyContainer, c.cfg.ClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())
-	}
 	if c.cfg.InternalTLSKeyPair != nil && c.cfg.InternalTLSKeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.InternalTLSKeyPair.InitContainer(ManagerNamespace))
 	}
@@ -299,10 +299,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
-			Containers:         []corev1.Container{managerContainer, esProxyContainer, c.voltronContainer()},
+			Containers:         []corev1.Container{c.managerContainer(), c.managerEsProxyContainer(), c.voltronContainer()},
 			Volumes:            c.managerVolumes(),
 		},
-	}, c.cfg.ClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", c.cfg.Namespace)
@@ -395,9 +395,9 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 	}
 }
 
-func (c *managerComponent) kibanaEnabled() bool {
-	enableKibana := !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode)
-	if c.cfg.Tenant.MultiTenant() {
+func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
+	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
+	if tenant.MultiTenant() {
 		enableKibana = false
 	}
 	return enableKibana
@@ -417,7 +417,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(c.kibanaEnabled())},
+		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
 		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
 		// and the current license not enabling the feature. The compliance flag that we set on the manager container is a feature
 		// flag, which we should set purely based on whether the compliance CR is present, ignoring the license status.
@@ -569,8 +569,20 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!c.kibanaEnabled())},
+		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
 		{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", c.cfg.Namespace)},
+	}
+
+	if KibanaEnabled(c.cfg.Tenant, c.cfg.Installation) {
+		esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace))
+		env = append(env,
+			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
+			relasticsearch.ElasticSchemeEnvVar(esScheme),
+			relasticsearch.ElasticHostEnvVar(esHost),
+			relasticsearch.ElasticPortEnvVar(esPort),
+			relasticsearch.ElasticUserEnvVar(ElasticsearchManagerUserSecret),
+			relasticsearch.ElasticPasswordEnvVar(ElasticsearchManagerUserSecret),
+			relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ClusterConfig.ClusterName()))
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,
@@ -582,6 +594,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		if c.cfg.Tenant.MultiTenant() {
 			// This cluster supports multiple tenants. Point the manager at the correct Linseed instance for this tenant.
 			env = append(env, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Namespace)})
+			env = append(env, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Namespace})
 		}
 	}
 

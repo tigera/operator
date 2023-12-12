@@ -73,6 +73,13 @@ var (
 	// most scenarios. Retries should be used sparingly, and only in extraordinary
 	// circumstances. Use this as a default when retries are needed.
 	StandardRetry = 30 * time.Second
+
+	// AllowedSysctlKeys controls the allowed Sysctl keys can be set in Tuning plugin
+	AllowedSysctlKeys = map[string]bool{
+		"net.ipv4.tcp_keepalive_intvl":  true,
+		"net.ipv4.tcp_keepalive_probes": true,
+		"net.ipv4.tcp_keepalive_time":   true,
+	}
 )
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
@@ -843,4 +850,12 @@ func IsDexDisabled(authentication *operatorv1.Authentication) bool {
 		disableDex = true
 	}
 	return disableDex
+}
+func VerifySysctl(pluginData []operatorv1.Sysctl) error {
+	for _, setting := range pluginData {
+		if _, ok := AllowedSysctlKeys[setting.Key]; !ok {
+			return fmt.Errorf("key %s is not allowed in spec.calicoNetwork.sysctl", setting.Key)
+		}
+	}
+	return nil
 }

@@ -193,7 +193,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.TigeraLinseedSecret,
 		certificatemanagement.CASecretName,
-		relasticsearch.PublicCertSecret,
 		monitor.PrometheusClientTLSSecretName,
 		render.ElasticsearchAdminUserSecret,
 		render.ElasticsearchCuratorUserSecret,
@@ -206,7 +205,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Establish watches for secrets in the tigera-elasticsearch namespace.
 	for _, secretName := range []string{
-		relasticsearch.PublicCertSecret,
 		render.ElasticsearchAdminUserSecret,
 		render.TigeraElasticsearchInternalCertSecret,
 		render.OIDCUsersESSecretName,

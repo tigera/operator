@@ -307,6 +307,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 	case BOnlySet, Different:
 		out.ContainerIPForwarding = override.ContainerIPForwarding
 	}
+
+	switch compareFields(out.Sysctl, override.Sysctl) {
+	case BOnlySet, Different:
+		out.Sysctl = override.Sysctl
+	}
 	return out
 }
 

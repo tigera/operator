@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -755,6 +755,148 @@ var _ = Describe("Convert network tests", func() {
 		})
 
 		Context("Calico CNI config flags", func() {
+			Describe("migrate tuning setting", func() {
+				It("sysctl tuning in config", func() {
+					ds := emptyNodeSpec()
+					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+						Name: "CNI_NETWORK_CONFIG",
+						Value: `{
+"name": "k8s-pod-network",
+"cniVersion": "0.3.1",
+"plugins": [
+  {
+	"type": "calico",
+	"log_level": "info",
+	"datastore_type": "kubernetes",
+	"nodename": "__KUBERNETES_NODE_NAME__",
+	"mtu": __CNI_MTU__,
+	"ipam": {
+		"type": "host-local"
+	},
+	"policy": {
+		"type": "k8s"
+	},
+	"kubernetes": {
+		"kubeconfig": "__KUBECONFIG_FILEPATH__"
+	}
+  },
+  {
+	"type": "tuning",
+	"sysctl": [
+		  {
+			"key": "net.ipv4.tcp_keepalive_intvl",
+			"value": "15"
+		  },
+		  {
+			"key": "net.ipv4.tcp_keepalive_probes",
+			"value": "6"
+		  },
+		  {
+			"key": "net.ipv4.tcp_keepalive_time",
+			"value": "40"
+		  }
+		]
+  }
+  ]
+}`,
+					}}
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
+					cfg, err := Convert(ctx, c)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(cfg).ToNot(BeNil())
+					Expect(cfg.Spec.CalicoNetwork.Sysctl).ToNot(BeNil())
+					Expect(cfg.Spec.CalicoNetwork.Sysctl).To(Equal([]operatorv1.Sysctl{
+						{
+							Key:   "net.ipv4.tcp_keepalive_intvl",
+							Value: "15",
+						}, {
+							Key:   "net.ipv4.tcp_keepalive_probes",
+							Value: "6",
+						},
+						{
+							Key:   "net.ipv4.tcp_keepalive_time",
+							Value: "40",
+						},
+					}))
+				})
+
+				It("not allowed sysctl tuning in config", func() {
+					ds := emptyNodeSpec()
+					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+						Name: "CNI_NETWORK_CONFIG",
+						Value: `{
+"name": "k8s-pod-network",
+"cniVersion": "0.3.1",
+"plugins": [
+{
+"type": "calico",
+"log_level": "info",
+"datastore_type": "kubernetes",
+"nodename": "__KUBERNETES_NODE_NAME__",
+"mtu": __CNI_MTU__,
+"ipam": {
+	"type": "host-local"
+},
+"policy": {
+	"type": "k8s"
+},
+"kubernetes": {
+	"kubeconfig": "__KUBECONFIG_FILEPATH__"
+}
+},
+{
+	"type": "tuning",
+	"sysctl": [
+		{
+		  "key": "net.ipv4.not_allowed",
+		  "value": "40"
+		}
+	]
+  }
+]
+}`,
+					}}
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
+					cfg, err := Convert(ctx, c)
+					Expect(err).To(HaveOccurred())
+					Expect(cfg).To(BeNil())
+				})
+
+				It("no sysctl tuning in config, cfg must be nil", func() {
+					ds := emptyNodeSpec()
+					ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+						Name: "CNI_NETWORK_CONFIG",
+						Value: `{
+"name": "k8s-pod-network",
+"cniVersion": "0.3.1",
+"plugins": [
+{
+"type": "calico",
+"log_level": "info",
+"datastore_type": "kubernetes",
+"nodename": "__KUBERNETES_NODE_NAME__",
+"mtu": __CNI_MTU__,
+"ipam": {
+	"type": "host-local"
+},
+"policy": {
+	"type": "k8s"
+},
+"kubernetes": {
+	"kubeconfig": "__KUBECONFIG_FILEPATH__"
+}
+}
+]
+}`,
+					}}
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
+					cfg, err := Convert(ctx, c)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(cfg).ToNot(BeNil())
+					Expect(cfg.Spec.CalicoNetwork.Sysctl).To(BeNil())
+				})
+			})
+
 			Describe("migrate portmap setting", func() {
 				It("no portmap in config", func() {
 					ds := emptyNodeSpec()

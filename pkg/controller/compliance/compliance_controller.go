@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -133,7 +132,6 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
-			relasticsearch.PublicCertSecret,
 			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
 			render.VoltronLinseedPublicCert,
 		} {
@@ -141,10 +139,6 @@ func add(mgr manager.Manager, c controller.Controller) error {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
 		}
-	}
-
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
@@ -296,16 +290,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	secretsToWatch := []string{
 		render.ElasticsearchComplianceBenchmarkerUserSecret, render.ElasticsearchComplianceControllerUserSecret,
 		render.ElasticsearchComplianceReporterUserSecret, render.ElasticsearchComplianceSnapshotterUserSecret,
@@ -357,15 +341,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	}
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificates are not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificates are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
 
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
 	// For standalone and management clusters, we just use Linseed's actual certificate.
@@ -384,7 +359,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
 
 	// Get the key pairs for each component, generating them as needed.
 	type complianceKeyPair struct {
@@ -455,7 +430,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		BenchmarkerKeyPair:          benchmarkerKeyPair.Interface,
 		SnapshotterKeyPair:          snapshotterKeyPair.Interface,
 		ReporterKeyPair:             reporterKeyPair.Interface,
-		ESClusterConfig:             esClusterConfig,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   openshift,
 		ManagementCluster:           managementCluster,

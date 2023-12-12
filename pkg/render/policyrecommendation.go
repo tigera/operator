@@ -100,7 +100,7 @@ func (pr *policyRecommendationComponent) ResolveImages(is *operatorv1.ImageSet) 
 }
 
 func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
-	return rmeta.OSTypeAny
+	return rmeta.OSTypeLinux
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {

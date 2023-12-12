@@ -16,6 +16,9 @@ package render
 
 import (
 	"crypto/x509"
+	"fmt"
+
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -193,6 +196,30 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			Verbs:         []string{"use"},
 			ResourceNames: []string{PolicyRecommendationPodSecurityPolicyName},
 		})
+	}
+
+	if pr.cfg.Tenant.MultiTenant() {
+		// These rules are used by policy-recommendation in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{PolicyRecommendationName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, PolicyRecommendationNamespace),
+				},
+			},
+		}...)
 	}
 
 	return &rbacv1.ClusterRole{

@@ -121,7 +121,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	return r
 }
 
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(_ manager.Manager, c controller.Controller) error {
 	var err error
 
 	// watch for primary resource changes
@@ -155,6 +155,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
 		}
+	}
+
+	// Namespaces are watched in case external monitoring config is used.
+	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
 	}
 
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
@@ -225,6 +231,30 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
+	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+	fillDefaults(instance)
+	// Patch the monitor resource with defaults added.
+	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	var externalPrometheus bool
+	if instance.Spec.ExternalPrometheus != nil {
+		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheus.Namespace}, &corev1.Namespace{}); err != nil {
+			if !errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get external prometheus namespace", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			// We set ExternalPrometheus to nil, and proceed to render the other configuration.
+			// When the namespace is created, we will reconcile the ExternalPrometheus.
+			reqLogger.V(3).
+				WithValues("namespace", instance.Spec.ExternalPrometheus.Namespace).
+				Info("will skip external prometheus configuration, namespace does not exist")
+			instance.Spec.ExternalPrometheus = nil
+		} else {
+			externalPrometheus = true
+		}
+	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
@@ -262,10 +292,19 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
+
+	var serverTLSSecret certificatemanagement.KeyPairInterface
+	if !externalPrometheus || install.CertificateManagement != nil {
+		serverTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		// Prometheus requires to have an IP SAN in its certificate, so that it can be scraped by an external prometheus pod.
+		// Since we do not know what IP the pods will have, the pod will issue a CSR on startup for a certificate containing
+		// its own IP. pkg/controller/csr/csr_controller.go will then sign the certificate.
+		serverTLSSecret = certificateManager.CreateCSRKeyPair(monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
 	}
 
 	clientTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
@@ -345,6 +384,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	monitorCfg := &monitor.Config{
+		Monitor:                  instance.Spec,
 		Installation:             install,
 		PullSecrets:              pullSecrets,
 		AlertmanagerConfigSecret: alertmanagerConfigSecret,
@@ -356,6 +396,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		Openshift:                r.provider == operatorv1.ProviderOpenShift,
 		KubeControllerPort:       kubeControllersMetricsPort,
 		UsePSP:                   r.usePSP,
+		ExternalPrometheus:       externalPrometheus,
 	}
 
 	// Render prometheus component
@@ -390,7 +431,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	for _, component := range components {
-		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		if err = hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -413,6 +454,37 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func fillDefaults(instance *operatorv1.Monitor) {
+	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
+
+		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {
+			instance.Spec.ExternalPrometheus.ServiceMonitor.Labels = map[string]string{
+				render.AppLabelName: monitor.TigeraExternalPrometheus,
+			}
+		}
+
+		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints) == 0 {
+			instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints = []operatorv1.Endpoint{{}}
+		}
+
+		for i, ep := range instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints {
+			if len(ep.Params) == 0 {
+				// The following params let us scrape all metrics.
+				ep.Params = map[string][]string{"match[]": {"{__name__=~\".+\"}"}}
+			}
+			if ep.BearerTokenSecret.Key == "" || ep.BearerTokenSecret.Name == "" {
+				ep.BearerTokenSecret = corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: monitor.TigeraExternalPrometheus,
+					},
+					Key: "token",
+				}
+			}
+			instance.Spec.ExternalPrometheus.ServiceMonitor.Endpoints[i] = ep
+		}
+	}
 }
 
 // PrometheusTLSServerDNSNames returns all the DNS names valid for the prometheus server TLS asset.

@@ -652,7 +652,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.PolicyRecommendationEntityRule,
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).PolicyRecommendationSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 	}

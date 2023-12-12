@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -252,6 +254,10 @@ func (h *NetworkPolicyHelper) ManagerEntityRule() v3.EntityRule {
 
 func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-manager"), "tigera-manager")
+}
+
+func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace(render.PolicyRecommendationNamespace), render.PolicyRecommendationName)
 }
 
 const PrometheusSelector = "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')"

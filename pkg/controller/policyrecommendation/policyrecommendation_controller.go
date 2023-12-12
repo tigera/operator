@@ -332,16 +332,26 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
 
+	// Determine the namespaces to which we must bind the cluster role.
+	var bindNamespaces = []string{ResourceName}
+	if tenant.MultiTenant() {
+		bindNamespaces, err = helper.TenantNamespaces(r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:  r.clusterDomain,
-		Installation:   installation,
-		ManagedCluster: isManagedCluster,
-		PullSecrets:    pullSecrets,
-		Openshift:      r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:         r.usePSP,
-		Namespace:      helper.InstallNamespace(),
-		Tenant:         tenant,
+		ClusterDomain:     r.clusterDomain,
+		Installation:      installation,
+		ManagedCluster:    isManagedCluster,
+		PullSecrets:       pullSecrets,
+		Openshift:         r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:            r.usePSP,
+		Namespace:         helper.InstallNamespace(),
+		Tenant:            tenant,
+		BindingNamespaces: bindNamespaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

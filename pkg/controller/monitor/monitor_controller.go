@@ -233,11 +233,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 	fillDefaults(instance)
-	err = validateMonitorResource(instance)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.InvalidConfigurationError, err.Error(), err, reqLogger)
-		return reconcile.Result{}, err
-	}
 	// Patch the monitor resource with defaults added.
 	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
@@ -459,15 +454,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func validateMonitorResource(instance *operatorv1.Monitor) error {
-	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
-		if instance.Spec.ExternalPrometheus.Namespace != instance.Spec.ExternalPrometheus.Namespace {
-			return fmt.Errorf("invalid Monitor resource: Spec.ExternalPrometheus.Namespace must be equal to Spec.ExternalPrometheus.Namespace")
-		}
-	}
-	return nil
 }
 
 func fillDefaults(instance *operatorv1.Monitor) {

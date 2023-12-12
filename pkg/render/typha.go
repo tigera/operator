@@ -44,6 +44,7 @@ const (
 	TyphaServiceAccountName       = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
+	TyphaMetricsName              = "calico-typha-metrics"
 
 	TyphaContainerName = "calico-typha"
 
@@ -127,7 +128,9 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Add deployment last, as it may depend on the creation of previous objects in the list.
 	objs = append(objs, c.typhaDeployment())
-
+	if c.cfg.Installation.TyphaMetricsPort != nil {
+		objs = append(objs, c.typhaPrometheusService())
+	}
 	return objs, nil
 }
 
@@ -699,4 +702,32 @@ func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 		},
 	}
 	return aff
+}
+
+// typhaPrometheusService service for scraping typha metrics.
+func (c *typhaComponent) typhaPrometheusService() *corev1.Service {
+	port := c.cfg.Installation.TyphaMetricsPort
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TyphaMetricsName,
+			Namespace: common.CalicoNamespace,
+			Labels: map[string]string{
+				AppLabelName: TyphaMetricsName,
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Port:       *port,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(int(*port)),
+					Name:       TyphaMetricsName,
+				},
+			},
+			Selector: map[string]string{
+				AppLabelName: TyphaK8sAppName,
+			},
+		},
+	}
 }

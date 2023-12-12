@@ -763,7 +763,9 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 			corev1.Volume{
 				Name: "tigera-secure-linseed-token-tls",
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumMemory,
+					},
 				},
 			},
 		)

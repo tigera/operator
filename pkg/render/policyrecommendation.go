@@ -51,7 +51,8 @@ const (
 	PolicyRecommendationPodSecurityPolicyName = PolicyRecommendationName
 	PolicyRecommendationPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
-	PolicyRecommendationTLSSecretName = "policy-recommendation-tls"
+	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
+	PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName = "tigera-policy-recommendation-managed-cluster-access"
 )
 
 var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
@@ -117,6 +118,9 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
 		networkpolicy.AllowTigeraDefaultDeny(pr.cfg.Namespace),
+	}
+	if pr.cfg.Tenant.MultiTenant() {
+		objs = append(objs, pr.multiTenantManagedClustersAccess()...)
 	}
 
 	if pr.cfg.ManagedCluster {
@@ -235,6 +239,50 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationNamespace, pr.cfg.BindingNamespaces)
 }
 
+func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					// The Authentication Proxy in Voltron checks if PolicyRecommendation (either using impersonation
+					// headers for tigera-policy-recommendation service in tigera-policy-recommendation namespace or
+					// the actual account in a single tenant setup) can get a managed clusters before sending the
+					// request down the tunnel
+					"get",
+				},
+			},
+		},
+	})
+
+	// In a single tenant setup we want to create a cluster role that binds using service account
+	// tigera-linseed from tigera-elasticsearch namespace. In a multi-tenant setup Linseed from the tenant's
+	// namespace impersonates service tigera-linseed from tigera-elasticsearch namespace
+	objects = append(objects, &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			// requests for policy recommendation to managed clusters are done using service account tigera-policy-recommendation
+			// from tigera-policy-recommendation namespace regardless of tenancy mode (single tenant or multi-tenant)
+			{
+				Kind:      "ServiceAccount",
+				Name:      PolicyRecommendationName,
+				Namespace: PolicyRecommendationNamespace,
+			},
+		},
+	})
+
+	return objects
+}
 func (pr *policyRecommendationComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	return podsecuritypolicy.NewBasePolicy(PolicyRecommendationPodSecurityPolicyName)
 }

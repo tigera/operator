@@ -218,12 +218,41 @@ var _ = Describe("Monitor controller tests", func() {
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 
 				// External Prometheus related objects should be rendered after reconciliation.
-				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &monitoringv1.ServiceMonitor{})).NotTo(HaveOccurred())
+				serviceMonitor := &monitoringv1.ServiceMonitor{}
+				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, serviceMonitor)).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &corev1.ConfigMap{})).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &corev1.Secret{})).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &rbacv1.ClusterRole{})).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &rbacv1.ClusterRoleBinding{})).NotTo(HaveOccurred())
+
+				Expect(serviceMonitor.Spec.Endpoints).To(HaveLen(1))
+				// Verify that the default settings are propagated.
+				Expect(serviceMonitor.Labels).To(Equal(map[string]string{render.AppLabelName: monitor.TigeraExternalPrometheus}))
+				Expect(serviceMonitor.Spec.Endpoints[0]).To(Equal(monitoringv1.Endpoint{
+					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
+					Port:   "web",
+					Path:   "/federate",
+					Scheme: "https",
+					TLSConfig: &monitoringv1.TLSConfig{
+						SafeTLSConfig: monitoringv1.SafeTLSConfig{
+							CA: monitoringv1.SecretOrConfigMap{
+								ConfigMap: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "tigera-external-prometheus",
+									},
+									Key: corev1.TLSCertKey,
+								},
+							},
+						},
+					},
+					BearerTokenSecret: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: monitor.TigeraExternalPrometheus,
+						},
+						Key: "token",
+					},
+				}))
 			})
 		})
 	})

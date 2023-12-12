@@ -475,7 +475,7 @@ func fillDefaults(instance *operatorv1.Monitor) {
 
 		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {
 			instance.Spec.ExternalPrometheus.ServiceMonitor.Labels = map[string]string{
-				render.AppLabelName: monitor.TigeraPrometheusObjectName,
+				render.AppLabelName: monitor.TigeraExternalPrometheus,
 			}
 		}
 

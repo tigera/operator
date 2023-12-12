@@ -1323,7 +1323,7 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 					CA: monitoringv1.SecretOrConfigMap{
 						ConfigMap: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: TigeraPrometheusObjectName,
+								Name: TigeraExternalPrometheus,
 							},
 							Key: corev1.TLSCertKey,
 						},

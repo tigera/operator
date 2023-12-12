@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -242,32 +243,15 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		needsCSRRole = monitorCR.Spec.ExternalPrometheus != nil
 	}
 
-	csrRole := certificatemanagement.CSRClusterRole()
-	var roleFound bool
-	if err = r.client.Get(ctx, client.ObjectKey{Name: csrRole.Name}, csrRole); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return reconcile.Result{}, err
-		}
-	} else {
-		roleFound = true
-	}
-	if needsCSRRole && !roleFound {
+	var passthrough render.Component
+	if needsCSRRole {
 		// This controller creates the cluster role for any pod in the cluster that requires certificate management.
-		if err = r.client.Create(ctx, certificatemanagement.CSRClusterRole()); err != nil {
-			if !apierrors.IsAlreadyExists(err) {
-				return reconcile.Result{}, err
-			}
-		}
+		passthrough = render.NewPassthrough(certificatemanagement.CSRClusterRole())
+	} else {
+		passthrough = render.NewDeletionPassthrough(certificatemanagement.CSRClusterRole())
 	}
-	if !needsCSRRole && roleFound {
-		if err := r.client.Delete(ctx, certificatemanagement.CSRClusterRole()); err != nil {
-			if !apierrors.IsNotFound(err) {
-				return reconcile.Result{}, err
-			}
-		}
-	}
-
-	return reconcile.Result{}, nil
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	return reconcile.Result{}, componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
 }
 
 // validate Criteria include:

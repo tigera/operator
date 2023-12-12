@@ -238,6 +238,12 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	var toDelete []client.Object
+	if mc.cfg.Installation.TyphaMetricsPort != nil {
+		toCreate = append(toCreate, mc.typhaServiceMonitor())
+	} else {
+		toDelete = append(toDelete, mc.typhaServiceMonitor())
+	}
+
 	toDelete = append(toDelete,
 		// Remove the pod monitor that existed prior to v1.25.
 		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}},
@@ -1103,6 +1109,18 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Destination: render.DexEntityRule,
 		},
 	}...)
+	typhaMetricsPort := cfg.Installation.TyphaMetricsPort
+	if typhaMetricsPort != nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				// dest is host networked and so the policy cannot be made more specific.
+				Ports: networkpolicy.Ports(uint16(*typhaMetricsPort)),
+			},
+		},
+		)
+	}
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
@@ -1361,4 +1379,34 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 			},
 		},
 	}, needsRBAC
+}
+
+func (mc *monitorComponent) typhaServiceMonitor() client.Object {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.TyphaMetricsName,
+			Namespace: TigeraPrometheusObjectName,
+			Labels:    map[string]string{"team": "network-operators"},
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          render.TyphaMetricsName,
+					Scheme:        "http",
+					ScrapeTimeout: "5s",
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{common.CalicoNamespace},
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					render.AppLabelName: render.TyphaMetricsName,
+				},
+			},
+		},
+	}
 }

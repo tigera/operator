@@ -116,7 +116,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(2))
+		Expect(toDelete).To(HaveLen(3))
 
 		// Check the namespace.
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -567,7 +567,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(2))
+		Expect(toDelete).To(HaveLen(3))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -748,7 +748,7 @@ var _ = Describe("monitor rendering tests", func() {
 				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(toCreate).To(HaveLen(len(expectedResources)))
-			Expect(toDelete).To(HaveLen(2))
+			Expect(toDelete).To(HaveLen(3))
 		})
 		It("Should render external prometheus resources with service monitor and custom token", func() {
 			cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
@@ -778,7 +778,7 @@ var _ = Describe("monitor rendering tests", func() {
 				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(toCreate).To(HaveLen(len(expectedResources)))
-			Expect(toDelete).To(HaveLen(2))
+			Expect(toDelete).To(HaveLen(3))
 		})
 		It("Should render external prometheus resources without service monitor", func() {
 			cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
@@ -798,7 +798,53 @@ var _ = Describe("monitor rendering tests", func() {
 				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(toCreate).To(HaveLen(len(expectedResources)))
+			Expect(toDelete).To(HaveLen(3))
+		})
+		It("Should render typha service monitor if typha metrics are enabled", func() {
+			cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
+			cfg.ExternalPrometheus = true
+			component := monitor.Monitor(cfg)
+			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+			toCreate, toDelete := component.Objects()
+			expectedResources := expectedBaseResources()
+			expectedResources = append(expectedResources,
+				resource{"calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor"},
+			)
+
+			for i, expectedRes := range expectedResources {
+				obj := toCreate[i]
+				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+			Expect(toCreate).To(HaveLen(len(expectedResources)))
 			Expect(toDelete).To(HaveLen(2))
+			sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
+			Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-typha-metrics",
+					Namespace: "tigera-prometheus",
+					Labels:    map[string]string{"team": "network-operators"},
+				},
+				Spec: monitoringv1.ServiceMonitorSpec{
+					Endpoints: []monitoringv1.Endpoint{
+						{
+							HonorLabels:   true,
+							Interval:      "5s",
+							Port:          "calico-typha-metrics",
+							Scheme:        "http",
+							ScrapeTimeout: "5s",
+						},
+					},
+					NamespaceSelector: monitoringv1.NamespaceSelector{
+						MatchNames: []string{common.CalicoNamespace},
+					},
+					Selector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							render.AppLabelName: render.TyphaMetricsName,
+						},
+					},
+				},
+			}))
 		})
 	})
 })

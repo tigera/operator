@@ -35,10 +35,13 @@ import (
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -61,6 +64,7 @@ var _ = Describe("CSR controller tests", func() {
 		scheme = runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(certificatesv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		// Create a client that will have a crud interface of k8s objects.
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -73,17 +77,22 @@ var _ = Describe("CSR controller tests", func() {
 			},
 		}
 		Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &operatorv1.Monitor{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec:       operatorv1.MonitorSpec{ExternalPrometheus: &operatorv1.ExternalPrometheus{Namespace: "default"}},
+		})).NotTo(HaveOccurred())
 		certificateManager, err = certificatemanager.Create(cli, &installation.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("OnCRFound").Return()
 		r = reconcileCSR{
-			client:           cli,
-			scheme:           scheme,
-			provider:         operatorv1.ProviderNone,
-			clusterDomain:    dns.DefaultClusterDomain,
-			allowedTLSAssets: allowedAssets(dns.DefaultClusterDomain),
+			client:              cli,
+			scheme:              scheme,
+			provider:            operatorv1.ProviderNone,
+			clusterDomain:       dns.DefaultClusterDomain,
+			allowedTLSAssets:    allowedAssets(dns.DefaultClusterDomain),
+			enterpriseCRDExists: true,
 		}
 	})
 
@@ -104,6 +113,7 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(csr.Status.Conditions[0].Type).To(Equal(certificatesv1.CertificateApproved))
 			Expect(csr.Status.Conditions[0].Status).To(Equal(corev1.ConditionTrue))
 			Expect(csr.Status.Certificate).ToNot(BeEmpty())
+			Expect(cli.Get(ctx, types.NamespacedName{Name: certificatemanagement.CSRClusterRoleName}, &rbacv1.ClusterRole{})).NotTo(HaveOccurred())
 		})
 
 		It("should reconcile 2 submitted CSRs", func() {

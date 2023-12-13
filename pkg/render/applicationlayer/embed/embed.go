@@ -18,6 +18,9 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -58,4 +61,20 @@ func AsMap() (map[string]string, error) {
 	}
 
 	return res, nil
+}
+
+func AsConfigMap(name, namespace string) (*corev1.ConfigMap, error) {
+	data, err := AsMap()
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: data,
+	}, nil
 }

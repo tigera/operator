@@ -19,6 +19,8 @@ import (
 	"reflect"
 	"strconv"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
@@ -856,6 +858,118 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[2].Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
+	It("should override container resource request with the value from Manager CR", func() {
+
+		managerResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		managercfg := operatorv1.Manager{
+			Spec: operatorv1.ManagerSpec{
+				Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
+					Spec: &operatorv1.ManagerDeploymentPodSpec{
+						Containers: []operatorv1.ManagerDeploymentContainer{{
+							Name:      "tigera-voltron",
+							Resources: &managerResources,
+						}},
+					},
+				},
+			},
+		}
+
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+			manager:                 &managercfg,
+		})
+
+		d, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+
+		var container *corev1.Container
+		for _, c := range d.Spec.Template.Spec.Containers {
+			if c.Name == "tigera-voltron" {
+				container = &c
+				break
+			}
+		}
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(managerResources))
+	})
+
+	It("should override init container resource request with the value from Manager CR", func() {
+
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		certificateManagement := &operatorv1.CertificateManagement{CACert: cert}
+
+		managerResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		managercfg := operatorv1.Manager{
+			Spec: operatorv1.ManagerSpec{
+				Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
+					Spec: &operatorv1.ManagerDeploymentPodSpec{
+						InitContainers: []operatorv1.ManagerDeploymentInitContainer{{
+							Name:      "manager-tls-key-cert-provisioner",
+							Resources: &managerResources,
+						}},
+					},
+				},
+			},
+		}
+
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, CertificateManagement: certificateManagement},
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+			manager:                 &managercfg,
+		})
+
+		d, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+
+		Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+
+		var initContainer *corev1.Container
+		for _, c := range d.Spec.Template.Spec.InitContainers {
+			if c.Name == "manager-tls-key-cert-provisioner" {
+				initContainer = &c
+				break
+			}
+		}
+		Expect(initContainer).NotTo(BeNil())
+		Expect(initContainer.Resources).To(Equal(managerResources))
+	})
+
 	Context("allow-tigera rendering", func() {
 		policyName := types.NamespacedName{Name: "allow-tigera.manager-access", Namespace: "tigera-manager"}
 
@@ -1093,6 +1207,7 @@ type renderConfig struct {
 	ns                      string
 	bindingNamespaces       []string
 	tenant                  *operatorv1.Tenant
+	manager                 *operatorv1.Manager
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -1163,6 +1278,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		BindingNamespaces:       roc.bindingNamespaces,
 		TruthNamespace:          common.OperatorNamespace(),
 		Tenant:                  roc.tenant,
+		Manager:                 roc.manager,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -252,6 +252,10 @@ func (h *NetworkPolicyHelper) ManagerEntityRule() v3.EntityRule {
 
 func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-manager"), "tigera-manager")
+}
+
+func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
 }
 
 const PrometheusSelector = "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')"

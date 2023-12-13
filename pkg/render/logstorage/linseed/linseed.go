@@ -617,7 +617,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.PolicyRecommendationEntityRule,
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).PolicyRecommendationSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 	}
@@ -648,4 +648,14 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
+}
+
+// LinseedNamespace determine the namespace in which Linseed is running.
+// For management and standalone clusters, this is always the tigera-elasticsearch
+// namespace. For multi-tenant management clusters, this is the tenant namespace
+func LinseedNamespace(tenant *operatorv1.Tenant) string {
+	if tenant.MultiTenant() {
+		return tenant.Namespace
+	}
+	return "tigera-elasticsearch"
 }

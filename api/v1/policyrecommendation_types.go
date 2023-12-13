@@ -38,26 +38,26 @@ type PolicyRecommendationDeploymentPodTemplateSpec struct {
 
 	// Spec is the PolicyRecommendation Deployment's PodSpec.
 	// +optional
-	Spec *PolicyRecommendationPodSpec `json:"spec,omitempty"`
+	Spec *PolicyRecommendationDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-// PolicyRecommendationPodSpec is the Manager Deployment's PodSpec.
-type PolicyRecommendationPodSpec struct {
+// PolicyRecommendationDeploymentPodSpec is the Manager Deployment's PodSpec.
+type PolicyRecommendationDeploymentPodSpec struct {
 	// InitContainers is a list of PolicyRecommendation init containers.
 	// If specified, this overrides the specified PolicyRecommendation Deployment init containers.
 	// If omitted, the PolicyRecommendation Deployment will use its default values for its init containers.
 	// +optional
-	InitContainers []PolicyRecommendationInitContainer `json:"initContainers,omitempty"`
+	InitContainers []PolicyRecommendationDeploymentInitContainer `json:"initContainers,omitempty"`
 
 	// Containers is a list of Manager containers.
 	// If specified, this overrides the specified Manager Deployment containers.
 	// If omitted, the Manager Deployment will use its default values for its containers.
 	// +optional
-	Containers []PolicyRecommendationContainer `json:"containers,omitempty"`
+	Containers []PolicyRecommendationDeploymentContainer `json:"containers,omitempty"`
 }
 
-// PolicyRecommendationContainer is a PolicyRecommendation Deployment container.
-type PolicyRecommendationContainer struct {
+// PolicyRecommendationDeploymentContainer is a PolicyRecommendation Deployment container.
+type PolicyRecommendationDeploymentContainer struct {
 	// Name is an enum which identifies the PolicyRecommendation Deployment container by name.
 	// +kubebuilder:validation:Enum=policy-recommendation-controller
 	Name string `json:"name"`
@@ -69,8 +69,8 @@ type PolicyRecommendationContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// PolicyRecommendationInitContainer is a PolicyRecommendation Deployment init container.
-type PolicyRecommendationInitContainer struct {
+// PolicyRecommendationDeploymentInitContainer is a PolicyRecommendation Deployment init container.
+type PolicyRecommendationDeploymentInitContainer struct {
 	// Name is an enum which identifies the PolicyRecommendation Deployment init container by name.
 	// +kubebuilder:validation:Enum=policy-recommendation-tls-key-cert-provisioner
 	Name string `json:"name"`

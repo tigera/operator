@@ -859,7 +859,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should override container resource request with the value from Manager CR", func() {
-
 		managerResources := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
@@ -913,7 +912,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should override init container resource request with the value from Manager CR", func() {
-
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		certificateManagement := &operatorv1.CertificateManagement{CACert: cert}

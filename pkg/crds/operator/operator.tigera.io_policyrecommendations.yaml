@@ -70,8 +70,8 @@ spec:
                           containers. If omitted, the Manager Deployment will use
                           its default values for its containers.
                         items:
-                          description: PolicyRecommendationContainer is a PolicyRecommendation
-                            Deployment container.
+                          description: PolicyRecommendationDeploymentContainer is
+                            a PolicyRecommendation Deployment container.
                           properties:
                             name:
                               description: Name is an enum which identifies the PolicyRecommendation
@@ -146,8 +146,8 @@ spec:
                           the PolicyRecommendation Deployment will use its default
                           values for its init containers.
                         items:
-                          description: PolicyRecommendationInitContainer is a PolicyRecommendation
-                            Deployment init container.
+                          description: PolicyRecommendationDeploymentInitContainer
+                            is a PolicyRecommendation Deployment init container.
                           properties:
                             name:
                               description: Name is an enum which identifies the PolicyRecommendation

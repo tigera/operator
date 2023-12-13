@@ -263,8 +263,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		policyRecommendationCfg := operatorv1.PolicyRecommendation{
 			Spec: operatorv1.PolicyRecommendationSpec{
 				Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
-					Spec: &operatorv1.PolicyRecommendationPodSpec{
-						Containers: []operatorv1.PolicyRecommendationContainer{{
+					Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
+						Containers: []operatorv1.PolicyRecommendationDeploymentContainer{{
 							Name:      "policy-recommendation-controller",
 							Resources: &prResources,
 						}},
@@ -305,8 +305,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		policyRecommendationCfg := operatorv1.PolicyRecommendation{
 			Spec: operatorv1.PolicyRecommendationSpec{
 				Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
-					Spec: &operatorv1.PolicyRecommendationPodSpec{
-						InitContainers: []operatorv1.PolicyRecommendationInitContainer{{
+					Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
+						InitContainers: []operatorv1.PolicyRecommendationDeploymentInitContainer{{
 							Name:      "policy-recommendation-tls-key-cert-provisioner",
 							Resources: &prResources,
 						}},

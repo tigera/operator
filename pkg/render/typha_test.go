@@ -17,17 +17,17 @@ package render_test
 import (
 	"fmt"
 
-	rbacv1 "k8s.io/api/rbac/v1"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -487,6 +487,31 @@ var _ = Describe("Typha rendering tests", func() {
 		// Assert we set annotations properly.
 		Expect(d.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
 		Expect(d.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
+
+		metricsService := rtest.GetResource(resources, "calico-typha-metrics", "calico-system", "", "v1", "Service")
+		Expect(metricsService).To(Equal(&corev1.Service{
+			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "calico-typha-metrics",
+				Namespace: common.CalicoNamespace,
+				Labels: map[string]string{
+					"k8s-app": "calico-typha-metrics",
+				},
+			},
+			Spec: corev1.ServiceSpec{
+				Ports: []corev1.ServicePort{
+					{
+						Port:       typhaMetricsPort,
+						Protocol:   corev1.ProtocolTCP,
+						TargetPort: intstr.FromInt(int(typhaMetricsPort)),
+						Name:       "calico-typha-metrics",
+					},
+				},
+				Selector: map[string]string{
+					"k8s-app": "calico-typha",
+				},
+			},
+		}))
 	})
 
 	Context("With typha deployment overrides", func() {

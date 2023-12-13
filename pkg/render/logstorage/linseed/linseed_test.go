@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -530,6 +532,92 @@ var _ = Describe("Linseed rendering tests", func() {
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Affinity).NotTo(BeNil())
 			Expect(d.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, "tenant-test-tenant")))
+		})
+
+		It("should override resource request with the value from TenantSpec's linseedDeployment when available", func() {
+			linseedResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			linseedDeployment := &operatorv1.LinseedDeployment{
+				Spec: &operatorv1.LinseedDeploymentSpec{
+					Template: &operatorv1.LinseedDeploymentPodTemplateSpec{
+						Spec: &operatorv1.LinseedDeploymentPodSpec{
+							Containers: []operatorv1.LinseedDeploymentContainer{{
+								Name:      "tigera-linseed",
+								Resources: &linseedResources,
+							}},
+						},
+					},
+				},
+			}
+			cfg.Tenant.Spec.LinseedDeployment = linseedDeployment
+			component := Linseed(cfg)
+
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-linseed"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(linseedResources))
+		})
+
+		It("should Override initcontainer's resource request with the value from TenantSpec's linseedDeployment when available and CertificateManagement is enabled", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
+			Expect(err).NotTo(HaveOccurred())
+			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
+			kp, tokenKP, bundle := getTLS(installation)
+
+			cfg.KeyPair = kp
+			cfg.TokenKeyPair = tokenKP
+			cfg.TrustedBundle = bundle
+			linseedResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			linseedDeployment := &operatorv1.LinseedDeployment{
+				Spec: &operatorv1.LinseedDeploymentSpec{
+					Template: &operatorv1.LinseedDeploymentPodTemplateSpec{
+						Spec: &operatorv1.LinseedDeploymentPodSpec{
+							InitContainers: []operatorv1.LinseedDeploymentInitContainer{{
+								Name:      "tigera-secure-linseed-token-tls-key-cert-provisioner",
+								Resources: &linseedResources,
+							}},
+						},
+					},
+				},
+			}
+			cfg.Tenant.Spec.LinseedDeployment = linseedDeployment
+
+			component := Linseed(cfg)
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+
+			var initContainer *corev1.Container
+			for _, c := range d.Spec.Template.Spec.InitContainers {
+				if c.Name == "tigera-secure-linseed-token-tls-key-cert-provisioner" {
+					initContainer = &c
+					break
+				}
+			}
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(linseedResources))
 		})
 	})
 

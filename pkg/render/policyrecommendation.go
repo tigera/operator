@@ -55,8 +55,6 @@ const (
 	PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName = "tigera-policy-recommendation-managed-cluster-access"
 )
 
-var PolicyRecommendationEntityRule = networkpolicy.CreateSourceEntityRule(PolicyRecommendationNamespace, PolicyRecommendationName)
-
 // Register secret/certs that need Server and Client Key usage
 func init() {
 	certkeyusage.SetCertKeyUsage(PolicyRecommendationTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
@@ -260,8 +258,9 @@ func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []cl
 	})
 
 	// In a single tenant setup we want to create a cluster role that binds using service account
-	// tigera-linseed from tigera-elasticsearch namespace. In a multi-tenant setup Linseed from the tenant's
-	// namespace impersonates service tigera-linseed from tigera-elasticsearch namespace
+	// tigera-policy-recommendation from tigera-policy-recommendation namespace. In a multi-tenant setup
+	// PolicyRecommendation Controller from the tenant's namespace impersonates service tigera-policy-recommendation
+	// from tigera-policy-recommendation namespace
 	objects = append(objects, &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName},

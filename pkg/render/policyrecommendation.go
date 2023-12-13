@@ -31,6 +31,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -76,7 +77,8 @@ type PolicyRecommendationConfiguration struct {
 	BindingNamespaces []string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
-	Tenant *operatorv1.Tenant
+	Tenant               *operatorv1.Tenant
+	PolicyRecommendation *operatorv1.PolicyRecommendation
 }
 
 type policyRecommendationComponent struct {
@@ -370,7 +372,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		},
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PolicyRecommendationName,
@@ -381,6 +383,12 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Template: *podTemplateSpec,
 		},
 	}
+
+	if overrides := pr.cfg.PolicyRecommendation; overrides != nil {
+		rcomponents.ApplyDeploymentOverrides(d, overrides)
+	}
+
+	return d
 }
 
 func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[string]string {

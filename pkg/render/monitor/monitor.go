@@ -1354,10 +1354,13 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 			MetricRelabelConfigs: ep.MetricRelabelConfigs,
 			RelabelConfigs:       ep.RelabelConfigs,
 		}
-		// The bearerTokenSecret provides the bearer token that is added to the request headers when scraping our prometheus server.
-		// Our server will do authn and authz. By default, we will render a service account + token and bind permissions to
-		// the service account. But if the user does not want to use our defaults, it can change the bearerTokenSecret to
-		// one of their choosing. In that case, it is up to the user to provide the required access. See also api/v1/monitor_types.go.
+		// All requests that go to our prometheus server are first passing through the authn-proxy side-car. This server
+		// will listen to https traffic and performs authn and authz (see also the rbac attributes in externalPrometheusRole()).
+		// The bearerTokenSecret in the endpoint configuration provides the bearer token that is added to the request
+		// headers when scraping our prometheus server. By default, we will render a service account + token and bind
+		// permissions to the service account. But if the user does not want to use our defaults, it can change the
+		// bearerTokenSecret to one of their choosing. In that case, it is up to the user to provide the required access.
+		// See also api/v1/monitor_types.go.
 		if ep.BearerTokenSecret.LocalObjectReference.Name == TigeraExternalPrometheus {
 			needsRBAC = true
 		}

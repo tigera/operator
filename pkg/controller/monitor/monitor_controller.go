@@ -240,7 +240,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	if instance.Spec.ExternalPrometheus != nil {
 		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheus.Namespace}, &corev1.Namespace{}); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get external prometheus namespace", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to get external prometheus namespace %s",
+				instance.Spec.ExternalPrometheus.Namespace), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}

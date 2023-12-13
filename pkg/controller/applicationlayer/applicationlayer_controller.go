@@ -33,7 +33,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -419,19 +418,14 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 }
 
 func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
-	data, err := embed.AsMap()
+	ruleset, err := embed.AsConfigMap(
+		applicationlayer.ModSecurityRulesetConfigMapName,
+		common.OperatorNamespace(),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	ruleset := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: data,
-	}
 	return ruleset, nil
 }
 

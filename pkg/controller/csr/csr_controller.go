@@ -32,8 +32,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,9 +45,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // LabelName label that we set on our CSRs, this helps us exclude irrelevant CSRs.
@@ -81,14 +85,17 @@ func relevantCSR(csr *certificatesv1.CertificateSigningRequest) bool {
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		// No need to start this controller (currently).
-		return nil
-	}
-
 	ctrl, err := controller.New(controllerName, mgr, controller.Options{Reconciler: newReconciler(mgr, opts)})
 	if err != nil {
 		return err
+	}
+
+	if err = ctrl.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
+	}
+
+	if err = ctrl.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
 	}
 
 	return utils.AddCSRWatchWithRelevancyFn(ctrl, relevantCSR)
@@ -102,11 +109,12 @@ type tlsAsset struct {
 
 func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &reconcileCSR{
-		client:           mgr.GetClient(),
-		scheme:           mgr.GetScheme(),
-		provider:         opts.DetectedProvider,
-		clusterDomain:    opts.ClusterDomain,
-		allowedTLSAssets: allowedAssets(opts.ClusterDomain),
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		provider:            opts.DetectedProvider,
+		clusterDomain:       opts.ClusterDomain,
+		allowedTLSAssets:    allowedAssets(opts.ClusterDomain),
+		enterpriseCRDExists: opts.EnterpriseCRDExists,
 	}
 	return r
 }
@@ -136,11 +144,12 @@ var _ reconcile.Reconciler = &reconcileCSR{}
 // conditions for signer name "tigera.io/operator-signer". This is the controller that monitors, approves and signs
 // these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid malicious requests.
 type reconcileCSR struct {
-	client           client.Client
-	scheme           *runtime.Scheme
-	provider         operatorv1.Provider
-	clusterDomain    string
-	allowedTLSAssets map[string]tlsAsset
+	client              client.Client
+	scheme              *runtime.Scheme
+	provider            operatorv1.Provider
+	clusterDomain       string
+	allowedTLSAssets    map[string]tlsAsset
+	enterpriseCRDExists bool
 }
 
 func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -148,20 +157,47 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	reqLogger.Info("Reconciling CSR Controller")
 	csrList := &certificatesv1.CertificateSigningRequestList{}
 
+	instance := &operatorv1.Installation{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, err
+	}
+
+	needsCSRRole := instance.Spec.CertificateManagement != nil
+	if !needsCSRRole && r.enterpriseCRDExists {
+		monitorCR := &operatorv1.Monitor{}
+		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+			if apierrors.IsNotFound(err) {
+				return reconcile.Result{}, nil
+			}
+			return reconcile.Result{}, err
+		}
+		needsCSRRole = monitorCR.Spec.ExternalPrometheus != nil
+	}
+
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	var passthrough render.Component
+	if needsCSRRole {
+		// This controller creates the cluster role for any pod in the cluster that requires certificate management.
+		passthrough = render.NewPassthrough(certificatemanagement.CSRClusterRole())
+		err := componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	} else {
+		passthrough = render.NewDeletionPassthrough(certificatemanagement.CSRClusterRole())
+		reqLogger.V(5).Info("ending reconciliation, no CSRs have to be signed with the current configuration.")
+		return reconcile.Result{}, componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
+	}
+
 	// Filter out unnecessary CSRs. (Calico CSRs are guaranteed to have this label).
 	requirement, err := labels.NewRequirement(LabelName, selection.Exists, []string{})
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 	if err := r.client.List(ctx, csrList, &client.ListOptions{LabelSelector: labels.NewSelector().Add(*requirement)}); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	instance := &operatorv1.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
-		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, nil
-		}
 		return reconcile.Result{}, err
 	}
 
@@ -191,7 +227,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 				},
 			}
 			reqLogger.Error(err, "Rejecting the CSR.")
-			if err = r.client.SubResource("status").Update(ctx, &csr); err != nil {
+			if err = r.client.SubResource("approval").Update(ctx, &csr); err != nil {
 				return reconcile.Result{}, err
 			}
 			continue
@@ -222,7 +258,6 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		}
 		reqLogger.V(5).Info("Signed CSR with name : %v.", csr.Name)
 	}
-
 	return reconcile.Result{}, nil
 }
 

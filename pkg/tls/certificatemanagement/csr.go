@@ -19,14 +19,14 @@ import (
 	"fmt"
 	"strings"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -147,7 +147,10 @@ func CertificateVolumeSource(certificateManagement *operatorv1.CertificateManage
 	var defaultMode int32 = 420
 	if certificateManagement != nil {
 		return corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				// Writing the TLS assets to memory. This is more secure and less accessible.
+				Medium: corev1.StorageMediumMemory,
+			},
 		}
 	} else {
 		return corev1.VolumeSource{

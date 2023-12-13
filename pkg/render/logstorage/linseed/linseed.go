@@ -396,8 +396,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 
 		if l.cfg.Tenant.MultiTenant() {
-			// For clusters shared between muliple tenants, we need to configure Linseed with the correct namespace information for its tenant.
-			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
+			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
 
 			// We also use shared indices for multi-tenant clusters.
@@ -652,7 +652,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.PolicyRecommendationEntityRule,
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).PolicyRecommendationSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 	}

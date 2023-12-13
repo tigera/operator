@@ -238,21 +238,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	var externalPrometheus bool
 	if instance.Spec.ExternalPrometheus != nil {
 		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheus.Namespace}, &corev1.Namespace{}); err != nil {
-			if !errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get external prometheus namespace", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			// We set ExternalPrometheus to nil, and proceed to render the other configuration.
-			// When the namespace is created, we will reconcile the ExternalPrometheus.
-			reqLogger.V(3).
-				WithValues("namespace", instance.Spec.ExternalPrometheus.Namespace).
-				Info("will skip external prometheus configuration, namespace does not exist")
-			instance.Spec.ExternalPrometheus = nil
-		} else {
-			externalPrometheus = true
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get external prometheus namespace", err, reqLogger)
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -294,7 +283,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var serverTLSSecret certificatemanagement.KeyPairInterface
-	if !externalPrometheus || install.CertificateManagement != nil {
+	if instance.Spec.ExternalPrometheus == nil || install.CertificateManagement != nil {
+		// We're either not using an external prometheus in which case we simply sign the KeyPair directly using the certificateManager,
+		// or we are configured to use a custom TLS secret, which is also handled under the covers by `GetOrCreateKeyPair`.
 		serverTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
@@ -396,7 +387,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		Openshift:                r.provider == operatorv1.ProviderOpenShift,
 		KubeControllerPort:       kubeControllersMetricsPort,
 		UsePSP:                   r.usePSP,
-		ExternalPrometheus:       externalPrometheus,
 	}
 
 	// Render prometheus component

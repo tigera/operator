@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,8 +40,8 @@ type ExternalPrometheus struct {
 	// +optional
 	ServiceMonitor *ServiceMonitor `json:"serviceMonitor,omitempty"`
 
-	// Namespace is the namespace where the operator will create resources for your Prometheus instance. As long as the
-	// namespace does not exist, nothing will be rendered.
+	// Namespace is the namespace where the operator will create resources for your Prometheus instance. The namespace
+	// must be created before the operator will create Prometheus resources.
 	// +required
 	Namespace string `json:"namespace"`
 }

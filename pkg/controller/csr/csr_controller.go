@@ -157,20 +157,47 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	reqLogger.Info("Reconciling CSR Controller")
 	csrList := &certificatesv1.CertificateSigningRequestList{}
 
+	instance := &operatorv1.Installation{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, err
+	}
+
+	needsCSRRole := instance.Spec.CertificateManagement != nil
+	if !needsCSRRole && r.enterpriseCRDExists {
+		monitorCR := &operatorv1.Monitor{}
+		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+			if apierrors.IsNotFound(err) {
+				return reconcile.Result{}, nil
+			}
+			return reconcile.Result{}, err
+		}
+		needsCSRRole = monitorCR.Spec.ExternalPrometheus != nil
+	}
+
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	var passthrough render.Component
+	if needsCSRRole {
+		// This controller creates the cluster role for any pod in the cluster that requires certificate management.
+		passthrough = render.NewPassthrough(certificatemanagement.CSRClusterRole())
+		err := componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	} else {
+		passthrough = render.NewDeletionPassthrough(certificatemanagement.CSRClusterRole())
+		reqLogger.V(5).Info("ending reconciliation, no CSRs have to be signed with the current configuration.")
+		return reconcile.Result{}, componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
+	}
+
 	// Filter out unnecessary CSRs. (Calico CSRs are guaranteed to have this label).
 	requirement, err := labels.NewRequirement(LabelName, selection.Exists, []string{})
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 	if err := r.client.List(ctx, csrList, &client.ListOptions{LabelSelector: labels.NewSelector().Add(*requirement)}); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	instance := &operatorv1.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
-		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, nil
-		}
 		return reconcile.Result{}, err
 	}
 
@@ -231,27 +258,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		}
 		reqLogger.V(5).Info("Signed CSR with name : %v.", csr.Name)
 	}
-	needsCSRRole := instance.Spec.CertificateManagement != nil
-	if !needsCSRRole && r.enterpriseCRDExists {
-		monitorCR := &operatorv1.Monitor{}
-		if err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
-			if apierrors.IsNotFound(err) {
-				return reconcile.Result{}, nil
-			}
-			return reconcile.Result{}, err
-		}
-		needsCSRRole = monitorCR.Spec.ExternalPrometheus != nil
-	}
-
-	var passthrough render.Component
-	if needsCSRRole {
-		// This controller creates the cluster role for any pod in the cluster that requires certificate management.
-		passthrough = render.NewPassthrough(certificatemanagement.CSRClusterRole())
-	} else {
-		passthrough = render.NewDeletionPassthrough(certificatemanagement.CSRClusterRole())
-	}
-	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
-	return reconcile.Result{}, componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
+	return reconcile.Result{}, nil
 }
 
 // validate Criteria include:

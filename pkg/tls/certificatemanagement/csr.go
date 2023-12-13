@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -100,7 +101,7 @@ func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.Image
 }
 
 // CSRClusterRole returns a role with the necessary permissions to create certificate signing requests.
-func CSRClusterRole() *rbacv1.ClusterRole {
+func CSRClusterRole() client.Object {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

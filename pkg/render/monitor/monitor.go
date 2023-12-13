@@ -132,7 +132,6 @@ type Config struct {
 	Openshift                bool
 	KubeControllerPort       int
 	UsePSP                   bool
-	ExternalPrometheus       bool
 }
 
 type monitorComponent struct {
@@ -228,7 +227,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 
 	if mc.cfg.Monitor.ExternalPrometheus != nil {
 		toCreate = append(toCreate, mc.externalConfigMap())
-		if mc.cfg.ExternalPrometheus && mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor != nil {
+		if mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor != nil {
 			externalServiceMonitor, needsRBAC := mc.externalServiceMonitor()
 			toCreate = append(toCreate, externalServiceMonitor)
 			if needsRBAC {
@@ -1109,6 +1108,7 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Destination: render.DexEntityRule,
 		},
 	}...)
+
 	typhaMetricsPort := cfg.Installation.TyphaMetricsPort
 	if typhaMetricsPort != nil {
 		egressRules = append(egressRules, v3.Rule{
@@ -1354,8 +1354,10 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 			MetricRelabelConfigs: ep.MetricRelabelConfigs,
 			RelabelConfigs:       ep.RelabelConfigs,
 		}
-		// By default, we will render the service account token and cluster roles. But if the user chooses to override
-		// the bearer token, it is up to the user to provide the required access. See also api/v1/monitor_types.go.
+		// The bearerTokenSecret provides the bearer token that is added to the request headers when scraping our prometheus server.
+		// Our server will do authn and authz. By default, we will render a service account + token and bind permissions to
+		// the service account. But if the user does not want to use our defaults, it can change the bearerTokenSecret to
+		// one of their choosing. In that case, it is up to the user to provide the required access. See also api/v1/monitor_types.go.
 		if ep.BearerTokenSecret.LocalObjectReference.Name == TigeraExternalPrometheus {
 			needsRBAC = true
 		}

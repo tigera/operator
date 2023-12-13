@@ -729,7 +729,6 @@ var _ = Describe("monitor rendering tests", func() {
 				},
 				Namespace: "external-prometheus",
 			}
-			cfg.ExternalPrometheus = true
 			component := monitor.Monitor(cfg)
 			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 			toCreate, toDelete := component.Objects()
@@ -763,7 +762,6 @@ var _ = Describe("monitor rendering tests", func() {
 				},
 				Namespace: "external-prometheus",
 			}
-			cfg.ExternalPrometheus = true
 			component := monitor.Monitor(cfg)
 			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 			toCreate, toDelete := component.Objects()
@@ -784,7 +782,6 @@ var _ = Describe("monitor rendering tests", func() {
 			cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
 				Namespace: "external-prometheus",
 			}
-			cfg.ExternalPrometheus = true
 			component := monitor.Monitor(cfg)
 			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 			toCreate, toDelete := component.Objects()
@@ -802,7 +799,6 @@ var _ = Describe("monitor rendering tests", func() {
 		})
 		It("Should render typha service monitor if typha metrics are enabled", func() {
 			cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
-			cfg.ExternalPrometheus = true
 			component := monitor.Monitor(cfg)
 			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 			toCreate, toDelete := component.Objects()

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -167,6 +167,8 @@ type ManagerConfiguration struct {
 
 	// Whether or not to run the rendered components in multi-tenant mode.
 	Tenant *operatorv1.Tenant
+
+	Manager *operatorv1.Manager
 }
 
 type managerComponent struct {
@@ -321,6 +323,12 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			},
 			Template: *podTemplate,
 		},
+	}
+
+	if c.cfg.Manager != nil {
+		if overrides := c.cfg.Manager.Spec.ManagerDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
 	}
 	return d
 }

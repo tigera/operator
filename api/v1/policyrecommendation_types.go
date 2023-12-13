@@ -31,10 +31,6 @@ type PolicyRecommendationSpec struct {
 
 // PolicyRecommendationDeploymentPodTemplateSpec is the Manager Deployment's PodTemplateSpec
 type PolicyRecommendationDeploymentPodTemplateSpec struct {
-	// Metadata is a subset of a Kubernetes object's metadata that is added to
-	// the pod's metadata.
-	// +optional
-	Metadata *Metadata `json:"metadata,omitempty"`
 
 	// Spec is the PolicyRecommendation Deployment's PodSpec.
 	// +optional
@@ -49,9 +45,9 @@ type PolicyRecommendationDeploymentPodSpec struct {
 	// +optional
 	InitContainers []PolicyRecommendationDeploymentInitContainer `json:"initContainers,omitempty"`
 
-	// Containers is a list of Manager containers.
-	// If specified, this overrides the specified Manager Deployment containers.
-	// If omitted, the Manager Deployment will use its default values for its containers.
+	// Containers is a list of PolicyRecommendation containers.
+	// If specified, this overrides the specified PolicyRecommendation Deployment containers.
+	// If omitted, the PolicyRecommendation Deployment will use its default values for its containers.
 	// +optional
 	Containers []PolicyRecommendationDeploymentContainer `json:"containers,omitempty"`
 }

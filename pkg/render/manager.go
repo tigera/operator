@@ -38,7 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -167,7 +166,8 @@ type ManagerConfiguration struct {
 	BindingNamespaces []string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
-	Tenant  *operatorv1.Tenant
+	Tenant *operatorv1.Tenant
+
 	Manager *operatorv1.Manager
 }
 
@@ -326,7 +326,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	if overrides := c.cfg.Manager; overrides != nil {
-		rcomp.ApplyDeploymentOverrides(d, overrides)
+		rcomponents.ApplyDeploymentOverrides(d, overrides)
 	}
 
 	return d

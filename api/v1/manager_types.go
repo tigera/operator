@@ -35,10 +35,6 @@ type ManagerSpec struct {
 
 // ManagerDeploymentPodTemplateSpec is the Manager Deployment's PodTemplateSpec
 type ManagerDeploymentPodTemplateSpec struct {
-	// Metadata is a subset of a Kubernetes object's metadata that is added to
-	// the pod's metadata.
-	// +optional
-	Metadata *Metadata `json:"metadata,omitempty"`
 
 	// Spec is the Manager Deployment's PodSpec.
 	// +optional
@@ -69,7 +65,6 @@ type ManagerDeploymentContainer struct {
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named Manager Deployment container's resources.
 	// If omitted, the Manager Deployment will use its default value for this container's resources.
-	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
@@ -155,10 +150,6 @@ type ManagerList struct {
 	Items           []Manager `json:"items"`
 }
 
-func (c *Manager) isEmptyManagerSpec(obj ManagerSpec) bool {
-	return obj == ManagerSpec{}
-}
-
 func (c *Manager) GetMetadata() *Metadata {
 	return nil
 }
@@ -237,6 +228,10 @@ func (c *Manager) GetTerminationGracePeriodSeconds() *int64 {
 
 func (c *Manager) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
+}
+
+func (c *Manager) isEmptyManagerSpec(obj ManagerSpec) bool {
+	return obj == ManagerSpec{}
 }
 
 func init() {

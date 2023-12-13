@@ -40,35 +40,14 @@ spec:
                 description: Template describes the PolicyRecommendation Deployment
                   pod that will be created.
                 properties:
-                  metadata:
-                    description: Metadata is a subset of a Kubernetes object's metadata
-                      that is added to the pod's metadata.
-                    properties:
-                      annotations:
-                        additionalProperties:
-                          type: string
-                        description: Annotations is a map of arbitrary non-identifying
-                          metadata. Each of these key/value pairs are added to the
-                          object's annotations provided the key does not already exist
-                          in the object's annotations.
-                        type: object
-                      labels:
-                        additionalProperties:
-                          type: string
-                        description: Labels is a map of string keys and values that
-                          may match replicaset and service selectors. Each of these
-                          key/value pairs are added to the object's labels provided
-                          the key does not already exist in the object's labels.
-                        type: object
-                    type: object
                   spec:
                     description: Spec is the PolicyRecommendation Deployment's PodSpec.
                     properties:
                       containers:
-                        description: Containers is a list of Manager containers. If
-                          specified, this overrides the specified Manager Deployment
-                          containers. If omitted, the Manager Deployment will use
-                          its default values for its containers.
+                        description: Containers is a list of PolicyRecommendation
+                          containers. If specified, this overrides the specified PolicyRecommendation
+                          Deployment containers. If omitted, the PolicyRecommendation
+                          Deployment will use its default values for its containers.
                         items:
                           description: PolicyRecommendationDeploymentContainer is
                             a PolicyRecommendation Deployment container.

@@ -858,7 +858,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[2].Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
-	It("should override container resource request with the value from Manager CR", func() {
+	It("should override container's resource request with the value from Manager CR", func() {
 		managerResources := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
@@ -911,7 +911,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(container.Resources).To(Equal(managerResources))
 	})
 
-	It("should override init container resource request with the value from Manager CR", func() {
+	It("should override init container's resource request with the value from Manager CR", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		certificateManagement := &operatorv1.CertificateManagement{CACert: cert}

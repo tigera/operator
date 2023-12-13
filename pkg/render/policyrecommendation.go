@@ -77,7 +77,8 @@ type PolicyRecommendationConfiguration struct {
 	BindingNamespaces []string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
-	Tenant               *operatorv1.Tenant
+	Tenant *operatorv1.Tenant
+
 	PolicyRecommendation *operatorv1.PolicyRecommendation
 }
 

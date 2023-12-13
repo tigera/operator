@@ -328,9 +328,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 
 		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(idc.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		csrInitContainer := idc.Spec.Template.Spec.InitContainers[0]
-		Expect(csrInitContainer.Name).To(Equal("policy-recommendation-tls-key-cert-provisioner"))
-		Expect(csrInitContainer.Resources).To(Equal(prResources))
+		Expect(idc.Spec.Template.Spec.InitContainers[0].Name).To(Equal("policy-recommendation-tls-key-cert-provisioner"))
+		Expect(idc.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(prResources))
 	})
 
 	Context("allow-tigera rendering", func() {

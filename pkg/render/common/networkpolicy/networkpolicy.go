@@ -254,6 +254,10 @@ func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-manager"), "tigera-manager")
 }
 
+func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
+}
+
 const PrometheusSelector = "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')"
 
 var PrometheusEntityRule = v3.EntityRule{

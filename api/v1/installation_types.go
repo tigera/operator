@@ -18,8 +18,11 @@ package v1
 
 import (
 	"fmt"
+	"net"
+	"net/netip"
 	"strings"
 
+	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -611,6 +614,85 @@ type IPPool struct {
 	// +optional
 	// +kubebuilder:default:=false
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
+}
+
+// cidrToName returns a valid Kubernetes resource name given a CIDR. Kubernetes names must be valid DNS
+// names. We do the following:
+// - Expand the CIDR so that we get consistent results and remove IPv6 shorthand "::".
+// - Replace any slashes with dashes.
+// - Replace any : with dots.
+func cidrToName(cidr string) (string, error) {
+	// First, canonicalize the CIDR. e.g., 192.168.0.1/24 -> 192.168.0.0/24.
+	_, nw, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", err
+	}
+
+	// Parse the CIDR and expand it to its full form.
+	// e.g., fe80::/64 -> fe80:0000:0000:0000:0000:0000:0000:0000/64
+	pre, err := netip.ParsePrefix(nw.String())
+	if err != nil {
+		return "", err
+	}
+	name := pre.Addr().StringExpanded()
+
+	// Replace invalid characters.
+	// e.g., fe80:0000:0000:0000:0000:0000:0000:0000/64 -> fe80.0000.0000.0000.0000.0000.0000.0000-64
+	name = strings.ReplaceAll(name, ":", ".")
+	name += fmt.Sprintf("-%d", pre.Bits())
+
+	return name, nil
+}
+
+// ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
+func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
+	name, err := cidrToName(p.CIDR)
+	if err != nil {
+		return nil, err
+	}
+
+	pool := pcv1.IPPool{
+		TypeMeta:   metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec:       pcv1.IPPoolSpec{CIDR: p.CIDR},
+	}
+
+	// Set encap.
+	switch p.Encapsulation {
+	case EncapsulationIPIP:
+		pool.Spec.IPIPMode = pcv1.IPIPModeAlways
+		pool.Spec.VXLANMode = pcv1.VXLANModeNever
+	case EncapsulationIPIPCrossSubnet:
+		pool.Spec.IPIPMode = pcv1.IPIPModeCrossSubnet
+		pool.Spec.VXLANMode = pcv1.VXLANModeNever
+	case EncapsulationVXLAN:
+		pool.Spec.VXLANMode = pcv1.VXLANModeAlways
+		pool.Spec.IPIPMode = pcv1.IPIPModeNever
+	case EncapsulationVXLANCrossSubnet:
+		pool.Spec.VXLANMode = pcv1.VXLANModeCrossSubnet
+		pool.Spec.IPIPMode = pcv1.IPIPModeNever
+	}
+
+	// Set NAT
+	switch p.NATOutgoing {
+	case NATOutgoingEnabled:
+		pool.Spec.NATOutgoing = true
+	}
+
+	// Set BlockSize
+	if p.BlockSize != nil {
+		pool.Spec.BlockSize = int(*p.BlockSize)
+	}
+
+	// Set selector.
+	pool.Spec.NodeSelector = p.NodeSelector
+
+	// Set BGP export.
+	if p.DisableBGPExport != nil {
+		pool.Spec.DisableBGPExport = *p.DisableBGPExport
+	}
+
+	return &pool, nil
 }
 
 // CNIPluginType describes the type of CNI plugin used.

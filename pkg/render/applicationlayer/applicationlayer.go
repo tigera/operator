@@ -18,6 +18,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -298,6 +299,7 @@ func (c *component) containers() []corev1.Container {
 			commandArgs = append(
 				commandArgs,
 				"--waf-enabled",
+				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
 				"--waf-ruleset-base-dir", ModSecurityRulesetVolumePath,
 				"--waf-directive", "Include modsecdefault.conf",
 				"--waf-directive", "Include crs-setup.conf",
@@ -418,7 +420,7 @@ func (c *component) volumes() []corev1.Volume {
 				Name: CalicoLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
-						Path: "/var/log/calico",
+						Path: CalicologsVolumePath,
 						Type: &hostPathDirectoryOrCreate,
 					},
 				},

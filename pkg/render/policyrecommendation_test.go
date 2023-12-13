@@ -17,6 +17,8 @@ package render_test
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -233,6 +235,94 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		csrInitContainer := idc.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.PolicyRecommendationTLSSecretName)))
+	})
+
+	It("should override container's resource request with the value from policy recommendation CR", func() {
+
+		prResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		policyRecommendationCfg := operatorv1.PolicyRecommendation{
+			Spec: operatorv1.PolicyRecommendationSpec{
+				Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
+					Spec: &operatorv1.PolicyRecommendationPodSpec{
+						Containers: []operatorv1.PolicyRecommendationContainer{{
+							Name:      "policy-recommendation-controller",
+							Resources: &prResources,
+						}},
+					},
+				},
+			},
+		}
+
+		cfg.PolicyRecommendation = &policyRecommendationCfg
+		component := render.PolicyRecommendation(cfg)
+		resources, _ := component.Objects()
+		d, ok := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("policy-recommendation-controller"))
+		Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(prResources))
+	})
+
+	It("should override init container's resource request with the value from policy recommendation CR", func() {
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+		prResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		policyRecommendationCfg := operatorv1.PolicyRecommendation{
+			Spec: operatorv1.PolicyRecommendationSpec{
+				Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
+					Spec: &operatorv1.PolicyRecommendationPodSpec{
+						InitContainers: []operatorv1.PolicyRecommendationInitContainer{{
+							Name:      "policy-recommendation-tls-key-cert-provisioner",
+							Resources: &prResources,
+						}},
+					},
+				},
+			},
+		}
+
+		cfg.PolicyRecommendation = &policyRecommendationCfg
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+
+		policyRecommendationCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.PolicyRecommendationCertSecret = policyRecommendationCertSecret
+
+		component := render.PolicyRecommendation(cfg)
+		resources, _ := component.Objects()
+
+		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer := idc.Spec.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal("policy-recommendation-tls-key-cert-provisioner"))
+		Expect(csrInitContainer.Resources).To(Equal(prResources))
 	})
 
 	Context("allow-tigera rendering", func() {

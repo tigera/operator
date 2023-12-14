@@ -19,6 +19,8 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/tigera/operator/test"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -874,12 +876,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		managercfg := operatorv1.Manager{
 			Spec: operatorv1.ManagerSpec{
-				Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
-					Spec: &operatorv1.ManagerDeploymentPodSpec{
-						Containers: []operatorv1.ManagerDeploymentContainer{{
-							Name:      "tigera-voltron",
-							Resources: &managerResources,
-						}},
+				ManagerDeployment: &operatorv1.ManagerDeployment{
+					Spec: &operatorv1.ManagerDeploymentSpec{
+						Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ManagerDeploymentPodSpec{
+								Containers: []operatorv1.ManagerDeploymentContainer{{
+									Name:      "tigera-voltron",
+									Resources: &managerResources,
+								}},
+							},
+						},
 					},
 				},
 			},
@@ -900,13 +906,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
 
-		var container *corev1.Container
-		for _, c := range d.Spec.Template.Spec.Containers {
-			if c.Name == "tigera-voltron" {
-				container = &c
-				break
-			}
-		}
+		container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-voltron")
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(managerResources))
 	})
@@ -931,12 +931,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		managercfg := operatorv1.Manager{
 			Spec: operatorv1.ManagerSpec{
-				Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
-					Spec: &operatorv1.ManagerDeploymentPodSpec{
-						InitContainers: []operatorv1.ManagerDeploymentInitContainer{{
-							Name:      "manager-tls-key-cert-provisioner",
-							Resources: &managerResources,
-						}},
+				ManagerDeployment: &operatorv1.ManagerDeployment{
+					Spec: &operatorv1.ManagerDeploymentSpec{
+						Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ManagerDeploymentPodSpec{
+								InitContainers: []operatorv1.ManagerDeploymentInitContainer{{
+									Name:      "manager-tls-key-cert-provisioner",
+									Resources: &managerResources,
+								}},
+							},
+						},
 					},
 				},
 			},
@@ -957,13 +961,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 
-		var initContainer *corev1.Container
-		for _, c := range d.Spec.Template.Spec.InitContainers {
-			if c.Name == "manager-tls-key-cert-provisioner" {
-				initContainer = &c
-				break
-			}
-		}
+		initContainer := test.GetContainer(d.Spec.Template.Spec.InitContainers, "manager-tls-key-cert-provisioner")
 		Expect(initContainer).NotTo(BeNil())
 		Expect(initContainer.Resources).To(Equal(managerResources))
 	})

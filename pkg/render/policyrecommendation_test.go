@@ -246,7 +246,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 	})
 
 	It("should override container's resource request with the value from policy recommendation CR", func() {
-
 		prResources := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
@@ -260,20 +259,24 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			},
 		}
 
-		policyRecommendationCfg := operatorv1.PolicyRecommendation{
+		policyRecommendationcfg := operatorv1.PolicyRecommendation{
 			Spec: operatorv1.PolicyRecommendationSpec{
-				Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
-					Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
-						Containers: []operatorv1.PolicyRecommendationDeploymentContainer{{
-							Name:      "policy-recommendation-controller",
-							Resources: &prResources,
-						}},
+				PolicyRecommendationDeployment: &operatorv1.PolicyRecommendationDeployment{
+					Spec: &operatorv1.PolicyRecommendationDeploymentSpec{
+						Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
+							Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
+								Containers: []operatorv1.PolicyRecommendationDeploymentContainer{{
+									Name:      "policy-recommendation-controller",
+									Resources: &prResources,
+								}},
+							},
+						},
 					},
 				},
 			},
 		}
 
-		cfg.PolicyRecommendation = &policyRecommendationCfg
+		cfg.PolicyRecommendation = &policyRecommendationcfg
 		component := render.PolicyRecommendation(cfg)
 		resources, _ := component.Objects()
 		d, ok := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -302,20 +305,24 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			},
 		}
 
-		policyRecommendationCfg := operatorv1.PolicyRecommendation{
+		policyRecommendationcfg := operatorv1.PolicyRecommendation{
 			Spec: operatorv1.PolicyRecommendationSpec{
-				Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
-					Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
-						InitContainers: []operatorv1.PolicyRecommendationDeploymentInitContainer{{
-							Name:      "policy-recommendation-tls-key-cert-provisioner",
-							Resources: &prResources,
-						}},
+				PolicyRecommendationDeployment: &operatorv1.PolicyRecommendationDeployment{
+					Spec: &operatorv1.PolicyRecommendationDeploymentSpec{
+						Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
+							Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
+								InitContainers: []operatorv1.PolicyRecommendationDeploymentInitContainer{{
+									Name:      "policy-recommendation-tls-key-cert-provisioner",
+									Resources: &prResources,
+								}},
+							},
+						},
 					},
 				},
 			},
 		}
 
-		cfg.PolicyRecommendation = &policyRecommendationCfg
+		cfg.PolicyRecommendation = &policyRecommendationcfg
 		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 

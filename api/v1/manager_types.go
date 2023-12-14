@@ -28,6 +28,22 @@ type ManagerSpec struct {
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
 
+	// ManagerDeployment configures the Manager Deployment.
+	// +optional
+	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
+}
+
+// ManagerDeployment is the configuration for the Manager Deployment.
+type ManagerDeployment struct {
+
+	// Spec is the specification of the Manager Deployment.
+	// +optional
+	Spec *ManagerDeploymentSpec `json:"spec,omitempty"`
+}
+
+// ManagerDeploymentSpec defines configuration for the Manager Deployment.
+type ManagerDeploymentSpec struct {
+
 	// Template describes the Manager Deployment pod that will be created.
 	// +optional
 	Template *ManagerDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -163,20 +179,24 @@ func (c *Manager) GetPodTemplateMetadata() *Metadata {
 }
 
 func (c *Manager) GetInitContainers() []v1.Container {
-	if !c.isEmptyManagerSpec(c.Spec) {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
+	if c.Spec != (ManagerSpec{}) {
+		if c.Spec.ManagerDeployment != nil {
+			if c.Spec.ManagerDeployment.Spec != nil {
+				if c.Spec.ManagerDeployment.Spec.Template != nil {
+					if c.Spec.ManagerDeployment.Spec.Template.Spec != nil {
+						if c.Spec.ManagerDeployment.Spec.Template.Spec.InitContainers != nil {
+							cs := make([]v1.Container, len(c.Spec.ManagerDeployment.Spec.Template.Spec.InitContainers))
+							for i, v := range c.Spec.ManagerDeployment.Spec.Template.Spec.InitContainers {
+								// Only copy and return the init container if it has resources set.
+								if v.Resources == nil {
+									continue
+								}
+								c := v1.Container{Name: v.Name, Resources: *v.Resources}
+								cs[i] = c
+							}
+							return cs
 						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
 					}
-					return cs
 				}
 			}
 		}
@@ -185,20 +205,24 @@ func (c *Manager) GetInitContainers() []v1.Container {
 }
 
 func (c *Manager) GetContainers() []v1.Container {
-	if !c.isEmptyManagerSpec(c.Spec) {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-					for i, v := range c.Spec.Template.Spec.Containers {
-						// Only copy and return the container if it has resources set.
-						if v.Resources == nil {
-							continue
+	if c.Spec != (ManagerSpec{}) {
+		if c.Spec.ManagerDeployment != nil {
+			if c.Spec.ManagerDeployment.Spec != nil {
+				if c.Spec.ManagerDeployment.Spec.Template != nil {
+					if c.Spec.ManagerDeployment.Spec.Template.Spec != nil {
+						if c.Spec.ManagerDeployment.Spec.Template.Spec.Containers != nil {
+							cs := make([]v1.Container, len(c.Spec.ManagerDeployment.Spec.Template.Spec.Containers))
+							for i, v := range c.Spec.ManagerDeployment.Spec.Template.Spec.Containers {
+								// Only copy and return the init container if it has resources set.
+								if v.Resources == nil {
+									continue
+								}
+								c := v1.Container{Name: v.Name, Resources: *v.Resources}
+								cs[i] = c
+							}
+							return cs
 						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
 					}
-					return cs
 				}
 			}
 		}
@@ -228,10 +252,6 @@ func (c *Manager) GetTerminationGracePeriodSeconds() *int64 {
 
 func (c *Manager) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
-}
-
-func (c *Manager) isEmptyManagerSpec(obj ManagerSpec) bool {
-	return obj == ManagerSpec{}
 }
 
 func init() {

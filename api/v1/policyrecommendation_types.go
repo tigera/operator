@@ -24,12 +24,28 @@ import (
 // service.
 type PolicyRecommendationSpec struct {
 
+	// PolicyRecommendation configures the PolicyRecommendation Deployment.
+	// +optional
+	PolicyRecommendationDeployment *PolicyRecommendationDeployment `json:"policyRecommendationDeployment,omitempty"`
+}
+
+// PolicyRecommendationDeployment is the configuration for the PolicyRecommendation Deployment.
+type PolicyRecommendationDeployment struct {
+
+	// Spec is the specification of the PolicyRecommendation Deployment.
+	// +optional
+	Spec *PolicyRecommendationDeploymentSpec `json:"spec,omitempty"`
+}
+
+// PolicyRecommendationDeploymentSpec defines configuration for the PolicyRecommendation Deployment.
+type PolicyRecommendationDeploymentSpec struct {
+
 	// Template describes the PolicyRecommendation Deployment pod that will be created.
 	// +optional
 	Template *PolicyRecommendationDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-// PolicyRecommendationDeploymentPodTemplateSpec is the Manager Deployment's PodTemplateSpec
+// PolicyRecommendationDeploymentPodTemplateSpec is the PolicyRecommendation Deployment's PodTemplateSpec
 type PolicyRecommendationDeploymentPodTemplateSpec struct {
 
 	// Spec is the PolicyRecommendation Deployment's PodSpec.
@@ -37,7 +53,7 @@ type PolicyRecommendationDeploymentPodTemplateSpec struct {
 	Spec *PolicyRecommendationDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-// PolicyRecommendationDeploymentPodSpec is the Manager Deployment's PodSpec.
+// PolicyRecommendationDeploymentPodSpec is the PolicyRecommendation Deployment's PodSpec.
 type PolicyRecommendationDeploymentPodSpec struct {
 	// InitContainers is a list of PolicyRecommendation init containers.
 	// If specified, this overrides the specified PolicyRecommendation Deployment init containers.
@@ -72,7 +88,7 @@ type PolicyRecommendationDeploymentInitContainer struct {
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	// If specified, this overrides the named Manager Deployment init container's resources.
+	// If specified, this overrides the named PolicyRecommendation Deployment init container's resources.
 	// If omitted, the PolicyRecommendation Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
@@ -120,20 +136,24 @@ func (c *PolicyRecommendation) GetPodTemplateMetadata() *Metadata {
 }
 
 func (c *PolicyRecommendation) GetInitContainers() []v1.Container {
-	if !c.isEmptyPolicyRecommendationSpec(c.Spec) {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
+	if c.Spec != (PolicyRecommendationSpec{}) {
+		if c.Spec.PolicyRecommendationDeployment != nil {
+			if c.Spec.PolicyRecommendationDeployment.Spec != nil {
+				if c.Spec.PolicyRecommendationDeployment.Spec.Template != nil {
+					if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec != nil {
+						if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.InitContainers != nil {
+							cs := make([]v1.Container, len(c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.InitContainers))
+							for i, v := range c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.InitContainers {
+								// Only copy and return the init container if it has resources set.
+								if v.Resources == nil {
+									continue
+								}
+								c := v1.Container{Name: v.Name, Resources: *v.Resources}
+								cs[i] = c
+							}
+							return cs
 						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
 					}
-					return cs
 				}
 			}
 		}
@@ -142,20 +162,24 @@ func (c *PolicyRecommendation) GetInitContainers() []v1.Container {
 }
 
 func (c *PolicyRecommendation) GetContainers() []v1.Container {
-	if !c.isEmptyPolicyRecommendationSpec(c.Spec) {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-					for i, v := range c.Spec.Template.Spec.Containers {
-						// Only copy and return the container if it has resources set.
-						if v.Resources == nil {
-							continue
+	if c.Spec != (PolicyRecommendationSpec{}) {
+		if c.Spec.PolicyRecommendationDeployment != nil {
+			if c.Spec.PolicyRecommendationDeployment.Spec != nil {
+				if c.Spec.PolicyRecommendationDeployment.Spec.Template != nil {
+					if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec != nil {
+						if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.Containers != nil {
+							cs := make([]v1.Container, len(c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.Containers))
+							for i, v := range c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.Containers {
+								// Only copy and return the init container if it has resources set.
+								if v.Resources == nil {
+									continue
+								}
+								c := v1.Container{Name: v.Name, Resources: *v.Resources}
+								cs[i] = c
+							}
+							return cs
 						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
 					}
-					return cs
 				}
 			}
 		}

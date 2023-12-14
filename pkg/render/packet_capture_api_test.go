@@ -250,7 +250,9 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			volumes = append(volumes, corev1.Volume{
 				Name: render.PacketCaptureServerCert,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumMemory,
+					},
 				},
 			})
 		} else {

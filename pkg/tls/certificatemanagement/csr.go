@@ -19,14 +19,14 @@ import (
 	"fmt"
 	"strings"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 const (
@@ -39,6 +39,7 @@ const (
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
 func CreateCSRInitContainer(
 	certificateManagement *operatorv1.CertificateManagement,
+	secretName,
 	image string,
 	mountName string,
 	commonName string,
@@ -54,6 +55,10 @@ func CreateCSRInitContainer(
 		},
 		Env: []corev1.EnvVar{
 			{Name: "CERTIFICATE_PATH", Value: "/certs-share/"},
+			// SecretName, when defined, is used as a prefix for the CSR name. This avoids CSR name clashes if the same
+			// pod issues more than one CSR. Even though the CSRs are issued and read in sequence, there are edge-cases
+			// where a pod can get stuck in init.
+			{Name: "SECRET_NAME", Value: secretName},
 			{Name: "SIGNER", Value: certificateManagement.SignerName},
 			{Name: "COMMON_NAME", Value: commonName},
 			{Name: "KEY_ALGORITHM", Value: fmt.Sprintf("%v", certificateManagement.KeyAlgorithm)},
@@ -142,7 +147,10 @@ func CertificateVolumeSource(certificateManagement *operatorv1.CertificateManage
 	var defaultMode int32 = 420
 	if certificateManagement != nil {
 		return corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				// Writing the TLS assets to memory. This is more secure and less accessible.
+				Medium: corev1.StorageMediumMemory,
+			},
 		}
 	} else {
 		return corev1.VolumeSource{

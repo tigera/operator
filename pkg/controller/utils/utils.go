@@ -22,19 +22,19 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
-
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -181,6 +181,27 @@ func AddSecretWatchWithLabel(c controller.Controller, ns, label string) error {
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			_, hasLabel := e.Object.GetLabels()[label]
 			return (ns == "" || e.Object.GetNamespace() == ns) && hasLabel
+		},
+	})
+}
+
+// AddCSRWatchWithRelevancyFn adds a watch for CSRs with the given label. isRelevantFn is a function that returns true for
+// items that are relevant to the caller.
+func AddCSRWatchWithRelevancyFn(c controller.Controller, isRelevantFn func(*certificatesv1.CertificateSigningRequest) bool) error {
+	return c.Watch(&source.Kind{Type: &certificatesv1.CertificateSigningRequest{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			csr, ok := e.Object.(*certificatesv1.CertificateSigningRequest)
+			return ok && isRelevantFn(csr)
+
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			csr, ok := e.ObjectNew.(*certificatesv1.CertificateSigningRequest)
+			return ok && isRelevantFn(csr)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// If a CSR is deleted, then the need for a certificate is no longer there and there is no need to sign anything.
+			// Therefore, we discard this event. It is up to the issuer to re-issue a new CSR if needed.
+			return false
 		},
 	})
 }

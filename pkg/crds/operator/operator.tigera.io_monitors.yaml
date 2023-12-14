@@ -43,8 +43,8 @@ spec:
                 properties:
                   namespace:
                     description: Namespace is the namespace where the operator will
-                      create resources for your Prometheus instance. As long as the
-                      namespace does not exist, nothing will be rendered.
+                      create resources for your Prometheus instance. The namespace
+                      must be created before the operator will create Prometheus resources.
                     type: string
                   serviceMonitor:
                     description: 'ServiceMonitor when specified, the operator will

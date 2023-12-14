@@ -51,6 +51,12 @@ func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeAny
 }
 
+func (c *namespaceComponent) vppDataplaneEnabled() bool {
+	return c.cfg.Installation.CalicoNetwork != nil &&
+		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP
+}
+
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
 		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
@@ -61,6 +67,9 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if len(c.cfg.PullSecrets) > 0 {
 		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PullSecrets...)...)...)
+	}
+	if c.vppDataplaneEnabled() {
+		ns = append(ns, CreateNamespace(common.CalicoVPPDataplaneNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
 	}
 
 	if c.cfg.Terminating {

@@ -337,7 +337,7 @@ const (
 
 // LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
 //
-// One of: Iptables, BPF
+// One of: Iptables, BPF, VPP
 type LinuxDataplaneOption string
 
 const (
@@ -345,6 +345,14 @@ const (
 	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
 	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
+
+type VppDataplaneOptions struct {
+	Interfaces    string `json:"interfaces,omitempty"`
+	VppConfig     string `json:"vppConfig,omitempty"`
+	ServicePrefix string `json:"servicePrefix,omitempty"`
+	InitialConfig string `json:"initialConfig,omitempty"`
+	FeatureGates  string `json:"featureGates,omitempty"`
+}
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
@@ -355,6 +363,10 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Iptables;BPF;VPP
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
+
+	// VppDataplaneOptions is used to configure vpp dataplane.
+	// To specify this, linuxDataplane value should be vpp.
+	VppDataplaneOptions *VppDataplaneOptions `json:"vppDataplaneOptions,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional

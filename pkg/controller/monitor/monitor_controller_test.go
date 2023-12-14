@@ -52,6 +52,7 @@ var _ = Describe("Monitor controller tests", func() {
 	var r ReconcileMonitor
 	var scheme *runtime.Scheme
 	var installation *operatorv1.Installation
+	var monitorCR *operatorv1.Monitor
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -106,10 +107,11 @@ var _ = Describe("Monitor controller tests", func() {
 		Expect(cli.Create(ctx, installation)).To(BeNil())
 
 		// Apply the Monitor CR to the fake cluster.
-		Expect(cli.Create(ctx, &operatorv1.Monitor{
+		monitorCR = &operatorv1.Monitor{
 			TypeMeta:   metav1.TypeMeta{Kind: "Monitor", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-		})).NotTo(HaveOccurred())
+		}
+		Expect(cli.Create(ctx, monitorCR)).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 
@@ -194,6 +196,64 @@ var _ = Describe("Monitor controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		Context("controller reconciliation with external monitoring configuration", func() {
+			It("should create Prometheus related resources", func() {
+				Expect(r.client.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "external-prometheus"}})).NotTo(HaveOccurred())
+				monitorCR.Spec.ExternalPrometheus = &operatorv1.ExternalPrometheus{
+					ServiceMonitor: &operatorv1.ServiceMonitor{},
+					Namespace:      "external-prometheus",
+				}
+				Expect(r.client.Update(ctx, monitorCR)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Prometheus related objects should be rendered after reconciliation.
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+
+				// External Prometheus related objects should be rendered after reconciliation.
+				serviceMonitor := &monitoringv1.ServiceMonitor{}
+				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, serviceMonitor)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &corev1.ConfigMap{})).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &corev1.Secret{})).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &rbacv1.ClusterRole{})).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, &rbacv1.ClusterRoleBinding{})).NotTo(HaveOccurred())
+
+				Expect(serviceMonitor.Spec.Endpoints).To(HaveLen(1))
+				// Verify that the default settings are propagated.
+				Expect(serviceMonitor.Labels).To(Equal(map[string]string{render.AppLabelName: monitor.TigeraExternalPrometheus}))
+				Expect(serviceMonitor.Spec.Endpoints[0]).To(Equal(monitoringv1.Endpoint{
+					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
+					Port:   "web",
+					Path:   "/federate",
+					Scheme: "https",
+					TLSConfig: &monitoringv1.TLSConfig{
+						SafeTLSConfig: monitoringv1.SafeTLSConfig{
+							CA: monitoringv1.SecretOrConfigMap{
+								ConfigMap: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "tigera-external-prometheus",
+									},
+									Key: corev1.TLSCertKey,
+								},
+							},
+						},
+					},
+					BearerTokenSecret: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: monitor.TigeraExternalPrometheus,
+						},
+						Key: "token",
+					},
+				}))
+			})
 		})
 	})
 

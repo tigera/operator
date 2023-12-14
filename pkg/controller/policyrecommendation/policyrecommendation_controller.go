@@ -343,15 +343,16 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:     r.clusterDomain,
-		Installation:      installation,
-		ManagedCluster:    isManagedCluster,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:            r.usePSP,
-		Namespace:         helper.InstallNamespace(),
-		Tenant:            tenant,
-		BindingNamespaces: bindNamespaces,
+		ClusterDomain:        r.clusterDomain,
+		Installation:         installation,
+		ManagedCluster:       isManagedCluster,
+		PullSecrets:          pullSecrets,
+		Openshift:            r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:               r.usePSP,
+		Namespace:            helper.InstallNamespace(),
+		Tenant:               tenant,
+		BindingNamespaces:    bindNamespaces,
+		PolicyRecommendation: policyRecommendation,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

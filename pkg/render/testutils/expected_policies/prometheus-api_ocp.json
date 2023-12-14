@@ -52,7 +52,7 @@
         "protocol": "TCP",
         "destination": {
           "namespaceSelector": "projectcalico.org/name == 'tigera-prometheus'",
-          "selector": "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')",
+          "selector": "k8s-app == 'tigera-prometheus'",
           "ports": [
             9095
           ]

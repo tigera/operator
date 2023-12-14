@@ -33,6 +33,255 @@ spec:
             type: object
           spec:
             description: MonitorSpec defines the desired state of Tigera monitor.
+            properties:
+              externalPrometheus:
+                description: ExternalPrometheus optionally configures integration
+                  with an external Prometheus for scraping Calico metrics. When specified,
+                  the operator will render resources in the defined namespace. This
+                  option can be useful for configuring scraping from git-ops tools
+                  without the need of post-installation steps.
+                properties:
+                  namespace:
+                    description: Namespace is the namespace where the operator will
+                      create resources for your Prometheus instance. The namespace
+                      must be created before the operator will create Prometheus resources.
+                    type: string
+                  serviceMonitor:
+                    description: 'ServiceMonitor when specified, the operator will
+                      create a ServiceMonitor object in the namespace. It is recommended
+                      that you configure labels if you want your prometheus instance
+                      to pick up the configuration automatically. The operator will
+                      configure 1 endpoint by default: - Params to scrape all metrics
+                      available in Calico Enterprise. - BearerTokenSecret (If not
+                      overridden, the operator will also create corresponding RBAC
+                      that allows authz to the metrics.) - TLSConfig, containing the
+                      caFile and serverName.'
+                    properties:
+                      endpoints:
+                        description: The endpoints to scrape. This struct contains
+                          a subset of the Endpoint as defined in the prometheus docs.
+                          Fields related to connecting to our Prometheus server are
+                          automatically set by the operator.
+                        items:
+                          description: Endpoint contains a subset of relevant fields
+                            from the Prometheus Endpoint struct.
+                          properties:
+                            bearerTokenSecret:
+                              description: 'Secret to mount to read bearer token for
+                                scraping targets. Recommended: when unset, the operator
+                                will create a Secret, a ClusterRole and a ClusterRoleBinding.'
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    TODO: Add other useful fields. apiVersion, kind,
+                                    uid?'
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            honorLabels:
+                              description: HonorLabels chooses the metric's labels
+                                on collisions with target labels.
+                              type: boolean
+                            honorTimestamps:
+                              description: HonorTimestamps controls whether Prometheus
+                                respects the timestamps present in scraped data.
+                              type: boolean
+                            interval:
+                              description: Interval at which metrics should be scraped.
+                                If not specified Prometheus' global scrape interval
+                                is used.
+                              pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                              type: string
+                            metricRelabelings:
+                              description: MetricRelabelConfigs to apply to samples
+                                before ingestion.
+                              items:
+                                description: 'RelabelConfig allows dynamic rewriting
+                                  of the label set, being applied to samples before
+                                  ingestion. It defines `<metric_relabel_configs>`-section
+                                  of Prometheus configuration. More info: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#metric_relabel_configs'
+                                properties:
+                                  action:
+                                    default: replace
+                                    description: Action to perform based on regex
+                                      matching. Default is 'replace'. uppercase and
+                                      lowercase actions require Prometheus >= 2.36.
+                                    enum:
+                                    - replace
+                                    - Replace
+                                    - keep
+                                    - Keep
+                                    - drop
+                                    - Drop
+                                    - hashmod
+                                    - HashMod
+                                    - labelmap
+                                    - LabelMap
+                                    - labeldrop
+                                    - LabelDrop
+                                    - labelkeep
+                                    - LabelKeep
+                                    - lowercase
+                                    - Lowercase
+                                    - uppercase
+                                    - Uppercase
+                                    type: string
+                                  modulus:
+                                    description: Modulus to take of the hash of the
+                                      source label values.
+                                    format: int64
+                                    type: integer
+                                  regex:
+                                    description: Regular expression against which
+                                      the extracted value is matched. Default is '(.*)'
+                                    type: string
+                                  replacement:
+                                    description: Replacement value against which a
+                                      regex replace is performed if the regular expression
+                                      matches. Regex capture groups are available.
+                                      Default is '$1'
+                                    type: string
+                                  separator:
+                                    description: Separator placed between concatenated
+                                      source label values. default is ';'.
+                                    type: string
+                                  sourceLabels:
+                                    description: The source labels select values from
+                                      existing labels. Their content is concatenated
+                                      using the configured separator and matched against
+                                      the configured regular expression for the replace,
+                                      keep, and drop actions.
+                                    items:
+                                      description: LabelName is a valid Prometheus
+                                        label name which may only contain ASCII letters,
+                                        numbers, as well as underscores.
+                                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                                      type: string
+                                    type: array
+                                  targetLabel:
+                                    description: Label to which the resulting value
+                                      is written in a replace action. It is mandatory
+                                      for replace actions. Regex capture groups are
+                                      available.
+                                    type: string
+                                type: object
+                              type: array
+                            params:
+                              additionalProperties:
+                                items:
+                                  type: string
+                                type: array
+                              description: 'Optional HTTP URL parameters Default:
+                                scrape all metrics.'
+                              type: object
+                            relabelings:
+                              description: 'RelabelConfigs to apply to samples before
+                                scraping. Prometheus Operator automatically adds relabelings
+                                for a few standard Kubernetes fields. The original
+                                scrape job''s name is available via the `__tmp_prometheus_job_name`
+                                label. More info: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config'
+                              items:
+                                description: 'RelabelConfig allows dynamic rewriting
+                                  of the label set, being applied to samples before
+                                  ingestion. It defines `<metric_relabel_configs>`-section
+                                  of Prometheus configuration. More info: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#metric_relabel_configs'
+                                properties:
+                                  action:
+                                    default: replace
+                                    description: Action to perform based on regex
+                                      matching. Default is 'replace'. uppercase and
+                                      lowercase actions require Prometheus >= 2.36.
+                                    enum:
+                                    - replace
+                                    - Replace
+                                    - keep
+                                    - Keep
+                                    - drop
+                                    - Drop
+                                    - hashmod
+                                    - HashMod
+                                    - labelmap
+                                    - LabelMap
+                                    - labeldrop
+                                    - LabelDrop
+                                    - labelkeep
+                                    - LabelKeep
+                                    - lowercase
+                                    - Lowercase
+                                    - uppercase
+                                    - Uppercase
+                                    type: string
+                                  modulus:
+                                    description: Modulus to take of the hash of the
+                                      source label values.
+                                    format: int64
+                                    type: integer
+                                  regex:
+                                    description: Regular expression against which
+                                      the extracted value is matched. Default is '(.*)'
+                                    type: string
+                                  replacement:
+                                    description: Replacement value against which a
+                                      regex replace is performed if the regular expression
+                                      matches. Regex capture groups are available.
+                                      Default is '$1'
+                                    type: string
+                                  separator:
+                                    description: Separator placed between concatenated
+                                      source label values. default is ';'.
+                                    type: string
+                                  sourceLabels:
+                                    description: The source labels select values from
+                                      existing labels. Their content is concatenated
+                                      using the configured separator and matched against
+                                      the configured regular expression for the replace,
+                                      keep, and drop actions.
+                                    items:
+                                      description: LabelName is a valid Prometheus
+                                        label name which may only contain ASCII letters,
+                                        numbers, as well as underscores.
+                                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                                      type: string
+                                    type: array
+                                  targetLabel:
+                                    description: Label to which the resulting value
+                                      is written in a replace action. It is mandatory
+                                      for replace actions. Regex capture groups are
+                                      available.
+                                    type: string
+                                type: object
+                              type: array
+                            scrapeTimeout:
+                              description: Timeout after which the scrape is ended.
+                                If not specified, the Prometheus global scrape timeout
+                                is used unless it is less than `Interval` in which
+                                the latter is used.
+                              pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                              type: string
+                          type: object
+                        type: array
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: 'Labels are the metadata.labels of the ServiceMonitor.
+                          When combined with spec.serviceMonitorSelector.matchLabels
+                          on your prometheus instance, the service monitor will automatically
+                          be picked up. Default: k8s-app=tigera-prometheus'
+                        type: object
+                    type: object
+                required:
+                - namespace
+                type: object
             type: object
           status:
             description: MonitorStatus defines the observed state of Tigera monitor.

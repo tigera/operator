@@ -654,6 +654,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
 		BindingNamespaces:       namespaces,
+		Manager:                 instance,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

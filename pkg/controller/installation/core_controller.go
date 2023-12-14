@@ -292,8 +292,8 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
-		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusTLSSecretName, common.OperatorNamespace(), err)
+		if err = utils.AddSecretsWatch(c, monitor.PrometheusServerTLSSecretName, common.TigeraPrometheusNamespace); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), err)
 		}
 
 		// watch for change to primary resource LogCollector

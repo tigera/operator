@@ -258,7 +258,7 @@ func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRu
 	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
 }
 
-const PrometheusSelector = "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')"
+const PrometheusSelector = "k8s-app == 'tigera-prometheus'"
 
 var PrometheusEntityRule = v3.EntityRule{
 	NamespaceSelector: "projectcalico.org/name == 'tigera-prometheus'",

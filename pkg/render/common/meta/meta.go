@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,14 +28,12 @@ import (
 type OSType string
 
 const (
-	DefaultCertificateDuration = 825 * 24 * time.Hour
-
 	OSTypeAny     OSType = "any"
 	OSTypeLinux   OSType = "linux"
 	OSTypeWindows OSType = "windows"
 
-	// The name prefix used for the CA issuer, which is used for self-signed
-	// certificates issued for operator-managed certificates.
+	// TigeraOperatorCAIssuerPrefix The name prefix used for the CA issuer, which is used
+	// for self-signed certificates issued for operator-managed certificates.
 	// NOTE: Do not change this field since we use this value to identify
 	// certificates managed by this operator.
 	TigeraOperatorCAIssuerPrefix = "tigera-operator-signer"

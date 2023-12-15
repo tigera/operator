@@ -642,6 +642,11 @@ spec:
                 description: When FlowLogsCollectorDebugTrace is set to true, enables
                   the logs in the collector to be printed in their entirety.
                 type: boolean
+              flowLogsDestDomainsByClient:
+                description: 'FlowLogsDestDomainsByClient is used to configure if
+                  the source IP is used in the mapping of top level destination domains.
+                  [Default: true]'
+                type: boolean
               flowLogsDynamicAggregationEnabled:
                 description: FlowLogsDynamicAggregationEnabled is used to enable/disable
                   dynamically changing aggregation levels. Default is true.

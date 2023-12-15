@@ -17,6 +17,13 @@ package esmetrics
 import (
 	"context"
 	"fmt"
+	"time"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/logstorage/linseed"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -49,13 +56,14 @@ const (
 )
 
 type ESMetricsSubController struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	provider      operatorv1.Provider
-	clusterDomain string
-	usePSP        bool
-	multiTenant   bool
+	client         client.Client
+	scheme         *runtime.Scheme
+	status         status.StatusManager
+	provider       operatorv1.Provider
+	clusterDomain  string
+	usePSP         bool
+	multiTenant    bool
+	tierWatchReady *utils.ReadyFlag
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -70,11 +78,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	r := &ESMetricsSubController{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		status:        status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
-		clusterDomain: opts.ClusterDomain,
-		provider:      opts.DetectedProvider,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		status:         status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		clusterDomain:  opts.ClusterDomain,
+		provider:       opts.DetectedProvider,
+		tierWatchReady: &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -105,6 +114,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			return fmt.Errorf("log-storage-esmetrics-controller failed to watch Secret: %w", err)
 		}
 	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("log-storage-esmetrics-controller failed to establish a connection to k8s: %w", err)
+	}
+
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+		{Name: linseed.PolicyName, Namespace: render.ElasticsearchNamespace},
+	})
 
 	return nil
 }
@@ -142,6 +161,23 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 	if logStorage.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LogStorage defaulting to occur", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())

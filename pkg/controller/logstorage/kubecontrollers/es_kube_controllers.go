@@ -17,6 +17,13 @@ package kubecontrollers
 import (
 	"context"
 	"fmt"
+	"time"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
@@ -54,6 +61,7 @@ type ESKubeControllersController struct {
 	clusterDomain   string
 	usePSP          bool
 	elasticExternal bool
+	tierWatchReady  *utils.ReadyFlag
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -72,6 +80,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		clusterDomain:   opts.ClusterDomain,
 		status:          status.New(mgr.GetClient(), "log-storage-kubecontrollers", opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
+		tierWatchReady:  &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -118,6 +127,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
+	if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
+	}
 	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
@@ -128,6 +140,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to create periodic reconcile watch: %w", err)
 	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("log-storage-kubecontrollers failed to establish a connection to k8s: %w", err)
+	}
+
+	// Start goroutines to establish watches against projectcalico.org/v3 resources.
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+		{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
+	})
 
 	return nil
 }
@@ -168,6 +192,23 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)

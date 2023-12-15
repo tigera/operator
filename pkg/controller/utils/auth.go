@@ -109,7 +109,7 @@ func GetIDPSecret(ctx context.Context, client client.Client, authentication *ope
 	bindPW := secret.Data[render.BindPWSecretField]
 	if len(bindDN) > 0 && len(bindPW) > 0 {
 		if _, err := ldap.ParseDN(string(bindDN)); err != nil {
-			return nil, fmt.Errorf("secret %s/%s: should have be a valid LDAP DN", common.OperatorNamespace(), secretName)
+			return nil, fmt.Errorf("secret %s/%s: should have a valid LDAP DN", common.OperatorNamespace(), secretName)
 		}
 
 		// When Dex starts, it uses os.ExpandEnv to set up its configuration inside a json formatted string. If we validate
@@ -122,7 +122,7 @@ func GetIDPSecret(ctx context.Context, client client.Client, authentication *ope
 			}[s]
 		}))
 		if err := json.Unmarshal(data, &map[string]any{}); err != nil {
-			return nil, fmt.Errorf("secret %s/%s should have properly escaped data for bindDN and bindPW", common.OperatorNamespace(), secretName)
+			return nil, fmt.Errorf("fields bindDN and bindPW in secret %s/%s are not properly escaped", common.OperatorNamespace(), secretName)
 		}
 	}
 	rootCA := secret.Data[render.RootCASecretField]

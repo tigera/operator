@@ -132,7 +132,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Data: map[string][]byte{
 				render.ClientIDSecretField:     []byte("a"),
 				render.ClientSecretSecretField: []byte("a"),
-				render.RootCASecretField:       []byte("a"),
+				render.RootCASecretField:       []byte(dexSecret.Data[corev1.TLSCertKey]),
 			},
 		})).ToNot(HaveOccurred())
 

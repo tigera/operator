@@ -72,7 +72,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()
-
 		mockStatus.On("AddDaemonsets", mock.Anything)
 		mockStatus.On("AddDeployments", mock.Anything)
 		mockStatus.On("AddStatefulSets", mock.Anything)
@@ -82,7 +81,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
-
+		Expect(c.Create(ctx, &operatorv1.Monitor{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}))
 		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

@@ -16,9 +16,12 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/go-ldap/ldap"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -99,12 +102,36 @@ func GetIDPSecret(ctx context.Context, client client.Client, authentication *ope
 		if len(data) == 0 {
 			return nil, fmt.Errorf("%s is a required field for secret %s/%s", field, secret.Namespace, secret.Name)
 		}
+	}
 
-		if field == render.BindDNSecretField {
-			if _, err := ldap.ParseDN(string(data)); err != nil {
-				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", common.OperatorNamespace(), secretName, field)
-			}
+	// Validate LDAP fields.
+	bindDN := secret.Data[render.BindDNSecretField]
+	bindPW := secret.Data[render.BindPWSecretField]
+	if len(bindDN) > 0 && len(bindPW) > 0 {
+		if _, err := ldap.ParseDN(string(bindDN)); err != nil {
+			return nil, fmt.Errorf("secret %s/%s: should have a valid LDAP DN", common.OperatorNamespace(), secretName)
+		}
+
+		// When Dex starts, it uses os.ExpandEnv to set up its configuration inside a json formatted string. If we validate
+		// the input in the operator, the user will catch the configuration issue sooner.
+		const config = `{"bindDN": "$BIND_DN", "bindPW": "$BIND_PW"}`
+		data := []byte(os.Expand(config, func(s string) string {
+			return map[string]string{
+				"BIND_DN": string(bindDN),
+				"BIND_PW": string(bindPW),
+			}[s]
+		}))
+		if err := json.Unmarshal(data, &map[string]any{}); err != nil {
+			return nil, fmt.Errorf("fields bindDN and bindPW in secret %s/%s are not properly escaped", common.OperatorNamespace(), secretName)
 		}
 	}
+	rootCA := secret.Data[render.RootCASecretField]
+	if len(rootCA) > 0 {
+		_, err := certificatemanagement.ParseCertificate(rootCA)
+		if err != nil {
+			return nil, fmt.Errorf("secret %s/%s should have a valid certificate for field rootCA", common.OperatorNamespace(), secretName)
+		}
+	}
+
 	return secret, nil
 }

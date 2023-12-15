@@ -66,6 +66,7 @@ func NewControllerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 	multiTenant bool,
+	tierWatchReady *utils.ReadyFlag,
 ) (*ESKubeControllersController, error) {
 	opts := options.AddOptions{
 		DetectedProvider: provider,
@@ -75,10 +76,11 @@ func NewControllerWithShims(
 	}
 
 	r := &ESKubeControllersController{
-		client:        cli,
-		scheme:        scheme,
-		status:        status,
-		clusterDomain: opts.ClusterDomain,
+		client:         cli,
+		scheme:         scheme,
+		status:         status,
+		clusterDomain:  opts.ClusterDomain,
+		tierWatchReady: tierWatchReady,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -176,7 +178,7 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		Expect(cli.Create(ctx, bundle.ConfigMap(common.CalicoNamespace))).ShouldNot(HaveOccurred())
 
 		// Create the reconciler for the tests.
-		r, err = NewControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
+		r, err = NewControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false, readyFlag)
 		Expect(err).ShouldNot(HaveOccurred())
 	})
 

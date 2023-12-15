@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -177,6 +179,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+		{Name: esmetrics.ElasticsearchMetricsPolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: linseed.PolicyName, Namespace: render.ElasticsearchNamespace},
+	})
 	go utils.WaitToAddResourceWatch(c, k8sClient, log, r.dpiAPIReady, []client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,

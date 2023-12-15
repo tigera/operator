@@ -395,9 +395,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// any of them haven't been signed by the root CA.
 		trustedSecretNames = []string{
 			render.PacketCaptureServerCert,
-			monitor.PrometheusServerTLSSecretName,
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
+		}
+		// If external prometheus is enabled, the secret will be signed by the Calico CA and no secret will be created. We can skip
+		// adding it to the bundle, as trusting the CA will suffice.
+		monitorCR := &operatorv1.Monitor{}
+		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying required Monitor resource: ", err, logc)
+			return reconcile.Result{}, err
+		}
+		if monitorCR.Spec.ExternalPrometheus == nil {
+			trustedSecretNames = append(trustedSecretNames, monitor.PrometheusServerTLSSecretName)
 		}
 
 		if complianceLicenseFeatureActive && complianceCR != nil {

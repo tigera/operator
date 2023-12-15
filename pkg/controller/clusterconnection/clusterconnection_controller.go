@@ -288,7 +288,19 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	for _, secretName := range []string{render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)} {
+	secretsToTrust := []string{render.PacketCaptureServerCert, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+	// If external prometheus is enabled, the secret will be signed by the Calico CA and won't get rendered. We can skip
+	// adding it to the bundle, as trusting the CA will suffice.
+	monitorCR := &operatorv1.Monitor{}
+	if err := r.Client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying required Monitor resource: ", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if monitorCR.Spec.ExternalPrometheus == nil {
+		secretsToTrust = append(secretsToTrust, monitor.PrometheusServerTLSSecretName)
+	}
+
+	for _, secretName := range secretsToTrust {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)

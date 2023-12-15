@@ -74,6 +74,9 @@ var _ = Describe("Manager controller tests", func() {
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 		replicas = 2
+		Expect(c.Create(ctx, &operatorv1.Monitor{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}))
 	})
 
 	It("should query a default manager instance", func() {

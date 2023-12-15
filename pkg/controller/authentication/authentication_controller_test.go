@@ -17,13 +17,13 @@ package authentication
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -32,8 +32,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+	secret2 "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/test"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -495,8 +495,10 @@ var _ = Describe("authentication controller tests", func() {
 		})
 	})
 
+	tls, err := secret2.CreateTLSSecret(nil, "a", "a", corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, nil, "a")
+	Expect(err).NotTo(HaveOccurred())
+	validCertificate := tls.Data[corev1.TLSCertKey]
 	const (
-		validCA       = "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----"
 		validPW       = "dc=example,dc=com"
 		validDN       = "dc=example,dc=com"
 		invalidDN     = "dc=example,dc=com,pancake"
@@ -534,32 +536,32 @@ var _ = Describe("authentication controller tests", func() {
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
 			},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+			[]byte(validDN), []byte(validPW), validCertificate,
 			true),
 		Entry("Proper configuration w/o name attribute",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter},
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
 			},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+			[]byte(validDN), []byte(validPW), validCertificate,
 			true),
 		Entry("Proper configuration w/o groupSearch",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
 			},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+			[]byte(validDN), []byte(validPW), validCertificate,
 			true),
 		Entry("Wrong DN in secret",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
 			},
-			[]byte(invalidDN), []byte(validPW), []byte(validCA),
+			[]byte(invalidDN), []byte(validPW), validCertificate,
 			false),
 		Entry("Missing PW in secret",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
 			},
-			[]byte(validDN), []byte(""), []byte(validCA),
+			[]byte(validDN), []byte(""), validCertificate,
 			false),
 		Entry("Missing CA field in secret",
 			&operatorv1.AuthenticationLDAP{
@@ -572,35 +574,35 @@ var _ = Describe("authentication controller tests", func() {
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
 			},
-			[]byte(invalidDN), []byte(validPW), []byte(validCA),
+			[]byte(invalidDN), []byte(validPW), validCertificate,
 			false),
 		Entry("Wrong filter in LDAP userSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: invalidFilter, NameAttribute: attribute},
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
 			},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+			[]byte(validDN), []byte(validPW), validCertificate,
 			false),
 		Entry("Proper spec, filter omitted in userSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, NameAttribute: attribute},
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
 			},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+			[]byte(validDN), []byte(validPW), validCertificate,
 			true),
 		Entry("Wrong filter in LDAP groupSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: invalidFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
 			},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+			[]byte(validDN), []byte(validPW), validCertificate,
 			false),
 		Entry("Proper spec, filter omitted in groupSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
 				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
 			},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+			[]byte(validDN), []byte(validPW), validCertificate,
 			true),
 	)
 	var (

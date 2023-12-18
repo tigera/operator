@@ -183,6 +183,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					Images: []operatorv1.Image{
 						{Image: "tigera/fluentd", Digest: "sha256:fluentdhash"},
 						{Image: "tigera/fluentd-windows", Digest: "sha256:fluentdwindowshash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

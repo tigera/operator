@@ -470,7 +470,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					VXLANMode:    crdv1.VXLANModeAlways,
 				},
 			})
-			Expect(mergeAndFillDefaults(installation, nil, &currentPools)).To(BeNil())
+			Expect(MergeAndFillDefaults(installation, nil, &currentPools)).To(BeNil())
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface).Should(Equal("^br-.*"))
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV6).Should(BeNil())
 		})
@@ -483,7 +483,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					KubernetesProvider: provider,
 				},
 			}
-			Expect(mergeAndFillDefaults(installation, nil, nil)).To(BeNil())
+			Expect(MergeAndFillDefaults(installation, nil, nil)).To(BeNil())
 			if expected {
 				Expect(installation.Spec.TyphaAffinity).ToNot(BeNil())
 				Expect(installation.Spec.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).Should(Equal(result))

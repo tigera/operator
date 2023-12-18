@@ -21,6 +21,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	operator "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -224,7 +225,7 @@ var _ = Describe("IPPool controller", func() {
 				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork.IPPools)
 				Expect(v6pool).To(BeNil())
 			}
-			Expect(validateCustomResource(i)).NotTo(HaveOccurred())
+			Expect(validate(i, currentPools)).NotTo(HaveOccurred())
 		},
 
 		table.Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil, nil),
@@ -296,4 +297,120 @@ var _ = Describe("IPPool controller", func() {
 			&appsv1.DaemonSet{},
 		),
 	)
+})
+
+var _ = Describe("Test defaulting of Installation IP pools", func() {
+	It("should properly fill defaults for an IPv6-only instance", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{{CIDR: "fd00::0/64"}},
+				},
+			},
+		}
+
+		err := fillDefaults(instance, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
+		Expect(v4pool).To(BeNil())
+
+		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
+		Expect(v6pool).NotTo(BeNil())
+		Expect(v6pool.CIDR).To(Equal("fd00::0/64"))
+		Expect(v6pool.BlockSize).NotTo(BeNil())
+		Expect(*v6pool.BlockSize).To(Equal(int32(122)))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	// Tests for Calico Networking on EKS should go in this context.
+	Context("with Calico Networking on EKS", func() {
+		It("should default properly", func() {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubernetesProvider: operator.ProviderEKS,
+					CNI: &operator.CNISpec{
+						Type: operator.PluginCalico,
+					},
+				},
+			}
+			err := fillDefaults(instance, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(instance.Spec.CalicoNetwork.IPPools[0].Encapsulation).To(Equal(operator.EncapsulationVXLAN))
+			Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("172.16.0.0/16"))
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("Test validation of Installation IP pools", func() {
+	var instance *operator.Installation
+	var currentPools *crdv1.IPPoolList
+
+	BeforeEach(func() {
+		currentPools = &crdv1.IPPoolList{}
+		instance = &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CalicoNetwork: &operator.CalicoNetworkSpec{},
+				Variant:       operator.Calico,
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+	})
+
+	It("should not allow blocksize to exceed the pool size", func() {
+		// Try with an invalid block size.
+		var twentySix int32 = 26
+		var enabled operator.BGPOption = operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/27",
+				BlockSize:     &twentySix,
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validate(instance, currentPools)
+		Expect(err).To(HaveOccurred())
+
+		// Try with a valid block size
+		instance.Spec.CalicoNetwork.IPPools[0].CIDR = "192.168.0.0/26"
+		err = validate(instance, currentPools)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow out-of-bounds block sizes", func() {
+		// Try with an invalid block size.
+		var blockSizeTooBig int32 = 33
+		var blockSizeTooSmall int32 = 19
+		var blockSizeJustRight int32 = 32
+
+		// Start with a valid block size - /32 - just on the border.
+		var enabled operator.BGPOption = operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.0.0.0/8",
+				BlockSize:     &blockSizeJustRight,
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validate(instance, currentPools)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Try with out-of-bounds sizes now.
+		instance.Spec.CalicoNetwork.IPPools[0].BlockSize = &blockSizeTooBig
+		err = validate(instance, currentPools)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CalicoNetwork.IPPools[0].BlockSize = &blockSizeTooSmall
+		err = validate(instance, currentPools)
+		Expect(err).To(HaveOccurred())
+	})
 })

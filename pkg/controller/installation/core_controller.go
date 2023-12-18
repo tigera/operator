@@ -403,16 +403,16 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		return fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
 
-	err = mergeAndFillDefaults(instance, awsNode, currentPools)
+	err = MergeAndFillDefaults(instance, awsNode, currentPools)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// mergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
+// MergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
 // populates defaults in the Installation instance.
-func mergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, currentPools *crdv1.IPPoolList) error {
+func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, currentPools *crdv1.IPPoolList) error {
 	if awsNode != nil {
 		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
 			return fmt.Errorf("Could not resolve AWS node configuration: %s", err.Error())

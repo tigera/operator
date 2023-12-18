@@ -188,6 +188,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/guardian", Digest: "sha256:guardianhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

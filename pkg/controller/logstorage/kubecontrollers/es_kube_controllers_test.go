@@ -257,6 +257,7 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 					{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 					{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 					{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
+					{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 				},
 			},
 		})).ToNot(HaveOccurred())

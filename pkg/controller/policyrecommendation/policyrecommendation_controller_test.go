@@ -191,6 +191,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/policy-recommendation", Digest: "sha256:policyrecommendationcontrollerhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

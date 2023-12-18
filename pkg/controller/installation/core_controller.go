@@ -567,20 +567,22 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
 		needIPv4Autodetection = true
 	}
-	for _, pool := range currentPools.Items {
-		ip, _, err := net.ParseCIDR(pool.Spec.CIDR)
-		if err != nil {
-			return fmt.Errorf("failed to parse CIDR %s: %s", pool.Spec.CIDR, err)
-		}
-		if ip.To4() != nil {
-			// This is an IPv4 pool - we should default IPv4 autodetection if not specified.
-			needIPv4Autodetection = true
-		} else if ip.To16() != nil {
-			// This is an IPv6 pool - we should default IPv6 autodetection if not specified.
-			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
-				t := true
-				instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
-					FirstFound: &t,
+	if currentPools != nil {
+		for _, pool := range currentPools.Items {
+			ip, _, err := net.ParseCIDR(pool.Spec.CIDR)
+			if err != nil {
+				return fmt.Errorf("failed to parse CIDR %s: %s", pool.Spec.CIDR, err)
+			}
+			if ip.To4() != nil {
+				// This is an IPv4 pool - we should default IPv4 autodetection if not specified.
+				needIPv4Autodetection = true
+			} else if ip.To16() != nil {
+				// This is an IPv6 pool - we should default IPv6 autodetection if not specified.
+				if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
+					t := true
+					instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+						FirstFound: &t,
+					}
 				}
 			}
 		}

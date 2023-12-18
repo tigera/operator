@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package ippool
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -22,7 +22,7 @@ import (
 
 var _ = Describe("kubeadm pod-network-cidr detection", func() {
 	It("should parse podSubnet if it exists", func() {
-		var data = `
+		data := `
 networking:
   dnsDomain: cluster.local
   podSubnet: 192.168.0.0/16
@@ -37,7 +37,7 @@ networking:
 	})
 
 	It("should error if podSubnet is missing", func() {
-		var data = `
+		data := `
 networking:
   dnsDomain: cluster.local
   serviceSubnet: 10.96.0.0/12`

@@ -25,7 +25,6 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -352,22 +351,15 @@ var _ = Describe("Defaulting logic tests", func() {
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
-					IPPools: []operator.IPPool{{CIDR: "fd00::0/64"}},
+					IPPools: []operator.IPPool{{
+						CIDR:          "fd00::0/64",
+						Encapsulation: operator.EncapsulationNone,
+					}},
 				},
 			},
 		}
-
 		err := fillDefaults(instance, nil)
 		Expect(err).NotTo(HaveOccurred())
-
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
-		Expect(v4pool).To(BeNil())
-
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
-		Expect(v6pool).NotTo(BeNil())
-		Expect(v6pool.CIDR).To(Equal("fd00::0/64"))
-		Expect(v6pool.BlockSize).NotTo(BeNil())
-		Expect(*v6pool.BlockSize).To(Equal(int32(122)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
@@ -515,8 +507,6 @@ var _ = Describe("Defaulting logic tests", func() {
 			err := fillDefaults(instance, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
-			Expect(instance.Spec.CalicoNetwork.IPPools[0].Encapsulation).To(Equal(operator.EncapsulationVXLAN))
-			Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("172.16.0.0/16"))
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		})
 	})

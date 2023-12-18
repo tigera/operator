@@ -152,6 +152,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/cloud-controllers", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

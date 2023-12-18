@@ -168,14 +168,13 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		caSecretName = certificatemanagement.TenantCASecretName
 	}
 
-	if installation != nil && installation.CertificateManagement != nil {
-		// Configured to use certificate management. Get the CACert from
-		// the installation spec.
-		certificateManagement = installation.CertificateManagement
+	var certificateManagementEnabled bool
+	if installation != nil {
 		imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
 		if err != nil {
 			return nil, err
 		}
+		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
 		csrImage, err = components.GetReference(
 			components.ComponentCSRInitContainer,
 			installation.Registry,
@@ -186,8 +185,16 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		if err != nil {
 			return nil, err
 		}
-		certificatePEM = certificateManagement.CACert
-	} else {
+		if installation.CertificateManagement != nil {
+			// Configured to use certificate management. Get the CACert from
+			// the installation spec.
+			certificateManagement = installation.CertificateManagement
+			certificatePEM = certificateManagement.CACert
+			certificateManagementEnabled = true
+		}
+	}
+
+	if !certificateManagementEnabled {
 		// Using operator-managed certificates. Check to see if we have already provisioned a CA.
 		cm.log.V(2).Info("Looking for an existing CA", "secret", fmt.Sprintf("%s/%s", ns, caSecretName))
 		caSecret := &corev1.Secret{}

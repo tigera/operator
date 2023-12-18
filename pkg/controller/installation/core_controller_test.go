@@ -459,8 +459,20 @@ var _ = Describe("Testing core-controller installation", func() {
 					KubernetesProvider: operator.ProviderDockerEE,
 				},
 			}
-			Expect(mergeAndFillDefaults(installation, nil, nil)).To(BeNil())
+			currentPools := crdv1.IPPoolList{}
+			currentPools.Items = append(currentPools.Items, crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
+				Spec: crdv1.IPPoolSpec{
+					CIDR:         "192.168.0.0/16",
+					NATOutgoing:  true,
+					BlockSize:    26,
+					NodeSelector: "all()",
+					VXLANMode:    crdv1.VXLANModeAlways,
+				},
+			})
+			Expect(mergeAndFillDefaults(installation, nil, &currentPools)).To(BeNil())
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface).Should(Equal("^br-.*"))
+			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV6).Should(BeNil())
 		})
 	})
 
@@ -610,11 +622,22 @@ var _ = Describe("Testing core-controller installation", func() {
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
-			Expect(c.Create(
-				ctx,
-				&operator.ManagementCluster{
-					ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
-				})).NotTo(HaveOccurred())
+			// In most clusters, the IP pool controller is responsible for creating IP pools. The Installation controller waits for this,
+			// so we need to create those pools here.
+			pool := crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
+				Spec: crdv1.IPPoolSpec{
+					CIDR:         "192.168.0.0/16",
+					NATOutgoing:  true,
+					BlockSize:    26,
+					NodeSelector: "all()",
+					VXLANMode:    crdv1.VXLANModeAlways,
+				},
+			}
+			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
+
+			// Configure ourselves as a management cluster.
+			Expect(c.Create(ctx, &operator.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}})).NotTo(HaveOccurred())
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
@@ -795,6 +818,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+
+			// In most clusters, the IP pool controller is responsible for creating IP pools. The Installation controller waits for this,
+			// so we need to create those pools here.
+			pool := crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
+				Spec: crdv1.IPPoolSpec{
+					CIDR:         "192.168.0.0/16",
+					NATOutgoing:  true,
+					BlockSize:    26,
+					NodeSelector: "all()",
+					VXLANMode:    crdv1.VXLANModeAlways,
+				},
+			}
+			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
 
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{

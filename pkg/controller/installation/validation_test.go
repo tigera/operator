@@ -51,29 +51,6 @@ var _ = Describe("Installation validation tests", func() {
 		}
 	})
 
-	It("should not allow blocksize to exceed the pool size", func() {
-		// Try with an invalid block size.
-		var twentySix int32 = 26
-		var enabled operator.BGPOption = operator.BGPEnabled
-		instance.Spec.CalicoNetwork.BGP = &enabled
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-			{
-				CIDR:          "192.168.0.0/27",
-				BlockSize:     &twentySix,
-				Encapsulation: operator.EncapsulationNone,
-				NATOutgoing:   operator.NATOutgoingEnabled,
-				NodeSelector:  "all()",
-			},
-		}
-		err := validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
-
-		// Try with a valid block size
-		instance.Spec.CalicoNetwork.IPPools[0].CIDR = "192.168.0.0/26"
-		err = validateCustomResource(instance)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 	It("should allow IPv6 if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
 		enabled := operator.BGPEnabled
@@ -292,36 +269,6 @@ var _ = Describe("Installation validation tests", func() {
 		// Fill in defaults and validate the result.
 		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
-	})
-
-	It("should not allow out-of-bounds block sizes", func() {
-		// Try with an invalid block size.
-		var blockSizeTooBig int32 = 33
-		var blockSizeTooSmall int32 = 19
-		var blockSizeJustRight int32 = 32
-
-		// Start with a valid block size - /32 - just on the border.
-		var enabled operator.BGPOption = operator.BGPEnabled
-		instance.Spec.CalicoNetwork.BGP = &enabled
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-			{
-				CIDR:          "192.0.0.0/8",
-				BlockSize:     &blockSizeJustRight,
-				Encapsulation: operator.EncapsulationNone,
-				NATOutgoing:   operator.NATOutgoingEnabled,
-				NodeSelector:  "all()",
-			},
-		}
-		err := validateCustomResource(instance)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Try with out-of-bounds sizes now.
-		instance.Spec.CalicoNetwork.IPPools[0].BlockSize = &blockSizeTooBig
-		err = validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
-		instance.Spec.CalicoNetwork.IPPools[0].BlockSize = &blockSizeTooSmall
-		err = validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
 	})
 
 	It("should not allow a relative path in FlexVolumePath", func() {

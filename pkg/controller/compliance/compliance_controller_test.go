@@ -486,6 +486,7 @@ var _ = Describe("Compliance controller tests", func() {
 						{Image: "tigera/compliance-reporter", Digest: "sha256:reporterhash"},
 						{Image: "tigera/compliance-server", Digest: "sha256:serverhash"},
 						{Image: "tigera/compliance-snapshotter", Digest: "sha256:snapshotterhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

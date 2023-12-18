@@ -606,6 +606,7 @@ var _ = Describe("Manager controller tests", func() {
 							{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
 							{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
 							{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
+							{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 						},
 					},
 				})).ToNot(HaveOccurred())

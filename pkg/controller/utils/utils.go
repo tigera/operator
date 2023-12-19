@@ -23,12 +23,12 @@ import (
 	"time"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -692,6 +692,12 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 				// A name match was specified, and the object doesn't match it.
 				return false
 			}
+
+			// Filter out meaningless service account changes. We sometimes watch service accounts that we create,
+			// and we don't want to get stuck in a loop.
+			if unupdatedServiceAccounts(e.ObjectOld, e.ObjectNew) {
+				return false
+			}
 			// A name match was specified and the name matches, or this is just a namespace match.
 			// Assuming the generation has changed, return a match if the namespaces also match,
 			// or if no namespace was given to match against.
@@ -707,6 +713,27 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 	}
+}
+
+// unupdatedServiceAccounts returns false if both objects are serviceaccounts and if no meaningful change has been made.
+func unupdatedServiceAccounts(old client.Object, new client.Object) bool {
+	oldSA, oldOk := old.(*corev1.ServiceAccount)
+	newSA, newOk := new.(*corev1.ServiceAccount)
+	if oldOk && newOk {
+		oldSA = oldSA.DeepCopyObject().(*corev1.ServiceAccount)
+		oldSA.ResourceVersion = newSA.ResourceVersion
+		oldSA.ImagePullSecrets = newSA.ImagePullSecrets
+		oldSA.ObjectMeta.ManagedFields = newSA.ObjectMeta.ManagedFields
+		oldSA.ObjectMeta.OwnerReferences = newSA.ObjectMeta.OwnerReferences
+
+		// Semantic.DeepEqual is like reflect.DeepEqual, but focused on semantic equality instead of memory equality.
+		// That said, it still trips over some of the metadata we changed in the above lines.
+		equal := equality.Semantic.DeepEqual(oldSA, newSA)
+		if equal {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateResourceNameIsQualified returns a compiled list of errors which states which rule the name

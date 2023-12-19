@@ -431,4 +431,51 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Delete(event.DeleteEvent{Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace"}}})).To(BeFalse())
 		})
 	})
+
+	Context("filter out meaningless updates to service accounts", func() {
+		It("should recognize whether an object was changed", func() {
+			objectRef1 := corev1.ObjectReference{Kind: "a", Namespace: "a", Name: "a"}
+			objectRef2 := corev1.ObjectReference{Kind: "b", Namespace: "b", Name: "b"}
+			serviceAccount1 := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "a", OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "v1",
+					Kind:       "a",
+					Name:       "a",
+					UID:        "a",
+				}}},
+				Secrets: []corev1.ObjectReference{objectRef1},
+			}
+			Expect(unupdatedServiceAccounts(serviceAccount1, serviceAccount1)).To(BeTrue())
+			serviceAccount2 := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "b"},
+			}
+
+			By("finding the differences in relevant object meta")
+			Expect(unupdatedServiceAccounts(serviceAccount1, serviceAccount2)).To(BeFalse())
+			serviceAccount2 = serviceAccount1.DeepCopy()
+
+			By("noticing that two identical objects have no differences")
+			Expect(unupdatedServiceAccounts(serviceAccount1, serviceAccount2)).To(BeTrue())
+
+			By("finding the differences in secrets")
+			serviceAccount2.Secrets[0] = objectRef2
+			Expect(unupdatedServiceAccounts(serviceAccount1, serviceAccount2)).To(BeFalse())
+
+			By("ignoring owner references")
+			serviceAccount2 = serviceAccount1.DeepCopy()
+			serviceAccount2.OwnerReferences = []metav1.OwnerReference{{
+				APIVersion: "v1",
+				Kind:       "b",
+				Name:       "b",
+				UID:        "b",
+			}}
+			Expect(unupdatedServiceAccounts(serviceAccount1, serviceAccount2)).To(BeTrue())
+
+			By("not tripping over non-sa types")
+			Expect(unupdatedServiceAccounts(serviceAccount1, &corev1.ConfigMap{})).To(BeFalse())
+			Expect(unupdatedServiceAccounts(&corev1.ConfigMap{}, &corev1.ConfigMap{})).To(BeFalse())
+			Expect(unupdatedServiceAccounts(&corev1.ConfigMap{}, &corev1.ConfigMap{})).To(BeFalse())
+			Expect(unupdatedServiceAccounts(&corev1.ConfigMap{}, serviceAccount1)).To(BeFalse())
+		})
+	})
 })

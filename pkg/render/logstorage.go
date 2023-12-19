@@ -225,7 +225,6 @@ type elasticsearchComponent struct {
 	esImage         string
 	esOperatorImage string
 	kibanaImage     string
-	curatorImage    string
 	csrImage        string
 }
 
@@ -386,8 +385,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
-	// that on upgrade we clean up after ourselves. Eventually we can remove this cleanup code as well. TODO: Put version
-	// we can remove this code in (maybe 3.23?)
+	// that on upgrade we clean up after ourselves. Eventually we can remove this cleanup code as well.
 	toDelete = append(toDelete, es.curatorDecommissionedResources()...)
 
 	toCreate = append(toCreate, es.oidcUserRole())

@@ -101,12 +101,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentEsCurator = component{
-		Version:  "master",
-		Image:    "tigera/es-curator",
-		Registry: "",
-	}
-
 	ComponentEsProxy = component{
 		Version:  "master",
 		Image:    "tigera/es-proxy",
@@ -334,7 +328,6 @@ var (
 		ComponentElasticsearch,
 		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsCurator,
 		ComponentEsProxy,
 		ComponentFluentd,
 		ComponentFluentdWindows,

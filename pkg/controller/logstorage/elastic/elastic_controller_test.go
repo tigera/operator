@@ -64,15 +64,13 @@ var (
 	eckOperatorObjKey = client.ObjectKey{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}
 	esObjKey          = client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}
 	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
-	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.ESCuratorName}
 
 	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}
 
 	kbCertSecretOperKey = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
 
-	curatorUsrSecretObjMeta = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}
-	storageClassName        = "test-storage-class"
-	kbDNSNames              = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
+	storageClassName = "test-storage-class"
+	kbDNSNames       = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 
 	successResult = reconcile.Result{}
 )
@@ -315,10 +313,9 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("Run").Return()
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
-				// mockStatus.On("SetMetaData", mock.Anything).Return()
+				mockStatus.On("RemoveCronJobs", mock.Anything)
 			})
 
 			It("test LogStorage reconciles successfully", func() {
@@ -416,26 +413,15 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Update(ctx, &esConfigMap)).NotTo(HaveOccurred())
 
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
-				result, err = r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Verify that the ConfigMap was reverted to the original state
-				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).NotTo(HaveOccurred())
-				_, ok = esConfigMap.Data["test-field"]
-				Expect(ok).To(BeFalse())
-
-				// Expect to be waiting for curator secret
-				Expect(result).Should(Equal(reconcile.Result{}))
-				Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
-
 				mockStatus.On("ClearDegraded")
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(successResult))
 
-				By("confirming curator job is created")
-				Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
+				// Verify that the ConfigMap was reverted to the original state
+				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).NotTo(HaveOccurred())
+				_, ok = esConfigMap.Data["test-field"]
+				Expect(ok).To(BeFalse())
 
 				mockStatus.AssertExpectations(GinkgoT())
 			})
@@ -535,21 +521,10 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
-				result, err = r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Expect to be waiting for curator secret
-				Expect(result).Should(Equal(reconcile.Result{}))
-				Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
-
 				mockStatus.On("ClearDegraded")
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(successResult))
-
-				By("confirming curator job is created")
-				Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
 
 				By("confirming logstorage is degraded if ConfigMap is not available")
 				mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", "configmaps \"tigera-known-oidc-users\" not found", mock.Anything).Return()
@@ -747,7 +722,6 @@ var _ = Describe("LogStorage controller", func() {
 				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
 				result, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(reconcile.Result{}))
@@ -797,6 +771,7 @@ var _ = Describe("LogStorage controller", func() {
 			Context("checking rendered images", func() {
 				BeforeEach(func() {
 					mockStatus.On("ClearDegraded", mock.Anything)
+					mockStatus.On("RemoveCronJobs", mock.Anything)
 
 					CreateLogStorage(cli, &operatorv1.LogStorage{
 						ObjectMeta: metav1.ObjectMeta{
@@ -842,10 +817,6 @@ var _ = Describe("LogStorage controller", func() {
 							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 							Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 						},
-						&corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta},
-						&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-							Name: render.ElasticsearchCuratorUserSecret, Namespace: render.ElasticsearchNamespace,
-						}},
 					}
 
 					for _, rec := range resources {
@@ -872,26 +843,7 @@ var _ = Describe("LogStorage controller", func() {
 					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
-					By("confirming curator job is created")
-					Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
-
 					mockStatus.AssertExpectations(GinkgoT())
-
-					cj := batchv1.CronJob{
-						TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ESCuratorName,
-							Namespace: render.ElasticsearchNamespace,
-						},
-					}
-					Expect(test.GetResource(cli, &cj)).To(BeNil())
-					Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
-					curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.ESCuratorName)
-					Expect(curator).ToNot(BeNil())
-					Expect(curator.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentEsCurator.Image,
-							components.ComponentEsCurator.Version)))
 
 					escfg := esv1.Elasticsearch{
 						TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
@@ -950,7 +902,6 @@ var _ = Describe("LogStorage controller", func() {
 								{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
 								{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 								{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
-								{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
 								{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 								{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 								{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
@@ -976,26 +927,7 @@ var _ = Describe("LogStorage controller", func() {
 					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
-					By("confirming curator job is created")
-					Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
-
 					mockStatus.AssertExpectations(GinkgoT())
-
-					cj := batchv1.CronJob{
-						TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ESCuratorName,
-							Namespace: render.ElasticsearchNamespace,
-						},
-					}
-					Expect(test.GetResource(cli, &cj)).To(BeNil())
-					Expect(cj.Spec.JobTemplate.Spec.Template.Spec.Containers).To(HaveLen(1))
-					curator := test.GetContainer(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, render.ESCuratorName)
-					Expect(curator).ToNot(BeNil())
-					Expect(curator.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentEsCurator.Image,
-							"sha256:escuratorhash")))
 
 					escfg := esv1.Elasticsearch{
 						TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
@@ -1137,11 +1069,10 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("Run").Return()
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
-				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("ClearDegraded", mock.Anything)
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
-				// mockStatus.On("SetMetaData", mock.Anything).Return()
+				mockStatus.On("RemoveCronJobs", mock.Anything)
 				readyFlag = &utils.ReadyFlag{}
 				readyFlag.MarkAsReady()
 			})
@@ -1284,10 +1215,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		PullSecrets: []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		},
-		Provider: operatorv1.ProviderNone,
-		CuratorSecrets: []*corev1.Secret{
-			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}},
-		},
+		Provider:           operatorv1.ProviderNone,
 		ClusterDomain:      "cluster.local",
 		ElasticLicenseType: render.ElasticsearchLicenseTypeBasic,
 	}
@@ -1312,7 +1240,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 
 		Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
 	}
-	Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 }
 
 // CreateLogStorage creates a LogStorage object with the given parameters after filling in defaults,

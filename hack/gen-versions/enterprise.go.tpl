@@ -114,13 +114,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "es-curator" }}
-	ComponentEsCurator = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "es-proxy" }}
 	ComponentEsProxy = component{
 		Version:  "{{ .Version }}",
@@ -385,7 +378,6 @@ var (
 		ComponentElasticsearch,
 		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsCurator,
 		ComponentEsProxy,
 		ComponentFluentd,
 		ComponentFluentdWindows,

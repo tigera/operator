@@ -125,12 +125,15 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
+
 		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
 		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(ManagerNamespace),
 		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
 		managerClusterRoleBinding([]string{ManagerNamespace}),
+
+		// Install default UI settings for this managed cluster.
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
 		managerClusterWideTigeraLayer(),

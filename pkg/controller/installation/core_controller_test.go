@@ -54,7 +54,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
@@ -399,7 +398,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			r.typhaAutoscaler.start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -812,7 +811,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
@@ -859,7 +858,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			nodeSecret, err := secret.CreateTLSSecret(testCA,
 				render.NodeTLSSecretName, common.OperatorNamespace(), "key.key",
-				"cert.crt", rmeta.DefaultCertificateDuration, nil, render.FelixCommonName,
+				"cert.crt", tls.DefaultCertificateDuration, nil, render.FelixCommonName,
 			)
 			nodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -867,7 +866,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			typhaSecret, err := secret.CreateTLSSecret(testCA,
 				render.TyphaTLSSecretName, common.OperatorNamespace(), "key.key",
-				"cert.crt", rmeta.DefaultCertificateDuration, nil, render.TyphaCommonName,
+				"cert.crt", tls.DefaultCertificateDuration, nil, render.TyphaCommonName,
 			)
 			typhaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -995,7 +994,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())

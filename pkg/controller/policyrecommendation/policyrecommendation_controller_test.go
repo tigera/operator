@@ -46,7 +46,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/test"
 )
 
@@ -140,9 +139,6 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, kiibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -181,6 +177,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			res := test.GetResource(c, &d)
 			Expect(res).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To((Equal(map[string]string{"kubernetes.io/os": "linux"})))
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
@@ -194,6 +191,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/policy-recommendation", Digest: "sha256:policyrecommendationcontrollerhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

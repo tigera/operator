@@ -35,7 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -114,7 +113,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Watch the given secrets in each both the policy-recommendation and operator namespaces
 	for _, namespace := range watchNamespaces {
 		for _, secretName := range []string{
-			relasticsearch.PublicCertSecret,
 			render.ElasticsearchPolicyRecommendationUserSecret,
 			certificatemanagement.CASecretName,
 			render.ManagerInternalTLSSecretName,
@@ -334,16 +332,26 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
 
+	// Determine the namespaces to which we must bind the cluster role.
+	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
+	// For single-tenant or zero-tenant, the cluster role will be bind to the service account in the tigera-policy-recommendation
+	// namespace
+	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:  r.clusterDomain,
-		Installation:   installation,
-		ManagedCluster: isManagedCluster,
-		PullSecrets:    pullSecrets,
-		Openshift:      r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:         r.usePSP,
-		Namespace:      helper.InstallNamespace(),
-		Tenant:         tenant,
+		ClusterDomain:     r.clusterDomain,
+		Installation:      installation,
+		ManagedCluster:    isManagedCluster,
+		PullSecrets:       pullSecrets,
+		Openshift:         r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:            r.usePSP,
+		Namespace:         helper.InstallNamespace(),
+		Tenant:            tenant,
+		BindingNamespaces: bindNamespaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

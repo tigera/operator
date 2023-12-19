@@ -396,8 +396,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 
 		if l.cfg.Tenant.MultiTenant() {
-			// For clusters shared between muliple tenants, we need to configure Linseed with the correct namespace information for its tenant.
-			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
+			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
 
 			// We also use shared indices for multi-tenant clusters.
@@ -481,7 +481,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
 	}
 
-	return &appsv1.Deployment{
+	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
@@ -502,6 +502,14 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Replicas: replicas,
 		},
 	}
+
+	if l.cfg.Tenant.MultiTenant() {
+		if overrides := l.cfg.Tenant.Spec.LinseedDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(&d, overrides)
+		}
+	}
+
+	return &d
 }
 
 func (l *linseed) linseedServiceAccount() *corev1.ServiceAccount {
@@ -646,7 +654,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.PolicyRecommendationEntityRule,
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).PolicyRecommendationSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 	}
@@ -677,4 +685,14 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
+}
+
+// LinseedNamespace determine the namespace in which Linseed is running.
+// For management and standalone clusters, this is always the tigera-elasticsearch
+// namespace. For multi-tenant management clusters, this is the tenant namespace
+func LinseedNamespace(tenant *operatorv1.Tenant) string {
+	if tenant.MultiTenant() {
+		return tenant.Namespace
+	}
+	return "tigera-elasticsearch"
 }

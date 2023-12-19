@@ -226,11 +226,6 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, c.nodeDaemonset(cniConfig))
 
-	// This controller creates the cluster role for any pod in the cluster that requires certificate management.
-	if c.cfg.Installation.CertificateManagement != nil {
-		objs = append(objs, certificatemanagement.CSRClusterRole())
-	}
-
 	if c.cfg.MigrateNamespaces {
 		objs = append(objs, migration.ClusterRoleForKubeSystemNode())
 		objs = append(objs, migration.ClusterRoleBindingForKubeSystemNode())
@@ -711,6 +706,17 @@ func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
 	return portmapPlugin
 }
 
+func (c *nodeComponent) createTuningPlugin() map[string]interface{} {
+	// tuning plugin (sysctl)
+	tuningPlugin := map[string]interface{}{
+		"type":   "tuning",
+		"sysctl": []operatorv1.Sysctl{},
+	}
+	tuningPlugin["sysctl"] = c.cfg.Installation.CalicoNetwork.Sysctl
+
+	return tuningPlugin
+}
+
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
@@ -727,6 +733,11 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	if c.cfg.Installation.CalicoNetwork.HostPorts != nil &&
 		*c.cfg.Installation.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
 		plugins = append(plugins, c.createPortmapPlugin())
+	}
+
+	// optional tuning plugin
+	if c.cfg.Installation.CalicoNetwork.Sysctl != nil {
+		plugins = append(plugins, c.createTuningPlugin())
 	}
 
 	pluginsArray, _ := json.Marshal(plugins)

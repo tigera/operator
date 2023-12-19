@@ -46,11 +46,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
@@ -217,13 +216,11 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		testCA := test.MakeTestCA("logstorage-test")
 		esSecret, err := secret.CreateTLSSecret(testCA,
 			render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), "tls.key", "tls.crt",
-			rmeta.DefaultCertificateDuration, nil, esDNSNames...,
+			tls.DefaultCertificateDuration, nil, esDNSNames...,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 		Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
-		Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 		kbDNSNames = []string{"kb.example.com", "192.168.10.11"}
 		kbSecret, err := secret.CreateTLSSecret(
@@ -232,7 +229,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			kbDNSNames...,
 		)
@@ -310,7 +307,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			"tigera-secure-kb-http.tigera-elasticsearch.svc",
 		)
@@ -384,7 +381,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			"tigera-secure-kb-http.tigera-elasticsearch.svc",
 		)
@@ -426,7 +423,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			dnsNames...,
 		)
@@ -503,17 +500,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 func CreateLogStorage(client client.Client, ls *operatorv1.LogStorage) {
 	initializer.FillDefaults(ls)
 	ExpectWithOffset(1, client.Create(context.Background(), ls)).ShouldNot(HaveOccurred())
-}
-
-func createPubSecret(name string, ns string, bytes []byte, certName string) client.Object {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: ns,
-		},
-		Data: map[string][]byte{
-			certName: bytes,
-		},
-	}
 }
 
 // ExpectSecrets asserts that all of the given secrets exist in the cluster, and that no other secrets exist.

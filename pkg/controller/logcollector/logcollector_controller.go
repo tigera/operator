@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -46,7 +48,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -141,8 +142,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchEksLogForwarderUserSecret,
-		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
+		render.S3FluentdSecretName, render.EksLogForwarderSecret,
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusClientTLSSecretName,
 		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, render.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -546,7 +547,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
 					return reconcile.Result{}, err
 				}
-
 				eksConfig, err = getEksCloudwatchLogConfig(r.client,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,

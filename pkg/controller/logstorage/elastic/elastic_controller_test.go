@@ -54,9 +54,9 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
 
@@ -130,7 +130,7 @@ var _ = Describe("LogStorage controller", func() {
 		certificateManager, err = certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -348,9 +348,22 @@ var _ = Describe("LogStorage controller", func() {
 				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
 				Expect(err).ShouldNot(HaveOccurred())
 
+				esConfigMapKey := client.ObjectKey{
+					Name:      relasticsearch.ClusterConfigConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				}
+
+				esConfigMap := corev1.ConfigMap{}
+
+				// Verify that the ConfigMap doesn't exist prior to calling Reconcile
+				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).To(HaveOccurred())
+
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 				result, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
+
+				// Check that the ConfigMap was created by the call to Reconcile
+				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).NotTo(HaveOccurred())
 
 				// Expect to be waiting for Elasticsearch and Kibana to be functional
 				Expect(result).Should(Equal(reconcile.Result{}))
@@ -391,10 +404,24 @@ var _ = Describe("LogStorage controller", func() {
 				}
 				Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
+				// Modify ConfigMap we expect to be reverted by a call to Reconcile
+				_, ok := esConfigMap.Data["test-field"]
+				Expect(ok).To(BeFalse())
+
+				esConfigMap.Data = map[string]string{
+					"test-field": "test-data",
+				}
+				Expect(cli.Update(ctx, &esConfigMap)).NotTo(HaveOccurred())
+
 				mockStatus.On("ClearDegraded")
 				result, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(result).Should(Equal(successResult))
+
+				// Verify that the ConfigMap was reverted to the original state
+				Expect(cli.Get(ctx, esConfigMapKey, &esConfigMap)).NotTo(HaveOccurred())
+				_, ok = esConfigMap.Data["test-field"]
+				Expect(ok).To(BeFalse())
 
 				mockStatus.AssertExpectations(GinkgoT())
 			})
@@ -525,17 +552,15 @@ var _ = Describe("LogStorage controller", func() {
 				testCA := test.MakeTestCA("logstorage-test")
 				esSecret, err := secret.CreateTLSSecret(testCA,
 					render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), "tls.key", "tls.crt",
-					rmeta.DefaultCertificateDuration, nil, esDNSNames...,
+					tls.DefaultCertificateDuration, nil, esDNSNames...,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 				Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
-				Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 				kbDNSNames = []string{"kb.example.com", "192.168.10.11"}
 				kbSecret, err := secret.CreateTLSSecret(testCA,
-					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt", rmeta.DefaultCertificateDuration, nil, kbDNSNames...,
+					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt", tls.DefaultCertificateDuration, nil, kbDNSNames...,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Update(ctx, kbSecret)).ShouldNot(HaveOccurred())
@@ -605,7 +630,7 @@ var _ = Describe("LogStorage controller", func() {
 				testCA := test.MakeTestCA("logstorage-test")
 				kbSecret, err := secret.CreateTLSSecret(testCA,
 					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
-					rmeta.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
+					tls.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Update(ctx, kbSecret)).ShouldNot(HaveOccurred())
@@ -685,7 +710,7 @@ var _ = Describe("LogStorage controller", func() {
 				dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 				kbSecret, err := secret.CreateTLSSecret(testCA,
 					render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
-					rmeta.DefaultCertificateDuration, nil, dnsNames...,
+					tls.DefaultCertificateDuration, nil, dnsNames...,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				resources = append(resources, kbSecret)
@@ -787,7 +812,6 @@ var _ = Describe("LogStorage controller", func() {
 								AssociationStatus: cmnv1.AssociationEstablished,
 							},
 						},
-						relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap(),
 						&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						&corev1.ConfigMap{
 							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
@@ -881,6 +905,7 @@ var _ = Describe("LogStorage controller", func() {
 								{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 								{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 								{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
+								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
 					})).ToNot(HaveOccurred())
@@ -1173,9 +1198,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	esKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
 	Expect(err).NotTo(HaveOccurred())
-	esPublic, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cli.Create(context.Background(), esPublic.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 	var replicas int32 = 2
 	cfg := &render.ElasticsearchConfiguration{
@@ -1217,17 +1239,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		}
 
 		Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
-	}
-}
-
-func createPubSecret(name string, ns string, bytes []byte, certName string) client.Object {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: ns,
-		},
-		Data: map[string][]byte{
-			certName: bytes,
-		},
 	}
 }
 

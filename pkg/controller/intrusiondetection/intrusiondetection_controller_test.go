@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/tigera/operator/pkg/apis"
@@ -42,8 +44,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -284,6 +284,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
 						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
 						{Image: "tigera/webhooks-processor", Digest: "sha256:webhooksprocessorhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -347,6 +348,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					ManagementClusterAddr: "127.0.0.1:12345",
 				},
 			})).ToNot(HaveOccurred())
+
+			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("non-default-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -427,6 +430,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					ManagementClusterAddr: "127.0.0.1:12345",
 				},
 			})).ToNot(HaveOccurred())
+
+			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("non-default-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -559,6 +564,23 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(cpuLimit)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(memoryRequest)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
+		})
+
+		It("should error if Elasticsearch configuration ConfigMap contains default cluster-name field in managed cluster", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					ManagementClusterAddr: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+
+			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("managed-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 		})
 	})
 

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	. "github.com/onsi/ginkgo"
@@ -66,6 +68,7 @@ func NewControllerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 	multiTenant bool,
+	tierWatchReady *utils.ReadyFlag,
 ) (*ESKubeControllersController, error) {
 	opts := options.AddOptions{
 		DetectedProvider: provider,
@@ -75,10 +78,11 @@ func NewControllerWithShims(
 	}
 
 	r := &ESKubeControllersController{
-		client:        cli,
-		scheme:        scheme,
-		status:        status,
-		clusterDomain: opts.ClusterDomain,
+		client:         cli,
+		scheme:         scheme,
+		status:         status,
+		clusterDomain:  opts.ClusterDomain,
+		tierWatchReady: tierWatchReady,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -176,8 +180,12 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		Expect(cli.Create(ctx, bundle.ConfigMap(common.CalicoNamespace))).ShouldNot(HaveOccurred())
 
 		// Create the reconciler for the tests.
-		r, err = NewControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
+		r, err = NewControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false, readyFlag)
 		Expect(err).ShouldNot(HaveOccurred())
+
+		// Create the allow-tigera Tier, since the controller blocks on its existence.
+		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}}
+		Expect(cli.Create(ctx, tier)).ShouldNot(HaveOccurred())
 	})
 
 	It("should wait for the cluster CA to be provisioned", func() {
@@ -248,6 +256,7 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 					{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 					{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 					{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
+					{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 				},
 			},
 		})).ToNot(HaveOccurred())

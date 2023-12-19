@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,7 +46,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -145,9 +146,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret, render.ElasticsearchManagerUserSecret,
+			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
-			render.ManagerInternalTLSSecretName, monitor.PrometheusTLSSecretName, certificatemanagement.CASecretName,
+			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(managerController, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -394,10 +395,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// any of them haven't been signed by the root CA.
 		trustedSecretNames = []string{
 			render.PacketCaptureServerCert,
-			monitor.PrometheusTLSSecretName,
-			relasticsearch.PublicCertSecret,
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
+		}
+		// If external prometheus is enabled, the secret will be signed by the Calico CA and no secret will be created. We can skip
+		// adding it to the bundle, as trusting the CA will suffice.
+		monitorCR := &operatorv1.Monitor{}
+		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying required Monitor resource: ", err, logc)
+			return reconcile.Result{}, err
+		}
+		if monitorCR.Spec.ExternalPrometheus == nil {
+			trustedSecretNames = append(trustedSecretNames, monitor.PrometheusServerTLSSecretName)
 		}
 
 		if complianceLicenseFeatureActive && complianceCR != nil {
@@ -460,14 +469,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	clusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
-			return reconcile.Result{}, nil
+	var clusterConfig *relasticsearch.ClusterConfig
+	// We only require Elastic cluster configuration when Kibana is enabled.
+	if render.KibanaEnabled(tenant, installation) {
+		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
+			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
-		return reconcile.Result{}, err
 	}
 
 	var esSecrets []*corev1.Secret
@@ -619,6 +632,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	namespaces, err := helper.TenantNamespaces(r.client)
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+	if tenant.MultiTenant() {
+		// In a multi-tenant environment, we need to grant access to the canonical tigera-manager:tigera-manager service account
+		// so that es-proxy passes Voltron's authorization checks when accessing managed clusters. This is because per-tenant manager instances
+		// impersonate as this serviceaccount on these flows.
+		namespaces = append(namespaces, render.ManagerNamespace)
 	}
 
 	managerCfg := &render.ManagerConfiguration{

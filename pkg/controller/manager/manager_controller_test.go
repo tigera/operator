@@ -21,6 +21,7 @@ import (
 	"encoding/pem"
 	"fmt"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 
 	. "github.com/onsi/ginkgo"
@@ -50,11 +51,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
+	tigeratls "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
 
@@ -74,6 +74,9 @@ var _ = Describe("Manager controller tests", func() {
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 		replicas = 2
+		Expect(c.Create(ctx, &operatorv1.Monitor{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}))
 	})
 
 	It("should query a default manager instance", func() {
@@ -215,13 +218,10 @@ var _ = Describe("Manager controller tests", func() {
 			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
@@ -302,7 +302,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			userSecret, err := secret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -340,7 +340,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			userSecret, err := secret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -382,7 +382,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			customSecret, err := rsecret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Update the existing operator managed cert secret with bytes from
@@ -432,6 +432,7 @@ var _ = Describe("Manager controller tests", func() {
 		var licenseKey *v3.LicenseKey
 		var compliance *operatorv1.Compliance
 		var certificateManager certificatemanager.CertificateManager
+		var installation *operatorv1.Installation
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -479,25 +480,25 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
-			Expect(c.Create(
-				ctx,
-				&operatorv1.Installation{
-					ObjectMeta: metav1.ObjectMeta{Name: "default"},
-					Spec: operatorv1.InstallationSpec{
-						ControlPlaneReplicas: &replicas,
-						Variant:              operatorv1.TigeraSecureEnterprise,
-						Registry:             "some.registry.org/",
-					},
-					Status: operatorv1.InstallationStatus{
-						Variant: operatorv1.TigeraSecureEnterprise,
-						Computed: &operatorv1.InstallationSpec{
-							Registry: "some.registry.org/",
-							// The test is provider agnostic.
-							KubernetesProvider: operatorv1.ProviderNone,
-						},
+
+			installation = &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
+					Registry:             "some.registry.org/",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.TigeraSecureEnterprise,
+					Computed: &operatorv1.InstallationSpec{
+						Registry: "some.registry.org/",
+						// The test is provider agnostic.
+						KubernetesProvider: operatorv1.ProviderNone,
 					},
 				},
-			)).NotTo(HaveOccurred())
+			}
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
 			compliance = &operatorv1.Compliance{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Status: operatorv1.ComplianceStatus{
@@ -521,13 +522,10 @@ var _ = Describe("Manager controller tests", func() {
 			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
@@ -608,6 +606,7 @@ var _ = Describe("Manager controller tests", func() {
 							{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
 							{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
 							{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
+							{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 						},
 					},
 				})).ToNot(HaveOccurred())
@@ -1141,6 +1140,12 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: tenantBNamespace,
 					},
 				}
+				clusterRoleBinding := rbacv1.ClusterRoleBinding{
+					TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: render.ManagerClusterRoleBinding,
+					},
+				}
 
 				// We called Reconcile without specifying a namespace, so neither of these namespaced deployments should
 				// exist yet
@@ -1183,6 +1188,35 @@ var _ = Describe("Manager controller tests", func() {
 
 				err = test.GetResource(c, &tenantBDeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				// Ensure a cluster role binding was created that binds both tenants, as well as the
+				// canonical manager service account.
+				err = test.GetResource(c, &clusterRoleBinding)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				Expect(clusterRoleBinding.Subjects).To(HaveLen(3))
+			})
+		})
+
+		Context("FIPS reconciliation", func() {
+			BeforeEach(func() {
+				fipsEnabled := operatorv1.FIPSModeEnabled
+				installation.Spec.FIPSMode = &fipsEnabled
+				Expect(c.Update(
+					ctx,
+					installation,
+				)).NotTo(HaveOccurred())
+			})
+			It("should not require presence of ElasticSearch ConfigMap", func() {
+				Expect(c.Delete(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+				elasticConfigMapKey := client.ObjectKey{
+					Name:      relasticsearch.ClusterConfigConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				}
+				elasticConfigMap := corev1.ConfigMap{}
+				Expect(c.Get(ctx, elasticConfigMapKey, &elasticConfigMap)).To(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
 	})

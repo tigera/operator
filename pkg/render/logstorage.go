@@ -388,7 +388,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
 	// that on upgrade we clean up after ourselves. Eventually we can remove this cleanup code as well. TODO: Put version
 	// we can remove this code in (maybe 3.23?)
-	toDelete = append(toDelete, curatorDeprecatedResources()...)
+	toDelete = append(toDelete, es.curatorDecommissionedResources()...)
 
 	toCreate = append(toCreate, es.oidcUserRole())
 	toCreate = append(toCreate, es.oidcUserRoleBinding())
@@ -1387,13 +1387,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 
 // This is a list of components that belong to Curator which has been decommissioned since it is no longer supported
 // in Elasticsearch beyond version 8. We want to be able to clean up these resources if they exist in the cluster on upgrade.
-func curatorDeprecatedResources() []client.Object {
-	return []client.Object{
+func (es elasticsearchComponent) curatorDecommissionedResources() []client.Object {
+	resources := []client.Object{
 		&batchv1.CronJob{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "CronJob",
-				APIVersion: "batch/v1",
-			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ESCuratorName,
 				Namespace: ElasticsearchNamespace,
@@ -1409,14 +1405,7 @@ func curatorDeprecatedResources() []client.Object {
 				Name: ESCuratorName,
 			},
 		},
-		&policyv1beta1.PodSecurityPolicy{
-			TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ESCuratorName,
-			},
-		},
 		&v3.NetworkPolicy{
-			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      EsCuratorPolicyName,
 				Namespace: ElasticsearchNamespace,
@@ -1435,6 +1424,17 @@ func curatorDeprecatedResources() []client.Object {
 			},
 		},
 	}
+
+	if es.cfg.UsePSP {
+		resources = append(resources, &policyv1beta1.PodSecurityPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ESCuratorName,
+			},
+		})
+
+	}
+
+	return resources
 }
 
 // Applying this in the eck namespace will start a trial license for enterprise features.

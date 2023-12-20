@@ -85,6 +85,11 @@ spec:
                   opt-in to having ingress traffic examed by ModSecurity.
                 type: string
             type: object
+            x-kubernetes-validations:
+            - message: At least one of application layer features must to be enabled.
+              rule: self.applicationLayerPolicy == "Enabled" || (self.logCollection
+                != null && self.logCollection.collectLogs == "Enabled") || self.webApplicationFirewall
+                == "Enabled"
           status:
             description: ApplicationLayerStatus defines the observed state of ApplicationLayer
             properties:

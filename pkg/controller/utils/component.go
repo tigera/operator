@@ -486,7 +486,7 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		if len(csa.ImagePullSecrets) != 0 && len(dsa.ImagePullSecrets) == 0 {
 			// For example on OCP, the service account gets ImagePullSecrets added. If we don't merge this into the
 			// object, we will create a version update, immediately followed by another update by their controller,
-			// and then again our controllers watching the service account will reconcile again, causing a loop.
+			// and then our controllers watching the service account will reconcile again, causing a loop.
 			dsa.ImagePullSecrets = csa.ImagePullSecrets
 		}
 		return dsa

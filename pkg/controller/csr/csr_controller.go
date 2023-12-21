@@ -90,8 +90,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	if err = ctrl.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
+	if opts.EnterpriseCRDExists {
+		if err = ctrl.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
+		}
 	}
 
 	if err = ctrl.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {

@@ -36,7 +36,7 @@ test: fmt vet ut
 # The target architecture is select by setting the ARCH variable.
 # When ARCH is undefined it is set to the detected host architecture.
 # When ARCH differs from the host architecture a crossbuild will be performed.
-ARCHES ?= $(patsubst build/Dockerfile.%,%,$(wildcard build/Dockerfile.*))
+ARCHES ?= amd64 arm64 ppc64le s390x
 
 # BUILDARCH is the host architecture
 # ARCH is the target architecture
@@ -46,10 +46,10 @@ BUILDOS ?= $(shell uname -s | tr A-Z a-z)
 
 # canonicalized names for host architecture
 ifeq ($(BUILDARCH),aarch64)
-        BUILDARCH=arm64
+    BUILDARCH=arm64
 endif
 ifeq ($(BUILDARCH),x86_64)
-        BUILDARCH=amd64
+    BUILDARCH=amd64
 endif
 
 # unless otherwise set, I am building for my own architecture, i.e. not cross-compiling
@@ -57,26 +57,11 @@ ARCH ?= $(BUILDARCH)
 
 # canonicalized names for target architecture
 ifeq ($(ARCH),aarch64)
-        override ARCH=arm64
+    override ARCH=arm64
 endif
 ifeq ($(ARCH),x86_64)
-        override ARCH=amd64
+    override ARCH=amd64
 endif
-
-# Required to prevent `FROM SCRATCH` from pulling an amd64 image in the build phase.
-ifeq ($(ARCH),arm64)
-	TARGET_PLATFORM=arm64/v8
-endif
-ifeq ($(ARCH),ppc64le)
-	TARGET_PLATFORM=ppc64le
-endif
-ifeq ($(ARCH),amd64)
-	TARGET_PLATFORM=amd64
-endif
-ifeq ($(ARCH),s390x)
-	TARGET_PLATFORM=s390x
-endif
-EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
 # location of docker credentials to push manifests
 DOCKER_CONFIG ?= $(HOME)/.docker/config.json
@@ -88,15 +73,6 @@ DOCKER_CONFIG ?= $(HOME)/.docker/config.json
 # in the target, we then unescape them back
 escapefs = $(subst :,---,$(subst /,___,$(1)))
 unescapefs = $(subst ---,:,$(subst ___,/,$(1)))
-
-# Targets used when cross building.
-.PHONY: register
-# Enable binfmt adding support for miscellaneous binary formats.
-# This is only needed when running non-native binaries.
-register:
-ifneq ($(BUILDARCH),$(ARCH))
-	docker run --rm --privileged multiarch/qemu-user-static:register --reset || true
-endif
 
 # list of arches *not* to build when doing *-all
 EXCLUDEARCH ?=
@@ -116,14 +92,14 @@ endif
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.90
-CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
+CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./controllers -name '*.go')
 SRC_FILES+=$(shell find ./test -name '*.go')
 SRC_FILES+=main.go
 
-EXTRA_DOCKER_ARGS += -e GO111MODULE=on -e GOPRIVATE=github.com/tigera/*
+EXTRA_DOCKER_ARGS += -e GOPRIVATE=github.com/tigera/*
 ifeq ($(GIT_USE_SSH),true)
 	GIT_CONFIG_SSH ?= git config --global url."ssh://git@github.com/".insteadOf "https://github.com/";
 endif
@@ -150,6 +126,8 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 		-e GOPATH=/go \
 		-e GOCACHE=/go-cache \
+		-e GOOS=linux \
+		-e GOARCH=$(ARCH) \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-e ACK_GINKGO_RC=true \
 		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
@@ -252,14 +230,14 @@ endif
 image: build $(BUILD_IMAGE)
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
-$(BUILD_IMAGE)-$(ARCH): register $(BINDIR)/operator-$(ARCH)
-	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --platform=linux/$(TARGET_PLATFORM) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
+$(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
+	docker buildx build --load --platform=linux/$(ARCH) --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f build/Dockerfile .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
 
 .PHONY: images
-images: register image
+images: image
 
 # Build the images for the target architecture
 .PHONY: image-all
@@ -784,7 +762,7 @@ fmt:
 	go fmt ./...'
 
 # Run go vet against code
-vet: register
+vet:
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'

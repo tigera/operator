@@ -70,7 +70,7 @@ blocks:
             - 'cache store bin-amd64-${SEMAPHORE_GIT_SHA} build/_output/bin'
             - 'cache store go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
             - 'cache store go-mod-cache-amd64-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
-  - name: 'Build / Cache arm64 and ppc64le'
+  - name: 'Build / Cache multi-arch binaries'
     dependencies: [ "Build amd64" ]
     task:
       prologue:
@@ -82,7 +82,7 @@ blocks:
           execution_time_limit:
             minutes: 45
           commands:
-            - make register build ARCH=arm64
+            - make build ARCH=arm64
             # Store in cache for other builds in this run
             - 'cache store bin-arm64-${SEMAPHORE_GIT_SHA} build/_output/bin'
             - 'cache store go-pkg-cache-arm64-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
@@ -91,7 +91,7 @@ blocks:
           execution_time_limit:
             minutes: 45
           commands:
-            - make register build ARCH=ppc64le
+            - make build ARCH=ppc64le
             # Store in cache for other builds in this run
             - 'cache store bin-ppc64le-${SEMAPHORE_GIT_SHA} build/_output/bin'
             - 'cache store go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
@@ -100,7 +100,7 @@ blocks:
           execution_time_limit:
             minutes: 90
           commands:
-            - make register build ARCH=s390x
+            - make build ARCH=s390x
             # Store in cache for other builds in this run
             - 'cache store bin-s390x-${SEMAPHORE_GIT_SHA} build/_output/bin'
             - 'cache store go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA} .go-pkg-cache'

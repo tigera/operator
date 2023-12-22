@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate go run gen.go
+
 package applicationlayer
 
 import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -58,11 +59,9 @@ const (
 	DikastesSyncVolumeName           = "dikastes-sync"
 	DikastesContainerName            = "dikastes"
 	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
-	ModSecurityRulesetVolumePath     = "/etc/modsecurity-ruleset"
 	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
 	CalicoLogsVolumeName             = "var-log-calico"
-	CalicologsVolumePath             = "/var/log/calico"
 )
 
 func ApplicationLayer(
@@ -296,26 +295,17 @@ func (c *component) containers() []corev1.Container {
 		}
 
 		if c.config.WAFEnabled {
-			commandArgs = append(
-				commandArgs,
-				"--waf-enabled",
-				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
-				"--waf-ruleset-base-dir", ModSecurityRulesetVolumePath,
-				"--waf-directive", "Include modsecdefault.conf",
-				"--waf-directive", "Include crs-setup.conf",
-				"--waf-directive", "Include tigera.conf",
-				"--waf-directive", "Include rules/*.conf",
-			)
+			commandArgs = append(commandArgs, "--rules", "/etc/modsecurity-ruleset")
 			volMounts = append(
 				volMounts,
 				[]corev1.VolumeMount{
 					{
 						Name:      CalicoLogsVolumeName,
-						MountPath: CalicologsVolumePath,
+						MountPath: "/var/log/calico",
 					},
 					{
 						Name:      ModSecurityRulesetVolumeName,
-						MountPath: ModSecurityRulesetVolumePath,
+						MountPath: "/etc/modsecurity-ruleset",
 						ReadOnly:  true,
 					},
 				}...,
@@ -420,7 +410,7 @@ func (c *component) volumes() []corev1.Volume {
 				Name: CalicoLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
-						Path: CalicologsVolumePath,
+						Path: "/var/log/calico",
 						Type: &hostPathDirectoryOrCreate,
 					},
 				},

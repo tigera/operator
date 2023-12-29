@@ -407,6 +407,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				installation.Registry,
 				installation.ImagePath,
 				installation.ImagePrefix,
+				installation.ImageSuffix,
 				imageSet,
 			)
 			Expect(err).NotTo(HaveOccurred())

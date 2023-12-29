@@ -96,6 +96,7 @@ func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.Image
 		inst.Registry,
 		inst.ImagePath,
 		inst.ImagePrefix,
+		inst.ImageSuffix,
 		is,
 	)
 }

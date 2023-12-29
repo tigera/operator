@@ -133,26 +133,27 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var err error
 	errMsgs := []string{}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, suffix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, suffix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
+			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, suffix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
 		} else {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
+			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, suffix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}

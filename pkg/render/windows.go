@@ -70,6 +70,7 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var errMsgs []string
 	appendIfErr := func(imageName string, err error) string {
 		if err != nil {
@@ -79,11 +80,11 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIWindows, reg, path, prefix, is))
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNodeWindows, reg, path, prefix, is))
+		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIWindows, reg, path, prefix, suffix, is))
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNodeWindows, reg, path, prefix, suffix, is))
 	} else {
-		c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIWindows, reg, path, prefix, is))
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeWindows, reg, path, prefix, is))
+		c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIWindows, reg, path, prefix, suffix, is))
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeWindows, reg, path, prefix, suffix, is))
 	}
 
 	if len(errMsgs) != 0 {

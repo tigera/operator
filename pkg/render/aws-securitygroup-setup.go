@@ -51,8 +51,9 @@ func (c *awsSGSetupComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var err error
-	c.image, err = components.GetReference(components.ComponentOperatorInit, reg, path, prefix, is)
+	c.image, err = components.GetReference(components.ComponentOperatorInit, reg, path, prefix, suffix, is)
 	return err
 }
 

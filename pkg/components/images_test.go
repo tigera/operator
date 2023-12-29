@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ var _ = Describe("test GetReference", func() {
 	Context("No registry override", func() {
 		DescribeTable("should render",
 			func(c component, registry, image string) {
-				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
+				Expect(GetReference(c, "", "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "calico/node"),
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
@@ -42,7 +42,7 @@ var _ = Describe("test GetReference", func() {
 		DescribeTable("should render",
 			func(c component, registry, image string) {
 				ud := "UseDefault"
-				Expect(GetReference(c, ud, ud, "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
+				Expect(GetReference(c, ud, ud, "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "calico/node"),
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
@@ -55,7 +55,7 @@ var _ = Describe("test GetReference", func() {
 	Context("registry override", func() {
 		DescribeTable("should render",
 			func(c component, image string) {
-				Expect(GetReference(c, "quay.io/", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", "quay.io/", image, c.Version)))
+				Expect(GetReference(c, "quay.io/", "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", "quay.io/", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "calico/node"),
 			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/cnx-node"),
@@ -68,7 +68,7 @@ var _ = Describe("test GetReference", func() {
 	Context("image prefix override", func() {
 		DescribeTable("should render",
 			func(c component, image string) {
-				Expect(GetReference(c, "quay.io/", "", "pref", nil)).To(Equal(fmt.Sprintf("quay.io/%s:%s", image, c.Version)))
+				Expect(GetReference(c, "quay.io/", "", "pref", "", nil)).To(Equal(fmt.Sprintf("quay.io/%s:%s", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "calico/prefnode"),
 			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/prefcnx-node"),
@@ -81,7 +81,7 @@ var _ = Describe("test GetReference", func() {
 	Context("imagepath override", func() {
 		DescribeTable("should render",
 			func(c component, registry, image string) {
-				Expect(GetReference(c, "", "userpath", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
+				Expect(GetReference(c, "", "userpath", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "userpath/node"),
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "userpath/cnx-node"),
@@ -93,7 +93,7 @@ var _ = Describe("test GetReference", func() {
 	Context("registry and imagepath override", func() {
 		DescribeTable("should render",
 			func(c component, image string) {
-				Expect(GetReference(c, "quay.io/extra/", "userpath", "", nil)).To(Equal(fmt.Sprintf("quay.io/extra/%s:%s", image, c.Version)))
+				Expect(GetReference(c, "quay.io/extra/", "userpath", "", "", nil)).To(Equal(fmt.Sprintf("quay.io/extra/%s:%s", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "userpath/node"),
 			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node"),
@@ -116,7 +116,7 @@ var _ = Describe("test GetReference", func() {
 						},
 					},
 				}
-				Expect(GetReference(c, "quay.io/extra/", "userpath", "", is)).To(Equal(fmt.Sprintf("quay.io/extra/%s%s", image, hash)))
+				Expect(GetReference(c, "quay.io/extra/", "userpath", "", "", is)).To(Equal(fmt.Sprintf("quay.io/extra/%s%s", image, hash)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "userpath/node", "@sha256:caliconodehash"),
 			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node", "@sha256:tigeracnxnodehash"),

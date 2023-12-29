@@ -357,29 +357,30 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+	suffix := c.cfg.Installation.ImageSuffix
 	var err error
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.csiImage, err = components.GetReference(components.ComponentCSIPrivate, reg, path, prefix, is)
+		c.csiImage, err = components.GetReference(components.ComponentCSIPrivate, reg, path, prefix, suffix, is)
 		if err != nil {
 			return err
 		}
 
-		c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivate, reg, path, prefix, is)
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivate, reg, path, prefix, suffix, is)
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSIFIPS, reg, path, prefix, is)
+			c.csiImage, err = components.GetReference(components.ComponentCalicoCSIFIPS, reg, path, prefix, suffix, is)
 			if err != nil {
 				return err
 			}
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrarFIPS, reg, path, prefix, is)
+			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrarFIPS, reg, path, prefix, suffix, is)
 		} else {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
+			c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, suffix, is)
 			if err != nil {
 				return err
 			}
 
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, suffix, is)
 		}
 	}
 

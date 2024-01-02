@@ -1640,6 +1640,34 @@ var _ = Describe("Component handler tests", func() {
 			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
 		})
 	})
+	Context("services account updates should not result in removal of data", func() {
+		It("preserves secrets and image pull secrets that were present before object updates", func() {
+			sa := &corev1.ServiceAccount{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a",
+					Namespace: "a",
+				},
+				Secrets:                      []corev1.ObjectReference{{Name: "a"}},
+				ImagePullSecrets:             []corev1.LocalObjectReference{{Name: "a"}},
+				AutomountServiceAccountToken: nil,
+			}
+			Expect(c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "a"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, sa)).NotTo(HaveOccurred())
+
+			sa.Secrets = nil
+			sa.ImagePullSecrets = nil
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs:            []client.Object{sa},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).NotTo(HaveOccurred())
+			Expect(c.Get(ctx, client.ObjectKey{Name: "a", Namespace: "a"}, sa)).NotTo(HaveOccurred())
+			Expect(sa.Secrets).To(HaveLen(1))
+			Expect(sa.ImagePullSecrets).To(HaveLen(1))
+		})
+	})
 })
 
 var _ = Describe("Mocked client Component handler tests", func() {

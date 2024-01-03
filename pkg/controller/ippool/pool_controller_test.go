@@ -20,21 +20,194 @@ import (
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	configv1 "github.com/openshift/api/config/v1"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	schedv1 "k8s.io/api/scheduling/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var twentySix int32 = 26
+
+var _ = Describe("IP Pool controller tests", func() {
+	// var cli client.Client
+	// var currentPools *crdv1.IPPoolList
+	// var instance *operator.Installation
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var c client.Client
+	var mockStatus *status.MockStatus
+	var r Reconciler
+
+	BeforeEach(func() {
+		// The schema contains all objects that should be known to the fake client when the test runs.
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+		// Create a client that will have a crud interface of k8s objects.
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		ctx, cancel = context.WithCancel(context.Background())
+
+		// Create an object we can use throughout the test to do the compliance reconcile loops.
+		mockStatus = &status.MockStatus{}
+
+		r = Reconciler{
+			config:               nil, // there is no fake for config
+			client:               c,
+			scheme:               scheme,
+			autoDetectedProvider: operator.ProviderNone,
+			status:               mockStatus,
+		}
+	})
+
+	It("should do nothing if there is no Installation", func() {
+		mockStatus.On("OnCRNotFound")
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("should wait for Installation defaulting before continuing", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+			},
+		}
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, mock.Anything)
+		mockStatus.On("SetMetaData", mock.Anything)
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("should default an IPv4 pool and create it", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		// Get the Installation.
+		installation := &operator.Installation{}
+		err = c.Get(ctx, utils.DefaultInstanceKey, installation)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Verify an IP pool was defaulted.
+		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		pool := installation.Spec.CalicoNetwork.IPPools[0]
+		Expect(pool.CIDR).To(Equal("192.168.0.0/16"))
+
+		// Expect the IP pool to be created in the API server as well.
+		ipPools := crdv1.IPPoolList{}
+		err = c.List(ctx, &ipPools)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(1))
+		Expect(ipPools.Items[0].Spec.CIDR).To(Equal(pool.CIDR))
+	})
+
+	It("should not create a default IP pool if one already exists", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Create an IP pool. This simulates a user creating an IP pool before the operator has a chance to.
+		ipPool := crdv1.IPPool{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
+			Spec:       crdv1.IPPoolSpec{},
+		}
+		Expect(c.Create(ctx, &ipPool)).ShouldNot(HaveOccurred())
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		// Get the Installation.
+		installation := &operator.Installation{}
+		err = c.Get(ctx, utils.DefaultInstanceKey, installation)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Should be no IP pools defaulted.
+		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(0))
+
+		// No new IP pools should exist.
+		ipPools := crdv1.IPPoolList{}
+		err = c.List(ctx, &ipPools)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(1))
+	})
+
+	AfterEach(func() {
+		cancel()
+	})
+})
 
 var _ = table.DescribeTable("cidrWithinCidr",
 	func(CIDR, pool string, expectedResult bool) {

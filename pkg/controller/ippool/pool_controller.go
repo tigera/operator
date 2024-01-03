@@ -375,8 +375,8 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 
 		// Only default the IP pools if Calico IPAM is being used, and there are no IP pools specified.
 		// Defaulting of the Spec.CNI field occurs in pkg/controller/installation/
-		calicoIPAM := instance.Spec.CNI != nil && instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico
 		poolsUnspecified := instance.Spec.CalicoNetwork == nil || instance.Spec.CalicoNetwork.IPPools == nil
+		calicoIPAM := instance.Spec.CNI != nil && instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico
 		log.V(5).Info("Checking if we should default IP pool configuration", "calicoIPAM", calicoIPAM, "poolsUnspecified", poolsUnspecified)
 		if poolsUnspecified && calicoIPAM {
 			if instance.Spec.CalicoNetwork == nil {
@@ -399,6 +399,14 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 				}
 			}
 		}
+	} else if instance.Spec.CalicoNetwork == nil || instance.Spec.CalicoNetwork.IPPools == nil {
+		// There are existing IP pools in the cluster, and the installation hasn't specified any. This means IP pools are
+		// being managed out-of-bad of the operator API. So, default the installation field to an empty list,
+		// which means "Don't install any IP pools".
+		if instance.Spec.CalicoNetwork == nil {
+			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
+		}
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{}
 	}
 
 	// If there are no CalicoNetwork settings, return early. The code after this point
@@ -480,11 +488,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// that defaulting has occurred.
 	if installation.Finalizers == nil || len(installation.Finalizers) == 0 {
 		// TODO: Should check for exact finalizer name here instead.
-		r.status.SetDegraded(operator.InvalidConfigurationError, "Waiting for Installation defaulting to occur", nil, reqLogger)
+		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
-		r.status.SetDegraded(operator.InvalidConfigurationError, "Waiting for CNI type to be defaulted", nil, reqLogger)
+		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for CNI type to be defaulted", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

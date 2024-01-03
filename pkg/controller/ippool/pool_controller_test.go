@@ -366,19 +366,6 @@ var _ = Describe("fillDefaults()", func() {
 			nil,
 			&v1.ConfigMap{Data: map[string]string{"ClusterConfiguration": "podSubnet: 10.0.0.0/8"}},
 		),
-
-		// TODO: This belongs in Installation controller tests.
-		// table.Entry("CNI Type set from AWS Node daemonset and Calico config",
-		// 	&operator.Installation{
-		// 		Spec: operator.InstallationSpec{
-		// 			CNI: &operator.CNISpec{
-		// 				Type: operator.PluginAmazonVPC,
-		// 			},
-		// 		},
-		// 	},
-		// 	nil, nil,
-		// 	&appsv1.DaemonSet{},
-		// ),
 	)
 
 	It("should properly fill defaults for an IPv6-only instance", func() {

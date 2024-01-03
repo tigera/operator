@@ -16,6 +16,7 @@ package installation
 
 import (
 	"path/filepath"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -363,6 +364,24 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
+	It("should properly fill defaults for an IPv6-only instance with existing IPv6 pool", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CalicoNetwork: &operator.CalicoNetworkSpec{},
+			},
+		}
+		currentPools := crdv1.IPPoolList{
+			Items: []crdv1.IPPool{
+				{
+					Spec: crdv1.IPPoolSpec{CIDR: "fd00::0/64"},
+				},
+			},
+		}
+		err := fillDefaults(instance, &currentPools)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
 	table.DescribeTable("Test different values for FlexVolumePath",
 		func(i *operator.Installation, expectedFlexVolumePath string) {
 			Expect(fillDefaults(i, nil)).To(BeNil())
@@ -391,6 +410,7 @@ var _ = Describe("Defaulting logic tests", func() {
 			}, "/foo/bar/",
 		),
 	)
+
 	table.DescribeTable("Test different values for KubeletVolumePluginPath",
 		func(i *operator.Installation, expectedKubeletVolumePluginPath string) {
 			Expect(fillDefaults(i, nil)).To(BeNil())
@@ -511,6 +531,18 @@ var _ = Describe("Defaulting logic tests", func() {
 		})
 	})
 
+	Context("updateInstallationForAWSNode", func() {
+		It("should set the CNI to AmazonVPC", func() {
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					CNI: &operator.CNISpec{},
+				},
+			}
+			updateInstallationForAWSNode(instance, &appsv1.DaemonSet{})
+			Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginAmazonVPC))
+		})
+	})
+
 	Context("with AmazonVPC CNI", func() {
 		It("should default properly with no calicoNetwork specified", func() {
 			instance := &operator.Installation{
@@ -598,5 +630,58 @@ var _ = Describe("Defaulting logic tests", func() {
 		table.Entry("GKE CNI defaults to HostLocal IPAM", operator.PluginGKE, operator.IPAMPluginHostLocal),
 		table.Entry("AzureVNET CNI defaults to AzureVNET IPAM", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET),
 		table.Entry("Calico CNI defaults to Calico IPAM", operator.PluginCalico, operator.IPAMPluginCalico),
+	)
+
+	// This test verifies that we properly fill out defaults in the Installation based on the discovered IP pools
+	// in the cluster. The input - currentPools - represents the IP pools that we have discovered from the cluster's API server,
+	// and may have been provisioned either by the user directly, or via the IP pool controller in this operator.
+	table.DescribeTable("should handle various pool configurations",
+		func(currentPools []crdv1.IPPool) {
+			instance := &operator.Installation{}
+			Expect(fillDefaults(instance, &crdv1.IPPoolList{Items: currentPools})).NotTo(HaveOccurred())
+
+			// The resulting instance should be valid.
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+
+			// We should properly set fields based on the IP pools we were given.
+			// If we were given an IPv4 pool, we expect IPv4 fields to be filled.
+			// If we were given an IPv6 pool, we expect IPv6 fields to be filled.
+			var v4, v6 bool
+			for _, p := range currentPools {
+				if strings.Contains(p.Spec.CIDR, ":") {
+					v6 = true
+				} else {
+					v4 = true
+				}
+			}
+
+			if v4 {
+				Expect(*instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound).To(Equal(true))
+			} else {
+				Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4).To(BeNil())
+			}
+			if v6 {
+				Expect(*instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6.FirstFound).To(Equal(true))
+			} else {
+				Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6).To(BeNil())
+			}
+		},
+
+		table.Entry("one IPv4 pool", []crdv1.IPPool{{Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"}}}),
+		table.Entry("one IPv6 pool", []crdv1.IPPool{{Spec: crdv1.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}}}),
+		table.Entry("two IPv6 pools", []crdv1.IPPool{
+			{Spec: crdv1.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
+			{Spec: crdv1.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
+		}),
+		table.Entry("two IPv4 pools", []crdv1.IPPool{
+			{Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"}},
+			{Spec: crdv1.IPPoolSpec{CIDR: "172.168.0.0/16"}},
+		}),
+		table.Entry("dual-spec", []crdv1.IPPool{
+			{Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"}},
+			{Spec: crdv1.IPPoolSpec{CIDR: "172.168.0.0/16"}},
+			{Spec: crdv1.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
+			{Spec: crdv1.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
+		}),
 	)
 })

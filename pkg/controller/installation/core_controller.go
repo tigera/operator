@@ -401,6 +401,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 	if err := client.List(ctx, currentPools); err != nil {
 		return fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
+	// TODO: Should we remove any disabled IP pools from the list so they aren't included in defaulting?
 
 	err = MergeAndFillDefaults(instance, awsNode, currentPools)
 	if err != nil {
@@ -907,6 +908,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operator.ResourceNotFound, "waiting for IP pools to be created", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
+	// TODO: Should we remove any disabled IP pools from the list so they aren't included in logic?
 
 	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 	// the run the reset the degraded status and requeue the request.

@@ -81,6 +81,10 @@ var _ = Describe("IP Pool controller tests", func() {
 		}
 	})
 
+	AfterEach(func() {
+		cancel()
+	})
+
 	It("should do nothing if there is no Installation", func() {
 		mockStatus.On("OnCRNotFound")
 		_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -204,8 +208,164 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(ipPools.Items).To(HaveLen(1))
 	})
 
-	AfterEach(func() {
-		cancel()
+	It("should create all IP pools provided by the user", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{
+						{CIDR: "192.168.0.0/16"},
+						{CIDR: "172.15.0.0/16"},
+						{CIDR: "dead:beef::/64"},
+						{CIDR: "fd5f:abcd::/64"},
+					},
+				},
+			},
+		}
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		// Expect all IP pools to have been created.
+		ipPools := crdv1.IPPoolList{}
+		err = c.List(ctx, &ipPools)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(len(instance.Spec.CalicoNetwork.IPPools)))
+
+		// Verify basic data about the created pools.
+		poolsByCIDR := map[string]crdv1.IPPool{}
+		for _, pool := range ipPools.Items {
+			poolsByCIDR[pool.Spec.CIDR] = pool
+		}
+		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
+			Expect(poolsByCIDR).To(HaveKey(pool.CIDR))
+			Expect(poolsByCIDR[pool.CIDR].OwnerReferences).To(HaveLen(1))
+		}
+	})
+
+	It("should disallow modification if there is no API server", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{
+						{CIDR: "192.168.0.0/16", NATOutgoing: "Disabled"},
+					},
+				},
+			},
+		}
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		// Now, modify the IP pool. This should be rejected, because we only allow modification
+		// when the API server is available.
+		Expect(c.Get(ctx, utils.DefaultInstanceKey, instance)).ShouldNot(HaveOccurred())
+		instance.Spec.CalicoNetwork.IPPools[0].NATOutgoing = "Enabled"
+		Expect(c.Update(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Expect a new SetDegraded call.
+		mockStatus.On("SetDegraded", operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, mock.Anything)
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("should disallow deletion if there is no API server", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{
+						{CIDR: "192.168.0.0/16", NATOutgoing: "Disabled"},
+					},
+				},
+			},
+		}
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		// Now, delete the IP pool. This should be rejected, because we only allow deletion
+		// when the API server is available.
+		Expect(c.Get(ctx, utils.DefaultInstanceKey, instance)).ShouldNot(HaveOccurred())
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{}
+		Expect(c.Update(ctx, instance)).ShouldNot(HaveOccurred())
+
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Expect the IP pool to now be marked as disabled, but not deleted.
+		ipPools := crdv1.IPPoolList{}
+		err = c.List(ctx, &ipPools)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(1))
+		Expect(ipPools.Items[0].Spec.Disabled).To(BeTrue())
+
+		// Re-add the IP pool to the Installation.
+		Expect(c.Get(ctx, utils.DefaultInstanceKey, instance)).ShouldNot(HaveOccurred())
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{{CIDR: "192.168.0.0/16", NATOutgoing: "Disabled"}}
+		Expect(c.Update(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// We don't allow modification, so it will still be disabled.
+		mockStatus.On("SetDegraded", operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, mock.Anything)
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
 	})
 })
 

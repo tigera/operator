@@ -577,7 +577,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			} else {
 				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
 				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.
-				r.status.SetDegraded(operator.ResourceNotReady, "Unable to modify IP pools while API server is unavailable", nil, reqLogger)
+				r.status.SetDegraded(operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, reqLogger)
 				return reconcile.Result{}, nil
 			}
 		}

@@ -55,7 +55,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type,
 				strings.Join([]string{
 					operatorv1.IPAMPluginCalico.String(),
-					operatorv1.IPAMPluginHostLocal.String()}, ",",
+					operatorv1.IPAMPluginHostLocal.String(),
+				}, ",",
 				),
 			)
 		}
@@ -229,7 +230,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if v4pool.BlockSize != nil {
 				if *v4pool.BlockSize > 32 || *v4pool.BlockSize < 20 {
 					return fmt.Errorf("ipPool.blockSize must be greater than 19 and less than or equal to 32")
-
 				}
 
 				// Verify that the CIDR contains the blocksize.
@@ -316,8 +316,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 
 		if instance.Spec.CalicoNetwork.HostPorts != nil {
-			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-				return fmt.Errorf("spec.calicoNetwork.hostPorts is supported only for Calico CNI")
+			if *instance.Spec.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
+				if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+					return fmt.Errorf("spec.calicoNetwork.hostPorts is supported only for Calico CNI")
+				}
 			}
 
 			err := validateHostPorts(instance.Spec.CalicoNetwork.HostPorts)
@@ -412,7 +414,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", err)
-
 		}
 	}
 
@@ -421,7 +422,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeWindowsDaemonSetContainer, node.ValidateCalicoNodeWindowsDaemonSetInitContainer)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
-
 		}
 	}
 
@@ -430,7 +430,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
-
 		}
 	}
 

@@ -250,6 +250,19 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should allow HostPorts=Disabled when using the AmazonVPC plugin", func() {
+		bpf := operator.LinuxDataplaneBPF
+		bgp := operator.BGPDisabled
+		dis := operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		instance.Spec.CalicoNetwork.BGP = &bgp
+		instance.Spec.CNI.Type = operator.PluginAmazonVPC
+		instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
+		instance.Spec.CalicoNetwork.HostPorts = &dis
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("should prevent IPIP if BGP is disabled", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
@@ -416,7 +429,8 @@ var _ = Describe("Installation validation tests", func() {
 			{
 				Key:   "net.ipv4.tcp_keepalive_intvl",
 				Value: "15",
-			}, {
+			},
+			{
 				Key:   "net.ipv4.tcp_keepalive_probes",
 				Value: "6",
 			},
@@ -947,10 +961,9 @@ var _ = Describe("Installation validation tests", func() {
 	Describe("validate Windows configuration", func() {
 		BeforeEach(func() {
 			winDpHNS := operator.WindowsDataplaneHNS
-			instance.Spec.CalicoNetwork =
-				&operator.CalicoNetworkSpec{
-					WindowsDataplane: &winDpHNS,
-				}
+			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+				WindowsDataplane: &winDpHNS,
+			}
 			instance.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
 			var twentyEight int32 = 28
 			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -978,7 +991,6 @@ var _ = Describe("Installation validation tests", func() {
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled"))
-
 			})
 		})
 		Context("Calico CNI", func() {
@@ -1034,7 +1046,6 @@ var _ = Describe("Installation validation tests", func() {
 				err := validateCustomResource(instance)
 				Expect(err).ToNot(HaveOccurred())
 			})
-
 		})
 	})
 	Describe("validate CSIDaemonset", func() {

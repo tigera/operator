@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -385,8 +385,10 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		},
 	}
 
-	if overrides := pr.cfg.PolicyRecommendation; overrides != nil {
-		rcomponents.ApplyDeploymentOverrides(d, overrides)
+	if pr.cfg.PolicyRecommendation != nil {
+		if overrides := pr.cfg.PolicyRecommendation.Spec.PolicyRecommendationDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
 	}
 
 	return d

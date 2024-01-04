@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -166,36 +166,57 @@ type ManagerList struct {
 	Items           []Manager `json:"items"`
 }
 
-func (c *Manager) GetMetadata() *Metadata {
+func (c *ManagerDeployment) GetMetadata() *Metadata {
 	return nil
 }
 
-func (c *Manager) GetMinReadySeconds() *int32 {
+func (c *ManagerDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }
 
-func (c *Manager) GetPodTemplateMetadata() *Metadata {
+func (c *ManagerDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }
 
-func (c *Manager) GetInitContainers() []v1.Container {
-	if c.Spec != (ManagerSpec{}) {
-		if c.Spec.ManagerDeployment != nil {
-			if c.Spec.ManagerDeployment.Spec != nil {
-				if c.Spec.ManagerDeployment.Spec.Template != nil {
-					if c.Spec.ManagerDeployment.Spec.Template.Spec != nil {
-						if c.Spec.ManagerDeployment.Spec.Template.Spec.InitContainers != nil {
-							cs := make([]v1.Container, len(c.Spec.ManagerDeployment.Spec.Template.Spec.InitContainers))
-							for i, v := range c.Spec.ManagerDeployment.Spec.Template.Spec.InitContainers {
-								// Only copy and return the init container if it has resources set.
-								if v.Resources == nil {
-									continue
-								}
-								c := v1.Container{Name: v.Name, Resources: *v.Resources}
-								cs[i] = c
-							}
-							return cs
+func (c *ManagerDeployment) GetInitContainers() []v1.Container {
+	if c != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.InitContainers != nil {
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
+					for i, v := range c.Spec.Template.Spec.InitContainers {
+						// Only copy and return the init container if it has resources set.
+						if v.Resources == nil {
+							continue
 						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *ManagerDeployment) GetContainers() []v1.Container {
+	if c != nil {
+		if c.Spec != nil {
+			if c.Spec.Template != nil {
+				if c.Spec.Template.Spec != nil {
+					if c.Spec.Template.Spec.Containers != nil {
+						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
+						for i, v := range c.Spec.Template.Spec.Containers {
+							// Only copy and return the init container if it has resources set.
+							if v.Resources == nil {
+								continue
+							}
+							c := v1.Container{Name: v.Name, Resources: *v.Resources}
+							cs[i] = c
+						}
+						return cs
 					}
 				}
 			}
@@ -204,53 +225,27 @@ func (c *Manager) GetInitContainers() []v1.Container {
 	return nil
 }
 
-func (c *Manager) GetContainers() []v1.Container {
-	if c.Spec != (ManagerSpec{}) {
-		if c.Spec.ManagerDeployment != nil {
-			if c.Spec.ManagerDeployment.Spec != nil {
-				if c.Spec.ManagerDeployment.Spec.Template != nil {
-					if c.Spec.ManagerDeployment.Spec.Template.Spec != nil {
-						if c.Spec.ManagerDeployment.Spec.Template.Spec.Containers != nil {
-							cs := make([]v1.Container, len(c.Spec.ManagerDeployment.Spec.Template.Spec.Containers))
-							for i, v := range c.Spec.ManagerDeployment.Spec.Template.Spec.Containers {
-								// Only copy and return the init container if it has resources set.
-								if v.Resources == nil {
-									continue
-								}
-								c := v1.Container{Name: v.Name, Resources: *v.Resources}
-								cs[i] = c
-							}
-							return cs
-						}
-					}
-				}
-			}
-		}
-	}
+func (c *ManagerDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }
 
-func (c *Manager) GetAffinity() *v1.Affinity {
+func (c *ManagerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }
 
-func (c *Manager) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+func (c *ManagerDeployment) GetNodeSelector() map[string]string {
 	return nil
 }
 
-func (c *Manager) GetNodeSelector() map[string]string {
+func (c *ManagerDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *Manager) GetTolerations() []v1.Toleration {
+func (c *ManagerDeployment) GetTerminationGracePeriodSeconds() *int64 {
 	return nil
 }
 
-func (c *Manager) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *Manager) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+func (c *ManagerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 

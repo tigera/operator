@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -123,36 +123,34 @@ type PolicyRecommendationList struct {
 	Items           []PolicyRecommendation `json:"items"`
 }
 
-func (c *PolicyRecommendation) GetMetadata() *Metadata {
+func (c *PolicyRecommendationDeployment) GetMetadata() *Metadata {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetMinReadySeconds() *int32 {
+func (c *PolicyRecommendationDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetPodTemplateMetadata() *Metadata {
+func (c *PolicyRecommendationDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetInitContainers() []v1.Container {
-	if c.Spec != (PolicyRecommendationSpec{}) {
-		if c.Spec.PolicyRecommendationDeployment != nil {
-			if c.Spec.PolicyRecommendationDeployment.Spec != nil {
-				if c.Spec.PolicyRecommendationDeployment.Spec.Template != nil {
-					if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec != nil {
-						if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.InitContainers != nil {
-							cs := make([]v1.Container, len(c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.InitContainers))
-							for i, v := range c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.InitContainers {
-								// Only copy and return the init container if it has resources set.
-								if v.Resources == nil {
-									continue
-								}
-								c := v1.Container{Name: v.Name, Resources: *v.Resources}
-								cs[i] = c
+func (c *PolicyRecommendationDeployment) GetInitContainers() []v1.Container {
+	if c != nil {
+		if c.Spec != nil {
+			if c.Spec.Template != nil {
+				if c.Spec.Template.Spec != nil {
+					if c.Spec.Template.Spec.InitContainers != nil {
+						cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
+						for i, v := range c.Spec.Template.Spec.InitContainers {
+							// Only copy and return the init container if it has resources set.
+							if v.Resources == nil {
+								continue
 							}
-							return cs
+							c := v1.Container{Name: v.Name, Resources: *v.Resources}
+							cs[i] = c
 						}
+						return cs
 					}
 				}
 			}
@@ -161,24 +159,22 @@ func (c *PolicyRecommendation) GetInitContainers() []v1.Container {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetContainers() []v1.Container {
-	if c.Spec != (PolicyRecommendationSpec{}) {
-		if c.Spec.PolicyRecommendationDeployment != nil {
-			if c.Spec.PolicyRecommendationDeployment.Spec != nil {
-				if c.Spec.PolicyRecommendationDeployment.Spec.Template != nil {
-					if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec != nil {
-						if c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.Containers != nil {
-							cs := make([]v1.Container, len(c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.Containers))
-							for i, v := range c.Spec.PolicyRecommendationDeployment.Spec.Template.Spec.Containers {
-								// Only copy and return the init container if it has resources set.
-								if v.Resources == nil {
-									continue
-								}
-								c := v1.Container{Name: v.Name, Resources: *v.Resources}
-								cs[i] = c
+func (c *PolicyRecommendationDeployment) GetContainers() []v1.Container {
+	if c != nil {
+		if c.Spec != nil {
+			if c.Spec.Template != nil {
+				if c.Spec.Template.Spec != nil {
+					if c.Spec.Template.Spec.Containers != nil {
+						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
+						for i, v := range c.Spec.Template.Spec.Containers {
+							// Only copy and return the init container if it has resources set.
+							if v.Resources == nil {
+								continue
 							}
-							return cs
+							c := v1.Container{Name: v.Name, Resources: *v.Resources}
+							cs[i] = c
 						}
+						return cs
 					}
 				}
 			}
@@ -187,27 +183,27 @@ func (c *PolicyRecommendation) GetContainers() []v1.Container {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetAffinity() *v1.Affinity {
+func (c *PolicyRecommendationDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+func (c *PolicyRecommendationDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetNodeSelector() map[string]string {
+func (c *PolicyRecommendationDeployment) GetNodeSelector() map[string]string {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetTolerations() []v1.Toleration {
+func (c *PolicyRecommendationDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetTerminationGracePeriodSeconds() *int64 {
+func (c *PolicyRecommendationDeployment) GetTerminationGracePeriodSeconds() *int64 {
 	return nil
 }
 
-func (c *PolicyRecommendation) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+func (c *PolicyRecommendationDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 

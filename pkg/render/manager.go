@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -325,10 +325,11 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if overrides := c.cfg.Manager; overrides != nil {
-		rcomponents.ApplyDeploymentOverrides(d, overrides)
+	if c.cfg.Manager != nil {
+		if overrides := c.cfg.Manager.Spec.ManagerDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
 	}
-
 	return d
 }
 

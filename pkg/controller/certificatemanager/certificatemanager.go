@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -164,7 +164,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	// Determine the name of the CA secret to use. Default to the tigera CA name. For
 	// per-tenant CA secrets, we use a different name for differentiation.
 	caSecretName := certificatemanagement.CASecretName
-	if cm.tenant != nil {
+	if cm.tenant.MultiTenant() {
 		caSecretName = certificatemanagement.TenantCASecretName
 	}
 

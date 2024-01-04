@@ -538,7 +538,8 @@ var _ = Describe("Defaulting logic tests", func() {
 					CNI: &operator.CNISpec{},
 				},
 			}
-			updateInstallationForAWSNode(instance, &appsv1.DaemonSet{})
+			err := updateInstallationForAWSNode(instance, &appsv1.DaemonSet{})
+			Expect(err).NotTo(HaveOccurred())
 			Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginAmazonVPC))
 		})
 	})

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -493,6 +493,30 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("verifying that the non-standard secret fields have been standardized")
 			Expect(keyPair.Secret(appNs).Data[corev1.TLSPrivateKeyKey]).NotTo(BeNil())
 			Expect(keyPair.Secret(appNs).Data[corev1.TLSCertKey]).NotTo(BeNil())
+		})
+
+		It("should render correct CA secret name for single-tenant configuration", func() {
+			singleTenant := operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "single-tenant",
+					Namespace: "",
+				},
+			}
+			zeroTenantCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation(), certificatemanager.WithTenant(&singleTenant))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(zeroTenantCM.KeyPair().GetName()).To(Equal(certificatemanagement.CASecretName))
+		})
+
+		It("should render correct CA secret name for multi-tenant configuration", func() {
+			singleTenant := operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "multi-tenant",
+					Namespace: "tenant-namespace-a",
+				},
+			}
+			singleTenantCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation(), certificatemanager.WithTenant(&singleTenant))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(singleTenantCM.KeyPair().GetName()).To(Equal(certificatemanagement.TenantCASecretName))
 		})
 	})
 

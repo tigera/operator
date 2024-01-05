@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -708,12 +708,18 @@ func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
 
 func (c *nodeComponent) createTuningPlugin() map[string]interface{} {
 	// tuning plugin (sysctl)
+	sysctl := map[string]string{}
 	tuningPlugin := map[string]interface{}{
 		"type":   "tuning",
-		"sysctl": []operatorv1.Sysctl{},
+		"sysctl": sysctl,
 	}
-	tuningPlugin["sysctl"] = c.cfg.Installation.CalicoNetwork.Sysctl
 
+	// convert []operatorv1.Sysctl{} to map[string]string for CNI definition
+	// details: https://www.cni.dev/plugins/current/meta/tuning/#system-controls-operation
+	for _, v := range c.cfg.Installation.CalicoNetwork.Sysctl {
+		sysctl[v.Key] = v.Value
+	}
+	tuningPlugin["sysctl"] = sysctl
 	return tuningPlugin
 }
 

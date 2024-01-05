@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023, 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -782,20 +782,11 @@ var _ = Describe("Convert network tests", func() {
   },
   {
 	"type": "tuning",
-	"sysctl": [
-		  {
-			"key": "net.ipv4.tcp_keepalive_intvl",
-			"value": "15"
-		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_probes",
-			"value": "6"
-		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_time",
-			"value": "40"
-		  }
-		]
+	"sysctl": {
+		"net.ipv4.tcp_keepalive_intvl": "15",
+		"net.ipv4.tcp_keepalive_probes": "6",
+		"net.ipv4.tcp_keepalive_time": "40"
+	}
   }
   ]
 }`,
@@ -846,13 +837,10 @@ var _ = Describe("Convert network tests", func() {
 },
 {
 	"type": "tuning",
-	"sysctl": [
-		{
-		  "key": "net.ipv4.not_allowed",
-		  "value": "40"
-		}
-	]
-  }
+	"sysctl": {
+		"net.ipv4.not_allowed": "40"
+	}
+}
 ]
 }`,
 					}}

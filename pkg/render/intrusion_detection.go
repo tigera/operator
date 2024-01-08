@@ -508,7 +508,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
 				Resources: []string{"secrets", "configmaps"},
-				Verbs:     []string{"get"},
+				Verbs:     []string{"get", "watch"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"crd.projectcalico.org"},

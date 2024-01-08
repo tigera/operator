@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1047,6 +1047,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			KubernetesProvider:      operatorv1.ProviderEKS,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
+		cfg.ExternalElastic = true
+
 		// Create the Tenant object.
 		tenant := &operatorv1.Tenant{}
 		tenant.Name = "default"

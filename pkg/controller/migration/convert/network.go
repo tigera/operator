@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023, 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -201,8 +201,8 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	type TuningSpec struct {
-		Sysctl []operatorv1.Sysctl `json:"sysctl,omitempty"`
-		Type   string              `json:"type"`
+		Sysctl *map[string]string `json:"sysctl,omitempty"`
+		Type   string             `json:"type"`
 	}
 
 	// CNI tuning plugin
@@ -219,10 +219,10 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 
 		sysctlTuning := []operatorv1.Sysctl{}
-		for _, setting := range tuningSpecData.Sysctl {
+		for k, v := range *tuningSpecData.Sysctl {
 			sysctl := operatorv1.Sysctl{
-				Key:   setting.Key,
-				Value: setting.Value,
+				Key:   k,
+				Value: v,
 			}
 			sysctlTuning = append(sysctlTuning, sysctl)
 		}

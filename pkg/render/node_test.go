@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -2748,20 +2748,12 @@ var _ = Describe("Node rendering tests", func() {
       "type": "portmap"
     },
     {
-      "sysctl": [
+      "sysctl":
 		  {
-			"key": "net.ipv4.tcp_keepalive_intvl",
-			"value": "15"
+			"net.ipv4.tcp_keepalive_intvl": "15",
+			"net.ipv4.tcp_keepalive_probes": "6",
+			"net.ipv4.tcp_keepalive_time": "40"
 		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_probes",
-			"value": "6"
-		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_time",
-		    "value": "40"
-		  }
-		],
       "type": "tuning"
 	}
   ]

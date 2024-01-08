@@ -542,9 +542,6 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	if c.cfg.Tenant != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
-		// Always configure the Tenant Claim for all multi-tenancy setups (single tenant and multi tenant)
-		// This will check the tenant claim when a Bearer token is presented to Voltron
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"})
 
 		if c.cfg.Tenant.MultiTenant() {
 			env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})

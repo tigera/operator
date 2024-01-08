@@ -111,6 +111,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
+		externalElastic: opts.ElasticExternal,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -186,6 +187,7 @@ type ReconcileLogCollector struct {
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
 	multiTenant     bool
+	externalElastic bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -587,6 +589,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		UsePSP:                 r.usePSP,
 		UseSyslogCertificate:   useSyslogCertificate,
 		Tenant:                 tenant,
+		ExternalElastic:        r.externalElastic,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 	}
 	// Render the fluentd component for Linux

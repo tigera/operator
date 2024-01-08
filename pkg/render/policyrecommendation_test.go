@@ -383,6 +383,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				},
 			}
 			cfg.BindingNamespaces = []string{tenantANamespace}
+			cfg.ExternalElastic = true
 			tenantAPolicyRec := render.PolicyRecommendation(cfg)
 
 			tenantAResources, _ := tenantAPolicyRec.Objects()
@@ -474,6 +475,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					ID: "tenant-a-id",
 				},
 			}
+			cfg.ExternalElastic = true
 			cfg.BindingNamespaces = []string{tenantANamespace}
 			tenantPolicyRec := render.PolicyRecommendation(cfg)
 
@@ -485,6 +487,51 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", cfg.Tenant.Namespace)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", cfg.Tenant.Namespace)}))
+		})
+
+		It("should render environment variables for a single tenant external elastic", func() {
+			cfg.Namespace = render.PolicyRecommendationNamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tenantA",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			cfg.ExternalElastic = true
+			cfg.BindingNamespaces = []string{render.PolicyRecommendationNamespace}
+			tenantPolicyRec := render.PolicyRecommendation(cfg)
+
+			createdResources, _ := tenantPolicyRec.Objects()
+
+			d := rtest.GetResource(createdResources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", render.ElasticsearchNamespace)}))
+		})
+
+		It("should render environment variables for a single tenant internal elastic", func() {
+			cfg.Namespace = render.PolicyRecommendationNamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tenantA",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			cfg.ExternalElastic = false
+			cfg.BindingNamespaces = []string{render.PolicyRecommendationNamespace}
+			tenantPolicyRec := render.PolicyRecommendation(cfg)
+
+			createdResources, _ := tenantPolicyRec.Objects()
+
+			d := rtest.GetResource(createdResources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", render.ElasticsearchNamespace)}))
 		})
 
 		It("should render RBAC per tenant", func() {

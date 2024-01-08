@@ -166,7 +166,8 @@ type ManagerConfiguration struct {
 	BindingNamespaces []string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
-	Tenant *operatorv1.Tenant
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
 
 	Manager *operatorv1.Manager
 }
@@ -541,10 +542,17 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 
 	if c.cfg.Tenant != nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		// Configure the tenant id in order to read /write elastic data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
+
 		// Always configure the Tenant Claim for all multi-tenancy setups (single tenant and multi tenant)
 		// This will check the tenant claim when a Bearer token is presented to Voltron
+		// The actual value of the token is extracted from the tenant claim
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"})
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: c.cfg.Tenant.Spec.ID})
 
 		if c.cfg.Tenant.MultiTenant() {
 			env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
@@ -596,8 +604,11 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,
 	// in which case use the Linseed in the current namespace.
 	if c.cfg.Tenant != nil {
-		// A tenant was specified, ensur we set the tenant ID.
-		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+
+		if c.cfg.ExternalElastic {
+			// A tenant was specified, ensur we set the tenant ID.
+			env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
 
 		if c.cfg.Tenant.MultiTenant() {
 			// This cluster supports multiple tenants. Point the manager at the correct Linseed instance for this tenant.

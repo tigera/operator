@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -99,6 +99,9 @@ const (
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
+
+	flowLogFile        = "/var/log/calico/flowlogs/flows.log"
+	flowLogFileWindows = "c:/TigeraCalico/flowlogs/flows.log"
 )
 
 var FluentdSourceEntityRule = v3.EntityRule{
@@ -656,6 +659,12 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
+	// The flow log filepath is considerably different on Windows
+	flowLogFileVal := flowLogFile
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		flowLogFileVal = flowLogFileWindows
+	}
+
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
@@ -665,7 +674,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},
 		{Name: "FLUENT_UID", Value: "0"},
-		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
+		{Name: "FLOW_LOG_FILE", Value: flowLogFileVal},
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},

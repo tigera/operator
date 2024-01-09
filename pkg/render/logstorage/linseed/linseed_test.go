@@ -143,6 +143,7 @@ var _ = Describe("Linseed rendering tests", func() {
 					"client.key": {4, 5, 6},
 				},
 			}
+			cfg.ExternalElastic = true
 			component := Linseed(cfg)
 			createResources, _ := component.Objects()
 			d, ok := rtest.GetResource(createResources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -432,6 +433,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
 				ElasticPort:     "9200",
 				BindNamespaces:  []string{tenant.Namespace, "tigera-elasticsearch"},
+				ExternalElastic: true,
 			}
 		})
 
@@ -688,8 +690,9 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(cr.Rules).NotTo(ContainElements(expectedRules))
 		})
 
-		It("should render single-tenant environment variables", func() {
+		It("should render single-tenant environment variables with external elastic", func() {
 			cfg.ManagementCluster = true
+			cfg.ExternalElastic = true
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
@@ -697,6 +700,24 @@ var _ = Describe("Linseed rendering tests", func() {
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+
+			// These are only set for multi-tenant clusters. Make sure they aren't set here.
+			for _, env := range envs {
+				Expect(env.Name).NotTo(Equal("LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT"))
+				Expect(env.Name).NotTo(Equal("LINSEED_TENANT_NAMESPACE"))
+				Expect(env.Name).NotTo(Equal("BACKEND"))
+			}
+		})
+
+		It("should render single-tenant environment variables with internal elastic", func() {
+			cfg.ManagementCluster = true
+			cfg.ExternalElastic = false
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
 
 			// These are only set for multi-tenant clusters. Make sure they aren't set here.
 			for _, env := range envs {

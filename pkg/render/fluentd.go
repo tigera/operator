@@ -166,7 +166,8 @@ type FluentdConfiguration struct {
 
 	// Set if running as a multi-tenant management cluster. Configures the management cluster's
 	// own fluentd daemonset.
-	Tenant *operatorv1.Tenant
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -672,7 +673,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
 
-	if c.cfg.Tenant != nil {
+	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
 		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 
@@ -1080,7 +1081,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "TLS_KEY_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
 	}
-	if c.cfg.Tenant != nil {
+	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
 		envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 

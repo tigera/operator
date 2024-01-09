@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -116,7 +116,8 @@ type Config struct {
 	BindNamespaces []string
 
 	// Tenant configuration, if running for a particular tenant.
-	Tenant *operatorv1.Tenant
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
 
 	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
 	// mTLS is used between Linseed and the external Elastic cluster.
@@ -392,8 +393,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	replicas := l.cfg.Installation.ControlPlaneReplicas
 	if l.cfg.Tenant != nil {
-		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		if l.cfg.ExternalElastic {
+			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		}
 
 		if l.cfg.Tenant.MultiTenant() {
 			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.

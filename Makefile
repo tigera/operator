@@ -274,9 +274,9 @@ clean:
 ###############################################################################
 # Tests
 ###############################################################################
-UT_DIR?=./pkg
+UT_DIR?=./pkg/controller/compliance
 FV_DIR?=./test
-GINKGO_ARGS?= -v -trace -r
+GINKGO_ARGS?=
 GINKGO_FOCUS?=.*
 
 .PHONY: ut

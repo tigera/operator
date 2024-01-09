@@ -378,7 +378,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Determine if compliance is enabled.
 	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
-	complianceCR, err := compliance.GetCompliance(ctx, r.client)
+	complianceCR, err := compliance.GetCompliance(ctx, r.client, r.multiTenant, request.Namespace)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying compliance: ", err, logc)
 		return reconcile.Result{}, err
@@ -640,6 +640,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		namespaces = append(namespaces, render.ManagerNamespace)
 	}
 
+	tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
@@ -662,6 +667,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Namespace:               helper.InstallNamespace(),
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
+		TenantNamespaces:        tenantNamespaces,
 		BindingNamespaces:       namespaces,
 		Manager:                 instance,
 	}

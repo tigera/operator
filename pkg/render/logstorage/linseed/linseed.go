@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -117,6 +117,8 @@ type Config struct {
 
 	// Tenant configuration, if running for a particular tenant.
 	Tenant *operatorv1.Tenant
+
+	TenantNamespaces []string
 
 	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
 	// mTLS is used between Linseed and the external Elastic cluster.
@@ -606,31 +608,31 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceBenchmarkerSourceEntityRule,
+			Source:      render.ComplianceBenchmarkerSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceControllerSourceEntityRule,
+			Source:      render.ComplianceControllerSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceServerSourceEntityRule,
+			Source:      render.ComplianceServerSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceSnapshotterSourceEntityRule,
+			Source:      render.ComplianceSnapshotterSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceReporterSourceEntityRule,
+			Source:      render.ComplianceReporterSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

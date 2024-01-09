@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -99,6 +99,11 @@ func (r *ESKubeControllersController) createESGateway(
 		return err
 	}
 
+	tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
+	if err != nil {
+		return err
+	}
+
 	cfg := &esgateway.Config{
 		Installation:               install,
 		PullSecrets:                pullSecrets,
@@ -110,6 +115,7 @@ func (r *ESKubeControllersController) createESGateway(
 		UsePSP:                     usePSP,
 		Namespace:                  helper.InstallNamespace(),
 		TruthNamespace:             helper.TruthNamespace(),
+		TenantNamespaces:           tenantNamespaces,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -77,14 +77,54 @@ const (
 	ComplianceReporterSecret    = "tigera-compliance-reporter-tls"
 )
 
-var (
-	ComplianceServerEntityRule            = networkpolicy.CreateEntityRule(ComplianceNamespace, ComplianceServerName, complianceServerPort)
-	ComplianceServerSourceEntityRule      = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName)
-	ComplianceBenchmarkerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName)
-	ComplianceControllerSourceEntityRule  = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName)
-	ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
-	ComplianceReporterSourceEntityRule    = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
-)
+func createComplianceSourceEntityRule(deploymentName string, tenantNamespaces []string) v3.EntityRule {
+	nsSelector := fmt.Sprintf("projectcalico.org/name == '%s'", ComplianceNamespace)
+	if len(tenantNamespaces) > 0 {
+		tenantNSSelector := "projectcalico.org/name in {"
+		for _, ns := range tenantNamespaces {
+			tenantNSSelector = fmt.Sprintf("%s '%s',", tenantNSSelector, ns)
+		}
+		// Remove trailing ',' and close the selector
+		tenantNSSelector = fmt.Sprintf("%s }", strings.TrimRight(tenantNSSelector, ","))
+
+		nsSelector = fmt.Sprintf("%s || %s", nsSelector, tenantNSSelector)
+	}
+	return v3.EntityRule{
+		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
+		NamespaceSelector: nsSelector,
+	}
+}
+
+func createComplianceEntityRule(deploymentName string, ports []uint16, tenantNamespaces []string) v3.EntityRule {
+	entityRule := createComplianceSourceEntityRule(deploymentName, tenantNamespaces)
+	entityRule.Ports = networkpolicy.Ports(ports...)
+
+	return entityRule
+}
+
+func ComplianceServerEntityRule(tenantNamespaces []string) v3.EntityRule {
+	return createComplianceEntityRule(ComplianceServerName, []uint16{complianceServerPort}, tenantNamespaces)
+}
+
+func ComplianceServerSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
+	return createComplianceSourceEntityRule(ComplianceServerName, tenantNamespaces)
+}
+
+func ComplianceBenchmarkerSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
+	return createComplianceSourceEntityRule(ComplianceBenchmarkerName, tenantNamespaces)
+}
+
+func ComplianceControllerSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
+	return createComplianceSourceEntityRule(ComplianceControllerName, tenantNamespaces)
+}
+
+func ComplianceSnapshotterSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
+	return createComplianceSourceEntityRule(ComplianceSnapshotterName, tenantNamespaces)
+}
+
+func ComplianceReporterSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
+	return createComplianceSourceEntityRule(ComplianceReporterName, tenantNamespaces)
+}
 
 // Register secret/certs that need Server and Client Key usage
 func init() {
@@ -124,6 +164,11 @@ type ComplianceConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	Namespace string
+
+	// Whether to run the rendered components in multi-tenant mode.
+	Tenant *operatorv1.Tenant
 }
 
 type complianceComponent struct {
@@ -180,9 +225,9 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := []client.Object{
 		c.complianceAccessAllowTigeraNetworkPolicy(),
-		networkpolicy.AllowTigeraDefaultDeny(ComplianceNamespace),
+		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
 	}
-	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...)
+	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
 	complianceObjs = append(complianceObjs,
 		c.complianceControllerServiceAccount(),
 		c.complianceControllerRole(),
@@ -218,8 +263,8 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	if c.cfg.KeyValidatorConfig != nil {
-		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredSecrets(ComplianceNamespace)...)...)
-		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ComplianceNamespace)...)...)
+		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredSecrets(c.cfg.Namespace)...)...)
+		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(c.cfg.Namespace)...)...)
 	}
 
 	var objsToDelete []client.Object
@@ -232,7 +277,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	} else {
 		// Compliance server is only for Standalone or Management clusters
-		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: ComplianceNamespace}})
+		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: c.cfg.Namespace}})
 		complianceObjs = append(complianceObjs,
 			c.complianceServerManagedClusterRole(),
 			c.externalLinseedRoleBinding(),
@@ -259,7 +304,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
-	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.ESSecrets...)...)...)
+	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.ESSecrets...)...)...)
 
 	if c.cfg.HasNoLicense {
 		return nil, complianceObjs
@@ -282,7 +327,7 @@ const complianceServerPort = 5443
 func (c *complianceComponent) complianceControllerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount, Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount, Namespace: c.cfg.Namespace},
 	}
 }
 
@@ -312,7 +357,7 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 
 	return &rbacv1.Role{
 		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount, Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount, Namespace: c.cfg.Namespace},
 		Rules:      rules,
 	}
 }
@@ -349,7 +394,7 @@ func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterR
 func (c *complianceComponent) complianceControllerRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount, Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount, Namespace: c.cfg.Namespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
@@ -359,7 +404,7 @@ func (c *complianceComponent) complianceControllerRoleBinding() *rbacv1.RoleBind
 			{
 				Kind:      "ServiceAccount",
 				Name:      ComplianceControllerServiceAccount,
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -378,7 +423,7 @@ func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.C
 			{
 				Kind:      "ServiceAccount",
 				Name:      ComplianceControllerServiceAccount,
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -398,7 +443,7 @@ func (c *complianceComponent) complianceControllerClusterAdminClusterRoleBinding
 			{
 				Kind:      "ServiceAccount",
 				Name:      ComplianceControllerServiceAccount,
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -437,7 +482,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
-		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: c.cfg.Namespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_MAX_JOB_RETRIES", Value: "6"},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
@@ -447,12 +492,12 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 
 	var initContainers []corev1.Container
 	if c.cfg.ControllerKeyPair != nil && c.cfg.ControllerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(ComplianceNamespace))
+		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(c.cfg.Namespace))
 	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: ComplianceControllerServiceAccount,
@@ -486,7 +531,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 			Labels: map[string]string{
 				"k8s-app": ComplianceControllerName,
 			},
@@ -508,7 +553,7 @@ func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1b
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceReporterServiceAccount, Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceReporterServiceAccount, Namespace: c.cfg.Namespace},
 	}
 }
 
@@ -560,7 +605,7 @@ func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.Clu
 			{
 				Kind:      "ServiceAccount",
 				Name:      ComplianceReporterServiceAccount,
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -577,7 +622,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
-		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: c.cfg.Namespace},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
@@ -622,14 +667,14 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	}
 	var initContainers []corev1.Container
 	if c.cfg.ReporterKeyPair != nil && c.cfg.ReporterKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(ComplianceNamespace))
+		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
 	return &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera.io.report",
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 			Labels: map[string]string{
 				"k8s-app": ComplianceReporterName,
 			},
@@ -637,7 +682,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "tigera.io.report",
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 				Labels: map[string]string{
 					"k8s-app": ComplianceReporterName,
 				},
@@ -686,7 +731,7 @@ func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1bet
 func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount, Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount, Namespace: c.cfg.Namespace},
 	}
 }
 
@@ -698,7 +743,7 @@ func (c *complianceComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      linseed,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -788,7 +833,7 @@ func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.Clust
 			{
 				Kind:      "ServiceAccount",
 				Name:      ComplianceServerServiceAccount,
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -797,7 +842,7 @@ func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.Clust
 func (c *complianceComponent) complianceServerService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: c.cfg.Namespace},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
@@ -821,7 +866,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
-		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: c.cfg.Namespace},
 		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
@@ -833,13 +878,13 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	}
 	var initContainers []corev1.Container
 	if c.cfg.ServerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(ComplianceNamespace))
+		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ComplianceServerName,
-			Namespace:   ComplianceNamespace,
+			Namespace:   c.cfg.Namespace,
 			Annotations: complianceAnnotations(c),
 		},
 		Spec: corev1.PodSpec{
@@ -898,7 +943,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &complianceReplicas,
@@ -925,7 +970,7 @@ func complianceAnnotations(c *complianceComponent) map[string]string {
 func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceSnapshotterServiceAccount, Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceSnapshotterServiceAccount, Namespace: c.cfg.Namespace},
 	}
 }
 
@@ -988,7 +1033,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRoleBinding() *rbacv1.
 			{
 				Kind:      "ServiceAccount",
 				Name:      ComplianceSnapshotterServiceAccount,
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -1003,7 +1048,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
-		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
+		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: c.cfg.Namespace},
 		{Name: "TIGERA_COMPLIANCE_MAX_FAILED_JOBS_HISTORY", Value: "3"},
 		{Name: "TIGERA_COMPLIANCE_SNAPSHOT_HOUR", Value: "0"},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
@@ -1036,13 +1081,13 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 	}
 	var initContainers []corev1.Container
 	if c.cfg.SnapshotterKeyPair != nil && c.cfg.SnapshotterKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(ComplianceNamespace))
+		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: ComplianceSnapshotterServiceAccount,
@@ -1076,7 +1121,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &complianceReplicas,
@@ -1095,7 +1140,7 @@ func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceBenchmarkerServiceAccount, Namespace: ComplianceNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceBenchmarkerServiceAccount, Namespace: c.cfg.Namespace},
 	}
 }
 
@@ -1147,7 +1192,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.
 			{
 				Kind:      "ServiceAccount",
 				Name:      ComplianceBenchmarkerServiceAccount,
-				Namespace: ComplianceNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -1234,12 +1279,12 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 
 	var initContainers []corev1.Container
 	if c.cfg.BenchmarkerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(ComplianceNamespace))
+		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(c.cfg.Namespace))
 	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: ComplianceBenchmarkerServiceAccount,
@@ -1275,7 +1320,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 
 		Spec: appsv1.DaemonSetSpec{
@@ -1301,7 +1346,7 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
 		Users: []string{
-			fmt.Sprintf("system:serviceaccount:%s:tigera-compliance-benchmarker", ComplianceNamespace),
+			fmt.Sprintf("system:serviceaccount:%s:tigera-compliance-benchmarker", c.cfg.Namespace),
 		},
 		Volumes: []ocsv1.FSType{"*"},
 	}
@@ -1650,7 +1695,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceAccessPolicyName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
@@ -1713,7 +1758,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerPolicyName,
-			Namespace: ComplianceNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

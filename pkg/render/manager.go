@@ -542,7 +542,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 
 	if c.cfg.Tenant != nil {
-		// Configure the tenant id in order to read /write elastic data using the correct tenant ID
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
 		// Multi-tenant and single tenant with external elastic needs this variable set
 		if c.cfg.ExternalElastic {
 			env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
@@ -606,7 +606,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	if c.cfg.Tenant != nil {
 
 		if c.cfg.ExternalElastic {
-			// A tenant was specified, ensur we set the tenant ID.
+			// A tenant was specified, ensure we set the tenant ID.
 			env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 		}
 

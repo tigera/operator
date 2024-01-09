@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -508,7 +508,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
 				Resources: []string{"secrets", "configmaps"},
-				Verbs:     []string{"get"},
+				Verbs:     []string{"get", "watch"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"crd.projectcalico.org"},

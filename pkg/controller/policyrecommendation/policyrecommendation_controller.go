@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023,2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in policy recommendation with the License.
@@ -161,6 +161,7 @@ func newReconciler(
 		policyRecScopeWatchReady: policyRecScopeWatchReady,
 		usePSP:                   opts.UsePSP,
 		multiTenant:              opts.MultiTenant,
+		externalElastic:          opts.ElasticExternal,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -185,6 +186,7 @@ type ReconcilePolicyRecommendation struct {
 	provider                 operatorv1.Provider
 	usePSP                   bool
 	multiTenant              bool
+	externalElastic          bool
 }
 
 func GetPolicyRecommendation(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.PolicyRecommendation, error) {
@@ -352,6 +354,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		Namespace:         helper.InstallNamespace(),
 		Tenant:            tenant,
 		BindingNamespaces: bindNamespaces,
+		ExternalElastic:   r.externalElastic,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

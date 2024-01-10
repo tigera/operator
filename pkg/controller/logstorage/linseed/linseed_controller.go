@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -374,19 +374,23 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	cfg := &linseed.Config{
-		Installation:      install,
-		PullSecrets:       pullSecrets,
-		Namespace:         helper.InstallNamespace(),
-		BindNamespaces:    bindNamespaces,
-		TrustedBundle:     trustedBundle,
-		ClusterDomain:     r.clusterDomain,
-		KeyPair:           linseedKeyPair,
-		TokenKeyPair:      tokenKeyPair,
-		UsePSP:            r.usePSP,
-		ESClusterConfig:   esClusterConfig,
-		HasDPIResource:    hasDPIResource,
-		ManagementCluster: managementCluster != nil,
-		Tenant:            tenant,
+		Installation:        install,
+		PullSecrets:         pullSecrets,
+		Namespace:           helper.InstallNamespace(),
+		BindNamespaces:      bindNamespaces,
+		TrustedBundle:       trustedBundle,
+		ClusterDomain:       r.clusterDomain,
+		KeyPair:             linseedKeyPair,
+		TokenKeyPair:        tokenKeyPair,
+		UsePSP:              r.usePSP,
+		ESClusterConfig:     esClusterConfig,
+		HasDPIResource:      hasDPIResource,
+		ManagementCluster:   managementCluster != nil,
+		Tenant:              tenant,
+		ExternalElastic:     r.elasticExternal,
+		ElasticHost:         elasticHost,
+		ElasticPort:         elasticPort,
+		ElasticClientSecret: esClientSecret,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 

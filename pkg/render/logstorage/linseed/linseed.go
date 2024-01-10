@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -115,7 +115,15 @@ type Config struct {
 	BindNamespaces []string
 
 	// Tenant configuration, if running for a particular tenant.
-	Tenant *operatorv1.Tenant
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
+
+	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
+	// mTLS is used between Linseed and the external Elastic cluster.
+	ElasticClientSecret *corev1.Secret
+
+	ElasticHost string
+	ElasticPort string
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -354,13 +362,21 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	}
 
 	if l.cfg.Tenant != nil {
-		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
-		envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
-		for _, index := range l.cfg.Tenant.Spec.Indices {
-			envVars = append(envVars, index.EnvVar())
+		if l.cfg.ExternalElastic {
+			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		}
+
+		if l.cfg.Tenant.MultiTenant() {
+			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
+
+			// We also use shared indices for multi-tenant clusters.
+			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
+			for _, index := range l.cfg.Tenant.Spec.Indices {
+				envVars = append(envVars, index.EnvVar())
+			}
 		}
 	}
 

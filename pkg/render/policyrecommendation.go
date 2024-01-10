@@ -72,7 +72,9 @@ type PolicyRecommendationConfiguration struct {
 	Namespace string
 
 	// Whether or not to run the rendered components in multi-tenant mode.
-	Tenant *operatorv1.Tenant
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
+
 }
 
 type policyRecommendationComponent struct {
@@ -260,8 +262,13 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 	}
 
 	if pr.cfg.Tenant != nil {
-		envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: pr.cfg.Tenant.Namespace})
-		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: pr.cfg.Tenant.Spec.ID})
+		if pr.cfg.ExternalElastic {
+			envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: pr.cfg.Tenant.Spec.ID})
+		}
+
+		if pr.cfg.Tenant.MultiTenant() {
+			envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: pr.cfg.Tenant.Namespace})
+		}
 	}
 
 	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())

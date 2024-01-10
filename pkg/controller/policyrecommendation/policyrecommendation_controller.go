@@ -163,6 +163,7 @@ func newReconciler(
 		policyRecScopeWatchReady: policyRecScopeWatchReady,
 		usePSP:                   opts.UsePSP,
 		multiTenant:              opts.MultiTenant,
+		externalElastic:          opts.ElasticExternal,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -187,6 +188,7 @@ type ReconcilePolicyRecommendation struct {
 	provider                 operatorv1.Provider
 	usePSP                   bool
 	multiTenant              bool
+	externalElastic          bool
 }
 
 func GetPolicyRecommendation(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.PolicyRecommendation, error) {
@@ -336,13 +338,16 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:  r.clusterDomain,
-		Installation:   installation,
-		ManagedCluster: isManagedCluster,
-		PullSecrets:    pullSecrets,
-		Openshift:      r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:         r.usePSP,
-		Namespace:      helper.InstallNamespace(),
+		ClusterDomain:        r.clusterDomain,
+		Installation:         installation,
+		ManagedCluster:       isManagedCluster,
+		PullSecrets:          pullSecrets,
+		Openshift:            r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:               r.usePSP,
+		Namespace:            helper.InstallNamespace(),
+		Tenant:               tenant,
+		BindingNamespaces:    bindNamespaces,
+		ExternalElastic:      r.externalElastic,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

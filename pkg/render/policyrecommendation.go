@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,7 +74,6 @@ type PolicyRecommendationConfiguration struct {
 	// Whether or not to run the rendered components in multi-tenant mode.
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
-
 }
 
 type policyRecommendationComponent struct {

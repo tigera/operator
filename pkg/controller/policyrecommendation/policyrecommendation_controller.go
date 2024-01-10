@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in policy recommendation with the License.
@@ -338,16 +338,16 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:        r.clusterDomain,
-		Installation:         installation,
-		ManagedCluster:       isManagedCluster,
-		PullSecrets:          pullSecrets,
-		Openshift:            r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:               r.usePSP,
-		Namespace:            helper.InstallNamespace(),
-		Tenant:               tenant,
-		BindingNamespaces:    bindNamespaces,
-		ExternalElastic:      r.externalElastic,
+		ClusterDomain:     r.clusterDomain,
+		Installation:      installation,
+		ManagedCluster:    isManagedCluster,
+		PullSecrets:       pullSecrets,
+		Openshift:         r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:            r.usePSP,
+		Namespace:         helper.InstallNamespace(),
+		Tenant:            tenant,
+		BindingNamespaces: bindNamespaces,
+		ExternalElastic:   r.externalElastic,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1003,6 +1003,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 						ID: "tenant-a",
 					},
 				},
+				externalElastic: true,
 			})
 			d := rtest.GetResource(resources, "tigera-manager", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[2].Env
@@ -1010,6 +1011,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: tenantANamespace}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenantANamespace)}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
@@ -1045,7 +1047,45 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	Context("single-tenant rendering", func() {
-		It("should render single-tenant environment variables", func() {
+		It("should render single-tenant environment variables with external elastic", func() {
+			tenantAResources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      render.ManagerNamespace,
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tenant",
+						Namespace: "",
+					},
+					Spec: operatorv1.TenantSpec{
+						ID: "tenant-a",
+					},
+				},
+				externalElastic: true,
+			})
+			d := rtest.GetResource(tenantAResources, "tigera-manager", render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[2].Env
+			esProxyEnv := d.Spec.Template.Spec.Containers[1].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: "tenant-a"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: "tenant-a"}))
+			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
+
+			// Make sure we don't render multi-tenant environment variables
+			for _, env := range envs {
+				Expect(env.Name).NotTo(Equal("VOLTRON_TENANT_NAMESPACE"))
+				Expect(env.Name).NotTo(Equal("VOLTRON_LINSEED_ENDPOINT"))
+			}
+			for _, env := range esProxyEnv {
+				Expect(env.Name).NotTo(Equal("TENANT_NAMESPACE"))
+			}
+		})
+
+		It("should render single-tenant environment variables with internal elastic", func() {
 			tenantAResources := renderObjects(renderConfig{
 				oidc:                    false,
 				managementCluster:       nil,
@@ -1066,10 +1106,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			d := rtest.GetResource(tenantAResources, "tigera-manager", render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[2].Env
 			esProxyEnv := d.Spec.Template.Spec.Containers[1].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: "tenant-a"}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
-			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
 
 			// Make sure we don't render multi-tenant environment variables
 			for _, env := range envs {
@@ -1093,6 +1132,7 @@ type renderConfig struct {
 	ns                      string
 	bindingNamespaces       []string
 	tenant                  *operatorv1.Tenant
+	externalElastic         bool
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -1163,6 +1203,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		BindingNamespaces:       roc.bindingNamespaces,
 		TruthNamespace:          common.OperatorNamespace(),
 		Tenant:                  roc.tenant,
+		ExternalElastic:         roc.externalElastic,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

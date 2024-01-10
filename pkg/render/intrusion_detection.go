@@ -634,16 +634,15 @@ func (c *intrusionDetectionComponent) intrusionDetectionRole() *rbacv1.Role {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{
-					"",
-				},
-				Resources: []string{
-					"secrets",
-					"configmaps",
-				},
-				Verbs: []string{
-					"get",
-				},
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// Intrusion detection forwarder snapshots its state to a specific ConfigMap.
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "create", "update"},
 			},
 		},
 	}

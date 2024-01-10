@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -79,7 +79,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 
-		// Create an object we can use throughout the test to do the compliance reconcile loops.
+		// Create an object we can use throughout the tests.
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
@@ -101,8 +101,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
-		// Create an object we can use throughout the test to do the compliance reconcile loops.
-		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileIntrusionDetection{
 			client:          c,
 			scheme:          scheme,
@@ -132,8 +130,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 
-		// The compliance reconcile loop depends on a ton of objects that should be available in your client as
-		// prerequisites. Without them, compliance will not even start creating objects. Let's create them now.
+		// The reconcile loop depends on a ton of objects that should be available in your client as
+		// prerequisites. Without them, the controller will not even start creating objects. Let's create them now.
 		Expect(c.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
@@ -276,6 +274,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}
 			Expect(test.GetResource(c, &adAPI)).To(HaveOccurred())
 		})
+
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
@@ -430,7 +429,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 0)).To(BeTrue())
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
 		})
 
 		It("should wait on tigera-ee-installer-elasticsearch-access secret when in a management cluster", func() {
@@ -444,7 +443,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			// The missing secret should force utils.ElasticSearch to return a NotFound error which triggers r.status.SetDegraded.
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 1)
 		})
 	})
 
@@ -564,6 +563,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 	Context("Reconcile for Condition status", func() {
 		generation := int64(2)
+
 		It("should reconcile with creating new status condition with one item", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -599,6 +599,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with empty tigerastatus conditions ", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -619,6 +620,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 			Expect(instance.Status.Conditions).To(HaveLen(0))
 		})
+
 		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -680,6 +682,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -740,6 +743,34 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+	})
+
+	Context("External ES mode", func() {
+		BeforeEach(func() {
+			// Delete the Elasticsearch CR. This is created for ECK only.
+			Expect(c.Delete(ctx, &esv1.Elasticsearch{
+				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
+			})).NotTo(HaveOccurred())
+
+			// Update the reconciler to run in external ES mode for these tests.
+			r.elasticExternal = true
+		})
+
+		It("should Reconcile with default values for intrusion detection resource", func() {
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			ids := operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(test.GetResource(c, &ids)).To(BeNil())
+			Expect(ids.Spec.ComponentResources).ShouldNot(BeNil())
+			Expect(len(ids.Spec.ComponentResources)).Should(Equal(1))
+			Expect(ids.Spec.ComponentResources[0].ComponentName).Should(Equal(operatorv1.ComponentNameDeepPacketInspection))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPURequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimit)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
 		})
 	})
 })

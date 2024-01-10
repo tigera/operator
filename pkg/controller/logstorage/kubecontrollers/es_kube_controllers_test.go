@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023,2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -192,6 +192,18 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		Expect(err.Error()).Should(ContainSubstring("CA secret"))
 	})
 
+	It("should wait for elasticsearch to be provisioned", func() {
+		// Delete the Elasticsearch CR. This is created for ECK only.
+		Expect(cli.Delete(ctx, &esv1.Elasticsearch{
+			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
+		})).NotTo(HaveOccurred())
+
+		// Run the reconciler.
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(result).ShouldNot(Equal(successResult))
+	})
+
 	It("should reconcile resources for a standlone cluster", func() {
 		// Run the reconciler.
 		result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -271,5 +283,48 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 
 		err = Add(mgr, options)
 		Expect(err).To(BeNil())
+	})
+
+	Context("External ES mode", func() {
+		BeforeEach(func() {
+			// Delete the Elasticsearch CR. This is created for ECK only.
+			Expect(cli.Delete(ctx, &esv1.Elasticsearch{
+				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
+			})).NotTo(HaveOccurred())
+
+			// Update the reconciler to run in external ES mode for these tests.
+			r.elasticExternal = true
+		})
+
+		It("should reconcile resources for a cluster", func() {
+			// Run the reconciler.
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).Should(Equal(successResult))
+
+			// SetDegraded should not have been called.
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
+
+			// Check that kube-controllers was created as expected. We don't need to check every resource in detail, since
+			// the render package has its own tests which cover this in more detail.
+			dep := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kubecontrollers.EsKubeController,
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &dep)).To(BeNil())
+
+			// We also expect es-gateway to be created.
+			dep = appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      esgateway.DeploymentName,
+					Namespace: render.ElasticsearchNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &dep)).To(BeNil())
+		})
 	})
 })

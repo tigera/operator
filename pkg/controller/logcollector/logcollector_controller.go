@@ -1,4 +1,4 @@
-// Copyright (c) 2020,2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,6 +110,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
+		externalElastic: opts.ElasticExternal,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -185,6 +186,7 @@ type ReconcileLogCollector struct {
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
 	multiTenant     bool
+	externalElastic bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -587,6 +589,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		UsePSP:                 r.usePSP,
 		UseSyslogCertificate:   useSyslogCertificate,
 		Tenant:                 tenant,
+		ExternalElastic:        r.externalElastic,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 	}
 	// Render the fluentd component for Linux

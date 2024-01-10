@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -167,8 +167,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
 
-	if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+	if !opts.ElasticExternal {
+		if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
+			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+		}
 	}
 
 	return nil
@@ -186,6 +188,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
+		elasticExternal: opts.ElasticExternal,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -207,7 +210,8 @@ type ReconcileManager struct {
 	usePSP          bool
 
 	// Whether or not the operator is running in multi-tenant mode.
-	multiTenant bool
+	multiTenant     bool
+	elasticExternal bool
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -581,7 +585,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var elasticLicenseType render.ElasticsearchLicenseType
-	if managementClusterConnection == nil {
+	if !r.elasticExternal && managementClusterConnection == nil {
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, logc)
 			return reconcile.Result{}, err
@@ -639,6 +643,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Namespace:               helper.InstallNamespace(),
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
+		ExternalElastic:         r.elasticExternal,
 		BindingNamespaces:       namespaces,
 	}
 

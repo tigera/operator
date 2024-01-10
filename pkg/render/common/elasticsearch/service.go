@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,6 +48,8 @@ func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
 	return GatewayEndpoint(osType, clusterDomain, "tigera-elasticsearch")
 }
 
-func ElasticEndpoint() string {
+// ECKElasticEndpoint returns the URL of the Elasticsearch provisioned by the ECK operator. This
+// endpoint is only valid when using internal elasticsearch.
+func ECKElasticEndpoint() string {
 	return "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 }

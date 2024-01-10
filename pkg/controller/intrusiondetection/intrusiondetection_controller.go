@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -117,6 +117,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		dpiAPIReady:     dpiAPIReady,
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -236,6 +237,7 @@ type ReconcileIntrusionDetection struct {
 	dpiAPIReady     *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
+	elasticExternal bool
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -308,7 +310,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !isManagedCluster {
+	if !isManagedCluster && !r.elasticExternal {
 		// check es-gateway to be available
 		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 		if err != nil {

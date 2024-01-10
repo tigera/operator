@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package linseed
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -36,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -46,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -55,14 +58,15 @@ import (
 var log = logf.Log.WithName("controller_logstorage_linseed")
 
 type LinseedSubController struct {
-	client         client.Client
-	scheme         *runtime.Scheme
-	status         status.StatusManager
-	clusterDomain  string
-	tierWatchReady *utils.ReadyFlag
-	dpiAPIReady    *utils.ReadyFlag
-	usePSP         bool
-	multiTenant    bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	clusterDomain   string
+	tierWatchReady  *utils.ReadyFlag
+	dpiAPIReady     *utils.ReadyFlag
+	usePSP          bool
+	multiTenant     bool
+	elasticExternal bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -72,13 +76,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &LinseedSubController{
-		client:         mgr.GetClient(),
-		scheme:         mgr.GetScheme(),
-		clusterDomain:  opts.ClusterDomain,
-		tierWatchReady: &utils.ReadyFlag{},
-		dpiAPIReady:    &utils.ReadyFlag{},
-		multiTenant:    opts.MultiTenant,
-		status:         status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clusterDomain:   opts.ClusterDomain,
+		tierWatchReady:  &utils.ReadyFlag{},
+		dpiAPIReady:     &utils.ReadyFlag{},
+		multiTenant:     opts.MultiTenant,
+		status:          status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -291,15 +296,49 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Wait for Elasticsearch to be installed and available.
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	// Determine where to access elasticsearch.
+	elasticHost := "tigera-secure-es-http.tigera-elasticsearch.svc"
+	elasticPort := "9200"
+	var esClientSecret *corev1.Secret
+	if !r.elasticExternal {
+		// Wait for Elasticsearch to be installed and available.
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+	} else {
+		// If we're using an external ES, the Tenant resource must specify the ES endpoint.
+		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.URL == "" {
+			reqLogger.Error(nil, "Elasticsearch URL must be specified for this tenant")
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL must be specified for this tenant", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+
+		// Determine the host and port from the URL.
+		url, err := url.Parse(tenant.Spec.Elastic.URL)
+		if err != nil {
+			reqLogger.Error(err, "Elasticsearch URL is invalid")
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL is invalid", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		elasticHost = url.Hostname()
+		elasticPort = url.Port()
+
+		if tenant.ElasticMTLS() {
+			// If mTLS is enabled, get the secret containing the CA and client certificate.
+			esClientSecret = &corev1.Secret{}
+			err = r.client.Get(ctx, client.ObjectKey{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}, esClientSecret)
+			if err != nil {
+				reqLogger.Error(err, "Failed to read external Elasticsearch client certificate secret")
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch client certificate secret to be available", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
 	}
 
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
@@ -374,19 +413,23 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	cfg := &linseed.Config{
-		Installation:      install,
-		PullSecrets:       pullSecrets,
-		Namespace:         helper.InstallNamespace(),
-		BindNamespaces:    bindNamespaces,
-		TrustedBundle:     trustedBundle,
-		ClusterDomain:     r.clusterDomain,
-		KeyPair:           linseedKeyPair,
-		TokenKeyPair:      tokenKeyPair,
-		UsePSP:            r.usePSP,
-		ESClusterConfig:   esClusterConfig,
-		HasDPIResource:    hasDPIResource,
-		ManagementCluster: managementCluster != nil,
-		Tenant:            tenant,
+		Installation:        install,
+		PullSecrets:         pullSecrets,
+		Namespace:           helper.InstallNamespace(),
+		BindNamespaces:      bindNamespaces,
+		TrustedBundle:       trustedBundle,
+		ClusterDomain:       r.clusterDomain,
+		KeyPair:             linseedKeyPair,
+		TokenKeyPair:        tokenKeyPair,
+		UsePSP:              r.usePSP,
+		ESClusterConfig:     esClusterConfig,
+		HasDPIResource:      hasDPIResource,
+		ManagementCluster:   managementCluster != nil,
+		Tenant:              tenant,
+		ExternalElastic:     r.elasticExternal,
+		ElasticHost:         elasticHost,
+		ElasticPort:         elasticPort,
+		ElasticClientSecret: esClientSecret,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 

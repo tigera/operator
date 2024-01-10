@@ -1076,28 +1076,14 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		// Audit logs are owned by root on hosts so we need to be root user and group.
 		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
 		VolumeMounts:    volumeMounts,
-		LivenessProbe: &corev1.Probe{
+		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/version",
+					Path:   "/readyz",
 					Port:   intstr.FromInt(APIServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
-			InitialDelaySeconds: 90,
-			TimeoutSeconds:      10,
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/code/filecheck",
-					},
-				},
-			},
-			FailureThreshold:    5,
-			InitialDelaySeconds: 5,
-			TimeoutSeconds:      10,
 		},
 	}
 

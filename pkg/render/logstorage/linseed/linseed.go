@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -115,7 +116,15 @@ type Config struct {
 	BindNamespaces []string
 
 	// Tenant configuration, if running for a particular tenant.
-	Tenant *operatorv1.Tenant
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
+
+	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
+	// mTLS is used between Linseed and the external Elastic cluster.
+	ElasticClientSecret *corev1.Secret
+
+	ElasticHost string
+	ElasticPort string
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -155,6 +164,10 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.UsePSP {
 		toCreate = append(toCreate, l.linseedPodSecurityPolicy())
+	}
+	if l.cfg.ElasticClientSecret != nil {
+		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
 	return toCreate, toDelete
 }
@@ -199,7 +212,10 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	if l.cfg.Tenant != nil {
+	if l.cfg.Tenant.MultiTenant() {
+		// These rules are used by Linseed in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
 		rules = append(rules, []rbacv1.PolicyRule{
 			{
 				APIGroups:     []string{""},
@@ -324,8 +340,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
 
 		{Name: "ELASTIC_SCHEME", Value: "https"},
-		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
-		{Name: "ELASTIC_PORT", Value: "9200"},
+		{Name: "ELASTIC_HOST", Value: l.cfg.ElasticHost},
+		{Name: "ELASTIC_PORT", Value: l.cfg.ElasticPort},
 		{
 			Name:      "ELASTIC_USERNAME",
 			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "username", false),
@@ -347,6 +363,28 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
 	)
 
+	if l.cfg.ElasticClientSecret != nil {
+		// Add a volume for the required client certificate and key.
+		volumes = append(volumes, corev1.Volume{
+			Name: logstorage.ExternalCertsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: logstorage.ExternalCertsSecret,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      logstorage.ExternalCertsVolumeName,
+			MountPath: "/certs/elasticsearch/mtls",
+			ReadOnly:  true,
+		})
+
+		// Configure Linseed to use the mounted client certificate and key.
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_MTLS_ENABLED", Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_KEY", Value: "/certs/elasticsearch/mtls/client.key"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_CERT", Value: "/certs/elasticsearch/mtls/client.crt"})
+	}
+
 	if l.cfg.ManagementCluster {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: common.OperatorNamespace()},
@@ -354,13 +392,21 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	}
 
 	if l.cfg.Tenant != nil {
-		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
-		envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", l.cfg.Tenant.Namespace)})
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
-		for _, index := range l.cfg.Tenant.Spec.Indices {
-			envVars = append(envVars, index.EnvVar())
+		if l.cfg.ExternalElastic {
+			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		}
+
+		if l.cfg.Tenant.MultiTenant() {
+			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
+
+			// We also use shared indices for multi-tenant clusters.
+			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
+			for _, index := range l.cfg.Tenant.Spec.Indices {
+				envVars = append(envVars, index.EnvVar())
+			}
 		}
 	}
 
@@ -371,6 +417,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+	if l.cfg.ElasticClientSecret != nil {
+		annotations["hash.operator.tigera.io/elastic-client-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientSecret)
+	}
 
 	if l.cfg.TokenKeyPair != nil {
 		envVars = append(envVars,
@@ -510,7 +559,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerEntityRule(),
 		})
 	}
 
@@ -547,7 +596,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant != nil, l.cfg.Namespace).ManagerSourceEntityRule(),
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
@@ -601,7 +650,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.PolicyRecommendationEntityRule,
+			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).PolicyRecommendationSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 	}
@@ -632,4 +681,14 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
+}
+
+// LinseedNamespace determine the namespace in which Linseed is running.
+// For management and standalone clusters, this is always the tigera-elasticsearch
+// namespace. For multi-tenant management clusters, this is the tenant namespace
+func LinseedNamespace(tenant *operatorv1.Tenant) string {
+	if tenant.MultiTenant() {
+		return tenant.Namespace
+	}
+	return "tigera-elasticsearch"
 }

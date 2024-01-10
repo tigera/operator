@@ -87,6 +87,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
+	if opts.ElasticExternal {
+		// This controller installs the Elastic operator and an Elasticsearch instance, which is not
+		// needed when using an external Elastic cluster.
+		return nil
+	}
 
 	// Create the reconciler
 	r := &ElasticSubController{
@@ -678,7 +683,7 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 
 func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) error {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
-	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ElasticEndpoint())
+	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ECKElasticEndpoint())
 	if err != nil {
 		return err
 	}

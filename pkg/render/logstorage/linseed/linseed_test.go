@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -59,7 +60,7 @@ type resourceTestObj struct {
 }
 
 var _ = Describe("Linseed rendering tests", func() {
-	Context("Linseed deployment", func() {
+	Context("single-tenant rendering", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
 		var cfg *Config
@@ -103,6 +104,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 		})
 
@@ -122,6 +125,59 @@ var _ = Describe("Linseed rendering tests", func() {
 				Verbs:     []string{"get", "list", "watch"},
 			}
 			Expect(cr.Rules).To(ContainElement(secretsRules))
+		})
+
+		It("should support an external elasticsearch endpoint", func() {
+			cfg.ElasticHost = "test-host"
+			cfg.ElasticPort = "443"
+			cfg.ElasticClientSecret = &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      logstorage.ExternalCertsSecret,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string][]byte{
+					"client.crt": {1, 2, 3},
+					"client.key": {4, 5, 6},
+				},
+			}
+			cfg.ExternalElastic = true
+			component := Linseed(cfg)
+			createResources, _ := component.Objects()
+			d, ok := rtest.GetResource(createResources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue(), "Deployment not found")
+
+			// The deployment should have the hash annotation set, as well as a volume and volume mount for the client secret.
+			Expect(d.Spec.Template.Annotations["hash.operator.tigera.io/elastic-client-secret"]).To(Equal("ae1a6776a81bf1fc0ee4aac936a90bd61a07aea7"))
+			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
+				Name: logstorage.ExternalCertsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: logstorage.ExternalCertsSecret,
+					},
+				},
+			}))
+			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
+				Name:      logstorage.ExternalCertsVolumeName,
+				MountPath: "/certs/elasticsearch/mtls",
+				ReadOnly:  true,
+			}))
+
+			// Should expect mTLS env vars set.
+			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: "ELASTIC_CLIENT_KEY", Value: "/certs/elasticsearch/mtls/client.key",
+			}))
+			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: "ELASTIC_CLIENT_CERT", Value: "/certs/elasticsearch/mtls/client.crt",
+			}))
+			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: "ELASTIC_MTLS_ENABLED", Value: "true",
+			}))
+
+			// The client secret should also be emitted as a resources, but copied to the destination namespace.
+			s, ok := rtest.GetResource(createResources, logstorage.ExternalCertsSecret, render.ElasticsearchNamespace, "", "v1", "Secret").(*corev1.Secret)
+			Expect(ok).To(BeTrue(), "Secret not copied")
+			Expect(s.Data).To(Equal(cfg.ElasticClientSecret.Data))
 		})
 
 		It("should render properly when PSP is not supported by the cluster", func() {
@@ -154,6 +210,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 
 			component := Linseed(cfg)
@@ -268,6 +326,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			})
 
 			resources, _ := component.Objects()
@@ -368,6 +428,9 @@ var _ = Describe("Linseed rendering tests", func() {
 				Namespace:       "tenant-test-tenant",
 				Tenant:          tenant,
 				BindNamespaces:  []string{tenant.Namespace, "tigera-elasticsearch"},
+				ExternalElastic: true,
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
 			}
 		})
 
@@ -448,6 +511,111 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_domain_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_ip_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
+		})
+	})
+
+	Context("single-tenant rendering", func() {
+		var installation *operatorv1.InstallationSpec
+		var tenant *operatorv1.Tenant
+		var replicas int32
+		var cfg *Config
+		clusterDomain := "cluster.local"
+		esClusterConfig := relasticsearch.NewClusterConfig("", 1, 1, 1)
+
+		BeforeEach(func() {
+			replicas = 2
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
+			}
+			tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-tenant",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "test-tenant",
+				},
+			}
+			kp, tokenKP, bundle := getTLS(installation)
+			cfg = &Config{
+				Installation: installation,
+				PullSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				KeyPair:         kp,
+				TokenKeyPair:    tokenKP,
+				TrustedBundle:   bundle,
+				ClusterDomain:   clusterDomain,
+				ESClusterConfig: esClusterConfig,
+				Namespace:       "tenant-test-tenant",
+				Tenant:          tenant,
+				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:     "9200",
+			}
+		})
+
+		It("should NOT render impersonation permissions as part of tigera-linseed ClusterRole", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			cr := rtest.GetResource(resources, ClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{render.LinseedServiceName},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+					},
+				},
+			}
+			Expect(cr.Rules).NotTo(ContainElements(expectedRules))
+		})
+
+		It("should render single-tenant environment variables with external elastic", func() {
+			cfg.ManagementCluster = true
+			cfg.ExternalElastic = true
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+
+			// These are only set for multi-tenant clusters. Make sure they aren't set here.
+			for _, env := range envs {
+				Expect(env.Name).NotTo(Equal("LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT"))
+				Expect(env.Name).NotTo(Equal("LINSEED_TENANT_NAMESPACE"))
+				Expect(env.Name).NotTo(Equal("BACKEND"))
+			}
+		})
+
+		It("should render single-tenant environment variables with internal elastic", func() {
+			cfg.ManagementCluster = true
+			cfg.ExternalElastic = false
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
+
+			// These are only set for multi-tenant clusters. Make sure they aren't set here.
+			for _, env := range envs {
+				Expect(env.Name).NotTo(Equal("LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT"))
+				Expect(env.Name).NotTo(Equal("LINSEED_TENANT_NAMESPACE"))
+				Expect(env.Name).NotTo(Equal("BACKEND"))
+			}
 		})
 	})
 })

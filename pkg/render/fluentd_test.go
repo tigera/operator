@@ -1047,6 +1047,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			KubernetesProvider:      operatorv1.ProviderEKS,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
+		cfg.ExternalElastic = true
+
 		// Create the Tenant object.
 		tenant := &operatorv1.Tenant{}
 		tenant.Name = "default"

@@ -668,6 +668,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
 		TenantNamespaces:        tenantNamespaces,
+		ExternalElastic:         r.elasticExternal,
 		BindingNamespaces:       namespaces,
 		Manager:                 instance,
 	}

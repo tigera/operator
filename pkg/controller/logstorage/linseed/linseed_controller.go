@@ -435,6 +435,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		ManagementCluster:   managementCluster != nil,
 		Tenant:              tenant,
 		TenantNamespaces:    tenantNamespaces,
+		ExternalElastic:     r.elasticExternal,
 		ElasticHost:         elasticHost,
 		ElasticPort:         elasticPort,
 		ElasticClientSecret: esClientSecret,

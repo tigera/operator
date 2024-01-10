@@ -71,6 +71,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
+	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
+	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
+	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
+	if opts.MultiTenant {
+		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		log.Error(err, "Failed to establish a connection to k8s")
@@ -94,15 +104,15 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	if err = utils.AddInstallationWatch(complianceController); err != nil {
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch Installation resource: %w", err)
 	}
 
-	if err = imageset.AddImageSetWatch(complianceController); err != nil {
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddAPIServerWatch(complianceController); err != nil {
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %w", err)
 	}
 
@@ -123,19 +133,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to primary resource ManagementCluster
-	err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
-	err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
 	}
 
-	err = complianceController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
 	}
 

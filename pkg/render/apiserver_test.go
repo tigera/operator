@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -231,11 +231,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/var/log/calico/audit"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-audit-logs"))
 
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 		Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeTrue())
@@ -1649,11 +1648,10 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
-		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 		Expect(*d.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeTrue())

@@ -216,7 +216,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version:  "v2.43.1",
+		Version:  "v2.48.1",
 		Registry: "",
 	}
 

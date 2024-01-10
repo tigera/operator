@@ -42,6 +42,10 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 	// Use the discovery client to determine if the tigera secure specific APIs exist.
 	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
 	if err != nil {
+		if kerrors.IsNotFound(err) {
+			// If the operator API group is not found then crds just haven't been applied yet.
+			return false, nil
+		}
 		return false, err
 	}
 	for _, r := range resources.APIResources {

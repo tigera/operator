@@ -181,21 +181,25 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{Name: "KIBANA_PORT", Value: "5601", ValueFrom: nil},
 			{Name: "KIBANA_SCHEME", Value: "https"},
 			{Name: "START_XPACK_TRIAL", Value: "false"},
-			{Name: "USER", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "tigera-ee-installer-elasticsearch-access",
+			{
+				Name: "USER", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ee-installer-elasticsearch-access",
+						},
+						Key: "username",
 					},
-					Key: "username",
-				}},
+				},
 			},
-			{Name: "PASSWORD", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "tigera-ee-installer-elasticsearch-access",
+			{
+				Name: "PASSWORD", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ee-installer-elasticsearch-access",
+						},
+						Key: "password",
 					},
-					Key: "password",
-				}},
+				},
 			},
 			{Name: "KB_CA_CERT", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			{Name: "FIPS_MODE_ENABLED", Value: "false"},
@@ -256,7 +260,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Containers[1].SecurityContext.SeccompProfile).To(Equal(&corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}))
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-
 		Expect(clusterRole.Rules).To(ContainElements(
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
@@ -282,6 +285,34 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"securityeventwebhooks"},
 				Verbs:     []string{"get", "watch", "update"},
+			},
+		))
+
+		role := rtest.GetResource(resources, render.IntrusionDetectionName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(role.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "configmaps"},
+				Verbs:     []string{"get"},
+			},
+			rbacv1.PolicyRule{
+				// Intrusion detection forwarder snapshots its state to a specific ConfigMap.
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				Verbs:         []string{"get", "create", "update"},
+				ResourceNames: []string{"forwarder-config"},
+			},
+		))
+
+		roleBinding := rtest.GetResource(resources, render.IntrusionDetectionName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(roleBinding.RoleRef.Name).To(Equal(render.IntrusionDetectionName))
+		Expect(roleBinding.RoleRef.Kind).To(Equal("Role"))
+		Expect(roleBinding.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
+		Expect(roleBinding.Subjects).To(ContainElements(
+			rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      render.IntrusionDetectionName,
+				Namespace: render.IntrusionDetectionNamespace,
 			},
 		))
 	})

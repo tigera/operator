@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -327,16 +327,22 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
 
+	tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	dexComponentCfg := &render.DexComponentConfiguration{
-		PullSecrets:   pullSecrets,
-		Openshift:     r.provider == oprv1.ProviderOpenShift,
-		Installation:  install,
-		DexConfig:     dexCfg,
-		ClusterDomain: r.clusterDomain,
-		DeleteDex:     disableDex,
-		TLSKeyPair:    tlsKeyPair,
-		TrustedBundle: trustedBundle,
-		UsePSP:        r.usePSP,
+		PullSecrets:      pullSecrets,
+		Openshift:        r.provider == oprv1.ProviderOpenShift,
+		Installation:     install,
+		DexConfig:        dexCfg,
+		ClusterDomain:    r.clusterDomain,
+		DeleteDex:        disableDex,
+		TLSKeyPair:       tlsKeyPair,
+		TrustedBundle:    trustedBundle,
+		UsePSP:           r.usePSP,
+		TenantNamespaces: tenantNamespaces,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

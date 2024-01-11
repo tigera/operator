@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,6 +86,8 @@ type Config struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	TenantNamespaces []string
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
@@ -405,31 +407,31 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceBenchmarkerSourceEntityRule,
+					Source:      render.ComplianceBenchmarkerSourceEntityRule(e.cfg.TenantNamespaces),
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceControllerSourceEntityRule,
+					Source:      render.ComplianceControllerSourceEntityRule(e.cfg.TenantNamespaces),
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceServerSourceEntityRule,
+					Source:      render.ComplianceServerSourceEntityRule(e.cfg.TenantNamespaces),
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceSnapshotterSourceEntityRule,
+					Source:      render.ComplianceSnapshotterSourceEntityRule(e.cfg.TenantNamespaces),
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceReporterSourceEntityRule,
+					Source:      render.ComplianceReporterSourceEntityRule(e.cfg.TenantNamespaces),
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{

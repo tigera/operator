@@ -83,6 +83,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
+	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
+	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
+	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
+	if opts.MultiTenant {
+		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("policy-recommendation-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.PolicyRecommendationNamespace)
 
 	go utils.WaitToAddLicenseKeyWatch(policyRecController, k8sClient, log, licenseAPIReady)
@@ -98,15 +108,15 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	if err = utils.AddInstallationWatch(policyRecController); err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch Installation resource: %w", err)
 	}
 
-	if err = imageset.AddImageSetWatch(policyRecController); err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddAPIServerWatch(policyRecController); err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch APIServer resource: %w", err)
 	}
 
@@ -124,13 +134,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch ManagementCluster resource: %w", err)
 	}
 
-	err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 

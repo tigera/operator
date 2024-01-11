@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -137,6 +137,8 @@ const (
 	UpgradeError              TigeraStatusReason = "UpgradeError"
 	Unknown                   TigeraStatusReason = "Unknown"
 	ImageSetError             TigeraStatusReason = "ImageSetError"
+	ResourceProgressing       TigeraStatusReason = "ResourceProgressing"
+	ResourceDegraded          TigeraStatusReason = "ResourceDegraded"
 )
 
 func init() {

@@ -119,6 +119,8 @@ type Config struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
+	TenantNamespaces []string
+
 	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
 	// mTLS is used between Linseed and the external Elastic cluster.
 	ElasticClientSecret *corev1.Secret
@@ -609,31 +611,31 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceBenchmarkerSourceEntityRule,
+			Source:      render.ComplianceBenchmarkerSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceControllerSourceEntityRule,
+			Source:      render.ComplianceControllerSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceServerSourceEntityRule,
+			Source:      render.ComplianceServerSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceSnapshotterSourceEntityRule,
+			Source:      render.ComplianceSnapshotterSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.ComplianceReporterSourceEntityRule,
+			Source:      render.ComplianceReporterSourceEntityRule(l.cfg.TenantNamespaces),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

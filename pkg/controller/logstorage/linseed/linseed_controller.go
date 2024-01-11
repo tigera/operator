@@ -415,6 +415,11 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
+	tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	cfg := &linseed.Config{
 		Installation:        install,
 		PullSecrets:         pullSecrets,
@@ -429,6 +434,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		HasDPIResource:      hasDPIResource,
 		ManagementCluster:   managementCluster != nil,
 		Tenant:              tenant,
+		TenantNamespaces:    tenantNamespaces,
 		ExternalElastic:     r.elasticExternal,
 		ElasticHost:         elasticHost,
 		ElasticPort:         elasticPort,

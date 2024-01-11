@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -91,6 +91,8 @@ type GuardianConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	TenantNamespaces []string
 }
 
 type GuardianComponent struct {
@@ -431,25 +433,25 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceBenchmarkerSourceEntityRule,
+			Source:      ComplianceBenchmarkerSourceEntityRule(cfg.TenantNamespaces),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceReporterSourceEntityRule,
+			Source:      ComplianceReporterSourceEntityRule(cfg.TenantNamespaces),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceSnapshotterSourceEntityRule,
+			Source:      ComplianceSnapshotterSourceEntityRule(cfg.TenantNamespaces),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceControllerSourceEntityRule,
+			Source:      ComplianceControllerSourceEntityRule(cfg.TenantNamespaces),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{

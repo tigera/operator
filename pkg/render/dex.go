@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,6 +74,8 @@ type DexComponentConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	TenantNamespaces []string
 }
 
 type dexComponent struct {
@@ -438,7 +440,7 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      ComplianceServerSourceEntityRule,
+					Source:      ComplianceServerSourceEntityRule(c.cfg.TenantNamespaces),
 					Destination: dexIngressPortDestination,
 				},
 				{

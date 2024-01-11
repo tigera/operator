@@ -77,7 +77,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if opts.MultiTenant {
 		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
 		if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
+			return fmt.Errorf("compliance-controller failed to watch Tenant resource: %w", err)
 		}
 	}
 

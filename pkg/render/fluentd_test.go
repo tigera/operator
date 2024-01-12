@@ -418,7 +418,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "TLS_KEY_PATH", Value: "c:/tigera-fluentd-prometheus-tls/tls.key"},
 			{Name: "TLS_CRT_PATH", Value: "c:/tigera-fluentd-prometheus-tls/tls.crt"},
 			{Name: "FLUENT_UID", Value: "0"},
-			{Name: "FLOW_LOG_FILE", Value: "c:/TigeraCalico/flowlogs/flows.log"},
+			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			{
@@ -438,7 +438,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		expectedEnvs = []corev1.EnvVar{
 			{Name: "FLUENT_UID", Value: "0"},
-			{Name: "FLOW_LOG_FILE", Value: "c:/TigeraCalico/flowlogs/flows.log"},
+			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			{

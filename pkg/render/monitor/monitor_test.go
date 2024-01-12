@@ -754,5 +754,21 @@ var _ = Describe("monitor rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
+
+		It("prometheus policy should omit kube-controller egress rule when kube-controller port is 0", func() {
+			// Baseline case
+			cfg.KubeControllerPort = 9094
+			component := monitor.MonitorPolicy(cfg)
+			resourcesToCreate, _ := component.Objects()
+			baselinePolicy := testutils.GetAllowTigeraPolicyFromResources(types.NamespacedName{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
+
+			// kube-controllers port set to 0
+			cfg.KubeControllerPort = 0
+			component = monitor.MonitorPolicy(cfg)
+			resourcesToCreate, _ = component.Objects()
+			zeroedPolicy := testutils.GetAllowTigeraPolicyFromResources(types.NamespacedName{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
+
+			Expect(len(zeroedPolicy.Spec.Egress)).To(Equal(len(baselinePolicy.Spec.Egress) - 1))
+		})
 	})
 })

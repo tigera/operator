@@ -115,7 +115,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		}
 
 		for _, condition := range ts.Status.Conditions {
-			for i, _ := range tsAggConditions {
+			for i := range tsAggConditions {
 				if tsAggConditions[i].Type == condition.Type {
 					tsAggConditions[i].Status = condition.Status
 					tsAggConditions[i].Message = fmt.Sprintf("%s%s for %s;", tsAggConditions[i].Message, condition.Message, logStorage)
@@ -149,7 +149,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 }
 
 func setTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionType operatorv1.StatusConditionType, reason string) {
-	for i, _ := range tsAggConditions {
+	for i := range tsAggConditions {
 		if tsAggConditions[i].Type == conditionType {
 			tsAggConditions[i].Status = operatorv1.ConditionTrue
 			tsAggConditions[i].Reason = reason
@@ -158,7 +158,7 @@ func setTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditi
 }
 
 func clearTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionTypes []operatorv1.StatusConditionType, reason string) {
-	for i, _ := range tsAggConditions {
+	for i := range tsAggConditions {
 		for _, conditionType := range conditionTypes {
 			if tsAggConditions[i].Type == conditionType {
 				tsAggConditions[i].Status = operatorv1.ConditionFalse

@@ -17,7 +17,6 @@ package initializer
 import (
 	"context"
 	"fmt"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -95,102 +94,52 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 
 	// Aggregate tiger status for all log storage controllers
 	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
-	tsLogStorage := &operatorv1.TigeraStatus{}
 
-	available, progressing, degraded := false, false, false
-	availableTransitionTime, progressTransitionTime, degTransitionTime := metav1.Time{}, metav1.Time{}, metav1.Time{}
-	progressingReason, degReason := operatorv1.Unknown, operatorv1.Unknown
-	progressingMsg, degMsg := "", ""
+	//Initialize aggregated TigeraStatus conditions with default values.
+	tsAggConditions := []operatorv1.TigeraStatusCondition{
+		{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentProgressing, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentDegraded, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+	}
 
+	// Map to keep track of the status conditions for each type.
+	statusMap := make(map[operatorv1.StatusConditionType]bool)
+
+	// Loop through all log storage instances.
 	for _, logStorage := range logStorageInstances {
 
+		// Fetch TigeraStatus for the individual log storage subcontrollers.
 		ts := &operatorv1.TigeraStatus{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil {
 			return reconcile.Result{}, err
 		}
 
 		for _, condition := range ts.Status.Conditions {
-			if condition.Type == operatorv1.ComponentAvailable {
-				available = true
-				if (condition.LastTransitionTime.Time).After(availableTransitionTime.Time) {
-					availableTransitionTime = condition.LastTransitionTime
+			for i, _ := range tsAggConditions {
+				if tsAggConditions[i].Type == condition.Type {
+					tsAggConditions[i].Status = condition.Status
+					tsAggConditions[i].Message = fmt.Sprintf("%s%s for %s;", tsAggConditions[i].Message, condition.Message, logStorage)
+					if tsAggConditions[i].LastTransitionTime.Time.Before(condition.LastTransitionTime.Time) {
+						tsAggConditions[i].LastTransitionTime = condition.LastTransitionTime
+					}
+					statusMap[condition.Type] = statusMap[condition.Type] || (condition.Status == operatorv1.ConditionTrue)
 				}
-			} else if condition.Type == operatorv1.ComponentProgressing {
-				progressing = true
-				if (condition.LastTransitionTime.Time).After(progressTransitionTime.Time) {
-					progressTransitionTime = condition.LastTransitionTime
-				}
-				if progressingReason == operatorv1.Unknown {
-					progressingReason = operatorv1.TigeraStatusReason(condition.Reason)
-				} else {
-					progressingReason = operatorv1.ResourceProgressing
-				}
-				progressingMsg = progressingMsg + condition.Message + ";"
-			} else if condition.Type == operatorv1.ComponentDegraded {
-				degraded = true
-				if (condition.LastTransitionTime.Time).After(degTransitionTime.Time) {
-					degTransitionTime = condition.LastTransitionTime
-				}
-
-				if degReason == operatorv1.Unknown {
-					degReason = operatorv1.TigeraStatusReason(condition.Reason)
-				} else {
-					progressingReason = operatorv1.ResourceDegraded
-				}
-				degMsg = degMsg + condition.Message + ";"
 			}
 		}
-
 	}
 
-	if degraded {
-		degradedCondition := operatorv1.TigeraStatusCondition{
-			Type:               operatorv1.ComponentDegraded,
-			Status:             operatorv1.ConditionTrue,
-			LastTransitionTime: degTransitionTime,
-			Reason:             string(degReason),
-			Message:            degMsg,
-		}
-
-		clearAvailable(tsLogStorage.Status.Conditions)
-		clearProgressing(tsLogStorage.Status.Conditions)
-
-		tsLogStorage.Status.Conditions = append(tsLogStorage.Status.Conditions, degradedCondition)
-		// unset ava,prog
-	} else if progressing {
-		progressionCondition := operatorv1.TigeraStatusCondition{
-			Type:               operatorv1.ComponentProgressing,
-			Status:             operatorv1.ConditionTrue,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-			Reason:             string(progressingReason),
-			Message:            progressingMsg,
-		}
-		// unset prog,deg
-		clearAvailable(tsLogStorage.Status.Conditions)
-		clearDegraded(tsLogStorage.Status.Conditions)
-
-		tsLogStorage.Status.Conditions = append(tsLogStorage.Status.Conditions, progressionCondition)
-
-	} else if available {
-		// Set available
-		availableCondition := operatorv1.TigeraStatusCondition{
-			Type:               operatorv1.ComponentAvailable,
-			Status:             operatorv1.ConditionTrue,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-			Reason:             string(operatorv1.AllObjectsAvailable),
-			Message:            "All objects available",
-		}
-
-		// unset prog,deg
-		clearProgressing(tsLogStorage.Status.Conditions)
-		clearDegraded(tsLogStorage.Status.Conditions)
-
-		tsLogStorage.Status.Conditions = append(tsLogStorage.Status.Conditions, availableCondition)
+	if statusMap[operatorv1.ComponentDegraded] {
+		setTigeraStatus(tsAggConditions, operatorv1.ComponentDegraded, string(operatorv1.ResourceDegraded))
+		clearTigeraStatus(tsAggConditions, []operatorv1.StatusConditionType{operatorv1.ComponentAvailable, operatorv1.ComponentProgressing}, string(operatorv1.ResourceDegraded))
+	} else if statusMap[operatorv1.ComponentProgressing] {
+		setTigeraStatus(tsAggConditions, operatorv1.ComponentProgressing, string(operatorv1.ResourceProgressing))
+		clearTigeraStatus(tsAggConditions, []operatorv1.StatusConditionType{operatorv1.ComponentAvailable, operatorv1.ComponentDegraded}, string(operatorv1.ResourceProgressing))
+	} else if statusMap[operatorv1.ComponentAvailable] {
+		setTigeraStatus(tsAggConditions, operatorv1.ComponentAvailable, string(operatorv1.AllObjectsAvailable))
+		clearTigeraStatus(tsAggConditions, []operatorv1.StatusConditionType{operatorv1.ComponentProgressing, operatorv1.ComponentDegraded}, string(operatorv1.AllObjectsAvailable))
 	}
 
-	// End
-
-	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, tsLogStorage.Status.Conditions)
+	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, tsAggConditions)
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
 		return reconcile.Result{}, err
@@ -199,15 +148,23 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func clearProgressing(conditions []operatorv1.TigeraStatusCondition) {
-	condition := operatorv1.TigeraStatusCondition{Type: operatorv1.ComponentProgressing, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: ""}
-	conditions = append(conditions, condition)
+func setTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionType operatorv1.StatusConditionType, reason string) {
+	for i, _ := range tsAggConditions {
+		if tsAggConditions[i].Type == conditionType {
+			tsAggConditions[i].Status = operatorv1.ConditionTrue
+			tsAggConditions[i].Reason = reason
+		}
+	}
 }
-func clearAvailable(conditions []operatorv1.TigeraStatusCondition) {
-	condition := operatorv1.TigeraStatusCondition{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: ""}
-	conditions = append(conditions, condition)
-}
-func clearDegraded(conditions []operatorv1.TigeraStatusCondition) {
-	condition := operatorv1.TigeraStatusCondition{Type: operatorv1.ComponentDegraded, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: ""}
-	conditions = append(conditions, condition)
+
+func clearTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionTypes []operatorv1.StatusConditionType, reason string) {
+	for i, _ := range tsAggConditions {
+		for _, conditionType := range conditionTypes {
+			if tsAggConditions[i].Type == conditionType {
+				tsAggConditions[i].Status = operatorv1.ConditionFalse
+				tsAggConditions[i].Reason = reason
+				tsAggConditions[i].Message = ""
+			}
+		}
+	}
 }

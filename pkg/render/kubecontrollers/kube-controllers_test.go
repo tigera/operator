@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1017,6 +1017,23 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
+
+		It("policy should omit prometheus ingress rule when metrics port is 0", func() {
+			// Baseline
+			cfg.MetricsPort = 9094
+			component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+			resources, _ := component.Objects()
+			baselinePolicy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+
+			// Zeroed policy
+			cfg.MetricsPort = 0
+			component = kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+			resources, _ = component.Objects()
+			zeroedPolicy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+
+			Expect(len(zeroedPolicy.Spec.Ingress)).To(Equal(len(baselinePolicy.Spec.Ingress) - 1))
+		})
+
 	})
 
 	Context("es-kube-controllers allow-tigera rendering", func() {

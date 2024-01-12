@@ -42,13 +42,15 @@ import (
 var log = logf.Log.WithName("controller_logstorage")
 
 const (
-	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
-	TigeraStatusName                 = "log-storage"
-	TigeraStatusLogStorageAccess     = "log-storage-access"
-	TigeraStatusLogStorageElastic    = "log-storage-elastic"
-	TigeraStatusLogStorageSecrets    = "log-storage-secrets"
-	TigeraStatusLogStorageUsers      = "log-storage-users"
-	defaultEckOperatorMemorySetting  = "512Mi"
+	DefaultElasticsearchStorageClass     = "tigera-elasticsearch"
+	TigeraStatusName                     = "log-storage"
+	TigeraStatusLogStorageAccess         = "log-storage-access"
+	TigeraStatusLogStorageElastic        = "log-storage-elastic"
+	TigeraStatusLogStorageSecrets        = "log-storage-secrets"
+	TigeraStatusLogStorageUsers          = "log-storage-users"
+	TigeraStatusLogStorageESMetrics      = "log-storage-esmetrics"
+	TigeraStatusLogStorageKubeController = "log-storage-kubecontrollers"
+	defaultEckOperatorMemorySetting      = "512Mi"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller

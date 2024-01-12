@@ -17,12 +17,10 @@ package initializer
 import (
 	"context"
 	"fmt"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,8 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 )
 
@@ -92,54 +90,19 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Aggregate tiger status for all log storage controllers
-	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
+	// Fetch the current status condition for log storage
+	currentCondition := getCurrentConditions(ls.Status.Conditions)
 
-	//Initialize aggregated TigeraStatus conditions with default values.
-	tsAggConditions := []operatorv1.TigeraStatusCondition{
-		{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
-		{Type: operatorv1.ComponentProgressing, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
-		{Type: operatorv1.ComponentDegraded, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+	// Aggregate TigeraStatus conditions from all logstorage subcontrollers into a map,
+	// using the condition type (e.g., Available, Progressing, and Degraded) as the key.
+	desiredConditions, err := r.getDesiredConditions(ctx)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
-	// Map to keep track of the status conditions for each type.
-	statusMap := make(map[operatorv1.StatusConditionType]bool)
+	// Compare and update the current StatusCondition if there are any new changes
+	ls.Status.Conditions = updateConditions(currentCondition, desiredConditions)
 
-	// Loop through all log storage instances.
-	for _, logStorage := range logStorageInstances {
-
-		// Fetch TigeraStatus for the individual log storage subcontrollers.
-		ts := &operatorv1.TigeraStatus{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		for _, condition := range ts.Status.Conditions {
-			for i, _ := range tsAggConditions {
-				if tsAggConditions[i].Type == condition.Type {
-					tsAggConditions[i].Status = condition.Status
-					tsAggConditions[i].Message = fmt.Sprintf("%s%s for %s;", tsAggConditions[i].Message, condition.Message, logStorage)
-					if tsAggConditions[i].LastTransitionTime.Time.Before(condition.LastTransitionTime.Time) {
-						tsAggConditions[i].LastTransitionTime = condition.LastTransitionTime
-					}
-					statusMap[condition.Type] = statusMap[condition.Type] || (condition.Status == operatorv1.ConditionTrue)
-				}
-			}
-		}
-	}
-
-	if statusMap[operatorv1.ComponentDegraded] {
-		setTigeraStatus(tsAggConditions, operatorv1.ComponentDegraded, string(operatorv1.ResourceDegraded))
-		clearTigeraStatus(tsAggConditions, []operatorv1.StatusConditionType{operatorv1.ComponentAvailable, operatorv1.ComponentProgressing}, string(operatorv1.ResourceDegraded))
-	} else if statusMap[operatorv1.ComponentProgressing] {
-		setTigeraStatus(tsAggConditions, operatorv1.ComponentProgressing, string(operatorv1.ResourceProgressing))
-		clearTigeraStatus(tsAggConditions, []operatorv1.StatusConditionType{operatorv1.ComponentAvailable, operatorv1.ComponentDegraded}, string(operatorv1.ResourceProgressing))
-	} else if statusMap[operatorv1.ComponentAvailable] {
-		setTigeraStatus(tsAggConditions, operatorv1.ComponentAvailable, string(operatorv1.AllObjectsAvailable))
-		clearTigeraStatus(tsAggConditions, []operatorv1.StatusConditionType{operatorv1.ComponentProgressing, operatorv1.ComponentDegraded}, string(operatorv1.AllObjectsAvailable))
-	}
-
-	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, tsAggConditions)
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
 		return reconcile.Result{}, err
@@ -148,23 +111,107 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func setTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionType operatorv1.StatusConditionType, reason string) {
-	for i, _ := range tsAggConditions {
-		if tsAggConditions[i].Type == conditionType {
-			tsAggConditions[i].Status = operatorv1.ConditionTrue
-			tsAggConditions[i].Reason = reason
-		}
+func getCurrentConditions(lsConditions []metav1.Condition) map[string]metav1.Condition {
+	statusCondition := make(map[string]metav1.Condition)
+	for _, condition := range lsConditions {
+		statusCondition[condition.Type] = condition
 	}
+	return statusCondition
 }
 
-func clearTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionTypes []operatorv1.StatusConditionType, reason string) {
-	for i, _ := range tsAggConditions {
-		for _, conditionType := range conditionTypes {
-			if tsAggConditions[i].Type == conditionType {
-				tsAggConditions[i].Status = operatorv1.ConditionFalse
-				tsAggConditions[i].Reason = reason
-				tsAggConditions[i].Message = ""
+func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[string]metav1.Condition, error) {
+
+	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
+	if r.multiTenant {
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
+	} else {
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+	}
+
+	// Keep track of which instances are in which state.
+	states := map[string][]string{
+		string(operatorv1.ComponentDegraded):    {},
+		string(operatorv1.ComponentAvailable):   {},
+		string(operatorv1.ComponentProgressing): {},
+	}
+
+	// We also keep track of the oldest observed generation here so we can add it to the conditions later.
+	var observedGeneration int64
+
+	// Build up the lists of which components are in which state.
+	for _, instance := range expectedInstances {
+		ts := &operatorv1.TigeraStatus{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: instance}, ts); err != nil && errors.IsNotFound(err) {
+			// Expected status not found, treat it as an error.
+			states[string(operatorv1.ComponentDegraded)] = append(states[string(operatorv1.ComponentDegraded)], instance)
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Found it - add to states map, which we use to track which TigeraStatuses are in which state(s).
+		for _, condition := range ts.Status.Conditions {
+			if condition.Status == operatorv1.ConditionTrue {
+				states[string(condition.Type)] = append(states[string(condition.Type)], instance)
+			}
+			if observedGeneration == 0 || condition.ObservedGeneration < observedGeneration {
+				observedGeneration = condition.ObservedGeneration
 			}
 		}
 	}
+
+	// Convert the states map to a set of conditions.
+	conditions := map[string]metav1.Condition{}
+	for statusType, instances := range states {
+
+		condition := metav1.Condition{
+			Type:               statusType,
+			ObservedGeneration: observedGeneration,
+		}
+		if statusType != string(operatorv1.ComponentAvailable) && len(instances) != 0 {
+			// This condition is true.
+			condition.Status = metav1.ConditionTrue
+			condition.Reason = string(operatorv1.ResourceNotReady)
+			condition.Message = fmt.Sprintf("The following sub-controllers are in this condition: %+v", instances)
+		} else if statusType != string(operatorv1.ComponentAvailable) {
+			// This condition is false.
+			condition.Status = metav1.ConditionFalse
+			condition.Reason = string(operatorv1.Unknown)
+		} else {
+			// This is the available condition, which is only true if all statuses are available.
+			condition.Type = string(operatorv1.ComponentReady)
+			condition.Reason = string(operatorv1.ResourceNotReady)
+			// Available will be mapped to Ready while storing in ls Conditions. Update the key type to Ready when Available is true
+			statusType = condition.Type
+			if len(instances) == len(expectedInstances) {
+				condition.Status = metav1.ConditionTrue
+				condition.Reason = string(operatorv1.AllObjectsAvailable)
+				condition.Message = "All sub-controllers are available"
+			} else {
+				condition.Status = metav1.ConditionFalse
+			}
+		}
+		// Store the condition.
+		conditions[statusType] = condition
+	}
+	return conditions, nil
+}
+
+func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {
+
+	statusCondition := []metav1.Condition{}
+
+	//Update the current log storage condition only when the aggregate desired status have new changes
+	for _, desired := range desiredConditions {
+
+		current, ok := currentConditions[desired.Type]
+		if !ok || current.Status != desired.Status {
+			desired.LastTransitionTime = metav1.NewTime(time.Now())
+		} else {
+			desired.LastTransitionTime = current.LastTransitionTime
+		}
+
+		statusCondition = append(statusCondition, desired)
+	}
+	return statusCondition
 }

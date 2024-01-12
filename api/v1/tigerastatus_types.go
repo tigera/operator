@@ -137,8 +137,6 @@ const (
 	UpgradeError              TigeraStatusReason = "UpgradeError"
 	Unknown                   TigeraStatusReason = "Unknown"
 	ImageSetError             TigeraStatusReason = "ImageSetError"
-	ResourceProgressing       TigeraStatusReason = "ResourceProgressing"
-	ResourceDegraded          TigeraStatusReason = "ResourceDegraded"
 )
 
 func init() {

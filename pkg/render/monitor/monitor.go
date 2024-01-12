@@ -1104,14 +1104,6 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				// Egress access for Kube controller port metrics.
-				Ports: networkpolicy.Ports(uint16(cfg.KubeControllerPort)),
-			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
 				Selector: alertManagerSelector,
 				Ports:    networkpolicy.Ports(AlertmanagerPort),
 			},
@@ -1122,6 +1114,17 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Destination: render.DexEntityRule,
 		},
 	}...)
+
+	if cfg.KubeControllerPort != 0 {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				// Egress access for Kube controller port metrics.
+				Ports: networkpolicy.Ports(uint16(cfg.KubeControllerPort)),
+			},
+		})
+	}
 
 	typhaMetricsPort := cfg.Installation.TyphaMetricsPort
 	if typhaMetricsPort != nil {

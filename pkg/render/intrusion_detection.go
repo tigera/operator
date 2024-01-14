@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -501,21 +501,16 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			},
 			Verbs: []string{"get"},
 		},
-	}
-
-	if c.deployWebhooksController() {
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets", "configmaps"},
-				Verbs:     []string{"get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"securityeventwebhooks"},
-				Verbs:     []string{"get", "watch", "update"},
-			},
-		)
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets", "configmaps"},
+			Verbs:     []string{"get", "watch"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "watch", "update"},
+		},
 	}
 
 	if !c.cfg.ManagedCluster {
@@ -634,16 +629,15 @@ func (c *intrusionDetectionComponent) intrusionDetectionRole() *rbacv1.Role {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{
-					"",
-				},
-				Resources: []string{
-					"secrets",
-					"configmaps",
-				},
-				Verbs: []string{
-					"get",
-				},
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// Intrusion detection forwarder snapshots its state to a specific ConfigMap.
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "create", "update"},
 			},
 		},
 	}
@@ -738,9 +732,9 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		initContainers = append(initContainers, c.cfg.IntrusionDetectionCertSecret.InitContainer(IntrusionDetectionNamespace))
 	}
 
-	containers := []corev1.Container{intrusionDetectionContainer}
-	if c.deployWebhooksController() {
-		containers = append(containers, c.webhooksControllerContainer())
+	containers := []corev1.Container{
+		intrusionDetectionContainer,
+		c.webhooksControllerContainer(),
 	}
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -759,11 +753,6 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			Volumes:            volumes,
 		},
 	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
-}
-
-func (c *intrusionDetectionComponent) deployWebhooksController() bool {
-	// deploy webhooks controller container only for managed clusters or stand-alone enterprise clusters
-	return c.cfg.ManagedCluster || !c.cfg.ManagementCluster
 }
 
 func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Container {

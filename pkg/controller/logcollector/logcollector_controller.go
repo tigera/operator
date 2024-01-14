@@ -1,4 +1,4 @@
-// Copyright (c) 2020,2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -111,6 +111,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
+		externalElastic: opts.ElasticExternal,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -143,7 +144,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		render.ElasticsearchEksLogForwarderUserSecret,
 		render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusClientTLSSecretName,
 		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, render.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -186,6 +187,7 @@ type ReconcileLogCollector struct {
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
 	multiTenant     bool
+	externalElastic bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -587,6 +589,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		UsePSP:                 r.usePSP,
 		UseSyslogCertificate:   useSyslogCertificate,
 		Tenant:                 tenant,
+		ExternalElastic:        r.externalElastic,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 	}
 	// Render the fluentd component for Linux

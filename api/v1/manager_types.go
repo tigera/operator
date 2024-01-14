@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,6 +27,76 @@ type ManagerSpec struct {
 	// Deprecated. Please use the Authentication CR for configuring authentication.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
+
+	// ManagerDeployment configures the Manager Deployment.
+	// +optional
+	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
+}
+
+// ManagerDeployment is the configuration for the Manager Deployment.
+type ManagerDeployment struct {
+
+	// Spec is the specification of the Manager Deployment.
+	// +optional
+	Spec *ManagerDeploymentSpec `json:"spec,omitempty"`
+}
+
+// ManagerDeploymentSpec defines configuration for the Manager Deployment.
+type ManagerDeploymentSpec struct {
+
+	// Template describes the Manager Deployment pod that will be created.
+	// +optional
+	Template *ManagerDeploymentPodTemplateSpec `json:"template,omitempty"`
+}
+
+// ManagerDeploymentPodTemplateSpec is the Manager Deployment's PodTemplateSpec
+type ManagerDeploymentPodTemplateSpec struct {
+
+	// Spec is the Manager Deployment's PodSpec.
+	// +optional
+	Spec *ManagerDeploymentPodSpec `json:"spec,omitempty"`
+}
+
+// ManagerDeploymentPodSpec is the Manager Deployment's PodSpec.
+type ManagerDeploymentPodSpec struct {
+	// InitContainers is a list of Manager init containers.
+	// If specified, this overrides the specified Manager Deployment init containers.
+	// If omitted, the Manager Deployment will use its default values for its init containers.
+	// +optional
+	InitContainers []ManagerDeploymentInitContainer `json:"initContainers,omitempty"`
+
+	// Containers is a list of Manager containers.
+	// If specified, this overrides the specified Manager Deployment containers.
+	// If omitted, the Manager Deployment will use its default values for its containers.
+	// +optional
+	Containers []ManagerDeploymentContainer `json:"containers,omitempty"`
+}
+
+// ManagerDeploymentContainer is a Manager Deployment container.
+type ManagerDeploymentContainer struct {
+	// Name is an enum which identifies the Manager Deployment container by name.
+	// +kubebuilder:validation:Enum=tigera-voltron;tigera-manager;tigera-es-proxy
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named Manager Deployment container's resources.
+	// If omitted, the Manager Deployment will use its default value for this container's resources.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// ManagerDeploymentInitContainer is a Manager Deployment init container.
+type ManagerDeploymentInitContainer struct {
+	// Name is an enum which identifies the Manager Deployment init container by name.
+	// +kubebuilder:validation:Enum=manager-tls-key-cert-provisioner;internal-manager-tls-key-cert-provisioner;tigera-voltron-linseed-tls-key-cert-provisioner
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named Manager Deployment init container's resources.
+	// If omitted, the Manager Deployment will use its default value for this init container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // ManagerStatus defines the observed state of the Calico Enterprise manager GUI.
@@ -92,6 +164,89 @@ type ManagerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Manager `json:"items"`
+}
+
+func (c *ManagerDeployment) GetMetadata() *Metadata {
+	return nil
+}
+
+func (c *ManagerDeployment) GetMinReadySeconds() *int32 {
+	return nil
+}
+
+func (c *ManagerDeployment) GetPodTemplateMetadata() *Metadata {
+	return nil
+}
+
+func (c *ManagerDeployment) GetInitContainers() []v1.Container {
+	if c != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.InitContainers != nil {
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
+					for i, v := range c.Spec.Template.Spec.InitContainers {
+						// Only copy and return the init container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *ManagerDeployment) GetContainers() []v1.Container {
+	if c != nil {
+		if c.Spec != nil {
+			if c.Spec.Template != nil {
+				if c.Spec.Template.Spec != nil {
+					if c.Spec.Template.Spec.Containers != nil {
+						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
+						for i, v := range c.Spec.Template.Spec.Containers {
+							// Only copy and return the init container if it has resources set.
+							if v.Resources == nil {
+								continue
+							}
+							c := v1.Container{Name: v.Name, Resources: *v.Resources}
+							cs[i] = c
+						}
+						return cs
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *ManagerDeployment) GetAffinity() *v1.Affinity {
+	return nil
+}
+
+func (c *ManagerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	return nil
+}
+
+func (c *ManagerDeployment) GetNodeSelector() map[string]string {
+	return nil
+}
+
+func (c *ManagerDeployment) GetTolerations() []v1.Toleration {
+	return nil
+}
+
+func (c *ManagerDeployment) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (c *ManagerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+	return nil
 }
 
 func init() {

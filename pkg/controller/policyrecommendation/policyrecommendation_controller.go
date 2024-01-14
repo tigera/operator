@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in policy recommendation with the License.
@@ -83,6 +83,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
+	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
+	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
+	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
+	if opts.MultiTenant {
+		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("policy-recommendation-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.PolicyRecommendationNamespace)
 
 	go utils.WaitToAddLicenseKeyWatch(policyRecController, k8sClient, log, licenseAPIReady)
@@ -98,15 +108,15 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	if err = utils.AddInstallationWatch(policyRecController); err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch Installation resource: %w", err)
 	}
 
-	if err = imageset.AddImageSetWatch(policyRecController); err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddAPIServerWatch(policyRecController); err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch APIServer resource: %w", err)
 	}
 
@@ -124,13 +134,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch ManagementCluster resource: %w", err)
 	}
 
-	err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = policyRecController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 
@@ -161,6 +169,7 @@ func newReconciler(
 		policyRecScopeWatchReady: policyRecScopeWatchReady,
 		usePSP:                   opts.UsePSP,
 		multiTenant:              opts.MultiTenant,
+		externalElastic:          opts.ElasticExternal,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -185,6 +194,7 @@ type ReconcilePolicyRecommendation struct {
 	provider                 operatorv1.Provider
 	usePSP                   bool
 	multiTenant              bool
+	externalElastic          bool
 }
 
 func GetPolicyRecommendation(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.PolicyRecommendation, error) {
@@ -332,16 +342,28 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
 
+	// Determine the namespaces to which we must bind the cluster role.
+	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
+	// For single-tenant or zero-tenant, the cluster role will be bind to the service account in the tigera-policy-recommendation
+	// namespace
+	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	logc.V(3).Info("rendering components")
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:  r.clusterDomain,
-		Installation:   installation,
-		ManagedCluster: isManagedCluster,
-		PullSecrets:    pullSecrets,
-		Openshift:      r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:         r.usePSP,
-		Namespace:      helper.InstallNamespace(),
-		Tenant:         tenant,
+		ClusterDomain:        r.clusterDomain,
+		Installation:         installation,
+		ManagedCluster:       isManagedCluster,
+		PullSecrets:          pullSecrets,
+		Openshift:            r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:               r.usePSP,
+		Namespace:            helper.InstallNamespace(),
+		Tenant:               tenant,
+		BindingNamespaces:    bindNamespaces,
+		PolicyRecommendation: policyRecommendation,
+		ExternalElastic:      r.externalElastic,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

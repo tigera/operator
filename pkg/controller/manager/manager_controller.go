@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -148,7 +148,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		for _, secretName := range []string{
 			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
-			render.ManagerInternalTLSSecretName, monitor.PrometheusTLSSecretName, certificatemanagement.CASecretName,
+			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(managerController, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -395,9 +395,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// any of them haven't been signed by the root CA.
 		trustedSecretNames = []string{
 			render.PacketCaptureServerCert,
-			monitor.PrometheusTLSSecretName,
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
+		}
+		// If external prometheus is enabled, the secret will be signed by the Calico CA and no secret will be created. We can skip
+		// adding it to the bundle, as trusting the CA will suffice.
+		monitorCR := &operatorv1.Monitor{}
+		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying required Monitor resource: ", err, logc)
+			return reconcile.Result{}, err
+		}
+		if monitorCR.Spec.ExternalPrometheus == nil {
+			trustedSecretNames = append(trustedSecretNames, monitor.PrometheusServerTLSSecretName)
 		}
 
 		if complianceLicenseFeatureActive && complianceCR != nil {
@@ -653,7 +662,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Namespace:               helper.InstallNamespace(),
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
+		ExternalElastic:         r.elasticExternal,
 		BindingNamespaces:       namespaces,
+		Manager:                 instance,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

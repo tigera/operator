@@ -46,10 +46,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
@@ -216,7 +216,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		testCA := test.MakeTestCA("logstorage-test")
 		esSecret, err := secret.CreateTLSSecret(testCA,
 			render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), "tls.key", "tls.crt",
-			rmeta.DefaultCertificateDuration, nil, esDNSNames...,
+			tls.DefaultCertificateDuration, nil, esDNSNames...,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -229,7 +229,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			kbDNSNames...,
 		)
@@ -307,7 +307,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			"tigera-secure-kb-http.tigera-elasticsearch.svc",
 		)
@@ -381,7 +381,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			"tigera-secure-kb-http.tigera-elasticsearch.svc",
 		)
@@ -423,7 +423,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			common.OperatorNamespace(),
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 			dnsNames...,
 		)

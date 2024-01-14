@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,9 @@ package render_test
 
 import (
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -81,6 +84,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			PolicyRecommendationCertSecret: keyPair,
 			UsePSP:                         true,
 			Namespace:                      render.PolicyRecommendationNamespace,
+			BindingNamespaces:              []string{render.PolicyRecommendationNamespace},
 		}
 	})
 
@@ -121,6 +125,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/policy-recommendation-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/policy-recommendation-tls/tls.key"},
+			corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: "https://tigera-manager.tigera-manager.svc:9443"},
 		))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
@@ -144,6 +149,11 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys", "managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
@@ -235,6 +245,100 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.PolicyRecommendationTLSSecretName)))
 	})
 
+	It("should override container's resource request with the value from policy recommendation CR", func() {
+		prResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		policyRecommendationcfg := operatorv1.PolicyRecommendation{
+			Spec: operatorv1.PolicyRecommendationSpec{
+				PolicyRecommendationDeployment: &operatorv1.PolicyRecommendationDeployment{
+					Spec: &operatorv1.PolicyRecommendationDeploymentSpec{
+						Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
+							Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
+								Containers: []operatorv1.PolicyRecommendationDeploymentContainer{{
+									Name:      "policy-recommendation-controller",
+									Resources: &prResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg.PolicyRecommendation = &policyRecommendationcfg
+		component := render.PolicyRecommendation(cfg)
+		resources, _ := component.Objects()
+		d, ok := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("policy-recommendation-controller"))
+		Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(prResources))
+	})
+
+	It("should override init container's resource request with the value from policy recommendation CR", func() {
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+		prResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		policyRecommendationcfg := operatorv1.PolicyRecommendation{
+			Spec: operatorv1.PolicyRecommendationSpec{
+				PolicyRecommendationDeployment: &operatorv1.PolicyRecommendationDeployment{
+					Spec: &operatorv1.PolicyRecommendationDeploymentSpec{
+						Template: &operatorv1.PolicyRecommendationDeploymentPodTemplateSpec{
+							Spec: &operatorv1.PolicyRecommendationDeploymentPodSpec{
+								InitContainers: []operatorv1.PolicyRecommendationDeploymentInitContainer{{
+									Name:      "policy-recommendation-tls-key-cert-provisioner",
+									Resources: &prResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg.PolicyRecommendation = &policyRecommendationcfg
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+
+		policyRecommendationCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.PolicyRecommendationTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.PolicyRecommendationCertSecret = policyRecommendationCertSecret
+
+		component := render.PolicyRecommendation(cfg)
+		resources, _ := component.Objects()
+
+		idc := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		Expect(idc.Spec.Template.Spec.InitContainers[0].Name).To(Equal("policy-recommendation-tls-key-cert-provisioner"))
+		Expect(idc.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(prResources))
+	})
+
 	Context("allow-tigera rendering", func() {
 		policyName := types.NamespacedName{Name: "allow-tigera.tigera-policy-recommendation", Namespace: "tigera-policy-recommendation"}
 
@@ -278,6 +382,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					ID: "tenant-a-id",
 				},
 			}
+			cfg.BindingNamespaces = []string{tenantANamespace}
+			cfg.ExternalElastic = true
 			tenantAPolicyRec := render.PolicyRecommendation(cfg)
 
 			tenantAResources, _ := tenantAPolicyRec.Objects()
@@ -295,6 +401,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.default-deny", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
 				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -321,6 +429,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					ID: "tenant-b-id",
 				},
 			}
+			cfg.BindingNamespaces = []string{tenantANamespace, tenantBNamespace}
 			tenantBPolicyRec := render.PolicyRecommendation(cfg)
 
 			tenantBResources, _ := tenantBPolicyRec.Objects()
@@ -338,6 +447,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.default-deny", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
 				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -351,7 +462,151 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			envs = d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantBNamespace}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-b-id"}))
+		})
 
+		It("should render environment variables per tenant", func() {
+			cfg.Namespace = tenantANamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantA",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			cfg.ExternalElastic = true
+			cfg.BindingNamespaces = []string{tenantANamespace}
+			tenantPolicyRec := render.PolicyRecommendation(cfg)
+
+			createdResources, _ := tenantPolicyRec.Objects()
+
+			d := rtest.GetResource(createdResources, "tigera-policy-recommendation", cfg.Tenant.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: cfg.Tenant.Namespace}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", cfg.Tenant.Namespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", cfg.Tenant.Namespace)}))
+		})
+
+		It("should render environment variables for a single tenant external elastic", func() {
+			cfg.Namespace = render.PolicyRecommendationNamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tenantA",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			cfg.ExternalElastic = true
+			cfg.BindingNamespaces = []string{render.PolicyRecommendationNamespace}
+			tenantPolicyRec := render.PolicyRecommendation(cfg)
+
+			createdResources, _ := tenantPolicyRec.Objects()
+
+			d := rtest.GetResource(createdResources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", render.ElasticsearchNamespace)}))
+		})
+
+		It("should render environment variables for a single tenant internal elastic", func() {
+			cfg.Namespace = render.PolicyRecommendationNamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tenantA",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			cfg.ExternalElastic = false
+			cfg.BindingNamespaces = []string{render.PolicyRecommendationNamespace}
+			tenantPolicyRec := render.PolicyRecommendation(cfg)
+
+			createdResources, _ := tenantPolicyRec.Objects()
+
+			d := rtest.GetResource(createdResources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", render.ElasticsearchNamespace)}))
+		})
+
+		It("should render RBAC per tenant", func() {
+			cfg.Namespace = tenantANamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantA",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			cfg.BindingNamespaces = []string{tenantANamespace}
+			tenantPolicyRec := render.PolicyRecommendation(cfg)
+
+			createdResources, _ := tenantPolicyRec.Objects()
+
+			// Check that the cluster role allows the tenant's service account to impersonate
+			clusterRole := rtest.GetResource(createdResources, render.PolicyRecommendationName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			clusterRoleBinding := rtest.GetResource(createdResources, render.PolicyRecommendationName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(clusterRole.Rules).To(ContainElements(
+				rbacv1.PolicyRule{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{render.PolicyRecommendationName},
+				},
+				rbacv1.PolicyRule{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.PolicyRecommendationNamespace),
+					},
+				},
+			))
+			Expect(clusterRoleBinding.RoleRef).To(Equal(
+				rbacv1.RoleRef{
+					APIGroup: "rbac.authorization.k8s.io",
+					Kind:     "ClusterRole",
+					Name:     render.PolicyRecommendationName,
+				}))
+			Expect(clusterRoleBinding.Subjects).To(ConsistOf(
+				rbacv1.Subject{
+					Kind:      "ServiceAccount",
+					Name:      render.PolicyRecommendationName,
+					Namespace: cfg.Tenant.Namespace,
+				}))
+
+			// Check that the cluster role allows the tigera-policy-recommendation from namesapce tigera-policy-recommendation
+			// to get managed clusters in order to bypass the authentication proxy in Voltron
+			clusterRoleManagedClusters := rtest.GetResource(createdResources, render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(clusterRoleManagedClusters.Rules).To(ContainElements(
+				rbacv1.PolicyRule{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs:     []string{"get"},
+				},
+			))
+			clusterRoleManagedClustersBinding := rtest.GetResource(createdResources, render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(clusterRoleManagedClustersBinding.RoleRef).To(Equal(
+				rbacv1.RoleRef{
+					APIGroup: "rbac.authorization.k8s.io",
+					Kind:     "ClusterRole",
+					Name:     render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName,
+				}))
+			Expect(clusterRoleManagedClustersBinding.Subjects).To(ConsistOf(
+				rbacv1.Subject{
+					Kind:      "ServiceAccount",
+					Name:      render.PolicyRecommendationName,
+					Namespace: render.PolicyRecommendationNamespace,
+				}))
 		})
 	})
 })

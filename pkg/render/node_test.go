@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -2748,20 +2748,12 @@ var _ = Describe("Node rendering tests", func() {
       "type": "portmap"
     },
     {
-      "sysctl": [
+      "sysctl":
 		  {
-			"key": "net.ipv4.tcp_keepalive_intvl",
-			"value": "15"
+			"net.ipv4.tcp_keepalive_intvl": "15",
+			"net.ipv4.tcp_keepalive_probes": "6",
+			"net.ipv4.tcp_keepalive_time": "40"
 		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_probes",
-			"value": "6"
-		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_time",
-		    "value": "40"
-		  }
-		],
       "type": "tuning"
 	}
   ]
@@ -3390,7 +3382,6 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-					{name: certificatemanagement.CSRClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				}
 
 				component := render.Node(&cfg)

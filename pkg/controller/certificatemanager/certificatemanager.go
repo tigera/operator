@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@ package certificatemanager
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"strings"
 	"time"
@@ -40,6 +42,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// OperatorCSRSignerName when this value is set as a signer on a CSR, the CSR controller will handle
+// the request.
+const OperatorCSRSignerName = "tigera.io/operator-signer"
 
 var log = logf.Log.WithName("tls")
 
@@ -78,6 +84,10 @@ type CertificateManager interface {
 	GetKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
+	// CreateCSRKeyPair returns a KeyPair that relies on issuing Certificate Signing Requests to the kubernetes api to be
+	// signed by OperatorCSRSignerName. This means that pkg/controller/csr/csr_controller.go will end up signing the CSR
+	// using the private key of the certificate manager.
+	CreateCSRKeyPair(secretName, secretNamespace string, dnsNames []string) certificatemanagement.KeyPairInterface
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
 	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
@@ -100,6 +110,9 @@ type CertificateManager interface {
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
 	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
+	// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
+	// public key of the requestor is already set in the certificate template.
+	SignCertificate(certificate *x509.Certificate) ([]byte, error)
 }
 
 type Option func(cm *certificateManager) error
@@ -129,8 +142,10 @@ func WithTenant(t *operatorv1.Tenant) Option {
 // brings their own secrets, CertificateManager will preserve and return them.
 func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
 	var (
-		cryptoCA                      *crypto.CA
-		csrImage                      string
+		cryptoCA *crypto.CA
+		csrImage string
+		// The private key is of type any, as this is the interface used in the x509 package for all private key types.
+		privateKey                    any
 		privateKeyPEM, certificatePEM []byte
 		certificateManagement         *operatorv1.CertificateManagement
 		err                           error
@@ -149,18 +164,17 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	// Determine the name of the CA secret to use. Default to the tigera CA name. For
 	// per-tenant CA secrets, we use a different name for differentiation.
 	caSecretName := certificatemanagement.CASecretName
-	if cm.tenant != nil {
+	if cm.tenant.MultiTenant() {
 		caSecretName = certificatemanagement.TenantCASecretName
 	}
 
-	if installation != nil && installation.CertificateManagement != nil {
-		// Configured to use certificate management. Get the CACert from
-		// the installation spec.
-		certificateManagement = installation.CertificateManagement
+	var certificateManagementEnabled bool
+	if installation != nil {
 		imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
 		if err != nil {
 			return nil, err
 		}
+		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
 		csrImage, err = components.GetReference(
 			components.ComponentCSRInitContainer,
 			installation.Registry,
@@ -171,8 +185,16 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		if err != nil {
 			return nil, err
 		}
-		certificatePEM = certificateManagement.CACert
-	} else {
+		if installation.CertificateManagement != nil {
+			// Configured to use certificate management. Get the CACert from
+			// the installation spec.
+			certificateManagement = installation.CertificateManagement
+			certificatePEM = certificateManagement.CACert
+			certificateManagementEnabled = true
+		}
+	}
+
+	if !certificateManagementEnabled {
 		// Using operator-managed certificates. Check to see if we have already provisioned a CA.
 		cm.log.V(2).Info("Looking for an existing CA", "secret", fmt.Sprintf("%s/%s", ns, caSecretName))
 		caSecret := &corev1.Secret{}
@@ -202,11 +224,24 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			if err := cryptoCA.Config.WriteCertConfig(crtContent, keyContent); err != nil {
 				return nil, err
 			}
-			privateKeyPEM, certificatePEM = keyContent.Bytes(), crtContent.Bytes()
+			privateKey, privateKeyPEM, certificatePEM = cryptoCA.Config.Key, keyContent.Bytes(), crtContent.Bytes()
 		} else {
 			// Found an existing CA - use that.
 			cm.log.V(2).Info("Found an existing CA secret")
 			privateKeyPEM, certificatePEM = caSecret.Data[corev1.TLSPrivateKeyKey], caSecret.Data[corev1.TLSCertKey]
+			privateKeyDER, _ := pem.Decode(privateKeyPEM)
+			if privateKeyDER == nil {
+				return nil, fmt.Errorf("cannot parse private tls.key PEM from the CA bundle")
+			}
+			// Parse in order of likelihood of format. If the tigera-ca-private secret is not replaced with a custom one,
+			// the certificate is PKCS1 formatted. (The x509 package also uses parsing as the way to identifying the type.)
+			if privateKey, err = x509.ParsePKCS1PrivateKey(privateKeyDER.Bytes); err != nil {
+				if privateKey, err = x509.ParsePKCS8PrivateKey(privateKeyDER.Bytes); err != nil {
+					if privateKey, err = x509.ParseECPrivateKey(privateKeyDER.Bytes); err != nil {
+						return nil, fmt.Errorf("cannot parse private key from the CA bundle")
+					}
+				}
+			}
 			cryptoCA, err = crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
 			if err != nil {
 				return nil, err
@@ -227,6 +262,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	cm.keyPair = &certificatemanagement.KeyPair{
 		Name:                  caSecretName,
 		Namespace:             ns,
+		PrivateKey:            privateKey,
 		PrivateKeyPEM:         privateKeyPEM,
 		CertificatePEM:        certificatePEM,
 		CSRImage:              csrImage,
@@ -251,6 +287,20 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 	}
 }
 
+func (cm *certificateManager) CreateCSRKeyPair(secretName, namespace string, dnsNames []string) certificatemanagement.KeyPairInterface {
+	return &certificatemanagement.KeyPair{
+		Name: secretName,
+		CertificateManagement: &operatorv1.CertificateManagement{
+			CACert:     cm.keyPair.CertificatePEM,
+			SignerName: OperatorCSRSignerName,
+		},
+		DNSNames:       dnsNames,
+		CSRImage:       cm.keyPair.CSRImage,
+		Namespace:      namespace,
+		CertificatePEM: cm.keyPair.CertificatePEM,
+	}
+}
+
 // GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
 	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false, dnsNames)
@@ -272,7 +322,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}
 
 	// If we reach here, it means we need to create a new KeyPair.
-	tlsCfg, err := cm.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	tlsCfg, err := cm.MakeServerCertForDuration(sets.NewString(dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create signed cert pair: %s", err)
 	}
@@ -291,7 +341,23 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}, nil
 }
 
-// This type will be returned for errors that do not have the correct Ext Key usage types
+// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
+// public key of the requestor is already set in the certificate template.
+func (cm *certificateManager) SignCertificate(certificateTemplate *x509.Certificate) ([]byte, error) {
+	derBytes, err := x509.CreateCertificate(rand.Reader, certificateTemplate, cm.Certificate, certificateTemplate.PublicKey, cm.keyPair.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	pemBytes := bytes.NewBuffer([]byte{})
+	err = pem.Encode(pemBytes, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	if err != nil {
+		log.Error(err, "error encoding certificate PEM")
+		return nil, err
+	}
+	return pemBytes.Bytes(), nil
+}
+
+// CertExtKeyUsageError This type will be returned for errors that do not have the correct Ext Key usage types
 // for a specific secert certificate.
 type CertExtKeyUsageError struct {
 	msg string
@@ -467,6 +533,7 @@ func certificateManagementKeyPair(ca *certificateManager, secretName, ns string,
 		DNSNames:              dnsNames,
 		CSRImage:              ca.keyPair.CSRImage,
 		Namespace:             ns,
+		CertificatePEM:        ca.CertificateManagement().CACert,
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/logstorage"
+	"github.com/tigera/operator/pkg/tls"
 
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
 	. "github.com/onsi/ginkgo"
@@ -90,7 +90,7 @@ var _ = Describe("External ES Controller", func() {
 		bundle := certificateManager.CreateTrustedBundle(esKeyPair)
 		Expect(cli.Create(ctx, bundle.ConfigMap(render.ElasticsearchNamespace))).NotTo(HaveOccurred())
 
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -126,7 +126,7 @@ var _ = Describe("External ES Controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -138,7 +138,7 @@ var _ = Describe("External ES Controller", func() {
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
-			rmeta.DefaultCertificateDuration,
+			tls.DefaultCertificateDuration,
 			nil,
 		)
 		Expect(err).ShouldNot(HaveOccurred())

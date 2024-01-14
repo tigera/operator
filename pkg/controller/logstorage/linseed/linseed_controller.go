@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -173,10 +173,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		return fmt.Errorf("log-storage-elastic-controller failed to establish a connection to k8s: %w", err)
+		return fmt.Errorf("log-storage-linseed-controller failed to establish a connection to k8s: %w", err)
 	}
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+		{Name: linseed.PolicyName, Namespace: helper.InstallNamespace()},
+	})
 	go utils.WaitToAddResourceWatch(c, k8sClient, log, r.dpiAPIReady, []client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -426,6 +429,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		HasDPIResource:      hasDPIResource,
 		ManagementCluster:   managementCluster != nil,
 		Tenant:              tenant,
+		ExternalElastic:     r.elasticExternal,
 		ElasticHost:         elasticHost,
 		ElasticPort:         elasticPort,
 		ElasticClientSecret: esClientSecret,

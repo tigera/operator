@@ -81,7 +81,6 @@ func DecorateEnvironment(c corev1.Container, namespace string, cluster, esUserSe
 		},
 		{Name: "ELASTIC_CA", Value: certPath},
 		{Name: "ES_CA_CERT", Value: certPath},
-		{Name: "ES_CURATOR_BACKEND_CERT", Value: certPath},
 	}
 
 	c.Env = append(c.Env, envVars...)

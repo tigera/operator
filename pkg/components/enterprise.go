@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -98,12 +98,6 @@ var (
 	ComponentElasticsearchOperator = component{
 		Version:  "master",
 		Image:    "tigera/eck-operator",
-		Registry: "",
-	}
-
-	ComponentEsCurator = component{
-		Version:  "master",
-		Image:    "tigera/es-curator",
 		Registry: "",
 	}
 
@@ -216,7 +210,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version:  "v2.43.1",
+		Version:  "v2.48.1",
 		Registry: "",
 	}
 
@@ -334,7 +328,6 @@ var (
 		ComponentElasticsearch,
 		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsCurator,
 		ComponentEsProxy,
 		ComponentFluentd,
 		ComponentFluentdWindows,

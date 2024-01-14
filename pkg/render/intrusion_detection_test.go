@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -181,21 +181,25 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{Name: "KIBANA_PORT", Value: "5601", ValueFrom: nil},
 			{Name: "KIBANA_SCHEME", Value: "https"},
 			{Name: "START_XPACK_TRIAL", Value: "false"},
-			{Name: "USER", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "tigera-ee-installer-elasticsearch-access",
+			{
+				Name: "USER", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ee-installer-elasticsearch-access",
+						},
+						Key: "username",
 					},
-					Key: "username",
-				}},
+				},
 			},
-			{Name: "PASSWORD", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "tigera-ee-installer-elasticsearch-access",
+			{
+				Name: "PASSWORD", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "tigera-ee-installer-elasticsearch-access",
+						},
+						Key: "password",
 					},
-					Key: "password",
-				}},
+				},
 			},
 			{Name: "KB_CA_CERT", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			{Name: "FIPS_MODE_ENABLED", Value: "false"},
@@ -256,7 +260,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Containers[1].SecurityContext.SeccompProfile).To(Equal(&corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}))
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-
 		Expect(clusterRole.Rules).To(ContainElements(
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
@@ -276,12 +279,39 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
 				Resources: []string{"secrets", "configmaps"},
-				Verbs:     []string{"get"},
+				Verbs:     []string{"get", "watch"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"securityeventwebhooks"},
 				Verbs:     []string{"get", "watch", "update"},
+			},
+		))
+
+		role := rtest.GetResource(resources, render.IntrusionDetectionName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(role.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
+			},
+			rbacv1.PolicyRule{
+				// Intrusion detection forwarder snapshots its state to a specific ConfigMap.
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "create", "update"},
+			},
+		))
+
+		roleBinding := rtest.GetResource(resources, render.IntrusionDetectionName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(roleBinding.RoleRef.Name).To(Equal(render.IntrusionDetectionName))
+		Expect(roleBinding.RoleRef.Kind).To(Equal("Role"))
+		Expect(roleBinding.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
+		Expect(roleBinding.Subjects).To(ContainElements(
+			rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      render.IntrusionDetectionName,
+				Namespace: render.IntrusionDetectionNamespace,
 			},
 		))
 	})
@@ -395,152 +425,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
-	})
-
-	It("should not render webhooks-controller on management clusters", func() {
-		cfg.ManagementCluster = true
-		cfg.Openshift = notOpenshift
-		component := render.IntrusionDetection(cfg)
-		resources, _ := component.Objects()
-
-		// Should render the correct resources.
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-		}
-
-		Expect(resources).To(HaveLen(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-
-			if expectedRes.kind == "GlobalAlertTemplate" {
-				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
-			}
-		}
-
-		// Should mount ManagerTLSSecret for non-managed clusters
-		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		idji := rtest.GetResource(resources, "intrusion-detection-es-job-installer", render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
-		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
-			corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
-			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
-			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/intrusion-detection-tls/tls.crt"},
-			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/intrusion-detection-tls/tls.key"},
-			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
-		))
-		Expect(idji.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(idji.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
-		))
-
-		Expect(*idji.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-		Expect(*idji.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-		Expect(*idji.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
-		Expect(*idji.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*idji.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
-		Expect(idji.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			}),
-		)
-		Expect(idji.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}),
-		)
-
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("intrusion-detection-tls"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/intrusion-detection-tls"))
-
-		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(2))
-		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
-		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
-		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.IntrusionDetectionTLSSecretName))
-		Expect(idc.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.IntrusionDetectionTLSSecretName))
-
-		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
-		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
-		Expect(idc.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-		))
-		Expect(idc.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}),
-		)
-
-		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-
-		Expect(clusterRole.Rules).To(ContainElements(
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"authentication.k8s.io"},
-				Resources: []string{"tokenreviews"},
-				Verbs:     []string{"create"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"batch"},
-				Resources: []string{"cronjobs", "jobs"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-		))
-
-		Expect(clusterRole.Rules).NotTo(ContainElements(
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets", "configmaps"},
-				Verbs:     []string{"get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"securityeventwebhooks"},
-				Verbs:     []string{"get", "watch", "update"},
-			},
-		))
 	})
 
 	It("should not render intrusion-detection-es-job-installer and should disable GlobalAlert controller when cluster is managed", func() {

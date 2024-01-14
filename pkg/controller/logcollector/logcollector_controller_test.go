@@ -137,7 +137,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			},
 		})).NotTo(HaveOccurred())
 
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -183,6 +183,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					Images: []operatorv1.Image{
 						{Image: "tigera/fluentd", Digest: "sha256:fluentdhash"},
 						{Image: "tigera/fluentd-windows", Digest: "sha256:fluentdwindowshash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

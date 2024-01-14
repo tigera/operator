@@ -42,7 +42,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
-
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
@@ -73,7 +72,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()
-
 		mockStatus.On("AddDaemonsets", mock.Anything)
 		mockStatus.On("AddDeployments", mock.Anything)
 		mockStatus.On("AddStatefulSets", mock.Anything)
@@ -83,7 +81,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
-
+		Expect(c.Create(ctx, &operatorv1.Monitor{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}))
 		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -101,7 +101,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
-		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
+		promSecret, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 
 		queryServerSecret, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{"a"})
@@ -188,6 +188,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/guardian", Digest: "sha256:guardianhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

@@ -237,7 +237,7 @@ func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
 // operator secrets or secrets that are brought to the cluster by the customer.
 func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret {
 	cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
-	cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
 	keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 	_ = cfg.WriteCertConfig(crtContent, keyContent)
 

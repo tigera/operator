@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package linseed
 import (
 	"context"
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
@@ -141,6 +143,7 @@ var _ = Describe("Linseed rendering tests", func() {
 					"client.key": {4, 5, 6},
 				},
 			}
+			cfg.ExternalElastic = true
 			component := Linseed(cfg)
 			createResources, _ := component.Objects()
 			d, ok := rtest.GetResource(createResources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -430,6 +433,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
 				ElasticPort:     "9200",
 				BindNamespaces:  []string{tenant.Namespace, "tigera-elasticsearch"},
+				ExternalElastic: true,
 			}
 		})
 
@@ -531,6 +535,92 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Affinity).NotTo(BeNil())
 			Expect(d.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, "tenant-test-tenant")))
 		})
+
+		It("should override resource request with the value from TenantSpec's linseedDeployment when available", func() {
+			linseedResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			linseedDeployment := &operatorv1.LinseedDeployment{
+				Spec: &operatorv1.LinseedDeploymentSpec{
+					Template: &operatorv1.LinseedDeploymentPodTemplateSpec{
+						Spec: &operatorv1.LinseedDeploymentPodSpec{
+							Containers: []operatorv1.LinseedDeploymentContainer{{
+								Name:      "tigera-linseed",
+								Resources: &linseedResources,
+							}},
+						},
+					},
+				},
+			}
+			cfg.Tenant.Spec.LinseedDeployment = linseedDeployment
+			component := Linseed(cfg)
+
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-linseed"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(linseedResources))
+		})
+
+		It("should Override initcontainer's resource request with the value from TenantSpec's linseedDeployment when available and CertificateManagement is enabled", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
+			Expect(err).NotTo(HaveOccurred())
+			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
+			kp, tokenKP, bundle := getTLS(installation)
+
+			cfg.KeyPair = kp
+			cfg.TokenKeyPair = tokenKP
+			cfg.TrustedBundle = bundle
+			linseedResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			linseedDeployment := &operatorv1.LinseedDeployment{
+				Spec: &operatorv1.LinseedDeploymentSpec{
+					Template: &operatorv1.LinseedDeploymentPodTemplateSpec{
+						Spec: &operatorv1.LinseedDeploymentPodSpec{
+							InitContainers: []operatorv1.LinseedDeploymentInitContainer{{
+								Name:      "tigera-secure-linseed-token-tls-key-cert-provisioner",
+								Resources: &linseedResources,
+							}},
+						},
+					},
+				},
+			}
+			cfg.Tenant.Spec.LinseedDeployment = linseedDeployment
+
+			component := Linseed(cfg)
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+
+			var initContainer *corev1.Container
+			for _, c := range d.Spec.Template.Spec.InitContainers {
+				if c.Name == "tigera-secure-linseed-token-tls-key-cert-provisioner" {
+					initContainer = &c
+					break
+				}
+			}
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(linseedResources))
+		})
 	})
 
 	Context("single-tenant rendering", func() {
@@ -600,8 +690,9 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(cr.Rules).NotTo(ContainElements(expectedRules))
 		})
 
-		It("should render single-tenant environment variables", func() {
+		It("should render single-tenant environment variables with external elastic", func() {
 			cfg.ManagementCluster = true
+			cfg.ExternalElastic = true
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
@@ -609,6 +700,24 @@ var _ = Describe("Linseed rendering tests", func() {
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+
+			// These are only set for multi-tenant clusters. Make sure they aren't set here.
+			for _, env := range envs {
+				Expect(env.Name).NotTo(Equal("LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT"))
+				Expect(env.Name).NotTo(Equal("LINSEED_TENANT_NAMESPACE"))
+				Expect(env.Name).NotTo(Equal("BACKEND"))
+			}
+		})
+
+		It("should render single-tenant environment variables with internal elastic", func() {
+			cfg.ManagementCluster = true
+			cfg.ExternalElastic = false
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
 
 			// These are only set for multi-tenant clusters. Make sure they aren't set here.
 			for _, env := range envs {
@@ -755,13 +864,17 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 			corev1.Volume{
 				Name: render.TigeraLinseedSecret,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumMemory,
+					},
 				},
 			},
 			corev1.Volume{
 				Name: "tigera-secure-linseed-token-tls",
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium: corev1.StorageMediumMemory,
+					},
 				},
 			},
 		)

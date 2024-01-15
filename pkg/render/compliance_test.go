@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@ package render_test
 
 import (
 	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -90,6 +92,7 @@ var _ = Describe("compliance rendering tests", func() {
 			ClusterDomain:      clusterDomain,
 			TrustedBundle:      bundle,
 			UsePSP:             true,
+			Namespace:          render.ComplianceNamespace,
 		}
 	})
 
@@ -720,5 +723,156 @@ var _ = Describe("compliance rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
+	})
+
+	Context("multi-tenant rendering", func() {
+		tenantANamespace := "tenant-a"
+		tenantBNamespace := "tenant-b"
+		It("should render expected components inside expected namespace for each compliance instance", func() {
+			cfg.Namespace = tenantANamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantA",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			tenantACompliance, err := render.Compliance(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			tenantAResources, _ := tenantACompliance.Objects()
+
+			// Should render the correct resources
+			tenantAExpectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{"allow-tigera.compliance-access", tenantANamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"allow-tigera.default-deny", tenantANamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"tigera-compliance-controller", tenantANamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-controller", tenantANamespace, rbac, "v1", "Role"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-controller", tenantANamespace, rbac, "v1", "RoleBinding"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-controller", tenantANamespace, "apps", "v1", "Deployment"},
+				{"tigera-compliance-reporter", tenantANamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"tigera.io.report", tenantANamespace, "", "v1", "PodTemplate"},
+				{"tigera-compliance-snapshotter", tenantANamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-snapshotter", tenantANamespace, "apps", "v1", "Deployment"},
+				{"tigera-compliance-benchmarker", tenantANamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-benchmarker", tenantANamespace, "apps", "v1", "DaemonSet"},
+				{"inventory", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"tigera-compliance-server", tenantANamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{"allow-tigera.compliance-server", tenantANamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
+				{"compliance", tenantANamespace, "", "v1", "Service"},
+				{"compliance-server", tenantANamespace, "apps", "v1", "Deployment"},
+				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			}
+
+			Expect(len(tenantAResources)).To(Equal(len(tenantAExpectedResources)))
+
+			for i, expectedRes := range tenantAExpectedResources {
+				rtest.ExpectResourceTypeAndObjectMetadata(tenantAResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			for _, deploymentName := range []string{"compliance-controller", "compliance-snapshotter", "compliance-server"} {
+				deployment := rtest.GetResource(tenantAResources, deploymentName, tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+				envs := deployment.Spec.Template.Spec.Containers[0].Env
+				Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: tenantANamespace}))
+			}
+
+			cfg.Namespace = tenantBNamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantB",
+					Namespace: tenantBNamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-b-id",
+				},
+			}
+			tenantBCompliance, err := render.Compliance(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			tenantBResources, _ := tenantBCompliance.Objects()
+
+			// Should render the correct resources
+			tenantBExpectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{"allow-tigera.compliance-access", tenantBNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"allow-tigera.default-deny", tenantBNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"tigera-compliance-controller", tenantBNamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-controller", tenantBNamespace, rbac, "v1", "Role"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-controller", tenantBNamespace, rbac, "v1", "RoleBinding"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-controller", tenantBNamespace, "apps", "v1", "Deployment"},
+				{"tigera-compliance-reporter", tenantBNamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"tigera.io.report", tenantBNamespace, "", "v1", "PodTemplate"},
+				{"tigera-compliance-snapshotter", tenantBNamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-snapshotter", tenantBNamespace, "apps", "v1", "Deployment"},
+				{"tigera-compliance-benchmarker", tenantBNamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-benchmarker", tenantBNamespace, "apps", "v1", "DaemonSet"},
+				{"inventory", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"tigera-compliance-server", tenantBNamespace, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{"allow-tigera.compliance-server", tenantBNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
+				{"compliance", tenantBNamespace, "", "v1", "Service"},
+				{"compliance-server", tenantBNamespace, "apps", "v1", "Deployment"},
+				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			}
+
+			Expect(len(tenantBResources)).To(Equal(len(tenantBExpectedResources)))
+
+			for i, expectedRes := range tenantBExpectedResources {
+				rtest.ExpectResourceTypeAndObjectMetadata(tenantBResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			for _, deploymentName := range []string{"compliance-controller", "compliance-snapshotter", "compliance-server"} {
+				deployment := rtest.GetResource(tenantBResources, deploymentName, tenantBNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+				envs := deployment.Spec.Template.Spec.Containers[0].Env
+				Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: tenantBNamespace}))
+			}
+
+		})
 	})
 })

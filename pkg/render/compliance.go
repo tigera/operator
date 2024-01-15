@@ -77,55 +77,6 @@ const (
 	ComplianceReporterSecret    = "tigera-compliance-reporter-tls"
 )
 
-func createComplianceSourceEntityRule(deploymentName string, tenantNamespaces []string) v3.EntityRule {
-	nsSelector := fmt.Sprintf("projectcalico.org/name == '%s'", ComplianceNamespace)
-	if len(tenantNamespaces) > 0 {
-		tenantNSSelector := "projectcalico.org/name in {"
-		for _, ns := range tenantNamespaces {
-			tenantNSSelector = fmt.Sprintf("%s '%s',", tenantNSSelector, ns)
-		}
-		// Remove trailing ',' and close the selector
-		tenantNSSelector = fmt.Sprintf("%s }", strings.TrimRight(tenantNSSelector, ","))
-
-		nsSelector = fmt.Sprintf("%s || %s", nsSelector, tenantNSSelector)
-	}
-	return v3.EntityRule{
-		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
-		NamespaceSelector: nsSelector,
-	}
-}
-
-func createComplianceEntityRule(deploymentName string, ports []uint16, tenantNamespaces []string) v3.EntityRule {
-	entityRule := createComplianceSourceEntityRule(deploymentName, tenantNamespaces)
-	entityRule.Ports = networkpolicy.Ports(ports...)
-
-	return entityRule
-}
-
-func ComplianceServerEntityRule(tenantNamespaces []string) v3.EntityRule {
-	return createComplianceEntityRule(ComplianceServerName, []uint16{complianceServerPort}, tenantNamespaces)
-}
-
-func ComplianceServerSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
-	return createComplianceSourceEntityRule(ComplianceServerName, tenantNamespaces)
-}
-
-func ComplianceBenchmarkerSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
-	return createComplianceSourceEntityRule(ComplianceBenchmarkerName, tenantNamespaces)
-}
-
-func ComplianceControllerSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
-	return createComplianceSourceEntityRule(ComplianceControllerName, tenantNamespaces)
-}
-
-func ComplianceSnapshotterSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
-	return createComplianceSourceEntityRule(ComplianceSnapshotterName, tenantNamespaces)
-}
-
-func ComplianceReporterSourceEntityRule(tenantNamespaces []string) v3.EntityRule {
-	return createComplianceSourceEntityRule(ComplianceReporterName, tenantNamespaces)
-}
-
 // Register secret/certs that need Server and Client Key usage
 func init() {
 	certkeyusage.SetCertKeyUsage(ComplianceServerCertSecret, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
@@ -322,7 +273,7 @@ var (
 	complianceReplicas int32 = 1
 )
 
-const complianceServerPort = 5443
+const ComplianceServerPort = 5443
 
 func (c *complianceComponent) complianceControllerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
@@ -849,7 +800,7 @@ func (c *complianceComponent) complianceServerService() *corev1.Service {
 					Name:       "compliance-api",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(complianceServerPort),
+					TargetPort: intstr.FromInt(ComplianceServerPort),
 				},
 			},
 			Selector: map[string]string{"k8s-app": ComplianceServerName},
@@ -903,7 +854,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
-								Port:   intstr.FromInt(complianceServerPort),
+								Port:   intstr.FromInt(ComplianceServerPort),
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
@@ -914,7 +865,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
-								Port:   intstr.FromInt(complianceServerPort),
+								Port:   intstr.FromInt(ComplianceServerPort),
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
@@ -1749,7 +1700,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 			Protocol: &networkpolicy.TCPProtocol,
 			Source:   networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(complianceServerPort),
+				Ports: networkpolicy.Ports(ComplianceServerPort),
 			},
 		},
 	}

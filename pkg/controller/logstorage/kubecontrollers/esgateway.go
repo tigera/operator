@@ -99,11 +99,6 @@ func (r *ESKubeControllersController) createESGateway(
 		return err
 	}
 
-	tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
-	if err != nil {
-		return err
-	}
-
 	cfg := &esgateway.Config{
 		Installation:               install,
 		PullSecrets:                pullSecrets,
@@ -115,7 +110,6 @@ func (r *ESKubeControllersController) createESGateway(
 		UsePSP:                     usePSP,
 		Namespace:                  helper.InstallNamespace(),
 		TruthNamespace:             helper.TruthNamespace(),
-		TenantNamespaces:           tenantNamespaces,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

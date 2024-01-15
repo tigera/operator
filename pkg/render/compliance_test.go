@@ -17,8 +17,6 @@ package render_test
 import (
 	"fmt"
 
-	"github.com/tigera/api/pkg/lib/numorstring"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -875,28 +873,6 @@ var _ = Describe("compliance rendering tests", func() {
 				Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: tenantBNamespace}))
 			}
 
-		})
-		It("should render policy rules containing namespace selector with all valid tenant namespaces", func() {
-			expectedMultiTenantComplianceServerEntityRule := v3.EntityRule{
-				Selector:          "k8s-app == 'compliance-server'",
-				NamespaceSelector: "projectcalico.org/name == 'tigera-compliance' || projectcalico.org/name in { 'tenant-a', 'tenant-b' }",
-				Ports: []numorstring.Port{
-					{MinPort: 5443, MaxPort: 5443, PortName: ""},
-				},
-			}
-			tenantNamespaces := []string{tenantANamespace, tenantBNamespace}
-			actualMultiTenantComplianceServerEntityRule := render.ComplianceServerEntityRule(tenantNamespaces)
-			Expect(actualMultiTenantComplianceServerEntityRule).To(Equal(expectedMultiTenantComplianceServerEntityRule))
-
-			expectedNoTenantComplianceServerEntityRule := v3.EntityRule{
-				Selector:          "k8s-app == 'compliance-server'",
-				NamespaceSelector: "projectcalico.org/name == 'tigera-compliance'",
-				Ports: []numorstring.Port{
-					{MinPort: 5443, MaxPort: 5443, PortName: ""},
-				},
-			}
-			actualNoTenantComplianceServerEntityRule := render.ComplianceServerEntityRule(nil)
-			Expect(actualNoTenantComplianceServerEntityRule).To(Equal(expectedNoTenantComplianceServerEntityRule))
 		})
 	})
 })

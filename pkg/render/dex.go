@@ -74,8 +74,6 @@ type DexComponentConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
-
-	TenantNamespaces []string
 }
 
 type dexComponent struct {
@@ -440,7 +438,7 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      ComplianceServerSourceEntityRule(c.cfg.TenantNamespaces),
+					Source:      networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName),
 					Destination: dexIngressPortDestination,
 				},
 				{

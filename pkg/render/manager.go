@@ -915,7 +915,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ComplianceServerEntityRule(c.cfg.TenantNamespaces),
+			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ComplianceServerEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

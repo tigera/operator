@@ -91,8 +91,6 @@ type GuardianConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
-
-	TenantNamespaces []string
 }
 
 type GuardianComponent struct {
@@ -433,25 +431,25 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceBenchmarkerSourceEntityRule(cfg.TenantNamespaces),
+			Source:      networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceReporterSourceEntityRule(cfg.TenantNamespaces),
+			Source:      networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceSnapshotterSourceEntityRule(cfg.TenantNamespaces),
+			Source:      networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceControllerSourceEntityRule(cfg.TenantNamespaces),
+			Source:      networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{

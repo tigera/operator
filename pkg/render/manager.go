@@ -165,7 +165,7 @@ type ManagerConfiguration struct {
 	TruthNamespace    string
 	BindingNamespaces []string
 
-	// Whether to run the rendered components in multi-tenant mode.
+	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
@@ -915,7 +915,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ComplianceServerEntityRule(c.cfg.TenantNamespaces),
+			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ComplianceServerEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

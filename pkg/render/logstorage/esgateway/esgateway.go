@@ -86,8 +86,6 @@ type Config struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
-
-	TenantNamespaces []string
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
@@ -402,36 +400,6 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceBenchmarkerSourceEntityRule(e.cfg.TenantNamespaces),
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceControllerSourceEntityRule(e.cfg.TenantNamespaces),
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceServerSourceEntityRule(e.cfg.TenantNamespaces),
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceSnapshotterSourceEntityRule(e.cfg.TenantNamespaces),
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceReporterSourceEntityRule(e.cfg.TenantNamespaces),
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{

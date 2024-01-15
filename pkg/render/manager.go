@@ -166,11 +166,12 @@ type ManagerConfiguration struct {
 	TruthNamespace    string
 	BindingNamespaces []string
 
-	// Whether or not to run the rendered components in multi-tenant mode.
+	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	Manager *operatorv1.Manager
+	Manager          *operatorv1.Manager
+	TenantNamespaces []string
 }
 
 type managerComponent struct {
@@ -498,7 +499,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
-		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.cfg.ClusterDomain)},
+		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", c.cfg.Namespace, c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_LOGLEVEL", Value: "Info"},
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
@@ -917,7 +918,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ComplianceServerEntityRule,
+			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ComplianceServerEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

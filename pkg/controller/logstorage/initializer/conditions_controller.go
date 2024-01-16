@@ -116,30 +116,21 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 
 		// Update aggregated conditions based on fetched TigeraStatus
 		updateAggregatedConditions(ts.Status.Conditions, tsAggConditions, statusMap, logStorage)
-
-		//for _, condition := range ts.Status.Conditions {
-		//	for i := range tsAggConditions {
-		//		if tsAggConditions[i].Type == condition.Type {
-		//			tsAggConditions[i].Status = condition.Status
-		//			tsAggConditions[i].Message = fmt.Sprintf("%s%s for %s;", tsAggConditions[i].Message, condition.Message, logStorage)
-		//			if tsAggConditions[i].LastTransitionTime.Time.Before(condition.LastTransitionTime.Time) {
-		//				tsAggConditions[i].LastTransitionTime = condition.LastTransitionTime
-		//			}
-		//			statusMap[condition.Type] = statusMap[condition.Type] || (condition.Status == operatorv1.ConditionTrue)
-		//		}
-		//	}
-		//}
 	}
 
-	if statusMap[operatorv1.ComponentDegraded] {
+	// Update tigera status conditions
+	switch {
+	case statusMap[operatorv1.ComponentDegraded]:
 		setAndClearTigeraStatus(tsAggConditions, operatorv1.ComponentDegraded, string(operatorv1.ResourceDegraded))
-	} else if statusMap[operatorv1.ComponentProgressing] {
+	case statusMap[operatorv1.ComponentProgressing]:
 		setAndClearTigeraStatus(tsAggConditions, operatorv1.ComponentProgressing, string(operatorv1.ResourceProgressing))
-	} else if statusMap[operatorv1.ComponentAvailable] {
+	case statusMap[operatorv1.ComponentAvailable]:
 		setAndClearTigeraStatus(tsAggConditions, operatorv1.ComponentAvailable, string(operatorv1.AllObjectsAvailable))
 	}
 
-	tsAggConditions = compareTigeraStatusANdLogStorageCondition(ls.Status.Conditions, tsAggConditions)
+	// Verify if the aggregated TigeraStatus is identical to the previous one.
+	// This verification is necessary to prevent updating the last transition time unnecessarily when there is no change.
+	tsAggConditions = compareConditions(ls.Status.Conditions, tsAggConditions)
 
 	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, tsAggConditions)
 	if err := r.client.Status().Update(ctx, ls); err != nil {
@@ -163,7 +154,7 @@ func setAndClearTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition,
 	}
 }
 
-func compareTigeraStatusANdLogStorageCondition(statuscondition []metav1.Condition, conditions []operatorv1.TigeraStatusCondition) []operatorv1.TigeraStatusCondition {
+func compareConditions(statuscondition []metav1.Condition, conditions []operatorv1.TigeraStatusCondition) []operatorv1.TigeraStatusCondition {
 
 	defaultTime := metav1.Time{}
 	for _, lsCondition := range statuscondition {
@@ -173,14 +164,12 @@ func compareTigeraStatusANdLogStorageCondition(statuscondition []metav1.Conditio
 				conditions[i].Type == operatorv1.ComponentProgressing && lsCondition.Type == string(operatorv1.ComponentProgressing) {
 				tsTime := conditions[i].LastTransitionTime
 				if lsCondition.LastTransitionTime.Before(&tsTime) {
-					//haveExpiredTimestamp = true
 					return conditions
 				}
 				lsCondition.LastTransitionTime = defaultTime
 				conditions[i].LastTransitionTime = defaultTime
+				// TODO - to be fixed
 				if !reflect.DeepEqual(conditions[i], lsCondition) {
-					//fmt.Println("condition:---", conditions[i])
-					//fmt.Println("lscodition:", lsCondition)
 					return conditions
 				}
 				conditions[i].LastTransitionTime = tsTime
@@ -200,19 +189,6 @@ func updateAggregatedConditions(tsConditions []operatorv1.TigeraStatusCondition,
 					tsAggConditions[i].LastTransitionTime = condition.LastTransitionTime
 				}
 				statusMap[condition.Type] = statusMap[condition.Type] || (condition.Status == operatorv1.ConditionTrue)
-			}
-		}
-	}
-}
-
-// TODO remove
-func clearTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionTypes []operatorv1.StatusConditionType, reason string) {
-	for i := range tsAggConditions {
-		for _, conditionType := range conditionTypes {
-			if tsAggConditions[i].Type == conditionType {
-				tsAggConditions[i].Status = operatorv1.ConditionFalse
-				tsAggConditions[i].Reason = reason
-				tsAggConditions[i].Message = ""
 			}
 		}
 	}

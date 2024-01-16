@@ -177,6 +177,7 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 
 		// Create secrets needed for successful installation.
 		bundle := cm.CreateTrustedBundle()
+		Expect(cli.Create(ctx, bundle.ConfigMap(render.ElasticsearchNamespace))).ShouldNot(HaveOccurred())
 		Expect(cli.Create(ctx, bundle.ConfigMap(common.CalicoNamespace))).ShouldNot(HaveOccurred())
 
 		// Create the reconciler for the tests.

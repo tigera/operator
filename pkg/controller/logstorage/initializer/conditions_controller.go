@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,9 @@ package initializer
 import (
 	"context"
 	"fmt"
+	"reflect"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
@@ -90,18 +93,103 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Update conditions on the LogStorage object based on the status of the various components.
-	// TODO: Incorporate status from other sub controllers as well.
-	ts := &operatorv1.TigeraStatus{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: TigeraStatusName}, ts); err != nil {
-		return reconcile.Result{}, err
+	// Log storage instances to fetch TigeraStatus
+	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
+
+	// Initialize aggregated TigeraStatus conditions with default values
+	tsAggConditions := []operatorv1.TigeraStatusCondition{
+		{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentProgressing, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentDegraded, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
 	}
 
-	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, ts.Status.Conditions)
+	// Map to keep track of the conditions status for each type.
+	statusMap := make(map[operatorv1.StatusConditionType]bool)
+
+	for _, logStorage := range logStorageInstances {
+
+		// Fetch TigeraStatus for the individual log storage subcontrollers.
+		ts := &operatorv1.TigeraStatus{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// Update aggregated conditions based on fetched TigeraStatus
+		updateAggregatedConditions(ts.Status.Conditions, tsAggConditions, statusMap, logStorage)
+	}
+
+	// Update tigera status conditions
+	switch {
+	case statusMap[operatorv1.ComponentDegraded]:
+		setAndClearTigeraStatus(tsAggConditions, operatorv1.ComponentDegraded, string(operatorv1.ResourceDegraded))
+	case statusMap[operatorv1.ComponentProgressing]:
+		setAndClearTigeraStatus(tsAggConditions, operatorv1.ComponentProgressing, string(operatorv1.ResourceProgressing))
+	case statusMap[operatorv1.ComponentAvailable]:
+		setAndClearTigeraStatus(tsAggConditions, operatorv1.ComponentAvailable, string(operatorv1.AllObjectsAvailable))
+	}
+
+	// Verify if the aggregated TigeraStatus is identical to the previous one.
+	// This verification is necessary to prevent updating the last transition time unnecessarily when there is no change.
+	tsAggConditions = compareConditions(ls.Status.Conditions, tsAggConditions)
+
+	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, tsAggConditions)
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func setAndClearTigeraStatus(tsAggConditions []operatorv1.TigeraStatusCondition, conditionType operatorv1.StatusConditionType, reason string) {
+	for i := range tsAggConditions {
+		if tsAggConditions[i].Type == conditionType {
+			tsAggConditions[i].Status = operatorv1.ConditionTrue
+			tsAggConditions[i].Reason = reason
+		} else {
+			tsAggConditions[i].Status = operatorv1.ConditionFalse
+			tsAggConditions[i].Reason = reason
+			tsAggConditions[i].Message = ""
+		}
+	}
+}
+
+func compareConditions(statuscondition []metav1.Condition, conditions []operatorv1.TigeraStatusCondition) []operatorv1.TigeraStatusCondition {
+
+	defaultTime := metav1.Time{}
+	for _, lsCondition := range statuscondition {
+		for i := range conditions {
+			if conditions[i].Type == operatorv1.ComponentAvailable && lsCondition.Type == string(operatorv1.ComponentReady) ||
+				conditions[i].Type == operatorv1.ComponentDegraded && lsCondition.Type == string(operatorv1.ComponentDegraded) ||
+				conditions[i].Type == operatorv1.ComponentProgressing && lsCondition.Type == string(operatorv1.ComponentProgressing) {
+				tsTime := conditions[i].LastTransitionTime
+				if lsCondition.LastTransitionTime.Before(&tsTime) {
+					return conditions
+				}
+				lsCondition.LastTransitionTime = defaultTime
+				conditions[i].LastTransitionTime = defaultTime
+				// TODO - to be fixed
+				if !reflect.DeepEqual(conditions[i], lsCondition) {
+					return conditions
+				}
+				conditions[i].LastTransitionTime = tsTime
+			}
+		}
+	}
+	return conditions
+}
+
+func updateAggregatedConditions(tsConditions []operatorv1.TigeraStatusCondition, tsAggConditions []operatorv1.TigeraStatusCondition, statusMap map[operatorv1.StatusConditionType]bool, logStorageType string) {
+	for _, condition := range tsConditions {
+		for i := range tsAggConditions {
+			if tsAggConditions[i].Type == condition.Type {
+				tsAggConditions[i].Status = condition.Status
+				tsAggConditions[i].Message = fmt.Sprintf("%s%s for %s;", tsAggConditions[i].Message, condition.Message, logStorageType)
+				if tsAggConditions[i].LastTransitionTime.Time.Before(condition.LastTransitionTime.Time) {
+					tsAggConditions[i].LastTransitionTime = condition.LastTransitionTime
+				}
+				statusMap[condition.Type] = statusMap[condition.Type] || (condition.Status == operatorv1.ConditionTrue)
+			}
+		}
+	}
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -716,15 +716,16 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 		})
 	}
 
-	ingressRules := []v3.Rule{
-		{
+	ingressRules := []v3.Rule{}
+	if cfg.MetricsPort != 0 {
+		ingressRules = append(ingressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Source:   networkpolicy.PrometheusSourceEntityRule,
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(uint16(cfg.MetricsPort)),
 			},
-		},
+		})
 	}
 
 	return &v3.NetworkPolicy{

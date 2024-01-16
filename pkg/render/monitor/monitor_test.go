@@ -731,132 +731,148 @@ var _ = Describe("monitor rendering tests", func() {
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
 
-		It("Should render external prometheus resources with service monitor", func() {
-			cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
-				ServiceMonitor: &operatorv1.ServiceMonitor{
-					Endpoints: []operatorv1.Endpoint{
-						{
-							BearerTokenSecret: corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-external-prometheus"},
-							},
+		It("prometheus policy should omit kube-controller egress rule when kube-controller port is 0", func() {
+			// Baseline case
+			cfg.KubeControllerPort = 9094
+			component := monitor.MonitorPolicy(cfg)
+			resourcesToCreate, _ := component.Objects()
+			baselinePolicy := testutils.GetAllowTigeraPolicyFromResources(types.NamespacedName{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
+
+			// kube-controllers port set to 0
+			cfg.KubeControllerPort = 0
+			component = monitor.MonitorPolicy(cfg)
+			resourcesToCreate, _ = component.Objects()
+			zeroedPolicy := testutils.GetAllowTigeraPolicyFromResources(types.NamespacedName{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
+
+			Expect(len(zeroedPolicy.Spec.Egress)).To(Equal(len(baselinePolicy.Spec.Egress) - 1))
+		})
+	})
+
+	It("Should render external prometheus resources with service monitor", func() {
+		cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
+			ServiceMonitor: &operatorv1.ServiceMonitor{
+				Endpoints: []operatorv1.Endpoint{
+					{
+						BearerTokenSecret: corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-external-prometheus"},
 						},
 					},
 				},
-				Namespace: "external-prometheus",
-			}
-			component := monitor.Monitor(cfg)
-			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-			toCreate, toDelete := component.Objects()
-			expectedResources := expectedBaseResources()
-			expectedResources = append(expectedResources,
-				resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ConfigMap"},
-				resource{"tigera-external-prometheus", "external-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor"},
-				resource{"tigera-external-prometheus", "external-prometheus", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-				resource{"tigera-external-prometheus", "external-prometheus", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-				resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ServiceAccount"},
-				resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "Secret"},
-			)
+			},
+			Namespace: "external-prometheus",
+		}
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+		expectedResources := expectedBaseResources()
+		expectedResources = append(expectedResources,
+			resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ConfigMap"},
+			resource{"tigera-external-prometheus", "external-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor"},
+			resource{"tigera-external-prometheus", "external-prometheus", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			resource{"tigera-external-prometheus", "external-prometheus", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ServiceAccount"},
+			resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "Secret"},
+		)
 
-			for i, expectedRes := range expectedResources {
-				obj := toCreate[i]
-				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			}
-			Expect(toCreate).To(HaveLen(len(expectedResources)))
-			Expect(toDelete).To(HaveLen(3))
-		})
-		It("Should render external prometheus resources with service monitor and custom token", func() {
-			cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
-				ServiceMonitor: &operatorv1.ServiceMonitor{
-					Endpoints: []operatorv1.Endpoint{
-						{
-							BearerTokenSecret: corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: "some-other-token"},
-							},
+		for i, expectedRes := range expectedResources {
+			obj := toCreate[i]
+			rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
+		Expect(toDelete).To(HaveLen(3))
+	})
+	It("Should render external prometheus resources with service monitor and custom token", func() {
+		cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
+			ServiceMonitor: &operatorv1.ServiceMonitor{
+				Endpoints: []operatorv1.Endpoint{
+					{
+						BearerTokenSecret: corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "some-other-token"},
 						},
 					},
 				},
-				Namespace: "external-prometheus",
-			}
-			component := monitor.Monitor(cfg)
-			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-			toCreate, toDelete := component.Objects()
-			expectedResources := expectedBaseResources()
-			expectedResources = append(expectedResources,
-				resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ConfigMap"},
-				resource{"tigera-external-prometheus", "external-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor"},
-			)
+			},
+			Namespace: "external-prometheus",
+		}
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+		expectedResources := expectedBaseResources()
+		expectedResources = append(expectedResources,
+			resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ConfigMap"},
+			resource{"tigera-external-prometheus", "external-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor"},
+		)
 
-			for i, expectedRes := range expectedResources {
-				obj := toCreate[i]
-				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			}
-			Expect(toCreate).To(HaveLen(len(expectedResources)))
-			Expect(toDelete).To(HaveLen(3))
-		})
-		It("Should render external prometheus resources without service monitor", func() {
-			cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
-				Namespace: "external-prometheus",
-			}
-			component := monitor.Monitor(cfg)
-			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-			toCreate, toDelete := component.Objects()
-			expectedResources := expectedBaseResources()
-			expectedResources = append(expectedResources,
-				resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ConfigMap"},
-			)
+		for i, expectedRes := range expectedResources {
+			obj := toCreate[i]
+			rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
+		Expect(toDelete).To(HaveLen(3))
+	})
+	It("Should render external prometheus resources without service monitor", func() {
+		cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
+			Namespace: "external-prometheus",
+		}
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+		expectedResources := expectedBaseResources()
+		expectedResources = append(expectedResources,
+			resource{"tigera-external-prometheus", "external-prometheus", "", "v1", "ConfigMap"},
+		)
 
-			for i, expectedRes := range expectedResources {
-				obj := toCreate[i]
-				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			}
-			Expect(toCreate).To(HaveLen(len(expectedResources)))
-			Expect(toDelete).To(HaveLen(3))
-		})
-		It("Should render typha service monitor if typha metrics are enabled", func() {
-			cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
-			component := monitor.Monitor(cfg)
-			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-			toCreate, toDelete := component.Objects()
-			expectedResources := expectedBaseResources()
-			expectedResources = append(expectedResources,
-				resource{"calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor"},
-			)
+		for i, expectedRes := range expectedResources {
+			obj := toCreate[i]
+			rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
+		Expect(toDelete).To(HaveLen(3))
+	})
+	It("Should render typha service monitor if typha metrics are enabled", func() {
+		cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+		expectedResources := expectedBaseResources()
+		expectedResources = append(expectedResources,
+			resource{"calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor"},
+		)
 
-			for i, expectedRes := range expectedResources {
-				obj := toCreate[i]
-				rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			}
-			Expect(toCreate).To(HaveLen(len(expectedResources)))
-			Expect(toDelete).To(HaveLen(2))
-			sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
-			Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
-				TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "calico-typha-metrics",
-					Namespace: "tigera-prometheus",
-					Labels:    map[string]string{"team": "network-operators"},
-				},
-				Spec: monitoringv1.ServiceMonitorSpec{
-					Endpoints: []monitoringv1.Endpoint{
-						{
-							HonorLabels:   true,
-							Interval:      "5s",
-							Port:          "calico-typha-metrics",
-							Scheme:        "http",
-							ScrapeTimeout: "5s",
-						},
-					},
-					NamespaceSelector: monitoringv1.NamespaceSelector{
-						MatchNames: []string{common.CalicoNamespace},
-					},
-					Selector: metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							render.AppLabelName: render.TyphaMetricsName,
-						},
+		for i, expectedRes := range expectedResources {
+			obj := toCreate[i]
+			rtest.ExpectResourceTypeAndObjectMetadata(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
+		Expect(toDelete).To(HaveLen(2))
+		sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
+		Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
+			TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "calico-typha-metrics",
+				Namespace: "tigera-prometheus",
+				Labels:    map[string]string{"team": "network-operators"},
+			},
+			Spec: monitoringv1.ServiceMonitorSpec{
+				Endpoints: []monitoringv1.Endpoint{
+					{
+						HonorLabels:   true,
+						Interval:      "5s",
+						Port:          "calico-typha-metrics",
+						Scheme:        "http",
+						ScrapeTimeout: "5s",
 					},
 				},
-			}))
-		})
+				NamespaceSelector: monitoringv1.NamespaceSelector{
+					MatchNames: []string{common.CalicoNamespace},
+				},
+				Selector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						render.AppLabelName: render.TyphaMetricsName,
+					},
+				},
+			},
+		}))
 	})
 })
 

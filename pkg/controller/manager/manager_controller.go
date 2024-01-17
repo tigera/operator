@@ -640,11 +640,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		namespaces = append(namespaces, render.ManagerNamespace)
 	}
 
-	tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
@@ -667,7 +662,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Namespace:               helper.InstallNamespace(),
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
-		TenantNamespaces:        tenantNamespaces,
 		ExternalElastic:         r.elasticExternal,
 		BindingNamespaces:       namespaces,
 		Manager:                 instance,

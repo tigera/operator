@@ -119,8 +119,6 @@ type Config struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	TenantNamespaces []string
-
 	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
 	// mTLS is used between Linseed and the external Elastic cluster.
 	ElasticClientSecret *corev1.Secret

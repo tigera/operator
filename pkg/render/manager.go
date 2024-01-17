@@ -169,8 +169,7 @@ type ManagerConfiguration struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	Manager          *operatorv1.Manager
-	TenantNamespaces []string
+	Manager *operatorv1.Manager
 }
 
 type managerComponent struct {

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -400,36 +400,6 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceBenchmarkerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceControllerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceServerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceSnapshotterSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceReporterSourceEntityRule,
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{

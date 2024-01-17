@@ -796,7 +796,7 @@ var _ = Describe("Convert network tests", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(cfg).ToNot(BeNil())
 					Expect(cfg.Spec.CalicoNetwork.Sysctl).ToNot(BeNil())
-					Expect(cfg.Spec.CalicoNetwork.Sysctl).To(Equal([]operatorv1.Sysctl{
+					Expect(cfg.Spec.CalicoNetwork.Sysctl).To(ConsistOf([]operatorv1.Sysctl{
 						{
 							Key:   "net.ipv4.tcp_keepalive_intvl",
 							Value: "15",

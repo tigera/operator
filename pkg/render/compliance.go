@@ -273,7 +273,7 @@ var (
 	complianceReplicas int32 = 1
 )
 
-const ComplianceServerPort = 5443
+const complianceServerPort = 5443
 
 func (c *complianceComponent) complianceControllerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
@@ -800,7 +800,7 @@ func (c *complianceComponent) complianceServerService() *corev1.Service {
 					Name:       "compliance-api",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(ComplianceServerPort),
+					TargetPort: intstr.FromInt(complianceServerPort),
 				},
 			},
 			Selector: map[string]string{"k8s-app": ComplianceServerName},
@@ -854,7 +854,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
-								Port:   intstr.FromInt(ComplianceServerPort),
+								Port:   intstr.FromInt(complianceServerPort),
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
@@ -865,7 +865,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
-								Port:   intstr.FromInt(ComplianceServerPort),
+								Port:   intstr.FromInt(complianceServerPort),
 								Scheme: corev1.URISchemeHTTPS,
 							},
 						},
@@ -1700,7 +1700,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 			Protocol: &networkpolicy.TCPProtocol,
 			Source:   networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(ComplianceServerPort),
+				Ports: networkpolicy.Ports(complianceServerPort),
 			},
 		},
 	}

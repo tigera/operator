@@ -356,8 +356,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	var opts []certificatemanager.Option
 
-	opts = append(opts, certificatemanager.WithTenant(tenant))
-	opts = append(opts, certificatemanager.WithLogger(reqLogger))
+	opts = append(opts, certificatemanager.WithTenant(tenant), certificatemanager.WithLogger(reqLogger))
 
 	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {

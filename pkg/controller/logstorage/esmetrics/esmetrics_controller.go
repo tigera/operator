@@ -20,9 +20,20 @@ import (
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -37,15 +48,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_logstorage_esmetrics")
@@ -222,6 +224,12 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 			log,
 		)
 		return reconcile.Result{}, err
+	} else if serverKeyPair == nil {
+		// Possibly LogStorage was removed and caused the secret to have been deleted.
+		message := fmt.Sprintf("Waiting for secret %s/%s to be created", common.OperatorNamespace(), esmetrics.ElasticsearchMetricsServerTLSSecret)
+		reqLogger.Info(message)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, message, nil, reqLogger)
+		return reconcile.Result{}, nil
 	}
 
 	trustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, render.ElasticsearchNamespace)

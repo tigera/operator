@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1076,28 +1076,17 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		// Audit logs are owned by root on hosts so we need to be root user and group.
 		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
 		VolumeMounts:    volumeMounts,
-		LivenessProbe: &corev1.Probe{
+		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/version",
+					Path:   "/readyz",
 					Port:   intstr.FromInt(APIServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
-			InitialDelaySeconds: 90,
-			TimeoutSeconds:      10,
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/code/filecheck",
-					},
-				},
-			},
-			FailureThreshold:    5,
-			InitialDelaySeconds: 5,
-			TimeoutSeconds:      10,
+			// We expect the readiness probe to contact kube-apiserver.
+			// A longer period is chosen to minimize load.
+			PeriodSeconds: 60,
 		},
 	}
 

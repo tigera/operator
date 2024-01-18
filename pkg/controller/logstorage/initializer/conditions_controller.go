@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@ package initializer
 import (
 	"context"
 	"fmt"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -90,18 +91,123 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Update conditions on the LogStorage object based on the status of the various components.
-	// TODO: Incorporate status from other sub controllers as well.
-	ts := &operatorv1.TigeraStatus{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: TigeraStatusName}, ts); err != nil {
-		return reconcile.Result{}, err
+	// Log storage instances to fetch TigeraStatus
+	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
+
+	aggTigeraStatusConditions := fillDefaultsForTigeraStatus(*ls)
+
+	// Map to keep track of the conditions status for each type.
+	statusMap := make(map[operatorv1.StatusConditionType]bool)
+
+	for _, logStorage := range logStorageInstances {
+		// Fetch TigeraStatus for the individual log storage subcontrollers.
+		ts := &operatorv1.TigeraStatus{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// Update aggregated conditions based on fetched TigeraStatus
+		updateAggregatedConditions(ts.Status.Conditions, aggTigeraStatusConditions, statusMap, logStorage)
 	}
 
-	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, ts.Status.Conditions)
+	// Update tigera status conditions
+
+	if statusMap[operatorv1.ComponentDegraded] {
+		degradedMessage := fmt.Sprintf("The following sub-controllers are degraded")
+		setAndClearTigeraStatus(aggTigeraStatusConditions, operatorv1.ComponentDegraded, []operatorv1.StatusConditionType{operatorv1.ComponentAvailable}, string(operatorv1.ResourceNotReady), degradedMessage)
+	}
+	if statusMap[operatorv1.ComponentProgressing] {
+		progMessage := fmt.Sprintf("The following sub-controllers are progresssing")
+		setAndClearTigeraStatus(aggTigeraStatusConditions, operatorv1.ComponentProgressing, []operatorv1.StatusConditionType{operatorv1.ComponentAvailable}, string(operatorv1.ResourceNotReady), progMessage)
+	}
+	if statusMap[operatorv1.ComponentAvailable] && !statusMap[operatorv1.ComponentDegraded] && !statusMap[operatorv1.ComponentProgressing] {
+		setAndClearTigeraStatus(aggTigeraStatusConditions, operatorv1.ComponentAvailable, []operatorv1.StatusConditionType{operatorv1.ComponentProgressing, operatorv1.ComponentDegraded}, string(operatorv1.AllObjectsAvailable), "All Objects are available")
+	}
+
+	// Update Transition Time stamp only when the newly aggregate tigera status condition is different from the previously computed.
+	updateLastTransitionTImeStamp(aggTigeraStatusConditions, ls.Status.Conditions)
+
+	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, aggTigeraStatusConditions)
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func updateLastTransitionTImeStamp(aggTigeraStatusConditions []operatorv1.TigeraStatusCondition, ls []metav1.Condition) {
+
+	for i := range aggTigeraStatusConditions {
+		for _, lsCondition := range ls {
+			if aggTigeraStatusConditions[i].Type == operatorv1.ComponentAvailable && lsCondition.Type == string(operatorv1.ComponentReady) ||
+				aggTigeraStatusConditions[i].Type == operatorv1.ComponentDegraded && lsCondition.Type == string(operatorv1.ComponentDegraded) ||
+				aggTigeraStatusConditions[i].Type == operatorv1.ComponentProgressing && lsCondition.Type == string(operatorv1.ComponentProgressing) {
+				// Retain the old LastTransitionTime when the condition type's status is unchanged.
+				// TODO remove comment - Compare the messages in case when progressing or degraded is still true with one or more component flicker between degraded and progressing.
+				if string(aggTigeraStatusConditions[i].Status) == string(lsCondition.Status) && aggTigeraStatusConditions[i].Message == lsCondition.Message {
+					aggTigeraStatusConditions[i].LastTransitionTime = lsCondition.LastTransitionTime
+				}
+			}
+		}
+	}
+
+}
+
+func fillDefaultsForTigeraStatus(ls operatorv1.LogStorage) []operatorv1.TigeraStatusCondition {
+	// Initialize aggregated TigeraStatus conditions with default values
+	aggTigeraStatusConditions := []operatorv1.TigeraStatusCondition{
+		{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentProgressing, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentDegraded, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+	}
+
+	return aggTigeraStatusConditions
+}
+
+func setAndClearTigeraStatus(aggTigeraStatusConditions []operatorv1.TigeraStatusCondition, conditionType operatorv1.StatusConditionType, clearTypes []operatorv1.StatusConditionType, reason, message string) {
+
+	for i := range aggTigeraStatusConditions {
+		if aggTigeraStatusConditions[i].Type == conditionType {
+			aggTigeraStatusConditions[i].Status = operatorv1.ConditionTrue
+			aggTigeraStatusConditions[i].Message = fmt.Sprintf("%s:%s", message, strings.TrimSuffix(aggTigeraStatusConditions[i].Message, ","))
+		} else {
+			for _, clearType := range clearTypes {
+				if aggTigeraStatusConditions[i].Type == clearType {
+					aggTigeraStatusConditions[i].Status = operatorv1.ConditionFalse
+					aggTigeraStatusConditions[i].Message = ""
+				}
+			}
+		}
+		aggTigeraStatusConditions[i].Reason = reason
+
+		if conditionType == operatorv1.ComponentAvailable {
+			aggTigeraStatusConditions[i].Message = message
+		}
+	}
+}
+
+func updateAggregatedConditions(tsConditions []operatorv1.TigeraStatusCondition, aggTigeraStatusConditions []operatorv1.TigeraStatusCondition, statusMap map[operatorv1.StatusConditionType]bool, logStorageType string) {
+	for _, condition := range tsConditions {
+		for i := range aggTigeraStatusConditions {
+			if aggTigeraStatusConditions[i].Type == condition.Type {
+				statusMap[condition.Type] = statusMap[condition.Type] || (condition.Status == operatorv1.ConditionTrue)
+
+				// Aggregate component name to construct message when condition is true
+				if condition.Status == operatorv1.ConditionTrue {
+					aggTigeraStatusConditions[i].Message = fmt.Sprintf("%s%s,", aggTigeraStatusConditions[i].Message, logStorageType)
+				}
+
+				// Update the most recent transition time
+				if aggTigeraStatusConditions[i].LastTransitionTime.Time.Before(condition.LastTransitionTime.Time) {
+					aggTigeraStatusConditions[i].LastTransitionTime = condition.LastTransitionTime
+				}
+
+				// Set the oldest Observed Generation
+				if condition.ObservedGeneration != 0 && (aggTigeraStatusConditions[i].ObservedGeneration == 0 || condition.ObservedGeneration < aggTigeraStatusConditions[i].ObservedGeneration) {
+					aggTigeraStatusConditions[i].ObservedGeneration = condition.ObservedGeneration
+				}
+			}
+		}
+	}
 }

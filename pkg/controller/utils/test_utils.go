@@ -1,4 +1,4 @@
-// Copyright (c) 2022,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import (
 func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r reconcile.Reconciler, mockStatus *status.MockStatus) {
 	err := c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})
 	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created", "tiers.projectcalico.org \"allow-tigera\" not found", mock.Anything).Return()
+	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", "tiers.projectcalico.org \"allow-tigera\" not found", mock.Anything).Return()
 
 	_, err = r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())

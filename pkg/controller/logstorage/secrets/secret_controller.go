@@ -334,9 +334,8 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	return reconcile.Result{}, nil
 }
 
-// generateInternalElasticSecrets generates secrets that are cluster-scoped in a multi-tenant environment
-// and shared by all tenants. For example, Elasticsearch is a shared resource and so only a single set of certificates
-// is needed.
+// generateInternalElasticSecrets generates key pairs for the internal ES cluster and Kibana managed by tigera-operator via ECK
+// when configured to use an internal ES.
 func (r *SecretSubController) generateInternalElasticSecrets(log logr.Logger, kibana bool, cm certificatemanager.CertificateManager) (*elasticKeyPairCollection, error) {
 	collection := elasticKeyPairCollection{log: log}
 

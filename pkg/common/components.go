@@ -26,7 +26,7 @@ import (
 func MergeMaps(current, desired map[string]string) map[string]string {
 	for k, v := range current {
 		// Copy over key/value that should be copied.
-		if _, ok := desired[k]; !ok && !strings.HasPrefix(k, "hash.operator.tigera.io") {
+		if _, ok := desired[k]; !ok && !strings.Contains(k, "hash.operator.tigera.io") {
 			desired[k] = v
 		}
 	}

@@ -343,7 +343,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 	})
 
-	It("should reconcile aggregating all log-storage-* tigerastatus conditions for Available", func() {
+	It("should reconcile aggregating all log-storage-* tigerastatus conditions for Available and later move to degraded", func() {
 
 		// Log storage instances to fetch TigeraStatus
 		logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
@@ -387,8 +387,9 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
 		Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 		Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+		recentTransitionTime := instance.Status.Conditions[0].LastTransitionTime
 
-		// Reconcile when ls does have tigerstatus condition - here
+		// Expect tigerstatus transition time remain unchanged when there is no changes to the  condition
 		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      "log-storage",
 			Namespace: "",
@@ -398,7 +399,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(result).Should(Equal(reconcile.Result{}))
 		instance = &operatorv1.LogStorage{}
 
-		By("asserting the condition's Ready have recent transition time in LogStorage CR")
+		By("Assert last transition time is not affected when tigerastatus condition is untouched")
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
 		Expect(instance.Status.Conditions).To(HaveLen(3))
 
@@ -407,28 +408,9 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
 		Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 		Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
-		Expect(instance.Status.Conditions[0].LastTransitionTime.Time.Equal(transitionTime.Time)).To(BeTrue())
+		Expect(instance.Status.Conditions[0].LastTransitionTime.Time.Equal(recentTransitionTime.Time)).To(BeTrue())
 
-		// Expect transition time not to be updated
-		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      "log-storage",
-			Namespace: "",
-		}})
-		Expect(err).ShouldNot(HaveOccurred())
-		// Expect to be waiting for Elasticsearch and Kibana to be functional
-		Expect(result).Should(Equal(reconcile.Result{}))
-		By("asserting the finalizers have been set on the LogStorage CR")
-		instance = &operatorv1.LogStorage{}
-
-		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
-		Expect(instance.Status.Conditions).To(HaveLen(3))
-
-		By("asserting the conditions's TransitionTime remain unchanged")
-		// The TransitionTime should remain unchanged when there are no modifications to the object.
-		Expect(instance.Status.Conditions[0].LastTransitionTime.Time.Equal(transitionTime.Time)).To(BeTrue())
-		Expect(instance.Status.Conditions[1].LastTransitionTime.Time.Equal(transitionTime.Time)).To(BeTrue())
-		Expect(instance.Status.Conditions[2].LastTransitionTime.Time.Equal(transitionTime.Time)).To(BeTrue())
-
+		// Expect tigerastatus set to be degraded with a different transistion time.
 		// update LogStorageUsers  Tigerastatus to degraded
 		tsUser := operatorv1.TigeraStatus{}
 		_ = cli.Get(ctx, client.ObjectKey{
@@ -439,21 +421,21 @@ var _ = Describe("LogStorage Conditions controller", func() {
 			{
 				Type:               operatorv1.ComponentAvailable,
 				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ComponentDegraded),
+				Reason:             string(operatorv1.ResourceNotReady),
 				Message:            "",
 				ObservedGeneration: generation,
 			},
 			{
 				Type:               operatorv1.ComponentProgressing,
 				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ComponentDegraded),
+				Reason:             string(operatorv1.ResourceNotReady),
 				Message:            "",
 				ObservedGeneration: generation,
 			},
 			{
 				Type:               operatorv1.ComponentDegraded,
 				Status:             operatorv1.ConditionTrue,
-				Reason:             string(operatorv1.ComponentDegraded),
+				Reason:             string(operatorv1.ResourceNotReady),
 				Message:            "no active connection found: no Elasticsearch node available",
 				ObservedGeneration: generation,
 			},
@@ -461,7 +443,6 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 		Expect(cli.Update(ctx, &tsUser)).NotTo(HaveOccurred())
 
-		// Expect transition time not to be updated
 		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      "log-storage",
 			Namespace: "",
@@ -474,34 +455,33 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(instance.Status.Conditions).To(HaveLen(3))
 
 		By("asserting the conditions's status is marked as degraded")
-
 		Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
 		Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.ResourceDegraded)))
+		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
 		Expect(instance.Status.Conditions[0].Message).To(Equal(""))
 		Expect(instance.Status.Conditions[0].LastTransitionTime.Time.Equal(transitionTime.Time)).To(BeFalse())
 
 		// Progressing should remain unchanged
 		Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
 		Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceDegraded)))
+		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
 		Expect(instance.Status.Conditions[1].Message).To(Equal(""))
 		Expect(instance.Status.Conditions[1].LastTransitionTime.Time.Equal(transitionTime.Time)).To(BeTrue())
 
 		// Degaraded status is marked as True
-		degradedMsg := "All Objects are available for log-storage;All Objects are available for log-storage-access;All Objects are available for log-storage-elastic;All Objects are available for log-storage-secrets;no active connection found: no Elasticsearch node available for log-storage-users;"
+		degradedMsg := "The following sub-controllers are degraded:log-storage-users"
 		Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
 		Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceDegraded)))
+		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
 		Expect(instance.Status.Conditions[2].Message).To(Equal(degradedMsg))
 		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		Expect(instance.Status.Conditions[2].LastTransitionTime.Time.Equal(transitionTime.Time)).To(BeFalse())
 
 	})
 
-	It("should set tigerastatus as degraded even when one of the log-storage-* tigerastatus conditions is degraded", func() {
+	It("should set both progressing and degraded as when log-storage-* tigerastatus conditions have degraded and progressing controllers", func() {
 		// Log storage instances to fetch TigeraStatus
-		logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
+		logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
 
 		for _, ls := range logStorageInstances {
 			createTigeraStatus(cli, ctx, ls, generation, transitionTime, []operatorv1.TigeraStatusCondition{})
@@ -512,22 +492,47 @@ var _ = Describe("LogStorage Conditions controller", func() {
 			{
 				Type:               operatorv1.ComponentAvailable,
 				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ComponentDegraded),
+				Reason:             string(operatorv1.ResourceNotReady),
 				Message:            "",
 				ObservedGeneration: generation,
 			},
 			{
 				Type:               operatorv1.ComponentProgressing,
 				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ComponentDegraded),
+				Reason:             string(operatorv1.ResourceNotReady),
 				Message:            "",
 				ObservedGeneration: generation,
 			},
 			{
 				Type:               operatorv1.ComponentDegraded,
 				Status:             operatorv1.ConditionTrue,
-				Reason:             string(operatorv1.ComponentDegraded),
+				Reason:             string(operatorv1.ResourceNotReady),
 				Message:            "no active connection found: no Elasticsearch node available",
+				ObservedGeneration: generation,
+			},
+		})
+
+		// set Progressing TigeraStatus for LogStorageUsers
+		createTigeraStatus(cli, ctx, TigeraStatusLogStorageAccess, generation, transitionTime, []operatorv1.TigeraStatusCondition{
+			{
+				Type:               operatorv1.ComponentAvailable,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentProgressing,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "Waiting for Pod tigera-tenant/tigera-linseed-596445df76-c4btq",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentDegraded,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "",
 				ObservedGeneration: generation,
 			},
 		})
@@ -566,19 +571,18 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 		Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
 		Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.ResourceDegraded)))
+		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
 		Expect(instance.Status.Conditions[0].Message).To(Equal(""))
 
 		Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
-		Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceDegraded)))
-		Expect(instance.Status.Conditions[1].Message).To(Equal(""))
+		Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+		Expect(instance.Status.Conditions[1].Message).To(Equal("The following sub-controllers are progresssing:log-storage-access"))
 
-		degradedMsg := "All Objects are available for log-storage;All Objects are available for log-storage-access;All Objects are available for log-storage-elastic;All Objects are available for log-storage-secrets;no active connection found: no Elasticsearch node available for log-storage-users;"
 		Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
 		Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceDegraded)))
-		Expect(instance.Status.Conditions[2].Message).To(Equal(degradedMsg))
+		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+		Expect(instance.Status.Conditions[2].Message).To(Equal("The following sub-controllers are degraded:log-storage-users"))
 		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 
 	})

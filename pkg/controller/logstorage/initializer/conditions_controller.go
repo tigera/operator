@@ -34,7 +34,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func AddConditionsController(mgr manager.Manager, opts options.AddOptions) error {
@@ -113,7 +112,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	for _, logStorage := range logStorageInstances {
 		// Fetch TigeraStatus for the individual log storage subcontrollers.
 		ts := &operatorv1.TigeraStatus{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil && apierrors.IsNotFound(err) {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil && errors.IsNotFound(err) {
 
 			// When one of the expected subcontroller is not found, update it as degraded
 			ts.Status = operatorv1.TigeraStatusStatus{

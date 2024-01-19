@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,6 +44,10 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
 	TigeraStatusName                 = "log-storage"
+	TigeraStatusLogStorageAccess     = "log-storage-access"
+	TigeraStatusLogStorageElastic    = "log-storage-elastic"
+	TigeraStatusLogStorageSecrets    = "log-storage-secrets"
+	TigeraStatusLogStorageUsers      = "log-storage-users"
 	defaultEckOperatorMemorySetting  = "512Mi"
 )
 

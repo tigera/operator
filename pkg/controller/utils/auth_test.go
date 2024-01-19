@@ -46,6 +46,7 @@ var _ = Describe("LDAP secrets tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 		certificateManager, err := certificatemanager.Create(cli, &operatorv1.InstallationSpec{}, ".cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())

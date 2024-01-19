@@ -94,7 +94,12 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	// Log storage instances to fetch TigeraStatus
 	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
 
-	aggTigeraStatusConditions := fillDefaultsForTigeraStatus(*ls)
+	// Initialize aggregated TigeraStatus conditions with default values
+	aggTigeraStatusConditions := []operatorv1.TigeraStatusCondition{
+		{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentProgressing, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+		{Type: operatorv1.ComponentDegraded, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
+	}
 
 	// Map to keep track of the conditions status for each type.
 	statusMap := make(map[operatorv1.StatusConditionType]bool)
@@ -110,8 +115,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		updateAggregatedConditions(ts.Status.Conditions, aggTigeraStatusConditions, statusMap, logStorage)
 	}
 
-	// Update tigera status conditions
-
+	// Update tigera status conditions based on statusMap
 	if statusMap[operatorv1.ComponentDegraded] {
 		degradedMessage := fmt.Sprintf("The following sub-controllers are degraded")
 		setAndClearTigeraStatus(aggTigeraStatusConditions, operatorv1.ComponentDegraded, []operatorv1.StatusConditionType{operatorv1.ComponentAvailable}, string(operatorv1.ResourceNotReady), degradedMessage)
@@ -124,8 +128,8 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		setAndClearTigeraStatus(aggTigeraStatusConditions, operatorv1.ComponentAvailable, []operatorv1.StatusConditionType{operatorv1.ComponentProgressing, operatorv1.ComponentDegraded}, string(operatorv1.AllObjectsAvailable), "All Objects are available")
 	}
 
-	// Update Transition Time stamp only when the newly aggregate tigera status condition is different from the previously computed.
-	updateLastTransitionTImeStamp(aggTigeraStatusConditions, ls.Status.Conditions)
+	// Resets TransitionTime to previously computed condition when condition status remain unchanged
+	resetLastTransitionTimeStamp(aggTigeraStatusConditions, ls.Status.Conditions)
 
 	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, aggTigeraStatusConditions)
 	if err := r.client.Status().Update(ctx, ls); err != nil {
@@ -136,7 +140,9 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func updateLastTransitionTImeStamp(aggTigeraStatusConditions []operatorv1.TigeraStatusCondition, ls []metav1.Condition) {
+// resetLastTransitionTimeStamp sets the LastTransitionTime to the previously computed condition
+// when the condition status remains unchanged
+func resetLastTransitionTimeStamp(aggTigeraStatusConditions []operatorv1.TigeraStatusCondition, ls []metav1.Condition) {
 
 	for i := range aggTigeraStatusConditions {
 		for _, lsCondition := range ls {
@@ -151,18 +157,6 @@ func updateLastTransitionTImeStamp(aggTigeraStatusConditions []operatorv1.Tigera
 			}
 		}
 	}
-
-}
-
-func fillDefaultsForTigeraStatus(ls operatorv1.LogStorage) []operatorv1.TigeraStatusCondition {
-	// Initialize aggregated TigeraStatus conditions with default values
-	aggTigeraStatusConditions := []operatorv1.TigeraStatusCondition{
-		{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
-		{Type: operatorv1.ComponentProgressing, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
-		{Type: operatorv1.ComponentDegraded, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown), Message: "", LastTransitionTime: metav1.Time{}},
-	}
-
-	return aggTigeraStatusConditions
 }
 
 func setAndClearTigeraStatus(aggTigeraStatusConditions []operatorv1.TigeraStatusCondition, conditionType operatorv1.StatusConditionType, clearTypes []operatorv1.StatusConditionType, reason, message string) {
@@ -180,7 +174,6 @@ func setAndClearTigeraStatus(aggTigeraStatusConditions []operatorv1.TigeraStatus
 			}
 		}
 		aggTigeraStatusConditions[i].Reason = reason
-
 		if conditionType == operatorv1.ComponentAvailable {
 			aggTigeraStatusConditions[i].Message = message
 		}

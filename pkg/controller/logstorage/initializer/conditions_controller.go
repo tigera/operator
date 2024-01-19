@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func AddConditionsController(mgr manager.Manager, opts options.AddOptions) error {
@@ -92,7 +93,12 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Log storage instances to fetch TigeraStatus
-	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
+	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
+
+	// log-storage user exist only in multitenant enviroment
+	if r.multiTenant {
+		logStorageInstances = append(logStorageInstances, TigeraStatusLogStorageUsers)
+	}
 
 	// Initialize aggregated TigeraStatus conditions with default values
 	aggTigeraStatusConditions := []operatorv1.TigeraStatusCondition{
@@ -107,7 +113,19 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	for _, logStorage := range logStorageInstances {
 		// Fetch TigeraStatus for the individual log storage subcontrollers.
 		ts := &operatorv1.TigeraStatus{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil && apierrors.IsNotFound(err) {
+
+			// When one of the expected subcontroller is not found, update it as degraded
+			ts.Status = operatorv1.TigeraStatusStatus{
+				Conditions: []operatorv1.TigeraStatusCondition{
+					{Type: operatorv1.ComponentDegraded,
+						Status:             operatorv1.ConditionTrue,
+						Reason:             string(operatorv1.ResourceNotFound),
+						Message:            "",
+						LastTransitionTime: metav1.Now()},
+				}}
+
+		} else if err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -184,7 +202,12 @@ func updateAggregatedConditions(tsConditions []operatorv1.TigeraStatusCondition,
 	for _, condition := range tsConditions {
 		for i := range aggTigeraStatusConditions {
 			if aggTigeraStatusConditions[i].Type == condition.Type {
+
 				statusMap[condition.Type] = statusMap[condition.Type] || (condition.Status == operatorv1.ConditionTrue)
+				// Available should be marked true when all of the subcontrollers are available.
+				if aggTigeraStatusConditions[i].Type == operatorv1.ComponentAvailable {
+					statusMap[condition.Type] = statusMap[condition.Type] && (condition.Status == operatorv1.ConditionTrue)
+				}
 
 				// Aggregate component name to construct message when condition is true
 				if condition.Status == operatorv1.ConditionTrue {

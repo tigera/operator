@@ -86,22 +86,18 @@ var _ = Describe("LogStorage Conditions controller", func() {
 	transitionTime := metav1.NewTime(time.Date(2024, time.January, 12, 15, 30, 21, 0, time.UTC))
 
 	It("should reconcile with one item in tigerastatus conditions", func() {
-		ts := &operatorv1.TigeraStatus{
-			ObjectMeta: metav1.ObjectMeta{Name: "log-storage"},
-			Spec:       operatorv1.TigeraStatusSpec{},
-			Status: operatorv1.TigeraStatusStatus{
-				Conditions: []operatorv1.TigeraStatusCondition{
-					{
-						Type:               operatorv1.ComponentAvailable,
-						Status:             operatorv1.ConditionTrue,
-						Reason:             string(operatorv1.AllObjectsAvailable),
-						Message:            "All Objects are available",
-						ObservedGeneration: generation,
-					},
-				},
-			},
+
+		logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets, TigeraStatusLogStorageUsers}
+
+		for _, ls := range logStorageInstances {
+			createTigeraStatus(cli, ctx, ls, generation, transitionTime, []operatorv1.TigeraStatusCondition{{
+				Type:               operatorv1.ComponentAvailable,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.AllObjectsAvailable),
+				Message:            "All Objects are available",
+				ObservedGeneration: generation,
+			}})
 		}
-		Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
 		CreateLogStorage(cli, &operatorv1.LogStorage{
 			ObjectMeta: metav1.ObjectMeta{
@@ -132,13 +128,26 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		By("asserting the finalizers have been set on the LogStorage CR")
 		instance := &operatorv1.LogStorage{}
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
-		Expect(instance.Status.Conditions).To(HaveLen(1))
+		Expect(instance.Status.Conditions).To(HaveLen(3))
 
 		Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
 		Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
 		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
 		Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 		Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+		Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+		Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+		Expect(instance.Status.Conditions[1].Message).To(Equal("All Objects are available"))
+		Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(int64(0)))
+
+		Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+		Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+		Expect(instance.Status.Conditions[2].Message).To(Equal("All Objects are available"))
+		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(int64(0)))
+
 	})
 
 	It("should reconcile with empty tigerastatus conditions", func() {
@@ -165,6 +174,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		})
 
 		r, err := NewTestConditionController(cli, scheme, dns.DefaultClusterDomain)
+		r.multiTenant = true
 		Expect(err).ShouldNot(HaveOccurred())
 		result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      "log-storage",
@@ -177,7 +187,13 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		By("asserting the finalizers have been set on the LogStorage CR")
 		instance := &operatorv1.LogStorage{}
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
-		Expect(instance.Status.Conditions).To(HaveLen(0))
+		Expect(instance.Status.Conditions).To(HaveLen(3))
+
+		Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+		Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+		Expect(instance.Status.Conditions[2].Message).To(Equal("The following sub-controllers are degraded:log-storage-access,log-storage-elastic,log-storage-secrets,log-storage-users"))
+		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(int64(0)))
 	})
 
 	It("should reconcile with creating new status condition with multiple conditions as true", func() {
@@ -367,6 +383,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		})
 
 		r, err := NewTestConditionController(cli, scheme, dns.DefaultClusterDomain)
+		r.multiTenant = true
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// Reconcile when ls does not have tigerstatus condition - Transition time would be current time
@@ -553,6 +570,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		})
 
 		r, err := NewTestConditionController(cli, scheme, dns.DefaultClusterDomain)
+		r.multiTenant = true
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// Reconcile when ls does not have tigerstatus condition - Transition time would be current time

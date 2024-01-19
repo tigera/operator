@@ -706,7 +706,6 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() corev1.Container {
-	esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace))
 	envs := []corev1.EnvVar{
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
@@ -736,13 +735,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Name:  "LINSEED_TOKEN",
 			Value: GetLinseedTokenPath(c.cfg.ManagedCluster),
 		},
-		relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ESClusterConfig.ClusterName()),
-		relasticsearch.ElasticUserEnvVar(ElasticsearchIntrusionDetectionUserSecret),
-		relasticsearch.ElasticPasswordEnvVar(ElasticsearchIntrusionDetectionUserSecret),
-		relasticsearch.ElasticHostEnvVar(esHost),
-		relasticsearch.ElasticPortEnvVar(esPort),
-		relasticsearch.ElasticSchemeEnvVar(esScheme),
-		relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
 	}
 
 	sc := securitycontext.NewNonRootContext()

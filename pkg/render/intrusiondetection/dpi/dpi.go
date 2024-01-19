@@ -336,7 +336,7 @@ func (c *dpiComponent) dpiClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 }
 
 func (c *dpiComponent) dpiLinseedAccessClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return rcomponents.ClusterRoleBinding(DeepPacketInspectionLinseedRBACName, DeepPacketInspectionLinseedRBACName, DeepPacketInspectionLinseedRBACName, c.cfg.BindNamespaces)
+	return rcomponents.ClusterRoleBinding(DeepPacketInspectionLinseedRBACName, DeepPacketInspectionLinseedRBACName, DeepPacketInspectionName, c.cfg.BindNamespaces)
 }
 
 func (c *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {

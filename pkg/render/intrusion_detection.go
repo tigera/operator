@@ -205,8 +205,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objsToDelete = append(objsToDelete, c.adComponentsToDelete()...)
 	}
 
-	// When FIPS mode is enabled, we currently disable our python based images.
-	if !c.cfg.ManagedCluster {
+	if !c.cfg.ManagedCluster && !c.cfg.Tenant.MultiTenant() {
+		// For now, we don't create the installer job in multi-tenant clusters.
 		idsObjs := []client.Object{
 			c.intrusionDetectionElasticsearchAllowTigeraPolicy(),
 			c.intrusionDetectionElasticsearchJob(),
@@ -215,6 +215,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			objs = append(objs, idsObjs...)
 		} else {
+			// When FIPS mode is enabled, we currently disable our python based images.
 			objsToDelete = append(objsToDelete, idsObjs...)
 		}
 	}

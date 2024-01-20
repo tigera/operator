@@ -51,6 +51,7 @@ const (
 	TigeraStatusLogStorageSecrets        = "log-storage-secrets"
 	TigeraStatusLogStorageUsers          = "log-storage-users"
 	TigeraStatusLogStorageESMetrics      = "log-storage-esmetrics"
+	TigeraStatusLogStorageDashboards     = "log-storage-dashboards"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller

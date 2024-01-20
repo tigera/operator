@@ -1,4 +1,4 @@
-// Copyright (c) 2020,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/controller/logstorage/dashboards"
 	"github.com/tigera/operator/pkg/controller/logstorage/esmetrics"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -81,6 +82,11 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 	// The ES metrics controller installs ES metrics into the cluster. It will only install ES metrics in a single-tenant
 	// management cluster.
 	if err := esmetrics.Add(mgr, opts); err != nil {
+		return err
+	}
+
+	// The dashboards controller installs Kibana dashboards and Kibana index-patterns
+	if err := dashboards.Add(mgr, opts); err != nil {
 		return err
 	}
 

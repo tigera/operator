@@ -1,0 +1,40 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.dashboards-installer",
+    "namespace": "tigera-elasticsearch"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "job-name == 'dashboards-installer'",
+    "types": [
+      "Egress"
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'tigera-kibana'",
+          "selector": "k8s-app == 'tigera-secure'",
+          "ports": [
+            5601
+          ]
+        }
+      }
+    ]
+  }
+}

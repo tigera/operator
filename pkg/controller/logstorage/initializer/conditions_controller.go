@@ -125,7 +125,7 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 	if r.multiTenant {
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 	} else {
-		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
 	}
 
 	// Keep track of which instances are in which state.

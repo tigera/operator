@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
-	"github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -195,14 +194,13 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objsToDelete = append(objsToDelete, c.adComponentsToDelete()...)
 	}
 
-	// When FIPS mode is enabled, we currently disable our python based images.
-	if !c.cfg.ManagedCluster {
+	if !c.cfg.ManagedCluster && !c.cfg.Tenant.MultiTenant() {
+		// For now, we don't create the installer job in multi-tenant clusters.
 		idsObjs := []client.Object{
 			c.intrusionDetectionJobServiceAccount(),
 			c.intrusionDetectionElasticsearchAllowTigeraPolicy(),
 			c.intrusionDetectionElasticsearchJob(),
 		}
-
 		objsToDelete = append(objsToDelete, idsObjs...)
 	}
 

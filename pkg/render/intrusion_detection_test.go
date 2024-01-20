@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	"github.com/tigera/operator/pkg/common"
 
@@ -612,6 +613,91 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		csrInitContainer := intrusionDetectionDeploy.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.IntrusionDetectionTLSSecretName)))
+	})
+
+	Context("multi-tenant rendering", func() {
+		tenantANamespace := "tenant-a-ns"
+		tenantBNamespace := "tenant-b-ns"
+		var tenantA *operatorv1.Tenant
+
+		BeforeEach(func() {
+			// Configure a tenant.
+			tenantA = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: tenantANamespace},
+				Spec:       operatorv1.TenantSpec{},
+			}
+			cfg.Namespace = tenantANamespace
+			cfg.BindNamespaces = []string{tenantANamespace, tenantBNamespace}
+			cfg.Tenant = tenantA
+		})
+
+		It("should render multi-tenant resources", func() {
+			component := render.IntrusionDetection(cfg)
+			toCreate, _ := component.Objects()
+
+			expected := []client.Object{
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: tenantANamespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantANamespace}},
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-es-job-installer", Namespace: tenantANamespace}},
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+			}
+			rtest.ExpectResources(toCreate, expected)
+
+			netpol, err := rtest.GetResourceOfType[*v3.NetworkPolicy](toCreate, render.IntrusionDetectionControllerPolicyName, tenantANamespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(netpol.Spec.Ingress).To(ConsistOf(v3.Rule{Action: v3.Deny}))
+
+			expectedEgressRules := []v3.Rule{
+				{
+					Action:   v3.Deny,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets: []string{"169.254.0.0/16"},
+					},
+				},
+				{
+					Action:   v3.Deny,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets: []string{"fe80::/10"},
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.UDPProtocol,
+					Destination: v3.EntityRule{
+						NamespaceSelector: "projectcalico.org/name == 'kube-system'",
+						Selector:          "k8s-app == 'kube-dns'",
+						Ports:             networkpolicy.Ports(53),
+					},
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: networkpolicy.CreateEntityRule(tenantANamespace, "tigera-secure-es-gateway", 5554),
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: networkpolicy.CreateEntityRule(tenantANamespace, "tigera-linseed", 8444),
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: networkpolicy.KubeAPIServerEntityRule,
+				},
+				{
+					Action: v3.Pass,
+				},
+			}
+			Expect(netpol.Spec.Egress).To(ConsistOf(expectedEgressRules))
+		})
 	})
 })
 

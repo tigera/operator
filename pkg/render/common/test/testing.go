@@ -119,8 +119,18 @@ func ExpectResource(expected client.Object, resources []client.Object) error {
 			}
 		}
 	}
+	return notFoundError(name, ns, resources)
+}
 
-	// Build a list of items so we can print a nice error message.
+func notFoundError(name, ns string, resources []client.Object) error {
+	if ns == "" {
+		return fmt.Errorf("resource %s not found in:\n\n%s", name, itemList(resources))
+	}
+	return fmt.Errorf("resource %s/%s not found in:\n\n%s", ns, name, itemList(resources))
+}
+
+// itemList is a helper for printing out a nice error message when a resource is not found.
+func itemList(resources []client.Object) string {
 	items := []string{}
 	for i, r := range resources {
 		items = append(items,
@@ -131,10 +141,7 @@ func ExpectResource(expected client.Object, resources []client.Object) error {
 				r.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName(),
 			))
 	}
-	if ns == "" {
-		return fmt.Errorf("%T %s not found in:\n\n%s", expected, name, strings.Join(items, "\n"))
-	}
-	return fmt.Errorf("%T %s/%s not found in:\n\n%s", expected, ns, name, strings.Join(items, "\n"))
+	return strings.Join(items, "\n")
 }
 
 // ExpectResourceTypeAndObjectMetadata checks that the given resource matches the expected name, namespace, group, version, and kind.
@@ -162,6 +169,26 @@ func GetResource(resources []client.Object, name, ns, group, version, kind strin
 		}
 	}
 	return nil
+}
+
+func GetResourceOfType[T client.Object](resources []client.Object, name, ns string) (T, error) {
+	for _, r := range resources {
+		if reflect.TypeOf(r) != reflect.TypeOf(*new(T)) {
+			continue
+		}
+		if r.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName() != name {
+			continue
+		}
+		if r.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace() != ns {
+			continue
+		}
+		// Type, name, and namespace match.
+		return r.(T), nil
+	}
+
+	// Return a nil instance of T and an error.
+	var n T
+	return n, notFoundError(name, ns, resources)
 }
 
 func GetGlobalResource(resources []client.Object, name, group, version, kind string) client.Object {

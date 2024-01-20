@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023,2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -60,18 +60,23 @@ var _ = Describe("LogStorage cleanup controller", func() {
 		tenantID1 := "tenant1"
 		tenantID2 := "tenant2"
 
-		staleUser := utils.LinseedUser(clusterID1, tenantID1)
+		staleLinseedUser := utils.LinseedUser(clusterID1, tenantID1)
+		staleDashboardsUser := utils.DashboardUser(clusterID1, tenantID1)
 
 		esTestUsers := []utils.User{
-			*staleUser,
+			*staleLinseedUser,
+			*staleDashboardsUser,
 			*utils.LinseedUser(clusterID1, tenantID2),
+			*utils.DashboardUser(clusterID1, tenantID2),
 			*utils.LinseedUser(clusterID2, tenantID1),
+			*utils.DashboardUser(clusterID2, tenantID1),
 			*utils.LinseedUser(clusterID2, tenantID2),
+			*utils.DashboardUser(clusterID2, tenantID2),
 		}
 
 		testESClient.On("GetUsers", ctx).Return(esTestUsers, nil)
-		testESClient.On("DeleteUser", ctx, staleUser).Return(nil)
-		testESClient.On("DeleteRoles", ctx, staleUser.Roles).Return(nil)
+		testESClient.On("DeleteUser", ctx, staleLinseedUser).Return(nil)
+		testESClient.On("DeleteRoles", ctx, staleLinseedUser.Roles).Return(nil)
 
 		cluster1IDConfigMap := corev1.ConfigMap{
 			ObjectMeta: apiv1.ObjectMeta{

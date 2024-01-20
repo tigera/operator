@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -225,22 +225,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					components.ComponentIntrusionDetectionController.Image,
 					components.ComponentIntrusionDetectionController.Version)))
 
-			j := batchv1.Job{
-				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.IntrusionDetectionInstallerJobName,
-					Namespace: render.IntrusionDetectionNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &j)).To(BeNil())
-			Expect(j.Spec.Template.Spec.Containers).To(HaveLen(1))
-			installer := test.GetContainer(j.Spec.Template.Spec.Containers, "elasticsearch-job-installer")
-			Expect(installer).ToNot(BeNil())
-			Expect(installer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentElasticTseeInstaller.Image,
-					components.ComponentElasticTseeInstaller.Version)))
-
 			training_pt := corev1.PodTemplate{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "PodTemplate",
@@ -280,7 +264,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:intrusiondetectionjobinstallerhash"},
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
 						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
 						{Image: "tigera/webhooks-processor", Digest: "sha256:webhooksprocessorhash"},
@@ -308,22 +291,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					components.ComponentIntrusionDetectionController.Image,
 					"sha256:intrusiondetectioncontrollerhash")))
 
-			j := batchv1.Job{
-				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.IntrusionDetectionInstallerJobName,
-					Namespace: render.IntrusionDetectionNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &j)).To(BeNil())
-			Expect(j.Spec.Template.Spec.Containers).To(HaveLen(1))
-			installer := test.GetContainer(j.Spec.Template.Spec.Containers, "elasticsearch-job-installer")
-			Expect(installer).ToNot(BeNil())
-			Expect(installer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentElasticTseeInstaller.Image,
-					"sha256:intrusiondetectionjobinstallerhash")))
-
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -339,51 +306,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentDeepPacketInspection.Image,
 					"sha256:deeppacketinspectionhash")))
-		})
-
-		It("should not register intrusion-detection-job-installer image when cluster is managed", func() {
-			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterConnectionSpec{
-					ManagementClusterAddr: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("non-default-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			j := batchv1.Job{
-				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.IntrusionDetectionInstallerJobName,
-					Namespace: render.IntrusionDetectionNamespace,
-				},
-			}
-			// Shouldn't be able to find the job in a managed cluster.
-			Expect(test.GetResource(c, &j)).NotTo(BeNil())
-		})
-
-		It("should register intrusion-detection-job-installer image when in a management cluster", func() {
-			Expect(c.Create(ctx, &operatorv1.ManagementCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterSpec{
-					Address: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			j := batchv1.Job{
-				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.IntrusionDetectionInstallerJobName,
-					Namespace: render.IntrusionDetectionNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &j)).To(BeNil())
 		})
 	})
 

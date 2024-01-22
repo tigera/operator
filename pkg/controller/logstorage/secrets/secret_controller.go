@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -473,19 +473,19 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		render.FluentdPrometheusTLSSecretName: common.OperatorNamespace(),
 
 		// Get certificate for intrusion detection controller, which Linseed needs to trust in a standalone or management cluster.
-		render.IntrusionDetectionTLSSecretName: common.OperatorNamespace(),
+		render.IntrusionDetectionTLSSecretName: helper.TruthNamespace(),
 
 		// Get certificate for DPI, which Linseed needs to trust in a standalone or management cluster.
-		render.DPITLSSecretName: common.OperatorNamespace(),
+		render.DPITLSSecretName: helper.TruthNamespace(),
 
 		// Get compliance certificates, which Linseed needs to trust.
-		render.ComplianceServerCertSecret:  common.OperatorNamespace(),
-		render.ComplianceSnapshotterSecret: common.OperatorNamespace(),
-		render.ComplianceBenchmarkerSecret: common.OperatorNamespace(),
-		render.ComplianceReporterSecret:    common.OperatorNamespace(),
+		render.ComplianceServerCertSecret:  helper.TruthNamespace(),
+		render.ComplianceSnapshotterSecret: helper.TruthNamespace(),
+		render.ComplianceBenchmarkerSecret: helper.TruthNamespace(),
+		render.ComplianceReporterSecret:    helper.TruthNamespace(),
 
 		// Get certificate for policy-recommendation, which Linseed needs to trust.
-		render.PolicyRecommendationTLSSecretName: common.OperatorNamespace(),
+		render.PolicyRecommendationTLSSecretName: helper.TruthNamespace(),
 
 		// Linseed and es-gateway need to trust the
 		render.TigeraElasticsearchInternalCertSecret: common.OperatorNamespace(),

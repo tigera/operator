@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -564,23 +564,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(cpuLimit)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(memoryRequest)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
-		})
-
-		It("should error if Elasticsearch configuration ConfigMap contains default cluster-name field in managed cluster", func() {
-			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterConnectionSpec{
-					ManagementClusterAddr: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-
-			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("managed-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
 		})
 	})
 

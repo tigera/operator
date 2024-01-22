@@ -31,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -61,9 +60,6 @@ type DPIConfig struct {
 	HasNoDPIResource   bool
 	ClusterDomain      string
 	DPICertSecret      certificatemanagement.KeyPairInterface
-	Namespace          string
-	BindNamespaces     []string
-	Tenant             *operatorv1.Tenant
 }
 
 func DPI(cfg *DPIConfig) render.Component {
@@ -75,13 +71,13 @@ type dpiComponent struct {
 	dpiImage string
 }
 
-func (c *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
+func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
-	c.dpiImage, err = components.GetReference(
+	d.dpiImage, err = components.GetReference(
 		components.ComponentDeepPacketInspection,
-		c.cfg.Installation.Registry,
-		c.cfg.Installation.ImagePath,
-		c.cfg.Installation.ImagePrefix,
+		d.cfg.Installation.Registry,
+		d.cfg.Installation.ImagePath,
+		d.cfg.Installation.ImagePrefix,
 		is)
 	if err != nil {
 		return err
@@ -89,114 +85,109 @@ func (c *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (c *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var toCreate, toDelete []client.Object
-
-	if !c.cfg.Tenant.MultiTenant() {
-		// In multi-tenant management clusters, namespace management is external to the operator. So skip this logic.
-		if c.cfg.HasNoLicense {
-			toDelete = append(toDelete, render.CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
-		} else {
-			toCreate = append(toCreate, render.CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
-		}
-
-		// This secret is deprecated in this namespace and should be removed in upgrade scenarios
-		toDelete = append(toDelete, &corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: c.cfg.Namespace},
-		})
+	if d.cfg.HasNoLicense {
+		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
+	} else {
+		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	}
 
-	if c.cfg.HasNoDPIResource || c.cfg.HasNoLicense {
-		toDelete = append(toDelete, c.dpiAllowTigeraPolicy())
-		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
+	// This secret is deprecated in this namespace and should be removed in upgrade scenarios
+	toDelete = append(toDelete, &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
+	})
+
+	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
+		toDelete = append(toDelete, d.dpiAllowTigeraPolicy())
+		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toDelete = append(toDelete,
-			c.dpiServiceAccount(),
-			c.dpiClusterRole(),
-			c.dpiClusterRoleBinding(),
-			c.dpiDaemonset(),
+			d.dpiServiceAccount(),
+			d.dpiClusterRole(),
+			d.dpiClusterRoleBinding(),
+			d.dpiDaemonset(),
 		)
 	} else {
-		toCreate = append(toCreate, c.dpiAllowTigeraPolicy())
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
+		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace)...)...)
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toCreate = append(toCreate,
-			c.dpiServiceAccount(),
-			c.dpiClusterRole(),
-			c.dpiClusterRoleBinding(),
-			c.dpiDaemonset(),
+			d.dpiServiceAccount(),
+			d.dpiClusterRole(),
+			d.dpiClusterRoleBinding(),
+			d.dpiDaemonset(),
 		)
 	}
-
-	if c.cfg.ManagementCluster {
+	if d.cfg.ManagementCluster {
 		// We always want to create these permissions when a management
 		// cluster is configured, to allow any DPI running inside a
 		// managed cluster to write data
-		toCreate = append(toCreate, c.dpiLinseedAccessClusterRole())
-		toCreate = append(toCreate, c.dpiLinseedAccessClusterRoleBinding())
-	} else if !c.cfg.ManagedCluster && !c.cfg.HasNoDPIResource && !c.cfg.HasNoLicense {
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
+	} else if !d.cfg.ManagedCluster && !d.cfg.HasNoDPIResource && !d.cfg.HasNoLicense {
 		// We want to create these permissions when a standalone
 		// cluster is configured to run DPI
-		toCreate = append(toCreate, c.dpiLinseedAccessClusterRole())
-		toCreate = append(toCreate, c.dpiLinseedAccessClusterRoleBinding())
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
 	} else {
 		// We want to remove these permissions when a standalone
 		// cluster is no longer configured, to run DPI or for managed clusters
 		toDelete = append(toDelete,
-			c.dpiLinseedAccessClusterRole(),
-			c.dpiLinseedAccessClusterRoleBinding(),
+			d.dpiLinseedAccessClusterRole(),
+			d.dpiLinseedAccessClusterRoleBinding(),
 		)
 	}
-
-	if c.cfg.ManagedCluster {
+	if d.cfg.ManagedCluster {
 		// For managed clusters, we must create a role binding to allow Linseed to
 		// manage access token secrets in our namespace.
-		toCreate = append(toCreate, c.externalLinseedRoleBinding())
+		toCreate = append(toCreate, d.externalLinseedRoleBinding())
 	} else {
 		// We can delete the role binding for management and standalone clusters, since
 		// for these cluster types normal serviceaccount tokens are used.
-		toDelete = append(toDelete, c.externalLinseedRoleBinding())
+		toDelete = append(toDelete, d.externalLinseedRoleBinding())
 	}
 
 	return toCreate, toDelete
 }
 
-func (c *dpiComponent) Ready() bool {
+func (d *dpiComponent) Ready() bool {
 	return true
 }
 
-func (c *dpiComponent) SupportedOSType() meta.OSType {
+func (d *dpiComponent) SupportedOSType() meta.OSType {
 	return meta.OSTypeLinux
 }
 
-func (c *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
+func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	var initContainers []corev1.Container
-	if c.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TyphaNodeTLS.NodeSecret.InitContainer(c.cfg.Namespace))
+	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Annotations: c.dpiAnnotations(),
+			Annotations: d.dpiAnnotations(),
 		},
 		Spec: corev1.PodSpec{
 			Tolerations:                   meta.TolerateAll,
-			ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
+			ImagePullSecrets:              secret.GetReferenceList(d.cfg.PullSecrets),
 			ServiceAccountName:            DeepPacketInspectionName,
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			HostNetwork:                   true,
 			// Adjust DNS policy so we can access in-cluster services.
 			DNSPolicy:      corev1.DNSClusterFirstWithHostNet,
 			InitContainers: initContainers,
-			Containers:     []corev1.Container{c.dpiContainer()},
-			Volumes:        c.dpiVolumes(),
+			Containers:     []corev1.Container{d.dpiContainer()},
+			Volumes:        d.dpiVolumes(),
 		},
 	}
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeepPacketInspectionName,
-			Namespace: c.cfg.Namespace,
+			Namespace: DeepPacketInspectionNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Template: *podTemplate,
@@ -204,34 +195,34 @@ func (c *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	}
 }
 
-func (c *dpiComponent) dpiContainer() corev1.Container {
-	sc := securitycontext.NewRootContext(c.cfg.Openshift)
+func (d *dpiComponent) dpiContainer() corev1.Container {
+	sc := securitycontext.NewRootContext(d.cfg.Openshift)
 	sc.Capabilities.Add = []corev1.Capability{
 		"NET_ADMIN",
 		"NET_RAW",
 	}
 	dpiContainer := corev1.Container{
 		Name:            DeepPacketInspectionName,
-		Image:           c.dpiImage,
+		Image:           d.dpiImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
-		Resources:       *c.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
-		Env:             c.dpiEnvVars(),
-		VolumeMounts:    c.dpiVolumeMounts(),
+		Resources:       *d.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
+		Env:             d.dpiEnvVars(),
+		VolumeMounts:    d.dpiVolumeMounts(),
 		// On OpenShift Snort needs privileged access to access host network
 		SecurityContext: sc,
-		ReadinessProbe:  c.dpiReadinessProbes(),
+		ReadinessProbe:  d.dpiReadinessProbes(),
 	}
 
 	return dpiContainer
 }
 
-func (c *dpiComponent) dpiVolumes() []corev1.Volume {
+func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 
 	volumes := []corev1.Volume{
-		c.cfg.DPICertSecret.Volume(),
-		c.cfg.TyphaNodeTLS.TrustedBundle.Volume(),
-		c.cfg.TyphaNodeTLS.NodeSecret.Volume(),
+		d.cfg.DPICertSecret.Volume(),
+		d.cfg.TyphaNodeTLS.TrustedBundle.Volume(),
+		d.cfg.TyphaNodeTLS.NodeSecret.Volume(),
 		{
 			Name: "log-snort-alters",
 			VolumeSource: corev1.VolumeSource{
@@ -243,7 +234,7 @@ func (c *dpiComponent) dpiVolumes() []corev1.Volume {
 		},
 	}
 
-	if c.cfg.ManagedCluster {
+	if d.cfg.ManagedCluster {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: render.LinseedTokenVolumeName,
@@ -259,7 +250,7 @@ func (c *dpiComponent) dpiVolumes() []corev1.Volume {
 	return volumes
 }
 
-func (c *dpiComponent) dpiEnvVars() []corev1.EnvVar {
+func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{
 			Name: "DPI_NODENAME",
@@ -269,34 +260,34 @@ func (c *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		},
 		{Name: "DPI_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "DPI_TYPHAK8SSERVICENAME", Value: render.TyphaServiceName},
-		{Name: "DPI_TYPHACAFILE", Value: c.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
-		{Name: "DPI_TYPHACERTFILE", Value: c.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
-		{Name: "DPI_TYPHAKEYFILE", Value: c.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
-		{Name: "LINSEED_CLIENT_CERT", Value: c.cfg.DPICertSecret.VolumeMountCertificateFilePath()},
-		{Name: "LINSEED_CLIENT_KEY", Value: c.cfg.DPICertSecret.VolumeMountKeyFilePath()},
-		{Name: "LINSEED_TOKEN", Value: render.GetLinseedTokenPath(c.cfg.ManagedCluster)},
-		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
+		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
+		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
+		{Name: "LINSEED_CLIENT_CERT", Value: d.cfg.DPICertSecret.VolumeMountCertificateFilePath()},
+		{Name: "LINSEED_CLIENT_KEY", Value: d.cfg.DPICertSecret.VolumeMountKeyFilePath()},
+		{Name: "LINSEED_TOKEN", Value: render.GetLinseedTokenPath(d.cfg.ManagedCluster)},
+		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode)},
 	}
 
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
-	if c.cfg.TyphaNodeTLS.TyphaCommonName != "" {
-		env = append(env, corev1.EnvVar{Name: "DPI_TYPHACN", Value: c.cfg.TyphaNodeTLS.TyphaCommonName})
+	if d.cfg.TyphaNodeTLS.TyphaCommonName != "" {
+		env = append(env, corev1.EnvVar{Name: "DPI_TYPHACN", Value: d.cfg.TyphaNodeTLS.TyphaCommonName})
 	}
-	if c.cfg.TyphaNodeTLS.TyphaURISAN != "" {
-		env = append(env, corev1.EnvVar{Name: "DPI_TYPHAURISAN", Value: c.cfg.TyphaNodeTLS.TyphaURISAN})
+	if d.cfg.TyphaNodeTLS.TyphaURISAN != "" {
+		env = append(env, corev1.EnvVar{Name: "DPI_TYPHAURISAN", Value: d.cfg.TyphaNodeTLS.TyphaURISAN})
 	}
 	return env
 }
 
-func (c *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
+func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	volumeMounts := append(
-		c.cfg.TyphaNodeTLS.TrustedBundle.VolumeMounts(c.SupportedOSType()),
-		c.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(c.SupportedOSType()),
+		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMounts(d.SupportedOSType()),
+		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(d.SupportedOSType()),
 		corev1.VolumeMount{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
-		c.cfg.DPICertSecret.VolumeMount(c.SupportedOSType()),
+		d.cfg.DPICertSecret.VolumeMount(d.SupportedOSType()),
 	)
-	if c.cfg.ManagedCluster {
+	if d.cfg.ManagedCluster {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      render.LinseedTokenVolumeName,
@@ -306,7 +297,7 @@ func (c *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return volumeMounts
 }
 
-func (c *dpiComponent) dpiReadinessProbes() *corev1.Probe {
+func (d *dpiComponent) dpiReadinessProbes() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -321,25 +312,61 @@ func (c *dpiComponent) dpiReadinessProbes() *corev1.Probe {
 	}
 }
 
-func (c *dpiComponent) dpiServiceAccount() *corev1.ServiceAccount {
+func (d *dpiComponent) dpiServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeepPacketInspectionName,
-			Namespace: c.cfg.Namespace,
+			Namespace: DeepPacketInspectionNamespace,
 		},
 	}
 }
 
-func (c *dpiComponent) dpiClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return rcomponents.ClusterRoleBinding(DeepPacketInspectionName, DeepPacketInspectionName, DeepPacketInspectionName, c.cfg.BindNamespaces)
+func (d *dpiComponent) dpiClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   DeepPacketInspectionName,
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     DeepPacketInspectionName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      DeepPacketInspectionName,
+				Namespace: DeepPacketInspectionNamespace,
+			},
+		},
+	}
 }
 
-func (c *dpiComponent) dpiLinseedAccessClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return rcomponents.ClusterRoleBinding(DeepPacketInspectionLinseedRBACName, DeepPacketInspectionLinseedRBACName, DeepPacketInspectionName, c.cfg.BindNamespaces)
+func (d *dpiComponent) dpiLinseedAccessClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   DeepPacketInspectionLinseedRBACName,
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     DeepPacketInspectionLinseedRBACName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      DeepPacketInspectionName,
+				Namespace: DeepPacketInspectionNamespace,
+			},
+		},
+	}
 }
 
-func (c *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
+func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -370,7 +397,7 @@ func (c *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if d.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -382,7 +409,7 @@ func (c *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 	return role
 }
 
-func (c *dpiComponent) dpiLinseedAccessClusterRole() *rbacv1.ClusterRole {
+func (d *dpiComponent) dpiLinseedAccessClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -400,13 +427,13 @@ func (c *dpiComponent) dpiLinseedAccessClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func (c *dpiComponent) dpiAnnotations() map[string]string {
-	if c.cfg.HasNoDPIResource || c.cfg.HasNoLicense {
+func (d *dpiComponent) dpiAnnotations() map[string]string {
+	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		return nil
 	}
-	annotations := c.cfg.TyphaNodeTLS.TrustedBundle.HashAnnotations()
-	annotations[c.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = c.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
-	annotations[c.cfg.DPICertSecret.HashAnnotationKey()] = c.cfg.DPICertSecret.HashAnnotationValue()
+	annotations := d.cfg.TyphaNodeTLS.TrustedBundle.HashAnnotations()
+	annotations[d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
+	annotations[d.cfg.DPICertSecret.HashAnnotationKey()] = d.cfg.DPICertSecret.HashAnnotationValue()
 	return annotations
 }
 
@@ -418,7 +445,7 @@ func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      linseed,
-			Namespace: c.cfg.Namespace,
+			Namespace: DeepPacketInspectionNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -436,7 +463,7 @@ func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 }
 
 // This policy uses service selectors.
-func (c *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
+func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -444,9 +471,9 @@ func (c *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}
-	egressRules = networkpolicy.AppendServiceSelectorDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = networkpolicy.AppendServiceSelectorDNSEgressRules(egressRules, d.cfg.Openshift)
 
-	if c.cfg.ManagedCluster {
+	if d.cfg.ManagedCluster {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
@@ -456,7 +483,7 @@ func (c *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).LinseedServiceSelectorEntityRule(),
+			Destination: networkpolicy.Helper(false, render.ElasticsearchNamespace).LinseedServiceSelectorEntityRule(),
 		})
 	}
 
@@ -464,7 +491,7 @@ func (c *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeepPacketInspectionPolicyName,
-			Namespace: c.cfg.Namespace,
+			Namespace: DeepPacketInspectionNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

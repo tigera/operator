@@ -389,7 +389,16 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+	bundleMaker := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
+	if r.multiTenant {
+		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		bundleMaker = nil
+	}
 
 	// Get the key pairs for each component, generating them as needed.
 	type complianceKeyPair struct {
@@ -494,7 +503,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			rcertificatemanagement.NewKeyPairOption(snapshotterKeyPair.Interface, true, true),
 			rcertificatemanagement.NewKeyPairOption(reporterKeyPair.Interface, true, true),
 		},
-		TrustedBundle: trustedBundle,
+		TrustedBundle: bundleMaker,
 	})
 
 	for _, comp := range []render.Component{namespaceComp, certificateComponent, comp} {

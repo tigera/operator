@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -256,6 +256,30 @@ func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
 
 func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
+}
+
+func (h *NetworkPolicyHelper) ComplianceServerEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-compliance"), "compliance-server", 5443)
+}
+
+func (h *NetworkPolicyHelper) ComplianceServerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-server")
+}
+
+func (h *NetworkPolicyHelper) ComplianceBenchmarkerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-benchmarker")
+}
+
+func (h *NetworkPolicyHelper) ComplianceControllerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-controller")
+}
+
+func (h *NetworkPolicyHelper) ComplianceSnapshotterSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-snapshotter")
+}
+
+func (h *NetworkPolicyHelper) ComplianceReporterSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-reporter")
 }
 
 const PrometheusSelector = "k8s-app == 'tigera-prometheus'"

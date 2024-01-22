@@ -378,7 +378,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Determine if compliance is enabled.
 	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
-	complianceCR, err := compliance.GetCompliance(ctx, r.client)
+	complianceCR, err := compliance.GetCompliance(ctx, r.client, r.multiTenant, request.Namespace)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying compliance: ", err, logc)
 		return reconcile.Result{}, err

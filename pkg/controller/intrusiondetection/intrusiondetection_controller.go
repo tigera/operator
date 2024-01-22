@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/logcollector"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/tenancy"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
@@ -90,6 +91,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Make a helper for determining which namespaces to use based on tenancy mode.
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
+	installNS, _, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, render.IntrusionDetectionNamespace)
+
 	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
@@ -104,11 +107,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
-		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: render.ADAPIPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: render.ADDetectorPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.IntrusionDetectionNamespace},
+		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: installNS},
+		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: installNS},
+		{Name: render.ADAPIPolicyName, Namespace: installNS},
+		{Name: render.ADDetectorPolicyName, Namespace: installNS},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
 		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace},
 	})
 
@@ -136,7 +139,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	err = c.Watch(&source.Kind{Type: &batchv1.Job{ObjectMeta: metav1.ObjectMeta{
-		Namespace: render.IntrusionDetectionNamespace,
+		Namespace: installNS,
 		Name:      render.IntrusionDetectionInstallerJobName,
 	}}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -543,7 +546,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with Typha/Felix secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
 	typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
 
 	// dpiKeyPair is the key pair dpi presents to identify itself
@@ -587,7 +589,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		intrusionDetectionComponent,
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.IntrusionDetectionNamespace,
+			Namespace:       helper.InstallNamespace(),
 			ServiceAccounts: []string{render.IntrusionDetectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.IntrusionDetectionCertSecret, true, true),
@@ -595,7 +597,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			TrustedBundle: bundleMaker,
 		}),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       dpi.DeepPacketInspectionNamespace,
+			Namespace:       dpiHelper.InstallNamespace(),
 			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, false, true),

@@ -92,7 +92,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
 	installNS, _, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, render.IntrusionDetectionNamespace)
-	dpiInstallNS, _, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, dpi.DeepPacketInspectionNamespace)
 
 	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
@@ -101,20 +100,22 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
-
-	go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
-		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
-
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+	policiesToWatch := []types.NamespacedName{
 		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: installNS},
 		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: installNS},
 		{Name: render.ADAPIPolicyName, Namespace: installNS},
 		{Name: render.ADDetectorPolicyName, Namespace: installNS},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
-		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpiInstallNS},
-	})
+	}
+	if !opts.MultiTenant {
+		// DPI is only supported in single-tenant mode.
+		go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
+			[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
+		policiesToWatch = append(policiesToWatch, types.NamespacedName{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace})
+	}
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, policiesToWatch)
+	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	// Watch for changes to operator.tigera.io APIs.
 	if err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, eventHandler); err != nil {
@@ -459,7 +460,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !r.dpiAPIReady.IsReady() {
+	if !r.multiTenant && !r.dpiAPIReady.IsReady() {
+		// DPI is only supported in single-tenant clusters, so we don't need to check for it in multi-tenant.
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -539,56 +541,19 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
-	// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
-	// makes tests fail, this needs to be looked at.
-	typhaNodeTLS, err := installation.GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with Typha/Felix secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
-
-	// dpiKeyPair is the key pair dpi presents to identify itself
-	dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	dpiList := &v3.DeepPacketInspectionList{}
 	if err := r.client.List(ctx, dpiList); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve DeepPacketInspection resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	hasNoDPIResource := len(dpiList.Items) == 0
-
-	dpiHelper := utils.NewNamespaceHelper(r.multiTenant, dpi.DeepPacketInspectionNamespace, request.Namespace)
-	dpiComponent := dpi.DPI(&dpi.DPIConfig{
-		IntrusionDetection: instance,
-		Installation:       network,
-		TyphaNodeTLS:       typhaNodeTLS,
-		PullSecrets:        pullSecrets,
-		Openshift:          r.provider == operatorv1.ProviderOpenShift,
-		ManagedCluster:     isManagedCluster,
-		ManagementCluster:  isManagementCluster,
-		HasNoLicense:       hasNoLicense,
-		HasNoDPIResource:   hasNoDPIResource,
-		ClusterDomain:      r.clusterDomain,
-		DPICertSecret:      dpiKeyPair,
-		Namespace:          dpiHelper.InstallNamespace(),
-		BindNamespaces:     namespaces,
-		Tenant:             tenant,
-	})
-
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
+	if !hasNoDPIResource && r.multiTenant {
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "DeepPacketInspection resource is not supported in multi-tenant mode", nil, reqLogger)
+		return reconcile.Result{}, nil
 	}
 
 	components := []render.Component{
 		intrusionDetectionComponent,
-		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       helper.InstallNamespace(),
 			ServiceAccounts: []string{render.IntrusionDetectionName},
@@ -597,16 +562,57 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			},
 			TrustedBundle: bundleMaker,
 		}),
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       dpiHelper.InstallNamespace(),
+	}
+
+	if !r.multiTenant {
+		// DPI is only supported in single-tenant / zero-tenant clusters.
+
+		// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
+		// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
+		// makes tests fail, this needs to be looked at.
+		typhaNodeTLS, err := installation.GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error with Typha/Felix secrets", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
+
+		// dpiKeyPair is the key pair dpi presents to identify itself
+		dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		dpiComponent := dpi.DPI(&dpi.DPIConfig{
+			IntrusionDetection: instance,
+			Installation:       network,
+			TyphaNodeTLS:       typhaNodeTLS,
+			PullSecrets:        pullSecrets,
+			Openshift:          r.provider == operatorv1.ProviderOpenShift,
+			ManagedCluster:     isManagedCluster,
+			ManagementCluster:  isManagementCluster,
+			HasNoLicense:       hasNoLicense,
+			HasNoDPIResource:   hasNoDPIResource,
+			ClusterDomain:      r.clusterDomain,
+			DPICertSecret:      dpiKeyPair,
+		})
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		components = append(components, dpiComponent)
+		components = append(components, rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       dpi.DeepPacketInspectionNamespace,
 			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, false, true),
 				rcertificatemanagement.NewKeyPairOption(dpiKeyPair, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
-		}),
+		}))
 	}
+
 	for _, comp := range components {
 		if err := handler.CreateOrUpdateOrDelete(context.Background(), comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
@@ -641,20 +647,22 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 // ComponentResources is not populated.
 func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
 	if ids.Spec.ComponentResources == nil {
-		ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
-			{
-				ComponentName: operatorv1.ComponentNameDeepPacketInspection,
-				ResourceRequirements: &corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryLimit),
-						corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPULimit),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryRequest),
-						corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPURequest),
+		if !r.multiTenant {
+			ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
+				{
+					ComponentName: operatorv1.ComponentNameDeepPacketInspection,
+					ResourceRequirements: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryLimit),
+							corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPULimit),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryRequest),
+							corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPURequest),
+						},
 					},
 				},
-			},
+			}
 		}
 	}
 

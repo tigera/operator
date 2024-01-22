@@ -20,10 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/ptr"
+	batchv1 "k8s.io/api/batch/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -151,12 +150,6 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	prefix := c.cfg.Installation.ImagePrefix
 	var errMsgs []string
 	var err error
-	if !c.cfg.ManagedCluster {
-		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, prefix, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
 
 	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
 	if err != nil {
@@ -195,7 +188,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	objs = append(objs,
 		c.intrusionDetectionServiceAccount(),
-		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
 		c.intrusionDetectionRole(),
@@ -276,15 +268,12 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	// When FIPS mode is enabled, we currently disable our python based images.
 	if !c.cfg.ManagedCluster {
 		idsObjs := []client.Object{
+			c.intrusionDetectionJobServiceAccount(),
 			c.intrusionDetectionElasticsearchAllowTigeraPolicy(),
 			c.intrusionDetectionElasticsearchJob(),
 		}
 
-		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			objs = append(objs, idsObjs...)
-		} else {
-			objsToDelete = append(objsToDelete, idsObjs...)
-		}
+		objsToDelete = append(objsToDelete, idsObjs...)
 	}
 
 	if c.cfg.UsePSP {
@@ -317,52 +306,11 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
-		},
-		Spec: corev1.PodSpec{
-			Tolerations:  c.cfg.Installation.ControlPlaneTolerations,
-			NodeSelector: c.cfg.Installation.ControlPlaneNodeSelector,
-			// This value needs to be set to never. The PodFailurePolicy will still ensure that this job will run until completion.
-			RestartPolicy:    corev1.RestartPolicyNever,
-			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
-			Containers: []corev1.Container{
-				c.intrusionDetectionJobContainer(),
-			},
-			Volumes:            []corev1.Volume{c.cfg.TrustedCertBundle.Volume()},
-			ServiceAccountName: IntrusionDetectionInstallerJobName,
-		},
-	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
-
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      IntrusionDetectionInstallerJobName,
 			Namespace: IntrusionDetectionNamespace,
-		},
-		Spec: batchv1.JobSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"job-name": IntrusionDetectionInstallerJobName,
-				},
-			},
-			Template: *podTemplate,
-			// PodFailurePolicy is not available for k8s < 1.26; setting BackoffLimit to a higher number (default is 6)
-			// to lessen the frequency of installation failures when responses from Elastic Search takes more time.
-			BackoffLimit: ptr.Int32ToPtr(30),
-			PodFailurePolicy: &batchv1.PodFailurePolicy{
-				Rules: []batchv1.PodFailurePolicyRule{
-					// We don't want the job to fail, so we keep retrying by ignoring incrementing the backoff.
-					{
-						Action: "Ignore",
-						OnExitCodes: &batchv1.PodFailurePolicyOnExitCodesRequirement{
-							Operator: "NotIn",
-							Values:   []int32{0},
-						},
-					},
-				},
-			},
 		},
 	}
 }
@@ -1196,11 +1144,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 				Name:      IntrusionDetectionName,
 				Namespace: IntrusionDetectionNamespace,
 			},
-			{
-				Kind:      "ServiceAccount",
-				Name:      IntrusionDetectionInstallerJobName,
-				Namespace: IntrusionDetectionNamespace,
-			},
 		},
 	}
 }
@@ -1429,26 +1372,11 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigeraPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-	})
-
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      IntrusionDetectionInstallerPolicyName,
 			Namespace: IntrusionDetectionNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: fmt.Sprintf("job-name == '%s'", IntrusionDetectionInstallerJobName),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
-			Egress:   egressRules,
 		},
 	}
 }

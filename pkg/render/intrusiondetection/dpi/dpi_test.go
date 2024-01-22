@@ -224,8 +224,6 @@ var _ = Describe("DPI rendering tests", func() {
 			HasNoDPIResource:   false,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
-			Namespace:          dpi.DeepPacketInspectionNamespace,
-			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 	})
 
@@ -280,8 +278,6 @@ var _ = Describe("DPI rendering tests", func() {
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 			ManagementCluster:  true,
-			Namespace:          dpi.DeepPacketInspectionNamespace,
-			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 
@@ -328,8 +324,6 @@ var _ = Describe("DPI rendering tests", func() {
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 			ManagedCluster:     true,
-			Namespace:          dpi.DeepPacketInspectionNamespace,
-			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 
@@ -375,8 +369,6 @@ var _ = Describe("DPI rendering tests", func() {
 			ManagementCluster:  true,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
-			Namespace:          dpi.DeepPacketInspectionNamespace,
-			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 
@@ -489,8 +481,6 @@ var _ = Describe("DPI rendering tests", func() {
 			ManagedCluster:     true,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
-			Namespace:          dpi.DeepPacketInspectionNamespace,
-			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 		createResources, deleteResource := component.Objects()
@@ -527,8 +517,6 @@ var _ = Describe("DPI rendering tests", func() {
 			ManagementCluster:  true,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
-			Namespace:          dpi.DeepPacketInspectionNamespace,
-			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 		createResources, deleteResource := component.Objects()

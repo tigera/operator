@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -224,6 +224,8 @@ var _ = Describe("DPI rendering tests", func() {
 			HasNoDPIResource:   false,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
+			Namespace:          dpi.DeepPacketInspectionNamespace,
+			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 	})
 
@@ -278,6 +280,8 @@ var _ = Describe("DPI rendering tests", func() {
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 			ManagementCluster:  true,
+			Namespace:          dpi.DeepPacketInspectionNamespace,
+			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 
@@ -324,6 +328,8 @@ var _ = Describe("DPI rendering tests", func() {
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
 			ManagedCluster:     true,
+			Namespace:          dpi.DeepPacketInspectionNamespace,
+			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 
@@ -369,6 +375,8 @@ var _ = Describe("DPI rendering tests", func() {
 			ManagementCluster:  true,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
+			Namespace:          dpi.DeepPacketInspectionNamespace,
+			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 
@@ -481,6 +489,8 @@ var _ = Describe("DPI rendering tests", func() {
 			ManagedCluster:     true,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
+			Namespace:          dpi.DeepPacketInspectionNamespace,
+			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 		createResources, deleteResource := component.Objects()
@@ -517,6 +527,8 @@ var _ = Describe("DPI rendering tests", func() {
 			ManagementCluster:  true,
 			ClusterDomain:      dns.DefaultClusterDomain,
 			DPICertSecret:      dpiCertSecret,
+			Namespace:          dpi.DeepPacketInspectionNamespace,
+			BindNamespaces:     []string{dpi.DeepPacketInspectionNamespace},
 		}
 		component := dpi.DPI(cfg)
 		createResources, deleteResource := component.Objects()

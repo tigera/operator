@@ -92,6 +92,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
 	installNS, _, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, render.IntrusionDetectionNamespace)
+	dpiInstallNS, _, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, dpi.DeepPacketInspectionNamespace)
 
 	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
@@ -112,7 +113,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.ADAPIPolicyName, Namespace: installNS},
 		{Name: render.ADDetectorPolicyName, Namespace: installNS},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
-		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace},
+		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpiInstallNS},
 	})
 
 	// Watch for changes to operator.tigera.io APIs.

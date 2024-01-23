@@ -127,16 +127,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = utils.AddSecretsWatchWithHandler(c, certificatemanagement.CASecretName, common.OperatorNamespace(), eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
-	if err = utils.AddSecretsWatchWithHandler(c, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace()); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
-	if err = utils.AddSecretsWatchWithHandler(c, render.TigeraKibanaCertSecret, helper.TruthNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddSecretsWatch(c, render.TigeraKibanaCertSecret, helper.TruthNamespace()); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
-	if err = utils.AddSecretsWatchWithHandler(c, render.TigeraLinseedSecret, helper.TruthNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, helper.TruthNamespace()); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
-	if err = utils.AddSecretsWatchWithHandler(c, esmetrics.ElasticsearchMetricsServerTLSSecret, helper.TruthNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddSecretsWatch(c, esmetrics.ElasticsearchMetricsServerTLSSecret, helper.TruthNamespace()); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
 	if err = utils.AddSecretsWatchWithHandler(c, monitor.PrometheusClientTLSSecretName, helper.TruthNamespace(), eventHandler); err != nil {
@@ -152,7 +152,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Service: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = utils.AddSecretsWatchWithHandler(c, certificatemanagement.TenantCASecretName, "", &handler.EnqueueRequestForObject{}); err != nil {
+		if err = utils.AddSecretsWatch(c, certificatemanagement.TenantCASecretName, ""); err != nil {
 			return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 		}
 	}
@@ -304,7 +304,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		cm.AddToStatusManager(r.status, render.ElasticsearchNamespace)
+		cm.AddToStatusManager(r.status, helper.InstallNamespace())
 	}
 
 	// Create secrets for Tigera components.
@@ -349,28 +349,26 @@ func (r *SecretSubController) generateInternalElasticSecrets(log logr.Logger, ki
 	}
 	collection.elastic = elasticKeyPair
 
-	if !r.multiTenant {
-		if kibana {
-			// Generate a keypair for Kibana.
-			//
-			// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
-			// It will be provisioned into the cluster in the render stage later on.
-			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-			kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
-			if err != nil {
-				log.Error(err, err.Error())
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
-				return nil, err
-			}
-			collection.kibana = kibanaKeyPair
+	if kibana {
+		// Generate a keypair for Kibana.
+		//
+		// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
+		// It will be provisioned into the cluster in the render stage later on.
+		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+		kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
+			return nil, err
+		}
+		collection.kibana = kibanaKeyPair
 
-			// Add the es-proxy certificate to the collection. This is needed in case the user has enabled Kibana with mTLS.
-			cert, err := cm.GetCertificate(r.client, render.ManagerInternalTLSSecretName, render.ManagerNamespace)
-			if err != nil && !errors.IsNotFound(err) {
-				return nil, err
-			} else {
-				collection.upstreamCerts = append(collection.upstreamCerts, cert)
-			}
+		// Add the es-proxy certificate to the collection. This is needed in case the user has enabled Kibana with mTLS.
+		cert, err := cm.GetCertificate(r.client, render.ManagerInternalTLSSecretName, render.ManagerNamespace)
+		if err != nil && !errors.IsNotFound(err) {
+			return nil, err
+		} else {
+			collection.upstreamCerts = append(collection.upstreamCerts, cert)
 		}
 	}
 

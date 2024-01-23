@@ -55,3 +55,9 @@ type ReplicatedPodResourceOverrides interface {
 
 	GetDeploymentStrategy() *appsv1.DeploymentStrategy
 }
+
+type PodResourceOverrides interface {
+	// GetContainers returns the containers used to override a Job's containers.
+	// Only containers with fields specified (other than its name) should be returned.
+	GetContainers() []corev1.Container
+}

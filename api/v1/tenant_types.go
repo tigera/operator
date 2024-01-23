@@ -87,6 +87,9 @@ type TenantSpec struct {
 
 	// LinseedDeployment configures the linseed Deployment.
 	LinseedDeployment *LinseedDeployment `json:"linseedDeployment,omitempty"`
+
+	// DashboardsJob configures the Dashboards job
+	DashboardsJob *DashboardsJob `json:"dashboardsJob,omitempty"`
 }
 
 // Index defines how to store a tenant's data

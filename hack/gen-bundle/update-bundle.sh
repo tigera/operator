@@ -73,7 +73,7 @@ yq write -i ${CSV} spec.relatedImages[0].image ${OPERATOR_IMAGE_DIGEST}
 sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1=tigera-operator/' bundle.Dockerfile
 
 # Supported OpenShift versions. Specify min version.
-openshiftVersions=v4.6
+openshiftVersions=v4.6-v4.9
 
 # Add in required labels
 cat <<EOF >> bundle.Dockerfile

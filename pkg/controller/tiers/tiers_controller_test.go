@@ -54,7 +54,6 @@ var _ = Describe("tier controller tests", func() {
 		ctx = context.Background()
 
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("ReadyToMonitor").Return()
 		mockStatus.On("OnCRFound").Return()
 
 		// Mark that the watches were successful.
@@ -116,6 +115,9 @@ var _ = Describe("tier controller tests", func() {
 
 	// Validate that the tier is created. Policy coverage is handled in the render tests.
 	It("reconciles the allow-tigera tier", func() {
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 

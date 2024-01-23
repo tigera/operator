@@ -62,7 +62,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
 		var cfg *Config
-		clusterDomain := "cluster.local"
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/dashboards.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/dashboards_ocp.json")
 
@@ -91,7 +90,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				TrustedBundle: bundle,
-				ClusterDomain: clusterDomain,
 				UsePSP:        true,
 				Namespace:     render.ElasticsearchNamespace,
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
@@ -192,7 +190,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				TrustedBundle: bundle,
-				ClusterDomain: clusterDomain,
 				Namespace:     render.ElasticsearchNamespace,
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.tigera-kibana.svc",
 				KibanaScheme:  "htpps",
@@ -210,7 +207,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 		var tenant *operatorv1.Tenant
 		var replicas int32
 		var cfg *Config
-		clusterDomain := "cluster.local"
 
 		BeforeEach(func() {
 			replicas = 2
@@ -239,7 +235,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				TrustedBundle: bundle,
-				ClusterDomain: clusterDomain,
 				Namespace:     "tenant-test-tenant",
 				Tenant:        tenant,
 				KibanaHost:    "external-kibana",
@@ -359,7 +354,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 		var tenant *operatorv1.Tenant
 		var replicas int32
 		var cfg *Config
-		clusterDomain := "cluster.local"
 
 		BeforeEach(func() {
 			replicas = 2
@@ -383,7 +377,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				TrustedBundle: bundle,
-				ClusterDomain: clusterDomain,
 				Namespace:     render.ElasticsearchNamespace,
 				Tenant:        tenant,
 				KibanaHost:    "external-kibana",
@@ -467,7 +460,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 		var tenant *operatorv1.Tenant
 		var replicas int32
 		var cfg *Config
-		clusterDomain := "cluster.local"
 
 		BeforeEach(func() {
 			replicas = 2
@@ -491,7 +483,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				TrustedBundle: bundle,
-				ClusterDomain: clusterDomain,
 				Namespace:     render.ElasticsearchNamespace,
 				Tenant:        tenant,
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",

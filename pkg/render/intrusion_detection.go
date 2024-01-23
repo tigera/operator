@@ -33,7 +33,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -139,7 +138,6 @@ type IntrusionDetectionConfiguration struct {
 
 type intrusionDetectionComponent struct {
 	cfg                    *IntrusionDetectionConfiguration
-	jobInstallerImage      string
 	controllerImage        string
 	webhooksProcessorImage string
 }
@@ -312,57 +310,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			Name:      IntrusionDetectionInstallerJobName,
 			Namespace: IntrusionDetectionNamespace,
 		},
-	}
-}
-
-func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Container {
-	kScheme, kHost, kPort, _ := url.ParseEndpoint(rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain))
-	secretName := ElasticsearchIntrusionDetectionJobUserSecret
-	return corev1.Container{
-		Name:            "elasticsearch-job-installer",
-		Image:           c.jobInstallerImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Env: []corev1.EnvVar{
-			{
-				Name:  "KIBANA_HOST",
-				Value: kHost,
-			},
-			{
-				Name:  "KIBANA_PORT",
-				Value: kPort,
-			},
-			{
-				Name:  "KIBANA_SCHEME",
-				Value: kScheme,
-			},
-			{
-				// We no longer need to start the xpack trial from the installer pod. Logstorage
-				// now takes care of this in combination with the ECK operator (v1).
-				Name:  "START_XPACK_TRIAL",
-				Value: "false",
-			},
-			{
-				Name:      "USER",
-				ValueFrom: secret.GetEnvVarSource(secretName, "username", false),
-			},
-			{
-				Name:      "PASSWORD",
-				ValueFrom: secret.GetEnvVarSource(secretName, "password", false),
-			},
-			{
-				Name:  "KB_CA_CERT",
-				Value: c.cfg.TrustedCertBundle.MountPath(),
-			},
-			{
-				Name:  "FIPS_MODE_ENABLED",
-				Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
-			},
-			relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ESClusterConfig.ClusterName()),
-			relasticsearch.ElasticUserEnvVar(ElasticsearchIntrusionDetectionJobUserSecret),
-			relasticsearch.ElasticPasswordEnvVar(ElasticsearchIntrusionDetectionJobUserSecret),
-		},
-		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 	}
 }
 

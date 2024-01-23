@@ -69,7 +69,7 @@ type DashboardsSubController struct {
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.EnterpriseCRDExists || opts.MultiTenant {
 		return nil
 	}
 
@@ -339,7 +339,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		PullSecrets:                pullSecrets,
 		Namespace:                  helper.InstallNamespace(),
 		TrustedBundle:              trustedBundle,
-		ClusterDomain:              d.clusterDomain,
 		UsePSP:                     d.usePSP,
 		IsManaged:                  managementClusterConnection != nil,
 		Tenant:                     tenant,

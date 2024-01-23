@@ -49,8 +49,7 @@ var (
 
 func Dashboards(c *Config) render.Component {
 	return &dashboards{
-		cfg:       c,
-		namespace: c.Namespace,
+		cfg: c,
 	}
 }
 
@@ -58,9 +57,6 @@ type dashboards struct {
 	image    string
 	csrImage string
 	cfg      *Config
-
-	// Namespace in which to provision the namespaced resources.
-	namespace string
 }
 
 // Config contains all the information needed to render the Dashboards component.
@@ -73,9 +69,6 @@ type Config struct {
 
 	// Trusted bundle to use when validating client certificates.
 	TrustedBundle certificatemanagement.TrustedBundleRO
-
-	// ClusterDomain to use when building service URLs.
-	ClusterDomain string
 
 	// Whether this is a managed cluster
 	IsManaged bool
@@ -183,9 +176,7 @@ func (d *dashboards) Job() *batchv1.Job {
 		annotations["hash.operator.tigera.io/kibana-client-secret"] = rmeta.SecretsAnnotationHash(d.cfg.ExternalKibanaClientSecret)
 	}
 
-	volumeMounts := append(
-		d.cfg.TrustedBundle.VolumeMounts(d.SupportedOSType()),
-	)
+	volumeMounts := d.cfg.TrustedBundle.VolumeMounts(d.SupportedOSType())
 
 	volumes := []corev1.Volume{
 		d.cfg.TrustedBundle.Volume(),
@@ -291,7 +282,7 @@ func (d *dashboards) Job() *batchv1.Job {
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name,
-			Namespace: d.namespace,
+			Namespace: d.cfg.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
@@ -332,7 +323,7 @@ func (d *dashboards) ServiceAccount() *corev1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name,
-			Namespace: d.namespace,
+			Namespace: d.cfg.Namespace,
 		},
 	}
 }
@@ -370,7 +361,7 @@ func (d *dashboards) PSPClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      Name,
-				Namespace: d.namespace,
+				Namespace: d.cfg.Namespace,
 			},
 		},
 	}

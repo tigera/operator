@@ -85,7 +85,7 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 		return err
 	}
 
-	// The settings controller installs
+	// The dashboards controller installs Kibana dashboards and Kibana index-patterns
 	if err := dashboards.Add(mgr, opts); err != nil {
 		return err
 	}

@@ -97,6 +97,8 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	// log-storage user exist only in multitenant enviroment
 	if r.multiTenant {
 		logStorageInstances = append(logStorageInstances, TigeraStatusLogStorageUsers)
+	} else {
+		logStorageInstances = append(logStorageInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
 	}
 
 	// Initialize aggregated TigeraStatus conditions with default values

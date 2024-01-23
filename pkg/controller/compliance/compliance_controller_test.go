@@ -899,9 +899,6 @@ var _ = Describe("Compliance controller tests", func() {
 			linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
-			bundleA, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, bundleA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
 			certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
 			Expect(err).NotTo(HaveOccurred())
@@ -911,9 +908,6 @@ var _ = Describe("Compliance controller tests", func() {
 			linseedTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantBNamespace, []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, linseedTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())
-			bundleB, err := certificateManagerTenantB.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, bundleB.ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &operatorv1.Compliance{
 				ObjectMeta: metav1.ObjectMeta{

@@ -392,7 +392,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	bundleMaker := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
 	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
 	if r.multiTenant {
-		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
+		trustedBundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
 			return reconcile.Result{}, err

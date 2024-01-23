@@ -170,6 +170,8 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
+	r.status.ReadyToMonitor()
+	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
 }
 

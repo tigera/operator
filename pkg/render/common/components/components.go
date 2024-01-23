@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022,2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	batchv1 "k8s.io/api/batch/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +38,13 @@ type replicatedPodResource struct {
 	minReadySeconds    *int32
 	podTemplateSpec    *corev1.PodTemplateSpec
 	deploymentStrategy *appsv1.DeploymentStrategy // Deployments only
+}
+
+// replicatedPodResource contains the overridable data for a Deployment or DaemonSet.
+type podResource struct {
+	labels          map[string]string
+	annotations     map[string]string
+	podTemplateSpec *corev1.PodTemplateSpec
 }
 
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
@@ -93,6 +101,15 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 	return r
 }
 
+// applyPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
+func applyPodResourceOverrides(r *podResource, overrides components.PodResourceOverrides) *podResource {
+	if containers := overrides.GetContainers(); containers != nil {
+		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
+	}
+
+	return r
+}
+
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
 func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.ReplicatedPodResourceOverrides) {
@@ -143,6 +160,29 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.Replica
 	d.Spec.MinReadySeconds = *r.minReadySeconds
 	d.Spec.Template = *r.podTemplateSpec
 	d.Spec.Strategy = *r.deploymentStrategy
+}
+
+// ApplyJobOverrides applies the overrides to the given Job.
+// Note: overrides must not be nil pointer.
+func ApplyJobOverrides(job *batchv1.Job, overrides components.PodResourceOverrides) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil {
+		return
+	}
+
+	// Pull out the data we'll override from the Job.
+	r := &podResource{
+		labels:          job.Labels,
+		annotations:     job.Annotations,
+		podTemplateSpec: &job.Spec.Template,
+	}
+	// Apply the overrides.
+	applyPodResourceOverrides(r, overrides)
+
+	// Set the possibly new fields back onto the DaemonSet.
+	job.Labels = r.labels
+	job.Annotations = r.annotations
+	job.Spec.Template = *r.podTemplateSpec
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

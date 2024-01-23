@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022,2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,4 +54,10 @@ type ReplicatedPodResourceOverrides interface {
 	GetTerminationGracePeriodSeconds() *int64
 
 	GetDeploymentStrategy() *appsv1.DeploymentStrategy
+}
+
+type PodResourceOverrides interface {
+	// GetContainers returns the containers used to override a Job's containers.
+	// Only containers with fields specified (other than its name) should be returned.
+	GetContainers() []corev1.Container
 }

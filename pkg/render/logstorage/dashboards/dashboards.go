@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -40,9 +42,9 @@ import (
 )
 
 var (
-	Name                     string = "dashboards-installer"
-	ElasticCredentialsSecret string = "tigera-ee-installer-elasticsearch-access-gateway"
-	PolicyName                      = networkpolicy.TigeraComponentPolicyPrefix + Name
+	Name                     = "dashboards-installer"
+	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
+	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name
 )
 
 func Dashboards(c *Config) render.Component {
@@ -285,7 +287,7 @@ func (d *dashboards) Job() *batchv1.Job {
 		},
 	}, d.cfg.Credentials).(*corev1.PodTemplateSpec)
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name,
@@ -315,6 +317,14 @@ func (d *dashboards) Job() *batchv1.Job {
 			},
 		},
 	}
+
+	if d.cfg.Tenant != nil && d.cfg.Tenant.Spec.DashboardsJob != nil {
+		if overrides := d.cfg.Tenant.Spec.DashboardsJob; overrides != nil {
+			rcomponents.ApplyJobOverrides(job, overrides)
+		}
+	}
+
+	return job
 }
 
 func (d *dashboards) ServiceAccount() *corev1.ServiceAccount {

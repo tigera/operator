@@ -304,7 +304,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Query the username and password this Dashboards Installer instance should use to authenticate with Elasticsearch.
-	// ALINA : To check the statement below
 	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
 	// For single-tenant system, these are created by es-kube-controllers.
 	key = types.NamespacedName{Name: dashboards.ElasticCredentialsSecret, Namespace: helper.InstallNamespace()}

@@ -162,8 +162,11 @@ func indexPattern(prefix, cluster, suffix, tenant string) string {
 	return fmt.Sprintf("%s.%s%s", prefix, cluster, suffix)
 }
 
-// Name for the linseed user in ES.
-var ElasticsearchUserNameLinseed = "tigera-ee-linseed"
+// User's name in ES.
+var (
+	ElasticsearchUserNameLinseed            = "tigera-ee-linseed"
+	ElasticsearchUserNameDashboardInstaller = "tigera-ee-dashboards-installer"
+)
 
 func LinseedUser(clusterID, tenant string) *User {
 	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant)
@@ -181,6 +184,25 @@ func LinseedUser(clusterID, tenant string) *User {
 							Privileges: []string{"create_index", "write", "manage", "read"},
 						},
 					},
+				},
+			},
+		},
+	}
+}
+
+func DashboardUser(clusterID, tenant string) *User {
+	username := formatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant)
+	return &User{
+		Username: username,
+		Roles: []Role{
+			{
+				Name: username,
+				Definition: &RoleDefinition{
+					Applications: []Application{{
+						Application: "kibana-.kibana",
+						Privileges:  []string{"all"},
+						Resources:   []string{"*"},
+					}},
 				},
 			},
 		},

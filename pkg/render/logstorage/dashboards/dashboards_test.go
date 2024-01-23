@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	batchv1 "k8s.io/api/batch/v1"
@@ -314,6 +316,42 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_HOST", Value: "external-kibana"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_PORT", Value: "443"}))
 		})
+
+		It("should override resource request with the value from TenantSpec's dashboardsJob when available", func() {
+			dashboardsJobResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			dashboardJob := &operatorv1.DashboardsJob{
+				Spec: &operatorv1.DashboardsJobSpec{
+					Template: &operatorv1.DashboardsJobPodTemplateSpec{
+						Spec: &operatorv1.DashboardsJobPodSpec{
+							Containers: []operatorv1.DashboardsJobContainer{{
+								Name:      Name,
+								Resources: &dashboardsJobResources,
+							}},
+						},
+					},
+				},
+			}
+			cfg.Tenant.Spec.DashboardsJob = dashboardJob
+			component := Dashboards(cfg)
+
+			resources, _ := component.Objects()
+			job := rtest.GetResource(resources, Name, cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal(Name))
+			Expect(job.Spec.Template.Spec.Containers[0].Resources).To(Equal(dashboardsJobResources))
+		})
+
 	})
 
 	Context("single-tenant with external elastic rendering", func() {

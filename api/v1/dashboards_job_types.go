@@ -16,7 +16,10 @@ limitations under the License.
 
 package v1
 
-import v1 "k8s.io/api/core/v1"
+import (
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+)
 
 // DashboardsJob is the configuration for the Dashboards job.
 type DashboardsJob struct {
@@ -26,13 +29,29 @@ type DashboardsJob struct {
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
 }
 
-func (d DashboardsJob) GetContainers() []v1.Container {
-	if d.Spec != nil {
-		if d.Spec.Template != nil {
-			if d.Spec.Template.Spec != nil {
-				if d.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(d.Spec.Template.Spec.Containers))
-					for i, v := range d.Spec.Template.Spec.Containers {
+func (in *DashboardsJob) GetMetadata() *Metadata {
+	return nil
+}
+
+func (in *DashboardsJob) GetMinReadySeconds() *int32 {
+	return nil
+}
+
+func (in *DashboardsJob) GetPodTemplateMetadata() *Metadata {
+	return nil
+}
+
+func (in *DashboardsJob) GetInitContainers() []v1.Container {
+	return nil
+}
+
+func (in *DashboardsJob) GetContainers() []v1.Container {
+	if in.Spec != nil {
+		if in.Spec.Template != nil {
+			if in.Spec.Template.Spec != nil {
+				if in.Spec.Template.Spec.Containers != nil {
+					cs := make([]v1.Container, len(in.Spec.Template.Spec.Containers))
+					for i, v := range in.Spec.Template.Spec.Containers {
 						// Only copy and return the container if it has resources set.
 						if v.Resources == nil {
 							continue
@@ -46,6 +65,30 @@ func (d DashboardsJob) GetContainers() []v1.Container {
 		}
 	}
 	return nil
+}
+
+func (in *DashboardsJob) GetAffinity() *v1.Affinity {
+	return nil
+}
+
+func (in *DashboardsJob) GetNodeSelector() map[string]string {
+	return nil
+}
+
+func (in *DashboardsJob) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	return nil
+}
+
+func (in *DashboardsJob) GetTolerations() []v1.Toleration {
+	return nil
+}
+
+func (in *DashboardsJob) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (in *DashboardsJob) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+	panic("implement me")
 }
 
 // DashboardsJobSpec defines configuration for the Dashboards job.

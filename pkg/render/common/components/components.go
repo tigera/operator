@@ -40,13 +40,6 @@ type replicatedPodResource struct {
 	deploymentStrategy *appsv1.DeploymentStrategy // Deployments only
 }
 
-// replicatedPodResource contains the overridable data for a Deployment or DaemonSet.
-type podResource struct {
-	labels          map[string]string
-	annotations     map[string]string
-	podTemplateSpec *corev1.PodTemplateSpec
-}
-
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
 	if metadata := overrides.GetMetadata(); metadata != nil {
@@ -96,15 +89,6 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 	}
 	if tolerations := overrides.GetTolerations(); tolerations != nil {
 		r.podTemplateSpec.Spec.Tolerations = tolerations
-	}
-
-	return r
-}
-
-// applyPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
-func applyPodResourceOverrides(r *podResource, overrides components.PodResourceOverrides) *podResource {
-	if containers := overrides.GetContainers(); containers != nil {
-		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
 	}
 
 	return r
@@ -163,21 +147,20 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.Replica
 }
 
 // ApplyJobOverrides applies the overrides to the given Job.
-// Note: overrides must not be nil pointer.
-func ApplyJobOverrides(job *batchv1.Job, overrides components.PodResourceOverrides) {
+func ApplyJobOverrides(job *batchv1.Job, overrides components.ReplicatedPodResourceOverrides) {
 	// Catch if caller passes in an explicit nil.
-	if overrides == nil {
+	if overrides == nil || job == nil {
 		return
 	}
 
-	// Pull out the data we'll override from the Job.
-	r := &podResource{
+	// Pull out the data we'll override from the DaemonSet.
+	r := &replicatedPodResource{
 		labels:          job.Labels,
 		annotations:     job.Annotations,
 		podTemplateSpec: &job.Spec.Template,
 	}
 	// Apply the overrides.
-	applyPodResourceOverrides(r, overrides)
+	applyReplicatedPodResourceOverrides(r, overrides)
 
 	// Set the possibly new fields back onto the DaemonSet.
 	job.Labels = r.labels

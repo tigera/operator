@@ -340,7 +340,6 @@ func (r *UserController) createUserLogin(ctx context.Context, elasticEndpoint st
 	}
 
 	// Create the user in ES.
-	//user := utils.LinseedUser(clusterID, tenantID)
 	user.Password = password
 	if err = esClient.CreateUser(ctx, user); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)

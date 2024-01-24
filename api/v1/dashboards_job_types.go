@@ -88,7 +88,7 @@ func (in *DashboardsJob) GetTerminationGracePeriodSeconds() *int64 {
 }
 
 func (in *DashboardsJob) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	panic("implement me")
+	return nil
 }
 
 // DashboardsJobSpec defines configuration for the Dashboards job.

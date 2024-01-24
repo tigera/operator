@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1046,14 +1046,6 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				// Egress access for Kube controller port metrics.
-				Ports: networkpolicy.Ports(uint16(cfg.KubeControllerPort)),
-			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
 				Selector: alertManagerSelector,
 				Ports:    networkpolicy.Ports(AlertmanagerPort),
 			},
@@ -1064,6 +1056,17 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Destination: render.DexEntityRule,
 		},
 	}...)
+
+	if cfg.KubeControllerPort != 0 {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				// Egress access for Kube controller port metrics.
+				Ports: networkpolicy.Ports(uint16(cfg.KubeControllerPort)),
+			},
+		})
+	}
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

@@ -891,11 +891,12 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 
 // Allow users to access Calico Enterprise Manager.
 func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	networkpolicyHelper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicyHelper.ManagerEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
@@ -906,18 +907,18 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ESGatewayEntityRule(),
+			Destination: networkpolicyHelper.ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
-			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).LinseedEntityRule(),
+			Destination: networkpolicyHelper.LinseedEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ComplianceServerEntityRule(),
+			Destination: networkpolicyHelper.ComplianceServerEntityRule(),
 		},
 		{
 			Action:      v3.Allow,

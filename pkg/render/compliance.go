@@ -104,7 +104,7 @@ type ComplianceConfiguration struct {
 	HasNoLicense                bool
 
 	// Trusted certificate bundle for all compliance pods.
-	TrustedBundle certificatemanagement.TrustedBundle
+	TrustedBundle certificatemanagement.TrustedBundleRO
 
 	// Key pairs used for mTLS.
 	ServerKeyPair      certificatemanagement.KeyPairInterface

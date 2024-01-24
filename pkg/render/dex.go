@@ -411,6 +411,9 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 	dexIngressPortDestination := v3.EntityRule{
 		Ports: networkpolicy.Ports(DexPort),
 	}
+
+	networkpolicyHelper := networkpolicy.DefaultHelper()
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -438,7 +441,7 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName),
+					Source:      networkpolicyHelper.ComplianceServerSourceEntityRule(),
 					Destination: dexIngressPortDestination,
 				},
 				{

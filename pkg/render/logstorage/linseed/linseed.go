@@ -567,12 +567,14 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		},
 	}...)
 
+	networkpolicyHelper := networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace)
+
 	if l.cfg.ManagementCluster {
 		// For management clusters, linseed talks to Voltron to create tokens.
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerEntityRule(),
+			Destination: networkpolicyHelper.ManagerEntityRule(),
 		})
 	}
 
@@ -603,37 +605,37 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ManagerSourceEntityRule(),
+			Source:      networkpolicyHelper.ManagerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ComplianceBenchmarkerSourceEntityRule(),
+			Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ComplianceControllerSourceEntityRule(),
+			Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ComplianceServerSourceEntityRule(),
+			Source:      networkpolicyHelper.ComplianceServerSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ComplianceSnapshotterSourceEntityRule(),
+			Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).ComplianceReporterSourceEntityRule(),
+			Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
@@ -657,7 +659,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace).PolicyRecommendationSourceEntityRule(),
+			Source:      networkpolicyHelper.PolicyRecommendationSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 	}

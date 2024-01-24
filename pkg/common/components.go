@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 func MergeMaps(current, desired map[string]string) map[string]string {
 	for k, v := range current {
 		// Copy over key/value that should be copied.
-		if _, ok := desired[k]; !ok && !strings.HasPrefix(k, "hash.operator.tigera.io") {
+		if _, ok := desired[k]; !ok && !strings.Contains(k, "hash.operator.tigera.io") {
 			desired[k] = v
 		}
 	}

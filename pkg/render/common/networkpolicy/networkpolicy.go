@@ -242,6 +242,14 @@ func (h *NetworkPolicyHelper) LinseedSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed")
 }
 
+func (h *NetworkPolicyHelper) DashboardInstallerEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-elasticsearch"), "dashboards-installer")
+}
+
+func (h *NetworkPolicyHelper) DashboardInstallerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-elasticsearch"), "dashboards-installer")
+}
+
 func (h *NetworkPolicyHelper) LinseedServiceSelectorEntityRule() v3.EntityRule {
 	return CreateServiceSelectorEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed")
 }

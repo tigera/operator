@@ -44,19 +44,6 @@
         "action": "Allow",
         "protocol": "TCP",
         "source": {
-          "selector": "job-name == 'intrusion-detection-es-job-installer'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'"
-        },
-        "destination": {
-          "ports": [
-            8444
-          ]
-        }
-      },
-      {
-        "action": "Allow",
-        "protocol": "TCP",
-        "source": {
           "selector": "k8s-app == 'tigera-manager'",
           "namespaceSelector": "projectcalico.org/name == 'tigera-manager'"
         },

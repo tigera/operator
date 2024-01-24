@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -162,8 +162,11 @@ func indexPattern(prefix, cluster, suffix, tenant string) string {
 	return fmt.Sprintf("%s.%s%s", prefix, cluster, suffix)
 }
 
-// Name for the linseed user in ES.
-var ElasticsearchUserNameLinseed = "tigera-ee-linseed"
+// User's name in ES.
+var (
+	ElasticsearchUserNameLinseed            = "tigera-ee-linseed"
+	ElasticsearchUserNameDashboardInstaller = "tigera-ee-dashboards-installer"
+)
 
 func LinseedUser(clusterID, tenant string) *User {
 	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant)
@@ -181,6 +184,26 @@ func LinseedUser(clusterID, tenant string) *User {
 							Privileges: []string{"create_index", "write", "manage", "read"},
 						},
 					},
+				},
+			},
+		},
+	}
+}
+
+func DashboardUser(clusterID, tenant string) *User {
+	username := formatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant)
+	return &User{
+		Username: username,
+		Roles: []Role{
+			{
+				Name: username,
+				Definition: &RoleDefinition{
+					Indices: make([]RoleIndex, 0),
+					Applications: []Application{{
+						Application: "kibana-.kibana",
+						Privileges:  []string{"all"},
+						Resources:   []string{"*"},
+					}},
 				},
 			},
 		},

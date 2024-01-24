@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022,2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	batchv1 "k8s.io/api/batch/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -143,6 +144,28 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.Replica
 	d.Spec.MinReadySeconds = *r.minReadySeconds
 	d.Spec.Template = *r.podTemplateSpec
 	d.Spec.Strategy = *r.deploymentStrategy
+}
+
+// ApplyJobOverrides applies the overrides to the given Job.
+func ApplyJobOverrides(job *batchv1.Job, overrides components.ReplicatedPodResourceOverrides) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil || job == nil {
+		return
+	}
+
+	// Pull out the data we'll override from the DaemonSet.
+	r := &replicatedPodResource{
+		labels:          job.Labels,
+		annotations:     job.Annotations,
+		podTemplateSpec: &job.Spec.Template,
+	}
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Set the possibly new fields back onto the DaemonSet.
+	job.Labels = r.labels
+	job.Annotations = r.annotations
+	job.Spec.Template = *r.podTemplateSpec
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

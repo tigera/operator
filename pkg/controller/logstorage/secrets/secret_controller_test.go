@@ -17,7 +17,6 @@ package secrets
 import (
 	"context"
 	"fmt"
-	"regexp"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -120,56 +119,6 @@ func NewMultiTenantSecretControllerWithShims(
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
-}
-
-func ExpectBundleContents(bundle *corev1.ConfigMap, secrets ...types.NamespacedName) {
-	ExpectWithOffset(1, bundle.Data).To(HaveKey("tigera-ca-bundle.crt"), fmt.Sprintf("Bundle: %+v", bundle))
-
-	// Go through and build up all of the secret names from within the bundle.
-	// Keep a list of all the certificates in the bundle in case we need to error it out.
-	certsInBundle := map[types.NamespacedName]bool{}
-
-	// Use a regex to extract secret namespaces and names from the bundle by matching
-	// the following pattern:
-	// # certificate name: <namespace>/<name>
-	re := regexp.MustCompile(`# certificate name: ([^\s]*)\/([^\s\n]*)`)
-	matches := re.FindAllStringSubmatch(bundle.Data["tigera-ca-bundle.crt"], -1)
-
-	// Go through each match and add it to the list of certs in the bundle.
-	for _, match := range matches {
-		key := types.NamespacedName{Name: match[2], Namespace: match[1]}
-		ExpectWithOffset(1, certsInBundle).ToNot(HaveKey(key), "Duplicate certificate found in bundle")
-		certsInBundle[key] = true
-	}
-
-	// Local helper for erroring if a secret is not found in the bundle.
-	errNotInBundle := func(s types.NamespacedName) string {
-		errStr := fmt.Sprintf("Certificate %s/%s not found among those in bundle:\n\n", s.Namespace, s.Name)
-		for cert := range certsInBundle {
-			errStr += fmt.Sprintf("%s/%s\n", cert.Namespace, cert.Name)
-		}
-		return errStr
-	}
-
-	// Now, we can assert that each secret given as an argument to this function is in the bundle.
-	for _, secret := range secrets {
-		ExpectWithOffset(1, certsInBundle).To(HaveKey(secret), errNotInBundle(secret))
-	}
-
-	// We can also assert that each secret within the bundle was given as an argument to this function!
-	for cert := range certsInBundle {
-		found := false
-		for _, secret := range secrets {
-			if cert.Name == secret.Name && cert.Namespace == secret.Namespace {
-				found = true
-				break
-			}
-		}
-
-		// If not found, error out.
-		errStr := fmt.Sprintf("Unexpected certificate %s/%s found among those in bundle", cert.Namespace, cert.Name)
-		ExpectWithOffset(1, found).To(BeTrue(), errStr)
-	}
 }
 
 var _ = Describe("LogStorage Secrets controller", func() {
@@ -296,7 +245,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 
 		// For this test, we only expect the tigera-operator CA to be included in the bundle as we haven't created any of the
 		// other upstream certificates this controller monitors yet.
-		ExpectBundleContents(bundle, types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()})
+		rtest.ExpectBundleContents(bundle, types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()})
 
 		bundleKibana := &corev1.ConfigMap{}
 		bundleKey = types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: render.KibanaNamespace}
@@ -304,7 +253,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 
 		// For this test, we only expect the tigera-operator CA to be included in the bundle as we haven't created any of the
 		// other upstream certificates this controller monitors yet.
-		ExpectBundleContents(bundleKibana, types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()})
+		rtest.ExpectBundleContents(bundleKibana, types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()})
 	})
 
 	It("test that LogStorage reconciles if the user-supplied certs have any DNS names", func() {
@@ -378,7 +327,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()},
 			{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()},
 		}
-		ExpectBundleContents(bundle, expectedCerts...)
+		rtest.ExpectBundleContents(bundle, expectedCerts...)
 	})
 
 	It("should regenerate operator managed certs that have invalid DNS names", func() {
@@ -665,20 +614,10 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			}
 			ExpectSecrets(ctx, cli, expected)
 
-			// Expect the trusted bundle to be provisioned in both the tigera-elasticsearch and tigera-kibana namespaces.
-			// The bundle should include the tigera-operator CA.
+			// The trusted bundle shouldn't be created in multi-tenant mode. This is instead created by the secrets/tenant_controller.
 			bundle := &corev1.ConfigMap{}
 			bundleKey := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: tenantNS}
-			Expect(cli.Get(ctx, bundleKey, bundle)).ShouldNot(HaveOccurred())
-
-			// We expect the bundle to contain the tenant's CA and the operator's CA, as well as the certs for external ES and Kibana.
-			ExpectBundleContents(
-				bundle,
-				types.NamespacedName{Name: certificatemanagement.TenantCASecretName, Namespace: tenantNS},
-				types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
-				types.NamespacedName{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
-				types.NamespacedName{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
-			)
+			Expect(cli.Get(ctx, bundleKey, bundle)).Should(HaveOccurred())
 		})
 	})
 })

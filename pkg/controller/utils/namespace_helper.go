@@ -51,12 +51,19 @@ type NamespaceHelper interface {
 	// binding global resources to potentially several different Tenant namespaces.
 	// For single-tenant clusters, this simply returns the InstallNamespace.
 	TenantNamespaces(client.Client) ([]string, error)
+
+	// Returns whether or not this is a multi-tenant helper.
+	MultiTenant() bool
 }
 
 type namespacer struct {
 	multiTenant           bool
 	singleTenantNamespace string
 	multiTenantNamespace  string
+}
+
+func (r *namespacer) MultiTenant() bool {
+	return r.multiTenant
 }
 
 func (r *namespacer) InstallNamespace() string {

@@ -127,15 +127,6 @@
           "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'"
         },
         "protocol": "TCP"
-      },
-      {
-        "action": "Allow",
-        "destination": {
-          "selector": "k8s-app == 'dashboards-installer'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
-          "ports" : []
-        },
-        "protocol": "TCP"
       }
     ]
   }

@@ -1760,11 +1760,6 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().DashboardInstallerEntityRule(),
-		},
 	}...)
 
 	kibanaPortIngressDestination := v3.EntityRule{

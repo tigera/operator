@@ -120,39 +120,6 @@ func getCurrentConditions(lsConditions []metav1.Condition) map[string]metav1.Con
 	return statusCondition
 }
 
-func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {
-
-	statusCondition := []metav1.Condition{}
-
-	//Update the current log storage condition only when the aggregate desired status have new changes
-	for _, desired := range desiredConditions {
-		found := false
-		var condition metav1.Condition
-		for _, current := range currentConditions {
-			if desired.Type == string(operatorv1.ComponentAvailable) && current.Type == string(operatorv1.ComponentReady) ||
-				desired.Type == string(operatorv1.ComponentDegraded) && current.Type == string(operatorv1.ComponentDegraded) ||
-				desired.Type == string(operatorv1.ComponentProgressing) && current.Type == string(operatorv1.ComponentProgressing) {
-				//Defaults to current log storage condition
-				condition = current
-				if string(desired.Status) != string(current.Status) || desired.Message != current.Message {
-					// if status or the message is updated then use the desired condition
-					condition = desired
-					condition.LastTransitionTime = metav1.NewTime(time.Now())
-				}
-				found = true
-			}
-		}
-		// if the desired condition is not found in the current logstorage condition then add it.
-		if !found {
-			condition = desired
-			condition.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-
-		statusCondition = append(statusCondition, condition)
-	}
-	return statusCondition
-}
-
 // getDesiredConditions checks sub-controller TigeraStatus objects and builds the desired
 // conditions based on the health of each. It returns a map for easy lookup - the key is the condition type.
 func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[string]metav1.Condition, error) {
@@ -174,13 +141,15 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 			// When one of the expected subcontroller is not found, update it as degraded
 			ts.Status = operatorv1.TigeraStatusStatus{
 				Conditions: []operatorv1.TigeraStatusCondition{
-					{Type: operatorv1.ComponentDegraded,
+					{
+						Type:               operatorv1.ComponentDegraded,
 						Status:             operatorv1.ConditionTrue,
 						Reason:             string(operatorv1.ResourceNotFound),
 						Message:            "",
-						LastTransitionTime: metav1.Now()},
-				}}
-
+						LastTransitionTime: metav1.Now(),
+					},
+				},
+			}
 		} else if err != nil {
 			return nil, err
 		}
@@ -251,6 +220,39 @@ func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusCo
 	}
 
 	return desiredLogStorageCondition
+}
+
+func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {
+
+	statusCondition := []metav1.Condition{}
+
+	//Update the current log storage condition only when the aggregate desired status have new changes
+	for _, desired := range desiredConditions {
+		found := false
+		var condition metav1.Condition
+		for _, current := range currentConditions {
+			if desired.Type == string(operatorv1.ComponentAvailable) && current.Type == string(operatorv1.ComponentReady) ||
+				desired.Type == string(operatorv1.ComponentDegraded) && current.Type == string(operatorv1.ComponentDegraded) ||
+				desired.Type == string(operatorv1.ComponentProgressing) && current.Type == string(operatorv1.ComponentProgressing) {
+				//Defaults to current log storage condition
+				condition = current
+				if string(desired.Status) != string(current.Status) || desired.Message != current.Message {
+					// if status or the message is updated then use the desired condition
+					condition = desired
+					condition.LastTransitionTime = metav1.NewTime(time.Now())
+				}
+				found = true
+			}
+		}
+		// if the desired condition is not found in the current logstorage condition then add it.
+		if !found {
+			condition = desired
+			condition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+
+		statusCondition = append(statusCondition, condition)
+	}
+	return statusCondition
 }
 
 func setAvailable(desired operatorv1.TigeraStatusCondition) metav1.Condition {

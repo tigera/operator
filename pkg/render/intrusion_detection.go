@@ -644,7 +644,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		c.webhooksControllerContainer(),
 	}
 
-	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        IntrusionDetectionName,
 			Namespace:   c.cfg.Namespace,
@@ -659,7 +659,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			Containers:         containers,
 			Volumes:            volumes,
 		},
-	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 }
 
 func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Container {
@@ -1050,6 +1050,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPolicy() *v3.NetworkPolicy {
+	helper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
+
 	egressRules := []v3.Rule{
 		// Block any link local IPs, e.g. cloud metadata, which are often targets of server-side request forgery (SSRF) attacks
 		{
@@ -1078,12 +1080,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ESGatewayEntityRule(),
+			Destination: helper.ESGatewayEntityRule(),
 		})
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).LinseedEntityRule(),
+			Destination: helper.LinseedEntityRule(),
 		})
 
 	}
@@ -1122,12 +1124,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigeraPolicy() *v3.NetworkPolicy {
+	helper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
+
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace).ESGatewayEntityRule(),
+		Destination: helper.ESGatewayEntityRule(),
 	})
 
 	return &v3.NetworkPolicy{
@@ -1154,7 +1158,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ADAPIObjectName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1176,7 +1180,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ADAPIObjectName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1187,7 +1191,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ADPersistentVolumeClaimName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1195,7 +1199,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ADAPIObjectName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1203,7 +1207,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      adDetectorName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1211,7 +1215,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      adDetectorName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1219,7 +1223,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      adDetectorName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1234,7 +1238,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      adDetectorName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1249,7 +1253,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ADAPIPolicyName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1257,7 +1261,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ADDetectorPolicyName,
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 
@@ -1267,7 +1271,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 				APIVersion: "v1",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 				Name:      ADJobPodTemplateBaseName + ".training",
 			},
 		},
@@ -1278,7 +1282,7 @@ func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 				APIVersion: "v1",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: c.cfg.Namespace,
+				Namespace: IntrusionDetectionNamespace,
 				Name:      ADJobPodTemplateBaseName + ".detection",
 			},
 		},

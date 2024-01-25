@@ -101,10 +101,9 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Compare and update current StatusCondition if there are any new changes
+	// Compare and update the current StatusCondition if there are any new changes
 	ls.Status.Conditions = updateConditions(currentCondition, desiredConditions)
 
-	//ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, aggTigeraStatusConditions)
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
 		return reconcile.Result{}, err
@@ -186,9 +185,8 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 			return nil, err
 		}
 
-		// Put tigeraStatus conditions into the map
+		// Merge TigeraStatus conditions from subcontrollers into a map.
 		for _, tsCondition := range ts.Status.Conditions {
-			// if the condition type already exist in desiredTigeraStatus map then merge subcontroller's tigerastatus
 			if desiredCondition, ok := desiredTigeraStatusMap[tsCondition.Type]; ok {
 				desiredTigeraStatusMap[tsCondition.Type] = mergeCondition(tsCondition, desiredCondition, logStorage)
 			} else {
@@ -218,7 +216,7 @@ func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusCo
 			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = setDegraded(degradedCondition)
 			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
 		} else {
-			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = clearDegraded(observedGeneration)
+			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.Unknown), "", observedGeneration)
 		}
 	}
 
@@ -230,17 +228,23 @@ func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusCo
 			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = setProgressing(progressingCondition)
 			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
 		} else {
-			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = clearProgressing(observedGeneration)
+			reason := string(operatorv1.Unknown)
+			// if degraded and no progressing components set reason as ResourceNotReady
+			if isDegOrProg {
+				reason = string(operatorv1.ResourceNotReady)
+			}
+			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = clearProgressing(reason, "", observedGeneration)
 		}
 	}
 
+	// Check for Available
 	if availableCondition, ok := desiredConditions[operatorv1.ComponentAvailable]; ok && !isDegOrProg {
 		// Set Available as true and clear degraded and progressing
 		observedGeneration := availableCondition.ObservedGeneration
 		if availableCondition.Status == operatorv1.ConditionTrue {
 			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = setAvailable(availableCondition)
-			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = clearProgressing(observedGeneration)
-			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = clearDegraded(observedGeneration)
+			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = clearProgressing(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
+			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
 		} else {
 			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
 		}
@@ -291,22 +295,22 @@ func clearAvailable(generation int64) metav1.Condition {
 	}
 }
 
-func clearProgressing(generation int64) metav1.Condition {
+func clearProgressing(reason, message string, generation int64) metav1.Condition {
 	return metav1.Condition{
 		Type:               string(operatorv1.ComponentProgressing),
 		Status:             metav1.ConditionFalse,
-		Message:            "",
-		Reason:             string(operatorv1.Unknown),
+		Message:            message,
+		Reason:             reason,
 		ObservedGeneration: generation,
 	}
 }
 
-func clearDegraded(generation int64) metav1.Condition {
+func clearDegraded(reason, message string, generation int64) metav1.Condition {
 	return metav1.Condition{
 		Type:               string(operatorv1.ComponentDegraded),
 		Status:             metav1.ConditionFalse,
-		Message:            "",
-		Reason:             string(operatorv1.Unknown),
+		Message:            message,
+		Reason:             reason,
 		ObservedGeneration: generation,
 	}
 }
@@ -315,7 +319,7 @@ func mergeCondition(tsCondition operatorv1.TigeraStatusCondition, desiredConditi
 	if tsCondition.Type == operatorv1.ComponentAvailable {
 		return mergeAvailableCondition(tsCondition, desiredCondition)
 	}
-	return mergeProgressingORDegradedStatus(tsCondition, desiredCondition, logStorageName)
+	return mergeProgressingORDegradedCondition(tsCondition, desiredCondition, logStorageName)
 
 }
 
@@ -337,7 +341,7 @@ func mergeAvailableCondition(tsCondition operatorv1.TigeraStatusCondition, desir
 	return tmpCondition
 }
 
-func mergeProgressingORDegradedStatus(tsCondition operatorv1.TigeraStatusCondition, desiredCondition operatorv1.TigeraStatusCondition, logStorageName string) operatorv1.TigeraStatusCondition {
+func mergeProgressingORDegradedCondition(tsCondition operatorv1.TigeraStatusCondition, desiredCondition operatorv1.TigeraStatusCondition, logStorageName string) operatorv1.TigeraStatusCondition {
 	tmpCondition := operatorv1.TigeraStatusCondition{Type: tsCondition.Type, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown)}
 	if tsCondition.Status == operatorv1.ConditionTrue || desiredCondition.Status == operatorv1.ConditionTrue {
 		tmpCondition.Status = operatorv1.ConditionTrue

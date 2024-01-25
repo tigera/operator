@@ -171,7 +171,7 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 // to compare with the current logStorage conditions.
 func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusConditionType]operatorv1.TigeraStatusCondition) map[string]metav1.Condition {
 
-	desiredLogStorageCondition := make(map[string]metav1.Condition)
+	lsConditions := make(map[string]metav1.Condition)
 
 	// if Degraded or Progressing is true, then Available should be marked as false even
 	// if tigerastatus have both Available and Degraded/Progressing set to True.
@@ -182,10 +182,10 @@ func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusCo
 		observedGeneration := degradedCondition.ObservedGeneration
 		if degradedCondition.Status == operatorv1.ConditionTrue {
 			isDegOrProg = true
-			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = setDegraded(degradedCondition)
-			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
+			lsConditions[string(operatorv1.ComponentDegraded)] = setDegraded(degradedCondition)
+			lsConditions[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
 		} else {
-			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.Unknown), "", observedGeneration)
+			lsConditions[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.Unknown), "", observedGeneration)
 		}
 	}
 
@@ -194,15 +194,15 @@ func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusCo
 		observedGeneration := progressingCondition.ObservedGeneration
 		if progressingCondition.Status == operatorv1.ConditionTrue {
 			isDegOrProg = true
-			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = setProgressing(progressingCondition)
-			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
+			lsConditions[string(operatorv1.ComponentProgressing)] = setProgressing(progressingCondition)
+			lsConditions[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
 		} else {
 			reason := string(operatorv1.Unknown)
 			// if degraded and no progressing components set reason as ResourceNotReady
 			if isDegOrProg {
 				reason = string(operatorv1.ResourceNotReady)
 			}
-			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = clearProgressing(reason, "", observedGeneration)
+			lsConditions[string(operatorv1.ComponentProgressing)] = clearProgressing(reason, "", observedGeneration)
 		}
 	}
 
@@ -211,15 +211,15 @@ func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusCo
 		// Set Available as true and clear degraded and progressing
 		observedGeneration := availableCondition.ObservedGeneration
 		if availableCondition.Status == operatorv1.ConditionTrue {
-			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = setAvailable(availableCondition)
-			desiredLogStorageCondition[string(operatorv1.ComponentProgressing)] = clearProgressing(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
-			desiredLogStorageCondition[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
+			lsConditions[string(operatorv1.ComponentReady)] = setAvailable(availableCondition)
+			lsConditions[string(operatorv1.ComponentProgressing)] = clearProgressing(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
+			lsConditions[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
 		} else {
-			desiredLogStorageCondition[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
+			lsConditions[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
 		}
 	}
 
-	return desiredLogStorageCondition
+	return lsConditions
 }
 
 func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {

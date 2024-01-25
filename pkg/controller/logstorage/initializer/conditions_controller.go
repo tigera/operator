@@ -176,7 +176,7 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 		} else if statusType != string(operatorv1.ComponentAvailable) {
 			// This condition is false.
 			condition.Status = metav1.ConditionFalse
-			condition.Reason = string(operatorv1.ResourceNotReady)
+			condition.Reason = string(operatorv1.Unknown)
 		} else {
 			// This is the available condition, which is only true if all statuses are available.
 			condition.Type = string(operatorv1.ComponentReady)

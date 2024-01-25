@@ -17,7 +17,6 @@ package initializer
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -120,106 +119,82 @@ func getCurrentConditions(lsConditions []metav1.Condition) map[string]metav1.Con
 	return statusCondition
 }
 
-// getDesiredConditions checks sub-controller TigeraStatus objects and builds the desired
-// conditions based on the health of each. It returns a map for easy lookup - the key is the condition type.
 func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[string]metav1.Condition, error) {
 
-	desiredTigeraStatusMap := make(map[operatorv1.StatusConditionType]operatorv1.TigeraStatusCondition)
-
-	logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
+	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
 	if r.multiTenant {
-		logStorageInstances = append(logStorageInstances, TigeraStatusLogStorageUsers)
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 	} else {
-		logStorageInstances = append(logStorageInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
 	}
 
-	for _, logStorage := range logStorageInstances {
+	// Keep track of which instances are in which state.
+	states := map[string][]string{
+		string(operatorv1.ComponentDegraded):    {},
+		string(operatorv1.ComponentAvailable):   {},
+		string(operatorv1.ComponentProgressing): {},
+	}
 
-		// Fetch TigeraStatus for the individual log storage subcontrollers.
+	// We also keep track of the oldest observed generation here so we can add it to the conditions later.
+	var observedGeneration int64
+
+	// Build up the lists of which components are in which state.
+	for _, instance := range expectedInstances {
 		ts := &operatorv1.TigeraStatus{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: logStorage}, ts); err != nil && errors.IsNotFound(err) {
-			// When one of the expected subcontroller is not found, update it as degraded
-			ts.Status = operatorv1.TigeraStatusStatus{
-				Conditions: []operatorv1.TigeraStatusCondition{
-					{
-						Type:               operatorv1.ComponentDegraded,
-						Status:             operatorv1.ConditionTrue,
-						Reason:             string(operatorv1.ResourceNotFound),
-						Message:            "",
-						LastTransitionTime: metav1.Now(),
-					},
-				},
-			}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: instance}, ts); err != nil && errors.IsNotFound(err) {
+			// Expected status not found, treat it as an error.
+			states[string(operatorv1.ComponentDegraded)] = append(states[string(operatorv1.ComponentDegraded)], instance)
+			continue
 		} else if err != nil {
 			return nil, err
 		}
 
-		// Merge TigeraStatus conditions from subcontrollers into a map.
-		for _, tsCondition := range ts.Status.Conditions {
-			if desiredCondition, ok := desiredTigeraStatusMap[tsCondition.Type]; ok {
-				desiredTigeraStatusMap[tsCondition.Type] = mergeCondition(tsCondition, desiredCondition, logStorage)
+		// Found it - add to states map, which we use to track which TigeraStatuses are in which state(s).
+		for _, condition := range ts.Status.Conditions {
+			if condition.Status == operatorv1.ConditionTrue {
+				states[string(condition.Type)] = append(states[string(condition.Type)], instance)
+			}
+			if observedGeneration == 0 || condition.ObservedGeneration < observedGeneration {
+				observedGeneration = condition.ObservedGeneration
+			}
+		}
+	}
+
+	// Convert the states map to a set of conditions.
+	conditions := map[string]metav1.Condition{}
+	for statusType, instances := range states {
+
+		condition := metav1.Condition{
+			Type:               statusType,
+			ObservedGeneration: observedGeneration,
+		}
+		if statusType != string(operatorv1.ComponentAvailable) && len(instances) != 0 {
+			// This condition is true.
+			condition.Status = metav1.ConditionTrue
+			condition.Reason = string(operatorv1.ResourceNotReady)
+			condition.Message = fmt.Sprintf("The following sub-controllers are in this condition: %+v", instances)
+		} else if statusType != string(operatorv1.ComponentAvailable) {
+			// This condition is false.
+			condition.Status = metav1.ConditionFalse
+			condition.Reason = string(operatorv1.ResourceNotReady)
+		} else {
+			// This is the available condition, which is only true if all statuses are available.
+			condition.Type = string(operatorv1.ComponentReady)
+			condition.Reason = string(operatorv1.ResourceNotReady)
+			// Available will be mapped to Ready while storing in ls Conditions. Update the key type to Ready when Available is true
+			statusType = condition.Type
+			if len(instances) == len(expectedInstances) {
+				condition.Status = metav1.ConditionTrue
+				condition.Reason = string(operatorv1.AllObjectsAvailable)
+				condition.Message = "All sub-controllers are available"
 			} else {
-				desiredTigeraStatusMap[tsCondition.Type] = tsCondition
+				condition.Status = metav1.ConditionFalse
 			}
 		}
+		// Store the condition.
+		conditions[statusType] = condition
 	}
-
-	return transformIntoLogStorageConditions(desiredTigeraStatusMap), nil
-}
-
-// Transform TigeraStatus conditions of type TigeraStatusCondition into metav1.Conditions
-// to compare with the current logStorage conditions.
-func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusConditionType]operatorv1.TigeraStatusCondition) map[string]metav1.Condition {
-
-	lsConditions := make(map[string]metav1.Condition)
-
-	// if Degraded or Progressing is true, then Available should be marked as false even
-	// if tigerastatus have both Available and Degraded/Progressing set to True.
-	isDegOrProg := false
-
-	// Check for Degraded
-	if degradedCondition, ok := desiredConditions[operatorv1.ComponentDegraded]; ok {
-		observedGeneration := degradedCondition.ObservedGeneration
-		if degradedCondition.Status == operatorv1.ConditionTrue {
-			isDegOrProg = true
-			lsConditions[string(operatorv1.ComponentDegraded)] = setDegraded(degradedCondition)
-			lsConditions[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
-		} else {
-			lsConditions[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.Unknown), "", observedGeneration)
-		}
-	}
-
-	// Check for Progressing
-	if progressingCondition, ok := desiredConditions[operatorv1.ComponentProgressing]; ok {
-		observedGeneration := progressingCondition.ObservedGeneration
-		if progressingCondition.Status == operatorv1.ConditionTrue {
-			isDegOrProg = true
-			lsConditions[string(operatorv1.ComponentProgressing)] = setProgressing(progressingCondition)
-			lsConditions[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
-		} else {
-			reason := string(operatorv1.Unknown)
-			// if degraded and no progressing components set reason as ResourceNotReady
-			if isDegOrProg {
-				reason = string(operatorv1.ResourceNotReady)
-			}
-			lsConditions[string(operatorv1.ComponentProgressing)] = clearProgressing(reason, "", observedGeneration)
-		}
-	}
-
-	// Check for Available
-	if availableCondition, ok := desiredConditions[operatorv1.ComponentAvailable]; ok && !isDegOrProg {
-		// Set Available as true and clear degraded and progressing
-		observedGeneration := availableCondition.ObservedGeneration
-		if availableCondition.Status == operatorv1.ConditionTrue {
-			lsConditions[string(operatorv1.ComponentReady)] = setAvailable(availableCondition)
-			lsConditions[string(operatorv1.ComponentProgressing)] = clearProgressing(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
-			lsConditions[string(operatorv1.ComponentDegraded)] = clearDegraded(string(operatorv1.AllObjectsAvailable), "All objects are available", observedGeneration)
-		} else {
-			lsConditions[string(operatorv1.ComponentReady)] = clearAvailable(observedGeneration)
-		}
-	}
-
-	return lsConditions
+	return conditions, nil
 }
 
 func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {
@@ -228,135 +203,15 @@ func updateConditions(currentConditions, desiredConditions map[string]metav1.Con
 
 	//Update the current log storage condition only when the aggregate desired status have new changes
 	for _, desired := range desiredConditions {
-		found := false
-		var condition metav1.Condition
-		for _, current := range currentConditions {
-			if desired.Type == string(operatorv1.ComponentAvailable) && current.Type == string(operatorv1.ComponentReady) ||
-				desired.Type == string(operatorv1.ComponentDegraded) && current.Type == string(operatorv1.ComponentDegraded) ||
-				desired.Type == string(operatorv1.ComponentProgressing) && current.Type == string(operatorv1.ComponentProgressing) {
-				//Defaults to current log storage condition
-				condition = current
-				if string(desired.Status) != string(current.Status) || desired.Message != current.Message {
-					// if status or the message is updated then use the desired condition
-					condition = desired
-					condition.LastTransitionTime = metav1.NewTime(time.Now())
-				}
-				found = true
-			}
-		}
-		// if the desired condition is not found in the current logstorage condition then add it.
-		if !found {
-			condition = desired
-			condition.LastTransitionTime = metav1.NewTime(time.Now())
+
+		current, ok := currentConditions[desired.Type]
+		if !ok || current.Status != desired.Status {
+			desired.LastTransitionTime = metav1.NewTime(time.Now())
+		} else {
+			desired.LastTransitionTime = current.LastTransitionTime
 		}
 
-		statusCondition = append(statusCondition, condition)
+		statusCondition = append(statusCondition, desired)
 	}
 	return statusCondition
-}
-
-func setAvailable(desired operatorv1.TigeraStatusCondition) metav1.Condition {
-	return metav1.Condition{
-		Type:               string(operatorv1.ComponentReady),
-		Status:             metav1.ConditionTrue,
-		Message:            "All Objects are available",
-		Reason:             string(operatorv1.AllObjectsAvailable),
-		ObservedGeneration: desired.ObservedGeneration,
-	}
-}
-
-func setProgressing(desired operatorv1.TigeraStatusCondition) metav1.Condition {
-	message := fmt.Sprintf("The following sub-controllers are progressing:%s", strings.TrimSuffix(desired.Message, ","))
-	return metav1.Condition{
-		Type:               string(operatorv1.ComponentProgressing),
-		Status:             metav1.ConditionTrue,
-		Message:            message,
-		Reason:             string(operatorv1.ResourceNotReady),
-		ObservedGeneration: desired.ObservedGeneration,
-	}
-}
-
-func setDegraded(desired operatorv1.TigeraStatusCondition) metav1.Condition {
-	degradedMessage := fmt.Sprintf("The following sub-controllers are degraded:%s", strings.TrimSuffix(desired.Message, ","))
-	return metav1.Condition{
-		Type:               string(operatorv1.ComponentDegraded),
-		Status:             metav1.ConditionTrue,
-		Message:            degradedMessage,
-		Reason:             string(operatorv1.ResourceNotReady),
-		ObservedGeneration: desired.ObservedGeneration,
-	}
-}
-
-func clearAvailable(generation int64) metav1.Condition {
-	return metav1.Condition{
-		Type:               operatorv1.TigeraStatusReady,
-		Status:             metav1.ConditionFalse,
-		Message:            "",
-		Reason:             string(operatorv1.ResourceNotReady),
-		ObservedGeneration: generation,
-	}
-}
-
-func clearProgressing(reason, message string, generation int64) metav1.Condition {
-	return metav1.Condition{
-		Type:               string(operatorv1.ComponentProgressing),
-		Status:             metav1.ConditionFalse,
-		Message:            message,
-		Reason:             reason,
-		ObservedGeneration: generation,
-	}
-}
-
-func clearDegraded(reason, message string, generation int64) metav1.Condition {
-	return metav1.Condition{
-		Type:               string(operatorv1.ComponentDegraded),
-		Status:             metav1.ConditionFalse,
-		Message:            message,
-		Reason:             reason,
-		ObservedGeneration: generation,
-	}
-}
-
-func mergeCondition(tsCondition operatorv1.TigeraStatusCondition, desiredCondition operatorv1.TigeraStatusCondition, logStorageName string) operatorv1.TigeraStatusCondition {
-	if tsCondition.Type == operatorv1.ComponentAvailable {
-		return mergeAvailableCondition(tsCondition, desiredCondition)
-	}
-	return mergeProgressingORDegradedCondition(tsCondition, desiredCondition, logStorageName)
-
-}
-
-func mergeAvailableCondition(tsCondition operatorv1.TigeraStatusCondition, desiredCondition operatorv1.TigeraStatusCondition) operatorv1.TigeraStatusCondition {
-	tmpCondition := operatorv1.TigeraStatusCondition{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown)}
-	if tsCondition.Status == operatorv1.ConditionTrue && desiredCondition.Status == operatorv1.ConditionTrue {
-		tmpCondition.Status = operatorv1.ConditionTrue
-	}
-
-	if tsCondition.Status == operatorv1.ConditionFalse {
-		tmpCondition.Reason = string(operatorv1.ResourceNotReady)
-	}
-
-	// Set the oldest Observed Generation
-	if tsCondition.ObservedGeneration != 0 && (desiredCondition.ObservedGeneration == 0 || tsCondition.ObservedGeneration < desiredCondition.ObservedGeneration) {
-		tmpCondition.ObservedGeneration = tsCondition.ObservedGeneration
-	}
-
-	return tmpCondition
-}
-
-func mergeProgressingORDegradedCondition(tsCondition operatorv1.TigeraStatusCondition, desiredCondition operatorv1.TigeraStatusCondition, logStorageName string) operatorv1.TigeraStatusCondition {
-	tmpCondition := operatorv1.TigeraStatusCondition{Type: tsCondition.Type, Status: operatorv1.ConditionFalse, Reason: string(operatorv1.Unknown)}
-	if tsCondition.Status == operatorv1.ConditionTrue || desiredCondition.Status == operatorv1.ConditionTrue {
-		tmpCondition.Status = operatorv1.ConditionTrue
-	}
-
-	if tsCondition.Status == operatorv1.ConditionTrue {
-		tmpCondition.Message = fmt.Sprintf("%s%s,", desiredCondition.Message, logStorageName)
-		tmpCondition.Reason = string(operatorv1.ResourceNotReady)
-	}
-
-	// Set the oldest Observed Generation
-	if tsCondition.ObservedGeneration != 0 && (desiredCondition.ObservedGeneration == 0 || tsCondition.ObservedGeneration < desiredCondition.ObservedGeneration) {
-		tmpCondition.ObservedGeneration = tsCondition.ObservedGeneration
-	}
-	return tmpCondition
 }

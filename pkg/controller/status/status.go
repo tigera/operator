@@ -965,7 +965,7 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ComponentReady) ||
 				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ComponentDegraded) ||
 				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ComponentProgressing) {
-				if string(c.Status) != string(condition.Status) {
+				if !reflect.DeepEqual(c.Status, condition.Status) {
 					ic.LastTransitionTime = metav1.NewTime(time.Now())
 				}
 				statuscondition[i] = ic

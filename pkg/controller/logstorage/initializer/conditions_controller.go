@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@ package initializer
 import (
 	"context"
 	"fmt"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,8 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 )
 
@@ -90,18 +90,128 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Update conditions on the LogStorage object based on the status of the various components.
-	// TODO: Incorporate status from other sub controllers as well.
-	ts := &operatorv1.TigeraStatus{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: TigeraStatusName}, ts); err != nil {
+	// Fetch the current status condition for log storage
+	currentCondition := getCurrentConditions(ls.Status.Conditions)
+
+	// Aggregate TigeraStatus conditions from all logstorage subcontrollers into a map,
+	// using the condition type (e.g., Available, Progressing, and Degraded) as the key.
+	desiredConditions, err := r.getDesiredConditions(ctx)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	ls.Status.Conditions = status.UpdateStatusCondition(ls.Status.Conditions, ts.Status.Conditions)
+	// Compare and update the current StatusCondition if there are any new changes
+	ls.Status.Conditions = updateConditions(currentCondition, desiredConditions)
+
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func getCurrentConditions(lsConditions []metav1.Condition) map[string]metav1.Condition {
+	statusCondition := make(map[string]metav1.Condition)
+	for _, condition := range lsConditions {
+		statusCondition[condition.Type] = condition
+	}
+	return statusCondition
+}
+
+func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[string]metav1.Condition, error) {
+
+	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
+	if r.multiTenant {
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
+	} else {
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+	}
+
+	// Keep track of which instances are in which state.
+	states := map[string][]string{
+		string(operatorv1.ComponentDegraded):    {},
+		string(operatorv1.ComponentAvailable):   {},
+		string(operatorv1.ComponentProgressing): {},
+	}
+
+	// We also keep track of the oldest observed generation here so we can add it to the conditions later.
+	var observedGeneration int64
+
+	// Build up the lists of which components are in which state.
+	for _, instance := range expectedInstances {
+		ts := &operatorv1.TigeraStatus{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: instance}, ts); err != nil && errors.IsNotFound(err) {
+			// Expected status not found, treat it as an error.
+			states[string(operatorv1.ComponentDegraded)] = append(states[string(operatorv1.ComponentDegraded)], instance)
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Found it - add to states map, which we use to track which TigeraStatuses are in which state(s).
+		for _, condition := range ts.Status.Conditions {
+			if condition.Status == operatorv1.ConditionTrue {
+				states[string(condition.Type)] = append(states[string(condition.Type)], instance)
+			}
+			if observedGeneration == 0 || condition.ObservedGeneration < observedGeneration {
+				observedGeneration = condition.ObservedGeneration
+			}
+		}
+	}
+
+	// Convert the states map to a set of conditions.
+	conditions := map[string]metav1.Condition{}
+	for statusType, instances := range states {
+
+		condition := metav1.Condition{
+			Type:               statusType,
+			ObservedGeneration: observedGeneration,
+		}
+		if statusType != string(operatorv1.ComponentAvailable) && len(instances) != 0 {
+			// This condition is true.
+			condition.Status = metav1.ConditionTrue
+			condition.Reason = string(operatorv1.ResourceNotReady)
+			condition.Message = fmt.Sprintf("The following sub-controllers are in this condition: %+v", instances)
+		} else if statusType != string(operatorv1.ComponentAvailable) {
+			// This condition is false.
+			condition.Status = metav1.ConditionFalse
+			condition.Reason = string(operatorv1.ResourceNotReady)
+		} else {
+			// This is the available condition, which is only true if all statuses are available.
+			condition.Type = string(operatorv1.ComponentReady)
+			condition.Reason = string(operatorv1.ResourceNotReady)
+			// Available will be mapped to Ready while storing in ls Conditions. Update the key type to Ready when Available is true
+			statusType = condition.Type
+			if len(instances) == len(expectedInstances) {
+				condition.Status = metav1.ConditionTrue
+				condition.Reason = string(operatorv1.AllObjectsAvailable)
+				condition.Message = "All sub-controllers are available"
+			} else {
+				condition.Status = metav1.ConditionFalse
+			}
+		}
+		// Store the condition.
+		conditions[statusType] = condition
+	}
+	return conditions, nil
+}
+
+func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {
+
+	statusCondition := []metav1.Condition{}
+
+	//Update the current log storage condition only when the aggregate desired status have new changes
+	for _, desired := range desiredConditions {
+
+		current, ok := currentConditions[desired.Type]
+		if !ok || current.Status != desired.Status {
+			desired.LastTransitionTime = metav1.NewTime(time.Now())
+		} else {
+			desired.LastTransitionTime = current.LastTransitionTime
+		}
+
+		statusCondition = append(statusCondition, desired)
+	}
+	return statusCondition
 }

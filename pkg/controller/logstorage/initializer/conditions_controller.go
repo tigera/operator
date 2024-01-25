@@ -164,11 +164,11 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 		}
 	}
 
-	// Transform TigeraStatus conditions of type TigeraStatusCondition into metav1.Conditions
-	// to compare with the current logStorage conditions.
 	return transformIntoLogStorageConditions(desiredTigeraStatusMap), nil
 }
 
+// Transform TigeraStatus conditions of type TigeraStatusCondition into metav1.Conditions
+// to compare with the current logStorage conditions.
 func transformIntoLogStorageConditions(desiredConditions map[operatorv1.StatusConditionType]operatorv1.TigeraStatusCondition) map[string]metav1.Condition {
 
 	desiredLogStorageCondition := make(map[string]metav1.Condition)

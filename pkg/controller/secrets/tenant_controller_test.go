@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,9 +32,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/dns"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,25 +51,17 @@ func NewTenantControllerWithShims(
 	cli client.Client,
 	scheme *runtime.Scheme,
 	status status.StatusManager,
-	provider operatorv1.Provider,
 	clusterDomain string,
-	multiTenant bool,
 ) (*TenantController, error) {
-	opts := options.AddOptions{
-		DetectedProvider: provider,
-		ClusterDomain:    clusterDomain,
-		ShutdownContext:  context.TODO(),
-		MultiTenant:      multiTenant,
-	}
-
 	r := &TenantController{
-		client:        cli,
-		scheme:        scheme,
-		status:        status,
-		clusterDomain: opts.ClusterDomain,
-		log:           logf.Log.WithName("controller_tenant_secrets"),
+		client:          cli,
+		scheme:          scheme,
+		status:          status,
+		clusterDomain:   clusterDomain,
+		elasticExternal: true,
+		log:             logf.Log.WithName("controller_tenant_secrets"),
 	}
-	r.status.Run(opts.ShutdownContext)
+	r.status.Run(context.TODO())
 	return r, nil
 }
 
@@ -79,7 +74,6 @@ var _ = Describe("Tenant controller", func() {
 		mockStatus *status.MockStatus
 		r          *TenantController
 		tenantNS   string
-		err        error
 	)
 
 	BeforeEach(func() {
@@ -112,6 +106,17 @@ var _ = Describe("Tenant controller", func() {
 			},
 		}
 		Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
+
+		// Create the cluster-scoped tigera-operator CA.
+		cm, err := certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
+
+		// Create the external ES and Kibana public certificates, used for external ES.
+		externalESSecret := rtest.CreateCertSecret(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), "external.es.com")
+		Expect(cli.Create(ctx, externalESSecret)).ShouldNot(HaveOccurred())
+		externalKibanaSecret := rtest.CreateCertSecret(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), "external.kb.com")
+		Expect(cli.Create(ctx, externalKibanaSecret)).ShouldNot(HaveOccurred())
 
 		// Create the tenant Namespace.
 		tenantNS = "tenant-namespace"
@@ -146,7 +151,7 @@ var _ = Describe("Tenant controller", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-		r, err = NewTenantControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, true)
+		r, err = NewTenantControllerWithShims(cli, scheme, mockStatus, dns.DefaultClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 	})
 
@@ -163,6 +168,17 @@ var _ = Describe("Tenant controller", func() {
 		// A trusted bundle without system roots should have been created.
 		trustedBundle := &corev1.ConfigMap{}
 		Expect(cli.Get(ctx, types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: tenantNS}, trustedBundle)).ShouldNot(HaveOccurred())
+		rtest.ExpectBundleContents(
+			trustedBundle,
+
+			// Should include both the per-tenant and cluster-scoped CA certs.
+			types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
+			types.NamespacedName{Name: certificatemanagement.TenantCASecretName, Namespace: tenantNS},
+
+			// Should include public certs for external ES and Kibana.
+			types.NamespacedName{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
+			types.NamespacedName{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
+		)
 
 		// A trusted bundle ConfigMap with system roots should also have been created.
 		Expect(cli.Get(ctx, types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapNamePublic, Namespace: tenantNS}, trustedBundle)).ShouldNot(HaveOccurred())

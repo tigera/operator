@@ -222,7 +222,7 @@ type ReconcileIntrusionDetection struct {
 	elasticExternal bool
 }
 
-func GetIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.IntrusionDetection, error) {
+func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.IntrusionDetection, error) {
 	key := client.ObjectKey{Name: "tigera-secure"}
 	if mt {
 		key.Namespace = ns
@@ -262,7 +262,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Fetch the IntrusionDetection instance
-	instance, err := GetIntrusionDetection(ctx, r.client, r.multiTenant, request.Namespace)
+	instance, err := getIntrusionDetection(ctx, r.client, r.multiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(3).Info("IntrusionDetection CR not found", "err", err)
@@ -509,6 +509,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Determine the namespaces to which we must bind the cluster role.
 	namespaces, err := helper.TenantNamespaces(r.client)
 	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving tenant namespaces", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

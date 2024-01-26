@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -453,6 +453,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		&operator.CalicoNetworkSpec{
 			IPPools: []operator.IPPool{
 				{
+					Name:          "default-ipv4-ippool",
 					CIDR:          "192.168.0.0/16",
 					Encapsulation: "IPIP",
 					NATOutgoing:   "Enabled",
@@ -479,6 +480,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		&operator.CalicoNetworkSpec{
 			IPPools: []operator.IPPool{
 				{
+					Name:          "default-ipv4-ippool",
 					CIDR:          "10.0.0.0/8",
 					Encapsulation: "IPIP",
 					NATOutgoing:   "Enabled",
@@ -513,6 +515,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		&operator.CalicoNetworkSpec{
 			IPPools: []operator.IPPool{
 				{
+					Name:          "10.0.0.0-24",
 					CIDR:          "10.0.0.0/24",
 					Encapsulation: "VXLAN",
 					NATOutgoing:   "Disabled",

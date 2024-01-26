@@ -435,6 +435,7 @@ type CalicoNetworkSpec struct {
 	// IPPools contains a list of IP pools to create if none exist. At most one IP pool of each
 	// address family may be specified. If omitted, a single pool will be configured if needed.
 	// +optional
+	// +kubebuilder:validation:MaxItems=25
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
 	// MTU specifies the maximum transmission unit to use on the pod network.

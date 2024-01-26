@@ -1370,6 +1370,10 @@ spec:
                           - VXLANCrossSubnet
                           - None
                           type: string
+                        name:
+                          description: Name is the name of the IP pool. If omitted,
+                            this will be generated.
+                          type: string
                         natOutgoing:
                           description: 'NATOutgoing specifies if NAT will be enabled
                             or disabled for outgoing traffic. Default: Enabled'
@@ -10486,6 +10490,10 @@ spec:
                               - VXLAN
                               - VXLANCrossSubnet
                               - None
+                              type: string
+                            name:
+                              description: Name is the name of the IP pool. If omitted,
+                                this will be generated.
                               type: string
                             natOutgoing:
                               description: 'NATOutgoing specifies if NAT will be enabled

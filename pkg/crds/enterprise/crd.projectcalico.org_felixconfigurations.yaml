@@ -74,32 +74,12 @@ spec:
                 - Enable
                 - Disable
                 type: string
-              bpfCTLBLogFilter:
-                description: 'BPFCTLBLogFilter specifies, what is logged by connect
-                  time load balancer when BPFLogLevel is debug. Currently has to be
-                  specified as ''all'' when BPFLogFilters is set to see CTLB logs.
-                  [Default: unset - means logs are emitted when BPFLogLevel id debug
-                  and BPFLogFilters not set.]'
-                type: string
-              bpfConnectTimeLoadBalancing:
-                description: 'BPFConnectTimeLoadBalancing when in BPF mode, controls
-                  whether Felix installs the connect-time load balancer. The connect-time
-                  load balancer is required for the host to be able to reach Kubernetes
-                  services and it improves the performance of pod-to-service connections.When
-                  set to TCP, connect time load balancing is available only for services
-                  with TCP ports. [Default: TCP]'
-                enum:
-                - TCP
-                - Enabled
-                - Disabled
-                type: string
               bpfConnectTimeLoadBalancingEnabled:
                 description: 'BPFConnectTimeLoadBalancingEnabled when in BPF mode,
                   controls whether Felix installs the connection-time load balancer.  The
                   connect-time load balancer is required for the host to be able to
                   reach Kubernetes services and it improves the performance of pod-to-service
-                  connections.  The only reason to disable it is for debugging purposes.
-                  This will be deprecated. Use BPFConnectTimeLoadBalancing [Default:
+                  connections.  The only reason to disable it is for debugging purposes.  [Default:
                   true]'
                 type: boolean
               bpfDSROptoutCIDRs:
@@ -116,12 +96,6 @@ spec:
                   that Calico workload traffic flows over as well as any interfaces
                   that handle incoming traffic to nodeports and services from outside
                   the cluster.  It should not match the workload interfaces (usually
-                  named cali...).
-                type: string
-              bpfDisableGROForIfaces:
-                description: BPFDisableGROForIfaces is a regular expression that controls
-                  which interfaces Felix should disable the Generic Receive Offload
-                  [GRO] option.  It should not match the workload interfaces (usually
                   named cali...).
                 type: string
               bpfDisableUnprivileged:
@@ -159,26 +133,11 @@ spec:
                   permissive L2 network.  [Default: Tunnel]'
                 pattern: ^(?i)(Tunnel|DSR)?$
                 type: string
-              bpfForceTrackPacketsFromIfaces:
-                description: 'BPFForceTrackPacketsFromIfaces in BPF mode, forces traffic
-                  from these interfaces to skip Calico''s iptables NOTRACK rule, allowing
-                  traffic from those interfaces to be tracked by Linux conntrack.  Should
-                  only be used for interfaces that are not used for the Calico fabric.  For
-                  example, a docker bridge device for non-Calico-networked containers.
-                  [Default: docker+]'
-                items:
-                  type: string
-                type: array
               bpfHostConntrackBypass:
                 description: 'BPFHostConntrackBypass Controls whether to bypass Linux
                   conntrack in BPF mode for workloads and services. [Default: true
                   - bypass Linux conntrack]'
                 type: boolean
-              bpfHostNetworkedNATWithoutCTLB:
-                description: 'BPFHostNetworkedNATWithoutCTLB when in BPF mode, controls
-                  whether Felix does a NAT without CTLB. This along with BPFConnectTimeLoadBalancing
-                  determines the CTLB behavior. [Default: Enabled]'
-                type: string
               bpfKubeProxyEndpointSlicesEnabled:
                 description: BPFKubeProxyEndpointSlicesEnabled in BPF mode, controls
                   whether Felix's embedded kube-proxy accepts EndpointSlices or not.
@@ -204,16 +163,6 @@ spec:
                   as any interfaces that handle incoming traffic to nodeports and
                   services from outside the cluster.
                 type: string
-              bpfLogFilters:
-                additionalProperties:
-                  type: string
-                description: "BPFLogFilters is a map of key=values where the value
-                  is a pcap filter expression and the key is an interface name with
-                  'all' denoting all interfaces, 'weps' all workload endpoints and
-                  'heps' all host endpoints. \n When specified as an env var, it accepts
-                  a comma-separated list of key=values. [Default: unset - means all
-                  debug logs are emitted]"
-                type: object
               bpfLogLevel:
                 description: 'BPFLogLevel controls the log level of the BPF programs
                   when in BPF dataplane mode.  One of "Off", "Info", or "Debug".  The
@@ -659,11 +608,6 @@ spec:
               flowLogsCollectorDebugTrace:
                 description: When FlowLogsCollectorDebugTrace is set to true, enables
                   the logs in the collector to be printed in their entirety.
-                type: boolean
-              flowLogsDestDomainsByClient:
-                description: 'FlowLogsDestDomainsByClient is used to configure if
-                  the source IP is used in the mapping of top level destination domains.
-                  [Default: true]'
                 type: boolean
               flowLogsDynamicAggregationEnabled:
                 description: FlowLogsDynamicAggregationEnabled is used to enable/disable
@@ -1123,7 +1067,7 @@ spec:
                 description: 'MetadataAddr is the IP address or domain name of the
                   server that can answer VM queries for cloud-init metadata. In OpenStack,
                   this corresponds to the machine running nova-api (or in Ubuntu,
-                  nova-api-metadata). A value of none (case-insensitive) means that
+                  nova-api-metadata). A value of none (case insensitive) means that
                   Felix should not set up any NAT rule for the metadata path. [Default:
                   127.0.0.1]'
                 type: string
@@ -1375,14 +1319,6 @@ spec:
                   nodes. [Default: "c:\\TigeraCalico\\flowlogs\\flows.log.pos"]. This
                   parameter only takes effect when FlowLogsDynamicAggregationEnabled
                   is set to true.'
-                type: string
-              windowsManageFirewallRules:
-                description: 'WindowsManageFirewallRules configures whether or not
-                  Felix will program Windows Firewall rules. (to allow inbound access
-                  to its own metrics ports) [Default: Disabled]'
-                enum:
-                - Enabled
-                - Disabled
                 type: string
               windowsNetworkName:
                 description: WindowsNetworkName specifies which Windows HNS networks

@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -49,7 +50,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const tigeraStatusName string = "ippools"
@@ -67,19 +67,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	r.status.Run(opts.ShutdownContext)
 
-	c, err := controller.New("tigera-ippool-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("tigera-ippool-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("Failed to create tigera-ippool-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Installation
-	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operator.Installation{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to APIServer
-	err = c.Watch(&source.Kind{Type: &operator.APIServer{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operator.APIServer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create APIServer watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
@@ -91,7 +91,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.Watch(&source.Kind{Type: &crdv1.IPPool{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch IPPool resource: %w", err)
 	}
@@ -99,7 +99,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if r.autoDetectedProvider == operator.ProviderOpenShift {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
-		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&configv1.Network{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %w", err)
@@ -175,17 +175,21 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 			}
 
 			if addr.To4() == nil {
+				// Treat the first IPv6 CIDR as the default. Subsequent CIDRs will be named based on their CIDR.
+				name := "default-ipv6-ippool"
 				if v6found {
-					continue
+					name = ""
 				}
 				v6found = true
-				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{Name: name, CIDR: c})
 			} else {
+				// Treat the first IPv4 CIDR as the default. Subsequent CIDRs will be named based on their CIDR.
+				name := "default-ipv4-ippool"
 				if v4found {
-					continue
+					name = ""
 				}
 				v4found = true
-				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{Name: name, CIDR: c})
 			}
 		}
 	} else if len(i.Spec.CalicoNetwork.IPPools) == 0 {
@@ -381,7 +385,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 		// then we assume that the user has configured them correctly out-of-band and we should not install any others.
 		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 			// If configured to run in openshift, then also fetch the openshift configuration API.
-			log.V(5).Info("Fetching OpenShift network configuration")
+			log.V(1).Info("Fetching OpenShift network configuration")
 			openshiftConfig := &configv1.Network{}
 			openshiftNetworkConfig := "cluster"
 			if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig); err != nil {
@@ -394,7 +398,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 			}
 		} else {
 			// Check if we're running on kubeadm by getting the config map.
-			log.V(5).Info("Fetching kubeadm config map")
+			log.V(1).Info("Fetching kubeadm config map")
 			kubeadmConfig := &corev1.ConfigMap{}
 			key := types.NamespacedName{Name: kubeadmConfigMap, Namespace: metav1.NamespaceSystem}
 			if err := client.Get(ctx, key, kubeadmConfig); err == nil {
@@ -411,7 +415,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 		// Defaulting of the Spec.CNI field occurs in pkg/controller/installation/
 		poolsUnspecified := instance.Spec.CalicoNetwork == nil || instance.Spec.CalicoNetwork.IPPools == nil
 		calicoIPAM := instance.Spec.CNI != nil && instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico
-		log.V(5).Info("Checking if we should default IP pool configuration", "calicoIPAM", calicoIPAM, "poolsUnspecified", poolsUnspecified)
+		log.V(1).Info("Checking if we should default IP pool configuration", "calicoIPAM", calicoIPAM, "poolsUnspecified", poolsUnspecified)
 		if poolsUnspecified && calicoIPAM {
 			if instance.Spec.CalicoNetwork == nil {
 				instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
@@ -454,8 +458,10 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 	}
 
 	currentPoolLookup := map[string]string{}
-	for _, cur := range currentPools.Items {
-		currentPoolLookup[cur.Spec.CIDR] = cur.Name
+	if currentPools != nil {
+		for _, cur := range currentPools.Items {
+			currentPoolLookup[cur.Spec.CIDR] = cur.Name
+		}
 	}
 
 	// Default any fields on each IP pool declared in the Installation object.
@@ -521,7 +527,6 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 // - Query desired IP pools (from Installation)
 // - Query existing IP pools owned by this controller
 // - Reconcile the differences
-// - Populate Installation status with ALL IP pools in the cluster.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling IP pools")
@@ -542,10 +547,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	defer r.status.SetMetaData(&installation.ObjectMeta)
 
 	// This controller relies on the core Installation controller to perform initial defaulting before it can continue.
-	// Finalizers are set by the core controller as part of the defaulting process. Wait for them to be set as an indicator
-	// that defaulting has occurred.
-	if installation.Finalizers == nil || len(installation.Finalizers) == 0 {
-		// TODO: Should check for exact finalizer name here instead.
+	// The core installation controller adds a specific finalizer as part of performing defaulting,
+	// so wait for that before we continue.
+	finalizerExists := false
+	for _, finalizer := range installation.GetFinalizers() {
+		if finalizer == render.CalicoFinalizer {
+			finalizerExists = true
+			break
+		}
+	}
+	if !finalizerExists {
 		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -680,7 +691,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, installation)
 
-	passThru := render.NewPassthrough(toCreateOrUpdate...)
+	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating IPPools", err, log)
 		return reconcile.Result{}, err

@@ -89,7 +89,6 @@ const (
 	// The default port used by calico/node to report Calico Enterprise internal metrics.
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	defaultNodeReporterPort = 9081
-	CalicoFinalizer         = "tigera.io/operator-cleanup"
 )
 
 const InstallationName string = "calico"
@@ -318,7 +317,7 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.Watch(&source.Kind{Type: &crdv1.IPPool{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch IPPool resource: %w", err)
 	}
@@ -378,6 +377,22 @@ type ReconcileInstallation struct {
 	tierWatchReady       *utils.ReadyFlag
 }
 
+// getActivePools returns the full set of enabled IP pools in the cluster.
+func getActivePools(ctx context.Context, client client.Client) (*crdv1.IPPoolList, error) {
+	allPools := crdv1.IPPoolList{}
+	if err := client.List(ctx, &allPools); err != nil && !apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("unable to list IPPools: %s", err.Error())
+	}
+	filtered := crdv1.IPPoolList{}
+	for _, pool := range allPools.Items {
+		if pool.Spec.Disabled {
+			continue
+		}
+		filtered.Items = append(filtered.Items, pool)
+	}
+	return &filtered, nil
+}
+
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
 func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
 	// Determine the provider in use by combining any auto-detected value with any value
@@ -397,11 +412,10 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		awsNode = nil
 	}
 
-	currentPools := &crdv1.IPPoolList{}
-	if err := client.List(ctx, currentPools); err != nil {
+	currentPools, err := getActivePools(ctx, client)
+	if err != nil {
 		return fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
-	// TODO: Should we remove any disabled IP pools from the list so they aren't included in defaulting?
 
 	err = MergeAndFillDefaults(instance, awsNode, currentPools)
 	if err != nil {
@@ -898,14 +912,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Wait for IP pools to be programmed. This may be done out-of-band by the user, or by the operator's IP pool controller.
-	currentPools := &crdv1.IPPoolList{}
-	err = r.client.List(ctx, currentPools)
-	if err != nil && !apierrors.IsNotFound(err) {
+	currentPools, err := getActivePools(ctx, r.client)
+	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if len(currentPools.Items) == 0 {
-		r.status.SetDegraded(operator.ResourceNotFound, "waiting for IP pools to be created", nil, reqLogger)
+		r.status.SetDegraded(operator.ResourceNotFound, "waiting for enabled IP pools to be created", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 	// TODO: Should we remove any disabled IP pools from the list so they aren't included in logic?
@@ -1836,7 +1849,7 @@ func updateInstallationForAWSNode(i *operator.Installation, ds *appsv1.DaemonSet
 	return nil
 }
 
-func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
+func addCRDWatches(c ctrlruntime.Controller, v operator.ProductVariant) error {
 	pred := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Create occurs because we've created it, so we can safely ignore it.
@@ -1852,13 +1865,13 @@ func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
 }
 
 func setInstallationFinalizer(i *operator.Installation) {
-	if !stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
-		i.SetFinalizers(append(i.GetFinalizers(), CalicoFinalizer))
+	if !stringsutil.StringInSlice(render.CalicoFinalizer, i.GetFinalizers()) {
+		i.SetFinalizers(append(i.GetFinalizers(), render.CalicoFinalizer))
 	}
 }
 
 func removeInstallationFinalizer(i *operator.Installation) {
-	if stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
-		i.SetFinalizers(stringsutil.RemoveStringInSlice(CalicoFinalizer, i.GetFinalizers()))
+	if stringsutil.StringInSlice(render.CalicoFinalizer, i.GetFinalizers()) {
+		i.SetFinalizers(stringsutil.RemoveStringInSlice(render.CalicoFinalizer, i.GetFinalizers()))
 	}
 }

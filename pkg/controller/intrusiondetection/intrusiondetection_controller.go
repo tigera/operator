@@ -88,10 +88,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
-
-	installNS, _, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, render.IntrusionDetectionNamespace)
+	installNS, truthNS, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, render.IntrusionDetectionNamespace)
 
 	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
@@ -118,7 +115,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	// Watch for changes to operator.tigera.io APIs.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, eventHandler); err != nil {
+	if err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %v", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, eventHandler); err != nil {
@@ -157,20 +154,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.VoltronLinseedPublicCert,
 		certificatemanagement.CASecretName,
 	} {
-		if err = utils.AddSecretsWatch(c, secretName, helper.TruthNamespace()); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, truthNS); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 		}
 	}
 
-	if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, helper.InstallNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, installNS); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, helper.InstallNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, installNS); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, helper.TruthNamespace(), eventHandler); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, truthNS, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
@@ -178,7 +175,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, helper.TruthNamespace(), eventHandler); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, truthNS, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 

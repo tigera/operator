@@ -453,6 +453,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		&operator.CalicoNetworkSpec{
 			IPPools: []operator.IPPool{
 				{
+					Name:          "192.168.0.0-16",
 					CIDR:          "192.168.0.0/16",
 					Encapsulation: "IPIP",
 					NATOutgoing:   "Enabled",
@@ -479,6 +480,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		&operator.CalicoNetworkSpec{
 			IPPools: []operator.IPPool{
 				{
+					Name:          "10.0.0.0-8",
 					CIDR:          "10.0.0.0/8",
 					Encapsulation: "IPIP",
 					NATOutgoing:   "Enabled",
@@ -513,6 +515,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		&operator.CalicoNetworkSpec{
 			IPPools: []operator.IPPool{
 				{
+					Name:          "10.0.0.0-24",
 					CIDR:          "10.0.0.0/24",
 					Encapsulation: "VXLAN",
 					NATOutgoing:   "Disabled",

@@ -454,8 +454,10 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 	}
 
 	currentPoolLookup := map[string]string{}
-	for _, cur := range currentPools.Items {
-		currentPoolLookup[cur.Spec.CIDR] = cur.Name
+	if currentPools != nil {
+		for _, cur := range currentPools.Items {
+			currentPoolLookup[cur.Spec.CIDR] = cur.Name
+		}
 	}
 
 	// Default any fields on each IP pool declared in the Installation object.

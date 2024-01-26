@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
@@ -46,6 +47,7 @@ type CSIConfiguration struct {
 	Installation *operatorv1.InstallationSpec
 	Terminating  bool
 	UsePSP       bool
+	OpenShift    bool
 }
 
 type csiComponent struct {
@@ -77,6 +79,18 @@ func (c *csiComponent) csiDriver() *v1.CSIDriver {
 	spec := v1.CSIDriverSpec{
 		PodInfoOnMount:       ptr.BoolToPtr(true),
 		VolumeLifecycleModes: volumeLifecycleModes,
+	}
+
+	// Openshift 4.13, introduces CSI admission plugin. This
+	// admission plugin restricts the use of ephemeral volumes
+	// on pod admission. Adding csi-ephemeral-volume-profile to
+	// restricted lets pods use the CSI volume in namespaces which
+	// enforces restricted, baseline, privileged pod security profile.
+	// Additional information can be found here
+	// https://docs.openshift.com/container-platform/4.13/storage/container_storage_interface/ephemeral-storage-csi-inline.html
+	meta.Labels = common.MapExistsOrInitialize(meta.Labels)
+	if c.cfg.OpenShift {
+		meta.Labels["security.openshift.io/csi-ephemeral-volume-profile"] = "restricted"
 	}
 
 	return &v1.CSIDriver{

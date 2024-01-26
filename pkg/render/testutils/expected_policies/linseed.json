@@ -32,7 +32,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'eks-log-forwarder'",
-          "namespaceSelector": "name == 'tigera-fluentd'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-fluentd'"
         },
         "destination": {
           "ports": [
@@ -57,21 +57,8 @@
         "action": "Allow",
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'elastic-curator'",
-          "namespaceSelector": "name == 'tigera-elasticsearch'"
-        },
-        "destination": {
-          "ports": [
-            8444
-          ]
-        }
-      },
-      {
-        "action": "Allow",
-        "protocol": "TCP",
-        "source": {
           "selector": "k8s-app == 'tigera-manager'",
-          "namespaceSelector": "name == 'tigera-manager'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-manager'"
         },
         "destination": {
           "ports": [
@@ -89,7 +76,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'compliance-benchmarker'",
-          "namespaceSelector": "name == 'tigera-compliance'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'"
         }
       },
       {
@@ -102,7 +89,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'compliance-controller'",
-          "namespaceSelector": "name == 'tigera-compliance'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'"
         }
       },
       {
@@ -115,7 +102,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'compliance-server'",
-          "namespaceSelector": "name == 'tigera-compliance'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'"
         }
       },
       {
@@ -128,7 +115,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'compliance-snapshotter'",
-          "namespaceSelector": "name == 'tigera-compliance'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'"
         }
       },
       {
@@ -141,7 +128,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'compliance-reporter'",
-          "namespaceSelector": "name == 'tigera-compliance'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'"
         }
       },
       {
@@ -167,7 +154,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'elastic-operator'",
-          "namespaceSelector": "name == 'tigera-eck-operator'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-eck-operator'"
         }
       },
       {
@@ -180,20 +167,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'tigera-elasticsearch-metrics'",
-          "namespaceSelector": "name == 'tigera-elasticsearch'"
-        }
-      },
-      {
-        "action": "Allow",
-        "destination": {
-          "ports": [
-            8444
-          ]
-        },
-        "protocol": "TCP",
-        "source": {
-          "selector": "k8s-app == 'tigera-dpi'",
-          "namespaceSelector": "name == 'tigera-dpi'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'"
         }
       },
       {
@@ -206,7 +180,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'tigera-policy-recommendation'",
-          "namespaceSelector": "name == 'tigera-policy-recommendation'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-policy-recommendation'"
         }
       }
     ],

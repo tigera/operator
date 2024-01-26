@@ -52,6 +52,9 @@ spec:
                 description: The namespace spec contains the namespace relative recommendation
                   vars.
                 properties:
+                  intraNamespacePassThroughTraffic:
+                    description: 'Pass intra-namespace traffic. [Default: false]'
+                    type: boolean
                   recStatus:
                     description: Recommendation status. One of Enabled, Disabled.
                     type: string

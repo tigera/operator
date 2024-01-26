@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"time"
+
+	"github.com/tigera/operator/pkg/controller/tenancy"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -34,7 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,9 +66,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
-	controller, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	complianceController, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return err
+	}
+
+	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
+	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
+	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
+	if opts.MultiTenant {
+		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("compliance-controller failed to watch Tenant resource: %w", err)
+		}
 	}
 
 	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
@@ -77,16 +87,71 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.PolicyRecommendationNamespace)
 
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
-		{Name: render.ComplianceAccessPolicyName, Namespace: render.ComplianceNamespace},
-		{Name: render.ComplianceServerPolicyName, Namespace: render.ComplianceNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ComplianceNamespace},
+	go utils.WaitToAddLicenseKeyWatch(complianceController, k8sClient, log, licenseAPIReady)
+
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, complianceController, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(complianceController, k8sClient, log, []types.NamespacedName{
+		{Name: render.ComplianceAccessPolicyName, Namespace: installNS},
+		{Name: render.ComplianceServerPolicyName, Namespace: installNS},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
 	})
 
-	return add(mgr, controller)
+	// Watch for changes to primary resource Compliance
+	err = complianceController.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch Installation resource: %w", err)
+	}
+
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch ImageSet: %w", err)
+	}
+
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %w", err)
+	}
+
+	// Watch the given secrets in each both the compliance and operator namespaces
+	for _, namespace := range watchNamespaces {
+		for _, secretName := range []string{
+			render.TigeraElasticsearchGatewaySecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
+			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
+			render.VoltronLinseedPublicCert,
+		} {
+			if err = utils.AddSecretsWatch(complianceController, secretName, namespace); err != nil {
+				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
+			}
+		}
+	}
+
+	// Watch for changes to primary resource ManagementCluster
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
+	}
+
+	// Watch for changes to primary resource ManagementClusterConnection
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
+	}
+
+	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
+	}
+
+	// Watch for changes to TigeraStatus.
+	if err = utils.AddTigeraStatusWatch(complianceController, ResourceName); err != nil {
+		return fmt.Errorf("compliance-controller failed to watch compliance Tigerastatus: %w", err)
+	}
+
+	return nil
 }
 
 // newReconciler returns a new *reconcile.Reconciler
@@ -100,76 +165,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
+		multiTenant:     opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
-}
-
-// add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c controller.Controller) error {
-	var err error
-
-	// Watch for changes to primary resource Compliance
-	err = c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch Network resource: %w", err)
-	}
-
-	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch ImageSet: %w", err)
-	}
-
-	if err = utils.AddAPIServerWatch(c); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %w", err)
-	}
-
-	// Watch the given secrets in each both the compliance and operator namespaces
-	for _, namespace := range []string{common.OperatorNamespace(), render.ComplianceNamespace} {
-		for _, secretName := range []string{
-			render.TigeraElasticsearchGatewaySecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
-			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
-			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
-			relasticsearch.PublicCertSecret,
-			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
-		} {
-			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
-			}
-		}
-	}
-
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
-	}
-
-	// Watch for changes to primary resource ManagementCluster
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
-	}
-
-	// Watch for changes to primary resource ManagementClusterConnection
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
-	}
-
-	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
-	}
-
-	// Watch for changes to TigeraStatus.
-	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch compliance Tigerastatus: %w", err)
-	}
-
-	return nil
 }
 
 // blank assignment to verify that ReconcileCompliance implements reconcile.Reconciler
@@ -187,11 +186,16 @@ type ReconcileCompliance struct {
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
+	multiTenant     bool
 }
 
-func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
+func GetCompliance(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.Compliance, error) {
+	key := client.ObjectKey{Name: "tigera-secure"}
+	if mt {
+		key.Namespace = ns
+	}
 	instance := &operatorv1.Compliance{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	err := cli.Get(ctx, key, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -204,11 +208,27 @@ func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Complian
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	helper := utils.NewNamespaceHelper(r.multiTenant, render.ComplianceNamespace, request.Namespace)
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling Compliance")
 
+	// We skip requests without a namespace specified in multi-tenant setups.
+	if r.multiTenant && request.Namespace == "" {
+		return reconcile.Result{}, nil
+	}
+
+	// Check if this is a tenant-scoped request.
+	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	if errors.IsNotFound(err) {
+		reqLogger.Info("No Tenant in this Namespace, skip")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Fetch the Compliance instance
-	instance, err := GetCompliance(ctx, r.client)
+	instance, err := GetCompliance(ctx, r.client, r.multiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -249,14 +269,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			log.Error(err, "Error querying allow-tigera tier")
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
@@ -266,17 +286,17 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Query for the installation object.
@@ -293,16 +313,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve pull secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -344,27 +354,22 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+	var opts []certificatemanager.Option
+
+	opts = append(opts, certificatemanager.WithTenant(tenant), certificatemanager.WithLogger(reqLogger))
+
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	var managerInternalTLSSecret certificatemanagement.CertificateInterface
 	if managementCluster != nil {
-		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	}
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificates are not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificates are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
@@ -375,7 +380,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		// management cluster into the managed cluster by kube-controllers.
 		linseedCertLocation = render.VoltronLinseedPublicCert
 	}
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
@@ -384,7 +389,16 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate, linseedCertificate)
+	bundleMaker := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
+	if r.multiTenant {
+		trustedBundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		bundleMaker = nil
+	}
 
 	// Get the key pairs for each component, generating them as needed.
 	type complianceKeyPair struct {
@@ -399,7 +413,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		// These key pairs are only used as client credentials for mTLS with Linseed, and so do not need DNS names listed
 		// as they do not act as server certs.
 		dnsNames := []string{"localhost"}
-		kp.Interface, err = certificateManager.GetOrCreateKeyPair(r.client, kp.SecretName, common.OperatorNamespace(), dnsNames)
+		kp.Interface, err = certificateManager.GetOrCreateKeyPair(r.client, kp.SecretName, helper.TruthNamespace(), dnsNames)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", kp.SecretName), err, reqLogger)
 			return reconcile.Result{}, err
@@ -411,14 +425,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		complianceServerKeyPair, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
 			render.ComplianceServerCertSecret,
-			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain))
+			helper.TruthNamespace(),
+			dns.GetServiceDNSNames(render.ComplianceServiceName, helper.InstallNamespace(), r.clusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
-	certificateManager.AddToStatusManager(r.status, render.ComplianceNamespace)
+	certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
@@ -441,6 +455,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(3).Info("rendering components")
+
+	namespaceComp := render.NewPassthrough(render.CreateNamespace(helper.InstallNamespace(), network.KubernetesProvider, render.PSSPrivileged))
+
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
@@ -452,7 +469,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		BenchmarkerKeyPair:          benchmarkerKeyPair.Interface,
 		SnapshotterKeyPair:          snapshotterKeyPair.Interface,
 		ReporterKeyPair:             reporterKeyPair.Interface,
-		ESClusterConfig:             esClusterConfig,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   openshift,
 		ManagementCluster:           managementCluster,
@@ -461,6 +477,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		ClusterDomain:               r.clusterDomain,
 		HasNoLicense:                hasNoLicense,
 		UsePSP:                      r.usePSP,
+		Namespace:                   helper.InstallNamespace(),
+		Tenant:                      tenant,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -475,7 +493,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		Namespace:       render.ComplianceNamespace,
+		Namespace:       helper.InstallNamespace(),
+		TruthNamespace:  helper.TruthNamespace(),
 		ServiceAccounts: []string{render.ComplianceServerServiceAccount, render.ComplianceBenchmarkerServiceAccount, render.ComplianceSnapshotterServiceAccount, render.ComplianceControllerServiceAccount, render.ComplianceReporterServiceAccount},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			rcertificatemanagement.NewKeyPairOption(complianceServerKeyPair, true, true),
@@ -484,10 +503,10 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			rcertificatemanagement.NewKeyPairOption(snapshotterKeyPair.Interface, true, true),
 			rcertificatemanagement.NewKeyPairOption(reporterKeyPair.Interface, true, true),
 		},
-		TrustedBundle: trustedBundle,
+		TrustedBundle: bundleMaker,
 	})
 
-	for _, comp := range []render.Component{comp, certificateComponent} {
+	for _, comp := range []render.Component{namespaceComp, certificateComponent, comp} {
 		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, err
@@ -506,7 +525,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,14 +24,18 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 )
 
-const TigeraComponentTierName = "allow-tigera"
-const TigeraComponentPolicyPrefix = TigeraComponentTierName + "."
-const TigeraComponentDefaultDenyPolicyName = TigeraComponentPolicyPrefix + "default-deny"
+const (
+	TigeraComponentTierName              = "allow-tigera"
+	TigeraComponentPolicyPrefix          = TigeraComponentTierName + "."
+	TigeraComponentDefaultDenyPolicyName = TigeraComponentPolicyPrefix + "default-deny"
+)
 
-var TCPProtocol = numorstring.ProtocolFromString(numorstring.ProtocolTCP)
-var UDPProtocol = numorstring.ProtocolFromString(numorstring.ProtocolUDP)
-var HighPrecedenceOrder = 1.0
-var AfterHighPrecendenceOrder = 10.0
+var (
+	TCPProtocol               = numorstring.ProtocolFromString(numorstring.ProtocolTCP)
+	UDPProtocol               = numorstring.ProtocolFromString(numorstring.ProtocolUDP)
+	HighPrecedenceOrder       = 1.0
+	AfterHighPrecendenceOrder = 10.0
+)
 
 // AppendDNSEgressRules appends a rule to the provided slice that allows DNS egress. The appended rule utilizes label selectors and ports.
 func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
@@ -84,7 +88,7 @@ func CreateEntityRule(namespace string, deploymentName string, ports ...uint16) 
 func CreateSourceEntityRule(namespace string, deploymentName string) v3.EntityRule {
 	return v3.EntityRule{
 		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
-		NamespaceSelector: fmt.Sprintf("name == '%s'", namespace),
+		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
 	}
 }
 
@@ -177,6 +181,7 @@ var KubeAPIServerEntityRule = v3.EntityRule{
 	Selector:          "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
 	Ports:             Ports(443, 6443, 12388),
 }
+
 var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 	Services: &v3.ServiceMatch{
 		Namespace: "default",
@@ -184,22 +189,107 @@ var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 	},
 }
 
-// The entity rules below are extracted from render subpackages to prevent cyclic dependencies.
-var ESGatewayEntityRule = CreateEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway", 5554)
-var ESGatewaySourceEntityRule = CreateSourceEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway")
-var ESGatewayServiceSelectorEntityRule = CreateServiceSelectorEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway-http")
+// Helper creates a helper for building network policies for multi-tenant capable components.
+// It takes two arguments:
+// - mt: true if running in multi-tenant mode, false otherwise.
+// - ns: The tenant's namespce.
+func Helper(mt bool, ns string) *NetworkPolicyHelper {
+	return &NetworkPolicyHelper{
+		multiTenant: mt,
+		ns:          ns,
+	}
+}
 
-var LinseedEntityRule = CreateEntityRule("tigera-elasticsearch", "tigera-linseed", 8444)
-var LinseedSourceEntityRule = CreateSourceEntityRule("tigera-elasticsearch", "tigera-linseed")
-var LinseedServiceSelectorEntityRule = CreateServiceSelectorEntityRule("tigera-elasticsearch", "tigera-linseed")
+// DefaultHelper returns a NetworkPolicyHelper configured for services that
+// only run in single-tenant clusters.
+func DefaultHelper() *NetworkPolicyHelper {
+	return &NetworkPolicyHelper{
+		multiTenant: false,
+		ns:          "",
+	}
+}
 
-const PrometheusSelector = "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')"
+type NetworkPolicyHelper struct {
+	multiTenant bool
+	ns          string
+}
+
+func (h *NetworkPolicyHelper) namespace(def string) string {
+	if !h.multiTenant {
+		return def
+	}
+	return h.ns
+}
+
+// ESGatewayEntityRule returns an entity rule that selects es-gateway pods in the given namespace.
+func (h *NetworkPolicyHelper) ESGatewayEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-elasticsearch"), "tigera-secure-es-gateway", 5554)
+}
+
+func (h *NetworkPolicyHelper) ESGatewaySourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-elasticsearch"), "tigera-secure-es-gateway")
+}
+
+func (h *NetworkPolicyHelper) ESGatewayServiceSelectorEntityRule() v3.EntityRule {
+	return CreateServiceSelectorEntityRule(h.namespace("tigera-elasticsearch"), "tigera-secure-es-gateway-http")
+}
+
+func (h *NetworkPolicyHelper) LinseedEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed", 8444)
+}
+
+func (h *NetworkPolicyHelper) LinseedSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed")
+}
+
+func (h *NetworkPolicyHelper) LinseedServiceSelectorEntityRule() v3.EntityRule {
+	return CreateServiceSelectorEntityRule(h.namespace("tigera-elasticsearch"), "tigera-linseed")
+}
+
+func (h *NetworkPolicyHelper) ManagerEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-manager"), "tigera-manager", 9443)
+}
+
+func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-manager"), "tigera-manager")
+}
+
+func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
+}
+
+func (h *NetworkPolicyHelper) ComplianceServerEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("tigera-compliance"), "compliance-server", 5443)
+}
+
+func (h *NetworkPolicyHelper) ComplianceServerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-server")
+}
+
+func (h *NetworkPolicyHelper) ComplianceBenchmarkerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-benchmarker")
+}
+
+func (h *NetworkPolicyHelper) ComplianceControllerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-controller")
+}
+
+func (h *NetworkPolicyHelper) ComplianceSnapshotterSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-snapshotter")
+}
+
+func (h *NetworkPolicyHelper) ComplianceReporterSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-reporter")
+}
+
+const PrometheusSelector = "k8s-app == 'tigera-prometheus'"
 
 var PrometheusEntityRule = v3.EntityRule{
 	NamespaceSelector: "projectcalico.org/name == 'tigera-prometheus'",
 	Selector:          PrometheusSelector,
 	Ports:             Ports(9095),
 }
+
 var PrometheusSourceEntityRule = v3.EntityRule{
 	NamespaceSelector: "name == 'tigera-prometheus'",
 	Selector:          PrometheusSelector,

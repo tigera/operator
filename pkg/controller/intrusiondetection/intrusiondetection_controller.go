@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
-	"time"
+
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
@@ -35,10 +36,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	batchv1 "k8s.io/api/batch/v1"
@@ -119,6 +118,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		dpiAPIReady:     dpiAPIReady,
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -149,8 +149,14 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch Network resource: %v", err)
+	// Watch for changes to primary resource ManagementCluster
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %w", err)
+	}
+
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch Installation resource: %v", err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -167,10 +173,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		relasticsearch.PublicCertSecret,
 		render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchIntrusionDetectionJobUserSecret,
-		render.ElasticsearchADJobUserSecret,
 		render.ElasticsearchPerformanceHotspotsUserSecret,
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
@@ -188,29 +192,20 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
-	// These watches are here to catch a modification to the resources we create in reconcile so the changes would be corrected.
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.IntrusionDetectionNamespace); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
-	}
-
 	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, render.IntrusionDetectionNamespace); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, render.ADAPITLSSecretName, render.IntrusionDetectionNamespace); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
 	// Watch for changes to TigeraStatus.
@@ -237,6 +232,7 @@ type ReconcileIntrusionDetection struct {
 	dpiAPIReady     *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
+	elasticExternal bool
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -291,15 +287,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	isManagedCluster := managementClusterConnection != nil
 
-	if err := r.fillDefaults(ctx, instance); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Unable to set defaults on IntrusionDetection", err, reqLogger)
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	// validate AnomalyDetection Specs first to give error feedback if ADSpec is misconfigured
-	if err = validateConfiguredAnomalyDetectionSpec(instance.Spec.AnomalyDetection, isManagedCluster); err != nil {
-		errMessage := "Invalid Anomaly Detection Specs provided"
-		r.status.SetDegraded(operatorv1.InvalidConfigurationError, errMessage, err, reqLogger)
+	isManagementCluster := managementCluster != nil
+
+	if err := r.fillDefaults(ctx, instance); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Unable to set defaults on IntrusionDetection", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -308,7 +305,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !isManagedCluster {
+	if !isManagedCluster && !r.elasticExternal {
 		// check es-gateway to be available
 		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 		if err != nil {
@@ -317,21 +314,21 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
@@ -340,17 +337,17 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, err
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Query for the installation object.
@@ -369,52 +366,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-
-	// Query for StorageClass for AD API if provided
-	shouldRenderADPVC := false
-	if !isManagedCluster && len(instance.Spec.AnomalyDetection.StorageClassName) > 0 {
-		// validate to degrade early if the storage class name is not valid
-		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetection.StorageClassName); err != nil {
-			errMessage := "invalid Anomaly Detection Storage Class name provided"
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, errMessage, err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.AnomalyDetection.StorageClassName}, &storagev1.StorageClass{}); err != nil {
-			if errors.IsNotFound(err) {
-				errMessage := "failed to get storage class for anomaly detection"
-				r.status.SetDegraded(operatorv1.ResourceNotFound, errMessage, err, reqLogger)
-				return reconcile.Result{}, err
-			} else {
-				errMessage := "failed to query for Anomaly Detection Storage Class"
-				r.status.SetDegraded(operatorv1.ResourceReadError, errMessage, err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
-		pvc := &corev1.PersistentVolumeClaim{}
-		err = r.client.Get(ctx, client.ObjectKey{Name: render.ADPersistentVolumeClaimName, Namespace: render.IntrusionDetectionNamespace}, pvc)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				shouldRenderADPVC = true
-			} else {
-				errMessage := "failed to query persistentvolumeclaim for anomaly detection"
-				r.status.SetDegraded(operatorv1.ResourceReadError, errMessage, err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
-		// delete the found PVC if it does not have the storageclass name specified in AD Spec
-		if !shouldRenderADPVC && *(pvc.Spec.StorageClassName) != instance.Spec.AnomalyDetection.StorageClassName {
-			err := r.client.Delete(ctx, pvc)
-			if err != nil {
-				errMessage := "failed to remove misconfigured PersistentVolumeClaim for Anomaly Detection"
-				r.status.SetDegraded(operatorv1.ResourceUpdateError, errMessage, err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			shouldRenderADPVC = true // set to true to rerender
-		}
 	}
 
 	// Query for the LogCollector instance. We need this to determine whether or not
@@ -437,9 +388,17 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	if isManagedCluster {
+		if esClusterConfig.ClusterName() == render.DefaultElasticsearchClusterName {
+			msg := fmt.Sprintf("%s/%s ConfigMap must contain a 'clusterName' field that is not '%s'", common.OperatorNamespace(), relasticsearch.ClusterConfigConfigMapName, render.DefaultElasticsearchClusterName)
+			err = fmt.Errorf("Elasticsearch cluster name must be non-default value in managed clusters")
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, msg, err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	secrets := []string{
 		render.ElasticsearchIntrusionDetectionUserSecret,
-		render.ElasticsearchADJobUserSecret,
 		render.ElasticsearchPerformanceHotspotsUserSecret,
 	}
 
@@ -461,7 +420,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -492,20 +451,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, nil
 	}
 
-	adAPIServerTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSSecretName, common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.ADAPIObjectName, render.IntrusionDetectionNamespace, r.clusterDomain))
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// intrusionDetectionKeyPair is the key pair intrusion detection presents to identify itself
 	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	anomalyDetectorKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.AnomalyDetectorTLSSecretName, common.OperatorNamespace(), []string{render.AnomalyDetectorTLSSecretName})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -514,7 +461,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !r.dpiAPIReady.IsReady() {
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Intrusion detection controller sometimes needs to make requests to outside sources. Therefore, we include
@@ -558,12 +505,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ClusterDomain:                r.clusterDomain,
 		ESLicenseType:                esLicenseType,
 		ManagedCluster:               isManagedCluster,
-		ShouldRenderADPVC:            shouldRenderADPVC,
+		ManagementCluster:            isManagementCluster,
 		HasNoLicense:                 hasNoLicense,
 		TrustedCertBundle:            trustedBundle,
-		ADAPIServerCertSecret:        adAPIServerTLSSecret,
 		IntrusionDetectionCertSecret: intrusionDetectionKeyPair,
-		AnomalyDetectorCertSecret:    anomalyDetectorKeyPair,
 		UsePSP:                       r.usePSP,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
@@ -573,6 +518,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
+	// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
+	// makes tests fail, this needs to be looked at.
 	typhaNodeTLS, err := installation.GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with Typha/Felix secrets", err, reqLogger)
@@ -602,9 +550,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		PullSecrets:        pullSecrets,
 		Openshift:          r.provider == operatorv1.ProviderOpenShift,
 		ManagedCluster:     isManagedCluster,
+		ManagementCluster:  isManagementCluster,
 		HasNoLicense:       hasNoLicense,
 		HasNoDPIResource:   hasNoDPIResource,
-		ESClusterConfig:    esClusterConfig,
 		ClusterDomain:      r.clusterDomain,
 		DPICertSecret:      dpiKeyPair,
 	})
@@ -614,11 +562,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,
-			ServiceAccounts: []string{render.IntrusionDetectionName, render.ADAPIObjectName, render.AnomalyDetectorsName},
+			ServiceAccounts: []string{render.IntrusionDetectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.IntrusionDetectionCertSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.AnomalyDetectorCertSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -657,7 +603,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.
@@ -669,7 +615,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 }
 
 // fillDefaults updates the IntrusionDetection resource with defaults if
-// ComponentResources and AnomalyDetectionSpec are not populated.
+// ComponentResources is not populated.
 func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
 	if ids.Spec.ComponentResources == nil {
 		ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
@@ -691,14 +637,6 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 
 	if err := r.client.Update(ctx, ids); err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec, isManagedController bool) error {
-	if isManagedController && len(adSpec.StorageClassName) > 0 {
-		return fmt.Errorf("unable to set Anomaly Detection Specification in a managed ckuster")
 	}
 
 	return nil

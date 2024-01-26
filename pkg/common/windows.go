@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,39 +17,31 @@
 package common
 
 import (
-	operatorv1 "github.com/tigera/operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
-)
+	"context"
 
-var (
-	// This taint is applied to nodes upgrading Calico Windows.
-	CalicoWindowsUpgradingTaint = &corev1.Taint{
-		Key:    CalicoWindowsUpgradeTaintKey,
-		Effect: corev1.TaintEffectNoSchedule,
-	}
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 const (
-	CalicoWindowsUpgradeResourceName    = "calico-windows-upgrade"
-	CalicoWindowsUpgradeVolumePath      = `c:\CalicoUpgrade`
-	CalicoWindowsUpgradeLabel           = "projectcalico.org/windows-upgrade"
-	CalicoWindowsUpgradeLabelInProgress = "in-progress"
-	CalicoVersionAnnotation             = "projectcalico.org/version"
-	CalicoVariantAnnotation             = "projectcalico.org/variant"
-	CalicoWindowsUpgradeTaintKey        = "projectcalico.org/windows-upgrade"
+	CalicoWindowsUpgradeResourceName = "calico-windows-upgrade"
 )
 
-// GetNodeVariantAndVersion gets the node's variant and version annotation
-// values and returns whether both annotations exist.
-func GetNodeVariantAndVersion(n *corev1.Node) (bool, operatorv1.ProductVariant, string) {
-	variant, ok := n.Annotations[CalicoVariantAnnotation]
-	if !ok {
-		return false, "", ""
-	}
-	version, ok := n.Annotations[CalicoVersionAnnotation]
-	if !ok {
-		return false, "", ""
+func HasWindowsNodes(c client.Client) (bool, error) {
+	nodes := corev1.NodeList{}
+	err := c.List(context.Background(), &nodes, client.MatchingLabels{"kubernetes.io/os": "windows"})
+	if err != nil {
+		return false, err
 	}
 
-	return true, operatorv1.ProductVariant(variant), version
+	return len(nodes.Items) > 0, nil
+}
+
+// WindowsEnabled returns true if the given Installation enables Windows, false otherwise.
+func WindowsEnabled(installation operatorv1.InstallationSpec) bool {
+	return installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.WindowsDataplane != nil &&
+		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneDisabled
 }

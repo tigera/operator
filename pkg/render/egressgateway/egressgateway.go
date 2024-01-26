@@ -227,10 +227,9 @@ func (c *component) egwReadinessProbe() *corev1.Probe {
 				Port: intstr.FromInt(int(DefaultHealthPort)),
 			},
 		},
-		InitialDelaySeconds: 3,
-		TimeoutSeconds:      1,
-		SuccessThreshold:    1,
-		PeriodSeconds:       3,
+		// during testing it was found that the default initial delay wasn't enough
+		// in some cases so the default has been increased
+		InitialDelaySeconds: 10,
 	}
 }
 
@@ -346,7 +345,7 @@ func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 }
 
 func (c *component) egwRole() *rbacv1.Role {
-	return &rbacv1.Role{
+	role := &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.config.EgressGW.Name,
@@ -361,6 +360,19 @@ func (c *component) egwRole() *rbacv1.Role {
 			},
 		},
 	}
+
+	if c.config.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"privileged"},
+			},
+		)
+	}
+
+	return role
 }
 
 func (c *component) egwRoleBinding() *rbacv1.RoleBinding {

@@ -36,7 +36,7 @@
         },
         "protocol": "TCP",
         "source": {
-          "namespaceSelector": "name == 'tigera-compliance'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'",
           "selector": "k8s-app == 'compliance-benchmarker'"
         }
       },
@@ -49,7 +49,7 @@
         },
         "protocol": "TCP",
         "source": {
-          "namespaceSelector": "name == 'tigera-compliance'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'",
           "selector": "k8s-app == 'compliance-reporter'"
         }
       },
@@ -62,7 +62,7 @@
         },
         "protocol": "TCP",
         "source": {
-          "namespaceSelector": "name == 'tigera-compliance'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'",
           "selector": "k8s-app == 'compliance-snapshotter'"
         }
       },
@@ -75,7 +75,7 @@
         },
         "protocol": "TCP",
         "source": {
-          "namespaceSelector": "name == 'tigera-compliance'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-compliance'",
           "selector": "k8s-app == 'compliance-controller'"
         }
       },
@@ -166,7 +166,7 @@
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
-          "selector":"(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')",
+          "selector":"k8s-app == 'tigera-prometheus'",
           "namespaceSelector": "projectcalico.org/name == 'tigera-prometheus'",
           "ports": [
             9095

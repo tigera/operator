@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,40 +30,41 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	DeploymentName        = "tigera-linseed"
-	ServiceAccountName    = "tigera-linseed"
-	RoleName              = "tigera-linseed"
-	ServiceName           = "tigera-linseed"
-	PodSecurityPolicyName = "tigera-linseed"
-	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
-	PortName              = "tigera-linseed"
-	TargetPort            = 8444
-	Port                  = 443
-	ClusterRoleName       = "tigera-linseed"
+	DeploymentName                                  = "tigera-linseed"
+	ServiceAccountName                              = "tigera-linseed"
+	PodSecurityPolicyName                           = "tigera-linseed"
+	PolicyName                                      = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
+	PortName                                        = "tigera-linseed"
+	TargetPort                                      = 8444
+	Port                                            = 443
+	ClusterRoleName                                 = "tigera-linseed"
+	MultiTenantManagedClustersAccessClusterRoleName = "tigera-linseed-managed-cluster-access"
 )
 
 func Linseed(c *Config) render.Component {
 	return &linseed{
 		cfg:       c,
-		namespace: render.ElasticsearchNamespace,
+		namespace: c.Namespace,
 	}
 }
 
@@ -90,7 +92,7 @@ type Config struct {
 	TokenKeyPair certificatemanagement.KeyPairInterface
 
 	// Trusted bundle to use when validating client certificates.
-	TrustedBundle certificatemanagement.TrustedBundle
+	TrustedBundle certificatemanagement.TrustedBundleRO
 
 	// ClusterDomain to use when building service URLs.
 	ClusterDomain string
@@ -103,6 +105,26 @@ type Config struct {
 
 	// Elastic cluster configuration
 	ESClusterConfig *relasticsearch.ClusterConfig
+
+	// Indicates whether DPI is installed in the cluster or not
+	HasDPIResource bool
+
+	// Namespace to install into.
+	Namespace string
+
+	// Namespaces to which we must bind the Linseed cluster role.
+	BindNamespaces []string
+
+	// Tenant configuration, if running for a particular tenant.
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
+
+	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
+	// mTLS is used between Linseed and the external Elastic cluster.
+	ElasticClientSecret *corev1.Secret
+
+	ElasticHost string
+	ElasticPort string
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -134,11 +156,18 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedAllowTigeraPolicy())
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
-	toCreate = append(toCreate, l.linseedRoleBinding())
+	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
+	if l.cfg.Tenant != nil {
+		toCreate = append(toCreate, l.multiTenantManagedClustersAccess()...)
+	}
 	toCreate = append(toCreate, l.linseedServiceAccount())
 	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.UsePSP {
 		toCreate = append(toCreate, l.linseedPodSecurityPolicy())
+	}
+	if l.cfg.ElasticClientSecret != nil {
+		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
 	return toCreate, toDelete
 }
@@ -169,10 +198,42 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			// Need to be able to list managed clusters
+			// TODO: Move to namespaced role in multi-tenant.
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch"},
 		},
+		// These permissions are necessary to allow the management cluster to monitor secrets that we want to propagate
+		// through to the managed cluster for identity verification such as the Voltron Linseed public certificate
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+	}
+
+	if l.cfg.Tenant.MultiTenant() {
+		// These rules are used by Linseed in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{render.LinseedServiceName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.ElasticsearchNamespace),
+				},
+			},
+		}...)
 	}
 
 	if l.cfg.UsePSP {
@@ -193,25 +254,52 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func (l *linseed) linseedRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ClusterRoleName,
+func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
+	return rcomponents.ClusterRoleBinding(ClusterRoleName, ClusterRoleName, ServiceAccountName, namespaces)
+}
+
+func (l *linseed) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					// The Authentication Proxy in Voltron checks if Linseed (either using impersonation headers for
+					// tigera-linseed service in tigera-elasticsearch namespace or the actual account in a single tenant
+					// setup) can get a managed clusters before sending the request down the tunnel
+					"get",
+				},
+			},
 		},
+	})
+
+	// In a single tenant setup we want to create a cluster role that binds using service account
+	// tigera-linseed from tigera-elasticsearch namespace. In a multi-tenant setup Linseed from the tenant's
+	// namespace impersonates service tigera-linseed from tigera-elasticsearch namespace
+	objects = append(objects, &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
 		RoleRef: rbacv1.RoleRef{
-			Kind:     "ClusterRole",
-			Name:     ClusterRoleName,
 			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
+			// requests for Linseed to managed clusters are done using service account tigera-linseed
+			// from tigera-elasticsearch namespace regardless of tenancy mode (single tenant or multi-tenant)
 			{
 				Kind:      "ServiceAccount",
 				Name:      ServiceAccountName,
-				Namespace: l.namespace,
+				Namespace: render.ElasticsearchNamespace,
 			},
 		},
-	}
+	})
+
+	return objects
 }
 
 func (l *linseed) linseedPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -252,8 +340,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(l.cfg.ESClusterConfig.Shards())},
 
 		{Name: "ELASTIC_SCHEME", Value: "https"},
-		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
-		{Name: "ELASTIC_PORT", Value: "9200"},
+		{Name: "ELASTIC_HOST", Value: l.cfg.ElasticHost},
+		{Name: "ELASTIC_PORT", Value: l.cfg.ElasticPort},
 		{
 			Name:      "ELASTIC_USERNAME",
 			ValueFrom: secret.GetEnvVarSource(render.ElasticsearchLinseedUserSecret, "username", false),
@@ -275,13 +363,56 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		l.cfg.KeyPair.VolumeMount(l.SupportedOSType()),
 	)
 
+	if l.cfg.ElasticClientSecret != nil {
+		// Add a volume for the required client certificate and key.
+		volumes = append(volumes, corev1.Volume{
+			Name: logstorage.ExternalCertsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: logstorage.ExternalCertsSecret,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      logstorage.ExternalCertsVolumeName,
+			MountPath: "/certs/elasticsearch/mtls",
+			ReadOnly:  true,
+		})
+
+		// Configure Linseed to use the mounted client certificate and key.
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_MTLS_ENABLED", Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_KEY", Value: "/certs/elasticsearch/mtls/client.key"})
+		envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_CLIENT_CERT", Value: "/certs/elasticsearch/mtls/client.crt"})
+	}
+
 	if l.cfg.ManagementCluster {
 		envVars = append(envVars,
-			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
-			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: common.OperatorNamespace()},
 		)
-		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
-		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+	}
+
+	replicas := l.cfg.Installation.ControlPlaneReplicas
+	if l.cfg.Tenant != nil {
+		if l.cfg.ExternalElastic {
+			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		}
+
+		if l.cfg.Tenant.MultiTenant() {
+			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
+
+			// We also use shared indices for multi-tenant clusters.
+			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
+			for _, index := range l.cfg.Tenant.Spec.Indices {
+				envVars = append(envVars, index.EnvVar())
+			}
+
+			if l.cfg.Tenant.Spec.ControlPlaneReplicas != nil {
+				replicas = l.cfg.Tenant.Spec.ControlPlaneReplicas
+			}
+		}
 	}
 
 	var initContainers []corev1.Container
@@ -291,7 +422,20 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
+	if l.cfg.ElasticClientSecret != nil {
+		annotations["hash.operator.tigera.io/elastic-client-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientSecret)
+	}
+
 	if l.cfg.TokenKeyPair != nil {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
+			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},
+		)
+		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
+		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
+		if l.cfg.TokenKeyPair.UseCertificateManagement() {
+			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
+		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
 	podTemplate := &corev1.PodTemplateSpec{
@@ -322,7 +466,6 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 							},
 						},
 						InitialDelaySeconds: 10,
-						PeriodSeconds:       5,
 					},
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -331,18 +474,17 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 							},
 						},
 						InitialDelaySeconds: 10,
-						PeriodSeconds:       5,
 					},
 				},
 			},
 		},
 	}
 
-	if l.cfg.Installation.ControlPlaneReplicas != nil && *l.cfg.Installation.ControlPlaneReplicas > 1 {
+	if replicas != nil && *replicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
 	}
 
-	return &appsv1.Deployment{
+	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
@@ -360,9 +502,17 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				},
 			},
 			Template: *podTemplate,
-			Replicas: l.cfg.Installation.ControlPlaneReplicas,
+			Replicas: replicas,
 		},
 	}
+
+	if l.cfg.Tenant.MultiTenant() {
+		if overrides := l.cfg.Tenant.Spec.LinseedDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(&d, overrides)
+		}
+	}
+
+	return &d
 }
 
 func (l *linseed) linseedServiceAccount() *corev1.ServiceAccount {
@@ -417,12 +567,14 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		},
 	}...)
 
+	networkpolicyHelper := networkpolicy.Helper(l.cfg.Tenant.MultiTenant(), l.cfg.Namespace)
+
 	if l.cfg.ManagementCluster {
 		// For management clusters, linseed talks to Voltron to create tokens.
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.ManagerEntityRule,
+			Destination: networkpolicyHelper.ManagerEntityRule(),
 		})
 	}
 
@@ -430,6 +582,99 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 	linseedIngressDestinationEntityRule := v3.EntityRule{
 		Ports: networkpolicy.Ports(TargetPort),
 	}
+
+	ingressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      render.FluentdSourceEntityRule,
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      render.EKSLogForwarderEntityRule,
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      render.IntrusionDetectionInstallerSourceEntityRule,
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.ManagerSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.ComplianceServerSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      render.IntrusionDetectionSourceEntityRule,
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      render.ECKOperatorSourceEntityRule,
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      esmetrics.ESMetricsSourceEntityRule,
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.PolicyRecommendationSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+	}
+
+	if l.cfg.HasDPIResource {
+		// DPI needs to access Linseed, however, since the is on the host network
+		// it's hard to create specific network policies for it.
+		// Allow all sources, as node CIDRs are not known.
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: linseedIngressDestinationEntityRule,
+		})
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -441,99 +686,18 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(DeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.FluentdSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.EKSLogForwarderEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.IntrusionDetectionInstallerSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ESCuratorSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ManagerSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceBenchmarkerSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceControllerSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceServerSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceSnapshotterSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ComplianceReporterSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.IntrusionDetectionSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ECKOperatorSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      esmetrics.ESMetricsSourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      dpi.DPISourceEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.PolicyRecommendationEntityRule,
-					Destination: linseedIngressDestinationEntityRule,
-				},
-			},
-			Egress: egressRules,
+			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
+}
+
+// LinseedNamespace determine the namespace in which Linseed is running.
+// For management and standalone clusters, this is always the tigera-elasticsearch
+// namespace. For multi-tenant management clusters, this is the tenant namespace
+func LinseedNamespace(tenant *operatorv1.Tenant) string {
+	if tenant.MultiTenant() {
+		return tenant.Namespace
+	}
+	return "tigera-elasticsearch"
 }

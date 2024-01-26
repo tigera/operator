@@ -17,24 +17,29 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 	"time"
-
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -57,9 +62,25 @@ const (
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
 )
 
-var DefaultInstanceKey = client.ObjectKey{Name: "default"}
-var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
-var OverlayInstanceKey = client.ObjectKey{Name: "overlay"}
+var (
+	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
+	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
+	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+
+	PeriodicReconcileTime = 5 * time.Minute
+
+	// StandardRetry is the amount of time to wait beofre retrying a request in
+	// most scenarios. Retries should be used sparingly, and only in extraordinary
+	// circumstances. Use this as a default when retries are needed.
+	StandardRetry = 30 * time.Second
+
+	// AllowedSysctlKeys controls the allowed Sysctl keys can be set in Tuning plugin
+	AllowedSysctlKeys = map[string]bool{
+		"net.ipv4.tcp_keepalive_intvl":  true,
+		"net.ipv4.tcp_keepalive_probes": true,
+		"net.ipv4.tcp_keepalive_time":   true,
+	}
+)
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
@@ -79,7 +100,7 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
-func AddNetworkWatch(c controller.Controller) error {
+func AddInstallationWatch(c controller.Controller) error {
 	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
 
@@ -104,33 +125,85 @@ func AddNamespaceWatch(c controller.Controller, name string) error {
 type MetaMatch func(metav1.ObjectMeta) bool
 
 func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
+	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+}
+
+func AddSecretsWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, s, metaMatches...)
+	return AddNamespacedWatch(c, s, h, metaMatches...)
 }
 
-func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
+func AddConfigMapWatch(c controller.Controller, name, namespace string, h handler.EventHandler) error {
 	cm := &corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, cm)
+	return AddNamespacedWatch(c, cm, h)
 }
 
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
+	return AddServiceWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
+}
+
+func AddServiceWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler) error {
 	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}, h)
+}
+
+func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
+	return AddNamespacedWatch(c, &appsv1.Deployment{
+		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}, &handler.EnqueueRequestForObject{})
+}
+
+func AddPeriodicReconcile(c controller.Controller, period time.Duration, handler handler.EventHandler) error {
+	return c.Watch(&source.Channel{Source: createPeriodicReconcileChannel(period)}, handler)
+}
+
+// AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.
+// If no namespace is provided, it watches cluster-wide.
+func AddSecretWatchWithLabel(c controller.Controller, ns, label string) error {
+	return c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			_, hasLabel := e.Object.GetLabels()[label]
+			return (ns == "" || e.Object.GetNamespace() == ns) && hasLabel
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			_, hasLabel := e.ObjectNew.GetLabels()[label]
+			return (ns == "" || e.ObjectNew.GetNamespace() == ns) && hasLabel
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			_, hasLabel := e.Object.GetLabels()[label]
+			return (ns == "" || e.Object.GetNamespace() == ns) && hasLabel
+		},
 	})
 }
 
-func AddPeriodicReconcile(c controller.Controller, period time.Duration) error {
-	return c.Watch(
-		&source.Channel{Source: createPeriodicReconcileChannel(period)},
-		&handler.EnqueueRequestForObject{},
-	)
+// AddCSRWatchWithRelevancyFn adds a watch for CSRs with the given label. isRelevantFn is a function that returns true for
+// items that are relevant to the caller.
+func AddCSRWatchWithRelevancyFn(c controller.Controller, isRelevantFn func(*certificatesv1.CertificateSigningRequest) bool) error {
+	return c.Watch(&source.Kind{Type: &certificatesv1.CertificateSigningRequest{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			csr, ok := e.Object.(*certificatesv1.CertificateSigningRequest)
+			return ok && isRelevantFn(csr)
+
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			csr, ok := e.ObjectNew.(*certificatesv1.CertificateSigningRequest)
+			return ok && isRelevantFn(csr)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// If a CSR is deleted, then the need for a certificate is no longer there and there is no need to sign anything.
+			// Therefore, we discard this event. It is up to the issuer to re-issue a new CSR if needed.
+			return false
+		},
+	})
 }
 
 func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEvent {
@@ -181,14 +254,11 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
-// will be generated.
-func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches ...MetaMatch) error {
+// will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
+func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-	if objMeta.GetNamespace() == "" {
-		return fmt.Errorf("No namespace provided for namespaced watch")
-	}
 	pred := createPredicateForObject(objMeta)
-	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
+	return c.Watch(&source.Kind{Type: obj}, h, pred)
 }
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
@@ -293,10 +363,8 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 	return secret, nil
 }
 
-// GetK8sServiceEndPoint reads the kubernetes-service-endpoint configmap and pushes
-// KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT to calico-node daemonset, typha
-// apiserver deployments
-func GetK8sServiceEndPoint(client client.Client) error {
+// GetK8sServiceEndPoint returns the kubernetes-service-endpoint configmap
+func GetK8sServiceEndPoint(client client.Client) (*corev1.ConfigMap, error) {
 	cmName := render.K8sSvcEndpointConfigMapName
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
@@ -304,9 +372,20 @@ func GetK8sServiceEndPoint(client client.Client) error {
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
-		// If the configmap is unavailable, do not return error
+		return nil, err
+	}
+	return cm, nil
+}
+
+// PopulateK8sServiceEndPoint reads the kubernetes-service-endpoint configmap and pushes
+// KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT to calico-node daemonset, typha
+// apiserver deployments
+func PopulateK8sServiceEndPoint(client client.Client) error {
+	cm, err := GetK8sServiceEndPoint(client)
+	if err != nil {
 		if !kerrors.IsNotFound(err) {
-			return fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
+			// If the configmap is unavailable, do not return an error
+			return fmt.Errorf("Failed to read ConfigMap %q: %s", render.K8sSvcEndpointConfigMapName, err)
 		}
 	} else {
 		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
@@ -380,6 +459,43 @@ func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Auth
 	}
 
 	return authentication, nil
+}
+
+// GetTenant returns the Tenant instance in the given namespace.
+func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*operatorv1.Tenant, string, error) {
+	if !mt {
+		// Multi-tenancy isn't enabled. Return nil.
+		return nil, "", nil
+	}
+
+	key := client.ObjectKey{Name: "default", Namespace: ns}
+	instance := &operatorv1.Tenant{}
+	err := cli.Get(ctx, key, instance)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if instance.Spec.ID == "" {
+		return nil, "", fmt.Errorf("Tenant %s/%s has no ID specified", ns, instance.Name)
+	}
+	return instance, instance.Spec.ID, nil
+}
+
+// TenantNamespaces returns all namespaces that contain a tenant.
+func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) {
+	namespaces := []string{}
+	tenants := operatorv1.TenantList{}
+	err := cli.List(ctx, &tenants)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tenants.Items {
+		namespaces = append(namespaces, t.Namespace)
+	}
+
+	// Sort the namespaces, so that the output is deterministic.
+	sort.Strings(namespaces)
+	return namespaces, nil
 }
 
 // GetInstallationStatus returns the current installation status, for use by other controllers.
@@ -497,17 +613,23 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 			duration = maxDuration
 		}
 		ticker.Reset(duration)
+
 		for obj := range resourcesToWatch {
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
 			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
-				objLog.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+				msg := "Failed to check if resource is ready - will retry"
+				if errors.IsNotFound(err) {
+					objLog.WithValues("Error", err).V(2).Info(msg)
+				} else {
+					objLog.WithValues("Error", err).Info(msg)
+				}
 			} else if !ok {
 				objLog.Info("Waiting for resource to be ready - will retry")
 			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
 				objLog.WithValues("Error", err).Info("Failed to watch resource - will retry")
 			} else {
-				objLog.Info("Successfully watching resource")
+				objLog.V(2).Info("Successfully watching resource")
 				delete(resourcesToWatch, obj)
 			}
 		}
@@ -544,21 +666,36 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				// No name or namespace match was specified. Match everything.
 				return true
 			}
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match.
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Return a match if the namespaces match, or if no namespace match was given.
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			// Not all objects use/have a generation, so we can't always rely on that to determine if the
+			// object has changed. The generation will be 0 if it's not set.
+			generationChanged := e.ObjectOld.GetGeneration() == 0 || e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
-				return true
+				// No name or namespace match was specified. Match everything, assuming the generation has changed.
+				return generationChanged
 			}
+
 			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
+				// A name match was specified, and the object doesn't match it.
 				return false
 			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
+			// A name match was specified and the name matches, or this is just a namespace match.
+			// Assuming the generation has changed, return a match if the namespaces also match,
+			// or if no namespace was given to match against.
+			return generationChanged && (e.ObjectNew.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == "")
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -567,7 +704,7 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
 				return false
 			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
+			return e.Object.GetNamespace() == objMeta.GetNamespace() || objMeta.GetNamespace() == ""
 		},
 	}
 }
@@ -644,4 +781,102 @@ func AddNodeLocalDNSWatch(c controller.Controller) error {
 		},
 	}
 	return c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
+}
+
+func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operatorv1.Provider) ([]string, error) {
+	// Discover the DNS Service's cluster IP address:
+	// Default kubernetes dns service is named "kube-dns", but RKE2 is using a different name for the default
+	// dns service i.e. "rke2-coredns-rke2-coredns".
+	dnsServiceName := "kube-dns"
+	if provider == operatorv1.ProviderRKE2 {
+		dnsServiceName = "rke2-coredns-rke2-coredns"
+	}
+
+	kubeDNSService := &corev1.Service{}
+
+	err := client.Get(ctx, types.NamespacedName{Name: dnsServiceName, Namespace: "kube-system"}, kubeDNSService)
+	if err != nil {
+		return nil, err
+	}
+
+	return kubeDNSService.Spec.ClusterIPs, nil
+}
+
+// GetDNSServiceName returns the name and namespace for the DNS service based on the given provider.
+// This is "kube-dns" for most providers, but varies on OpenShift and RKE2.
+func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
+	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
+	if provider == operatorv1.ProviderOpenShift {
+		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
+	} else if provider == operatorv1.ProviderRKE2 {
+		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
+	}
+	return kubeDNSServiceName
+}
+
+// MonitorConfigMap starts a goroutine which exits if the given configmap's data is changed.
+func MonitorConfigMap(cs kubernetes.Interface, name string, data map[string]string) error {
+	informer := cache.NewSharedInformer(
+		cache.NewListWatchFromClient(
+			cs.CoreV1().RESTClient(),
+			"configmaps",
+			common.OperatorNamespace(),
+			fields.OneTermEqualSelector("metadata.name", name),
+		),
+		&v1.ConfigMap{},
+		0, // no resync period
+	)
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: func(_, newObj interface{}) {
+			if !compareMap(data, newObj.(*v1.ConfigMap).Data) {
+				log.Info("detected config change. rebooting")
+				os.Exit(0)
+			}
+			log.Info("ignoring configmap update as data was not modified")
+		},
+		AddFunc: func(obj interface{}) {
+			if !compareMap(data, obj.(*v1.ConfigMap).Data) {
+				log.Info("detected config creation change. rebooting")
+				os.Exit(0)
+			}
+			log.Info("ignoring configmap creation as data was not modified")
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	go informer.Run(make(chan struct{}))
+	for !informer.HasSynced() {
+		time.Sleep(1 * time.Second)
+	}
+	return nil
+}
+
+func compareMap(m1, m2 map[string]string) bool {
+	if len(m1) != len(m2) {
+		return false
+	}
+	for k, v := range m1 {
+		if m2[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+func IsDexDisabled(authentication *operatorv1.Authentication) bool {
+	disableDex := false
+	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
+		disableDex = true
+	}
+	return disableDex
+}
+func VerifySysctl(pluginData []operatorv1.Sysctl) error {
+	for _, setting := range pluginData {
+		if _, ok := AllowedSysctlKeys[setting.Key]; !ok {
+			return fmt.Errorf("key %s is not allowed in spec.calicoNetwork.sysctl", setting.Key)
+		}
+	}
+	return nil
 }

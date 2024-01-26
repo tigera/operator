@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -61,6 +61,7 @@ const (
 
 	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
 	tigeraAPIServerTLSSecretName = "tigera-apiserver-certs"
+	APIServerSecretsRBACName     = "tigera-extension-apiserver-secrets-access"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -115,8 +116,8 @@ type APIServerConfiguration struct {
 	TLSKeyPair                  certificatemanagement.KeyPairInterface
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
-	TunnelCASecret              certificatemanagement.KeyPairInterface
 	TrustedBundle               certificatemanagement.TrustedBundle
+	MultiTenant                 bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -225,12 +226,33 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.kubeControllerMgrTierGetterClusterRoleBinding(),
 		c.uisettingsgroupGetterClusterRole(),
 		c.kubeControllerMgrUisettingsgroupGetterClusterRoleBinding(),
-		c.tigeraUserClusterRole(),
-		c.tigeraNetworkAdminClusterRole(),
 		c.tieredPolicyPassthruClusterRole(),
 		c.tieredPolicyPassthruClusterRolebinding(),
 		c.uiSettingsPassthruClusterRole(),
 		c.uiSettingsPassthruClusterRolebinding(),
+	}
+
+	if !c.cfg.MultiTenant {
+		// These resources are only installed in zero-tenant clusters. Multi-tenant clusters don't use the default
+		// RBAC resources.
+		globalEnterpriseObjects = append(globalEnterpriseObjects,
+			c.tigeraUserClusterRole(),
+			c.tigeraNetworkAdminClusterRole(),
+		)
+	}
+
+	if c.cfg.ManagementCluster != nil {
+		if c.cfg.MultiTenant {
+			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
+			// per-tenant guardian certificates when creating ManagedClusters.
+			globalEnterpriseObjects = append(globalEnterpriseObjects, c.multiTenantSecretsRBAC()...)
+		} else {
+			globalEnterpriseObjects = append(globalEnterpriseObjects, c.secretsRBAC()...)
+		}
+	} else {
+		// If we're not a management cluster, the API server doesn't need permissions to access secrets.
+		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
+		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
 	}
 
 	// Namespaced enterprise-only objects.
@@ -591,50 +613,158 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 		nameToDelete = enterpriseName
 	}
 
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{
+				"",
+			},
+			Resources: []string{
+				"configmaps",
+			},
+			Verbs: []string{
+				"list",
+				"watch",
+			},
+			ResourceNames: []string{
+				"extension-apiserver-authentication",
+			},
+		},
+		{
+			APIGroups: []string{
+				"rbac.authorization.k8s.io",
+			},
+			Resources: []string{
+				"clusterroles",
+				"clusterrolebindings",
+				"roles",
+				"rolebindings",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		},
+	}
+
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{
-						"",
-					},
-					Resources: []string{
-						"configmaps",
-					},
-					Verbs: []string{
-						"list",
-						"watch",
-					},
-					ResourceNames: []string{
-						"extension-apiserver-authentication",
-					},
-				},
-				{
-					APIGroups: []string{
-						"rbac.authorization.k8s.io",
-					},
-					Resources: []string{
-						"clusterroles",
-						"clusterrolebindings",
-						"roles",
-						"rolebindings",
-					},
-					Verbs: []string{
-						"get",
-						"list",
-						"watch",
-					},
-				},
-			},
+			Rules: rules,
 		}, &rbacv1.ClusterRole{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nameToDelete,
 			},
 		}
+}
+
+// multiTenantSecretsRBAC provides the tigera API server with the ability to read secrets on the cluster.
+// This is needed in multi-tenant management clusters only, in order to read tenant secrets for signing managed cluster certificates.
+func (c *apiServerComponent) multiTenantSecretsRBAC() []client.Object {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{c.tunnelSecretName()},
+		},
+	}
+
+	return []client.Object{
+		// Return the cluster role itself.
+		&rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: APIServerSecretsRBACName,
+			},
+			Rules: rules,
+		},
+
+		// And a binding to attach it to the API server.
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: APIServerSecretsRBACName,
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     APIServerSecretsRBACName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				},
+			},
+		},
+	}
+}
+
+func (c *apiServerComponent) tunnelSecretName() string {
+	secretName := VoltronTunnelSecretName
+	if c.cfg.ManagementCluster != nil && c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
+		secretName = c.cfg.ManagementCluster.Spec.TLS.SecretName
+	}
+	return secretName
+}
+
+// secretsRBAC provides the tigera API server with the ability to read secrets from the API server's namespace.
+func (c *apiServerComponent) secretsRBAC() []client.Object {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{c.tunnelSecretName()},
+		},
+	}
+
+	return []client.Object{
+		// Return the role itself.
+		&rbacv1.Role{
+			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      APIServerSecretsRBACName,
+				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			},
+			Rules: rules,
+		},
+
+		// And a binding to attach it to the API server.
+		&rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      APIServerSecretsRBACName,
+				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "Role",
+				Name:     APIServerSecretsRBACName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				},
+			},
+		},
+	}
 }
 
 // authClusterRoleBinding returns a clusterrolebinding to create, and a clusterrolebinding to delete.
@@ -831,9 +961,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	annotations := map[string]string{
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
 	}
-	if c.cfg.ManagementCluster != nil {
-		annotations[c.cfg.TunnelCASecret.HashAnnotationKey()] = c.cfg.TunnelCASecret.HashAnnotationValue()
-	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -903,6 +1030,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 func (c *apiServerComponent) hostNetwork() bool {
 	hostNetwork := c.cfg.ForceHostNetwork
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		c.cfg.Installation.CNI != nil &&
 		c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS, because the control plane nodes don't run
@@ -918,9 +1046,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if c.cfg.ManagementCluster != nil {
-			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount(c.SupportedOSType()))
-		}
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
@@ -929,6 +1054,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+	}
+
+	if c.cfg.MultiTenant {
+		env = append(env, corev1.EnvVar{Name: "MULTI_TENANT_ENABLED", Value: "true"})
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
@@ -947,28 +1076,17 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		// Audit logs are owned by root on hosts so we need to be root user and group.
 		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
 		VolumeMounts:    volumeMounts,
-		LivenessProbe: &corev1.Probe{
+		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/version",
+					Path:   "/readyz",
 					Port:   intstr.FromInt(APIServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
-			InitialDelaySeconds: 90,
-			PeriodSeconds:       10,
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/code/filecheck",
-					},
-				},
-			},
-			InitialDelaySeconds: 5,
-			PeriodSeconds:       10,
-			FailureThreshold:    5,
+			// We expect the readiness probe to contact kube-apiserver.
+			// A longer period is chosen to minimize load.
+			PeriodSeconds: 60,
 		},
 	}
 
@@ -990,15 +1108,13 @@ func (c *apiServerComponent) startUpArgs() []string {
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		args = append(args,
-			"--enable-managed-clusters-create-api=true",
-			fmt.Sprintf("--set-managed-clusters-ca-cert=%s", c.cfg.TunnelCASecret.VolumeMountCertificateFilePath()),
-			fmt.Sprintf("--set-managed-clusters-ca-key=%s", c.cfg.TunnelCASecret.VolumeMountKeyFilePath()))
+		args = append(args, "--enable-managed-clusters-create-api=true")
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
 		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
 			args = append(args, "--managementClusterCAType=Public")
+			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
 
@@ -1048,7 +1164,6 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 				},
 			},
 			InitialDelaySeconds: 90,
-			PeriodSeconds:       10,
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
@@ -1091,18 +1206,6 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 		if c.cfg.TrustedBundle != nil {
 			volumes = append(volumes, c.cfg.TrustedBundle.Volume())
-		}
-
-		if c.cfg.ManagementCluster != nil {
-			volumes = append(volumes, corev1.Volume{
-				// Append volume for tunnel CA certificate
-				Name: VoltronTunnelSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: VoltronTunnelSecretName,
-					},
-				},
-			})
 		}
 	}
 
@@ -1206,6 +1309,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"uisettings",
 				"externalnetworks",
 				"egressgatewaypolicies",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{
 				"get",
@@ -1451,6 +1555,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				"globalalerttemplates",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{"get", "watch", "list"},
 		},
@@ -1493,6 +1598,18 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch"},
+		},
+		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Allow the user to only view securityeventwebhooks.
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list"},
 		},
 	}
 
@@ -1612,6 +1729,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"globalalerttemplates",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
+				"securityeventwebhooks",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
@@ -1641,13 +1759,44 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers"},
-			Verbs:     []string{"get", "update", "patch", "create"},
+			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		// Allow the user to read services to view WAF configuration.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Allow the user to perform CRUD operations on securityeventwebhooks.
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
+		},
+		// Allow the user to create secrets.
+		{
+			APIGroups: []string{""},
+			Resources: []string{
+				"secrets",
+			},
+			Verbs: []string{"create"},
+		},
+		// Allow the user to patch webhooks-secret secret.
+		{
+			APIGroups: []string{""},
+			Resources: []string{
+				"secrets",
+			},
+			ResourceNames: []string{
+				"webhooks-secret",
+			},
+			Verbs: []string{"patch"},
 		},
 	}
 

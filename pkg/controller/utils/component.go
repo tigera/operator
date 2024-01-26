@@ -20,11 +20,12 @@ import (
 	"reflect"
 	"sync"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -33,14 +34,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
-
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
@@ -69,7 +68,7 @@ type componentHandler struct {
 func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
 	om, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
-		return fmt.Errorf("Object is not ObjectMetaAccessor")
+		return fmt.Errorf("object is not ObjectMetaAccessor")
 	}
 
 	multipleOwners := checkIfMultipleOwnersLabel(om.GetObjectMeta())
@@ -101,13 +100,16 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	// Make sure any objects with images also have an image pull policy.
 	modifyPodSpec(obj, setImagePullPolicy)
 
+	// Modify Liveness and Readiness probe default values if they are not set for this object.
+	setProbeTimeouts(obj)
+
 	// Make sure we have our standard selector and pod labels
 	setStandardSelectorAndLabels(obj)
 
 	cur, ok := obj.DeepCopyObject().(client.Object)
 	if !ok {
 		logCtx.V(2).Info("Failed converting object", "obj", obj)
-		return fmt.Errorf("Failed converting object %+v", obj)
+		return fmt.Errorf("failed converting object %+v", obj)
 	}
 	// Check to see if the object exists or not.
 	err := c.client.Get(ctx, key, cur)
@@ -126,6 +128,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 		}
 		err = c.client.Create(ctx, obj)
 		if err != nil {
+			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
 			return err
 		}
 		return nil
@@ -136,7 +139,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 		logCtx.Info("Ignoring annotated object")
 		return nil
 	}
-	logCtx.V(1).Info("Resource already exists, update it")
+	logCtx.V(2).Info("Resource already exists, update it")
 
 	// if mergeState returns nil we don't want to update the object
 	if mobj := mergeState(obj, cur); mobj != nil {
@@ -151,6 +154,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 			// Do the Create() with the merged object so that we preserve external labels/annotations.
 			resetMetadataForCreate(mobj)
 			if err := c.client.Create(ctx, mobj); err != nil {
+				logCtx.WithValues("key", key).Error(err, "Failed to create Job.")
 				return err
 			}
 			return nil
@@ -169,6 +173,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
 				if err := c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to create Secret.")
 					return err
 				}
 				return nil
@@ -189,6 +194,42 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 				resetMetadataForCreate(mobj)
 				if err := c.client.Create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate service.", "obj", obj)
+					return err
+				}
+				return nil
+			}
+		case *rbacv1.RoleBinding:
+			curRoleBinding := cur.(*rbacv1.RoleBinding)
+			objRoleBinding := obj.(*rbacv1.RoleBinding)
+			if objRoleBinding.RoleRef.Name != curRoleBinding.RoleRef.Name {
+				// RoleRef field of RoleBinding can't be modified, so delete and recreate the entire RoleBinding
+				if err = c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to delete RoleBinding for recreation.")
+					return err
+				}
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err = c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to recreate RoleBinding")
+					return err
+				}
+				return nil
+			}
+		case *rbacv1.ClusterRoleBinding:
+			curClusterRoleBinding := cur.(*rbacv1.ClusterRoleBinding)
+			objClusterRoleBinding := obj.(*rbacv1.ClusterRoleBinding)
+			if objClusterRoleBinding.RoleRef.Name != curClusterRoleBinding.RoleRef.Name {
+				// RoleRef field of ClusterRoleBinding can't be modified, so delete and recreate the entire ClusterRoleBinding
+				if err = c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to delete ClusterRoleBinding for recreation.")
+					return err
+				}
+
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err = c.client.Create(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to recreate ClusterRoleBinding")
 					return err
 				}
 				return nil
@@ -235,14 +276,15 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
 		// if we need to retry the function
 		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
-		// If the error is a resource Conflict, try the update again
 		if err != nil && errors.IsConflict(err) {
+			// If the error is a resource Conflict, try the update again
 			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
 			err = c.createOrUpdateObject(ctx, obj, osType)
 			if err != nil {
 				return err
 			}
 		} else if err != nil {
+			cmpLog.Error(err, "Failed to create or update object", "key", key)
 			return err
 		}
 
@@ -260,11 +302,21 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 
 		continue
 	}
+
 	if status != nil {
-		status.AddDaemonsets(daemonSets)
-		status.AddDeployments(deployments)
-		status.AddStatefulSets(statefulsets)
-		status.AddCronJobs(cronJobs)
+		// Add the objects to the status manager so we can report on their status.
+		if len(daemonSets) > 0 {
+			status.AddDaemonsets(daemonSets)
+		}
+		if len(deployments) > 0 {
+			status.AddDeployments(deployments)
+		}
+		if len(statefulsets) > 0 {
+			status.AddStatefulSets(statefulsets)
+		}
+		if len(cronJobs) > 0 {
+			status.AddCronJobs(cronJobs)
+		}
 	}
 
 	for _, obj := range objsToDelete {
@@ -431,6 +483,12 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 			// on the new object.
 			dsa.Secrets = csa.Secrets
 		}
+		if len(csa.ImagePullSecrets) != 0 && len(dsa.ImagePullSecrets) == 0 {
+			// For example on OCP, the service account gets ImagePullSecrets added. If we don't merge this into the
+			// object, we will create a version update, immediately followed by another update by their controller,
+			// and then our controllers watching the service account will reconcile again, causing a loop.
+			dsa.ImagePullSecrets = csa.ImagePullSecrets
+		}
 		return dsa
 	case *esv1.Elasticsearch:
 		// Only update if the spec has changed
@@ -569,6 +627,77 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
 	modifyPodSpec(obj, f)
+}
+
+// setProbeTimeouts modifies liveness and readiness probe default values if they are not set in the object.
+// Default values from k8s are sometimes too small, e.g., 1s for timeout, and Calico components might
+// be restarted prematurely. This function updates some threshold and seconds to a larger value when
+// they are not set in probes.
+//
+// For liveness probe: timeout defaults to 5s and period to 60s so that one component will be restarted
+// after around 3 minutes (3 default failure threshold).
+// For readiness probe: timeout defaults to 5s and period to 30s so that one component will be removed
+// from service after 1.5 minute (3 default failure threshold).
+func setProbeTimeouts(obj client.Object) {
+	const (
+		failureThreshold            = 3
+		livenessProbePeriodSeconds  = 60
+		readinessProbePeriodSeconds = 30
+		successThreshold            = 1
+		timeoutSeconds              = 5
+	)
+
+	var containers []v1.Container
+	switch obj := obj.(type) {
+	case *apps.Deployment:
+		containers = obj.Spec.Template.Spec.Containers
+	case *apps.DaemonSet:
+		containers = obj.Spec.Template.Spec.Containers
+	case *esv1.Elasticsearch:
+		for _, nodeset := range obj.Spec.NodeSets {
+			containers = append(containers, nodeset.PodTemplate.Spec.Containers...)
+		}
+	case *kbv1.Kibana:
+		containers = obj.Spec.PodTemplate.Spec.Containers
+	case *monitoringv1.Prometheus:
+		containers = obj.Spec.Containers
+	default:
+		return
+	}
+
+	for _, container := range containers {
+		if container.LivenessProbe != nil {
+			lp := container.LivenessProbe
+			if lp.FailureThreshold == 0 {
+				lp.FailureThreshold = failureThreshold
+			}
+			if lp.PeriodSeconds == 0 {
+				lp.PeriodSeconds = livenessProbePeriodSeconds
+			}
+			if lp.SuccessThreshold == 0 {
+				lp.SuccessThreshold = successThreshold
+			}
+			if lp.TimeoutSeconds == 0 {
+				lp.TimeoutSeconds = timeoutSeconds
+			}
+		}
+
+		if container.ReadinessProbe != nil {
+			rp := container.ReadinessProbe
+			if rp.FailureThreshold == 0 {
+				rp.FailureThreshold = failureThreshold
+			}
+			if rp.PeriodSeconds == 0 {
+				rp.PeriodSeconds = readinessProbePeriodSeconds
+			}
+			if rp.SuccessThreshold == 0 {
+				rp.SuccessThreshold = successThreshold
+			}
+			if rp.TimeoutSeconds == 0 {
+				rp.TimeoutSeconds = timeoutSeconds
+			}
+		}
+	}
 }
 
 // setStandardSelectorAndLabels will set the k8s-app and app.kubernetes.io/name Labels on the podTemplates

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,18 @@ func ValidateCalicoNodeDaemonSetContainer(container corev1.Container) error {
 
 // ValidateCalicoNodeDaemonSetInitContainer validates the given container is a valid calico-node DaemonSet init container.
 func ValidateCalicoNodeDaemonSetInitContainer(container corev1.Container) error {
+	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "initContainers"))
+	return errs.ToAggregate()
+}
+
+// ValidateCalicoNodeWindowsDaemonSetContainer validates the given container is a valid calico-node-windows DaemonSet container.
+func ValidateCalicoNodeWindowsDaemonSetContainer(container corev1.Container) error {
+	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
+	return errs.ToAggregate()
+}
+
+// ValidateCalicoNodeWindowsDaemonSetInitContainer validates the given container is a valid calico-node-windows DaemonSet init container.
+func ValidateCalicoNodeWindowsDaemonSetInitContainer(container corev1.Container) error {
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "initContainers"))
 	return errs.ToAggregate()
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,6 +34,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoCNIWindows = component{
+		Version:  "master",
+		Image:    "calico/cni-windows",
+		Registry: "",
+	}
+
 	ComponentCalicoKubeControllers = component{
 		Version:  "master",
 		Image:    "calico/kube-controllers",
@@ -55,6 +61,12 @@ var (
 	ComponentCalicoNodeFIPS = component{
 		Version:  "master-fips",
 		Image:    "calico/node",
+		Registry: "",
+	}
+
+	ComponentCalicoNodeWindows = component{
+		Version:  "master",
+		Image:    "calico/node-windows",
 		Registry: "",
 	}
 
@@ -85,12 +97,6 @@ var (
 	ComponentCalicoAPIServerFIPS = component{
 		Version:  "master-fips",
 		Image:    "calico/apiserver",
-		Registry: "",
-	}
-
-	ComponentWindowsUpgrade = component{
-		Version:  "master",
-		Image:    "calico/windows-upgrade",
 		Registry: "",
 	}
 
@@ -125,17 +131,18 @@ var (
 	CalicoImages = []component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
+		ComponentCalicoCNIWindows,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
 		ComponentCalicoNodeFIPS,
+		ComponentCalicoNodeWindows,
 		ComponentCalicoTypha,
 		ComponentCalicoTyphaFIPS,
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,
-		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,

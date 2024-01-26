@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,13 +26,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var (
-	ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
-)
+var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
-	CSRImage       string
-	Name           string
+	CSRImage  string
+	Name      string
+	Namespace string
+	// Golang's x509 package uses the 'any' type for all private and public keys. See x509.CreateCertificate() for more.
+	PrivateKey     any
 	PrivateKeyPEM  []byte
 	CertificatePEM []byte
 	ClusterDomain  string
@@ -50,6 +51,10 @@ func (k *KeyPair) GetCertificatePEM() []byte {
 
 func (k *KeyPair) GetName() string {
 	return k.Name
+}
+
+func (k *KeyPair) GetNamespace() string {
+	return k.Namespace
 }
 
 // UseCertificateManagement is true if this secret is not BYO and certificate management is used to provide the a pair to a pod.
@@ -81,7 +86,10 @@ func (k *KeyPair) Secret(namespace string) *corev1.Secret {
 }
 
 func (k *KeyPair) HashAnnotationKey() string {
-	return fmt.Sprintf("hash.operator.tigera.io/%s", k.GetName())
+	if k.GetNamespace() == "" {
+		return fmt.Sprintf("hash.operator.tigera.io/%s", k.GetName())
+	}
+	return fmt.Sprintf("%s.hash.operator.tigera.io/%s", k.GetNamespace(), k.GetName())
 }
 
 func (k *KeyPair) HashAnnotationValue() string {
@@ -125,6 +133,7 @@ func (k *KeyPair) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
 func (k *KeyPair) InitContainer(namespace string) corev1.Container {
 	initContainer := CreateCSRInitContainer(
 		k.CertificateManagement,
+		k.Name,
 		k.CSRImage,
 		k.GetName(),
 		k.DNSNames[0],
@@ -152,13 +161,44 @@ func (k *KeyPair) GetIssuer() CertificateInterface {
 	return k.Issuer
 }
 
+func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
+	const (
+		legacySecretCertName  = "cert" // Formerly known as certificatemanagement.ManagerSecretCertName
+		legacySecretKeyName   = "key"  // Formerly known as certificatemanagement.ManagerSecretKeyName
+		legacySecretKeyName2  = "apiserver.key"
+		legacySecretCertName2 = "apiserver.crt"
+		legacySecretKeyName3  = "key.key"             // Formerly used for Felix and Typha.
+		legacySecretCertName3 = "cert.crt"            // Formerly used for Felix and Typha.
+		legacySecretKeyName4  = "managed-cluster.key" // Used for tunnel secrets
+		legacySecretCertName4 = "managed-cluster.crt"
+		legacySecretKeyName5  = "management-cluster.key"
+		legacySecretCertName5 = "management-cluster.crt"
+	)
+	data := secret.Data
+	for keyField, certField := range map[string]string{
+		corev1.TLSPrivateKeyKey: corev1.TLSCertKey,
+		legacySecretKeyName:     legacySecretCertName,
+		legacySecretKeyName2:    legacySecretCertName2,
+		legacySecretKeyName3:    legacySecretCertName3,
+		legacySecretKeyName4:    legacySecretCertName4,
+		legacySecretKeyName5:    legacySecretCertName5,
+	} {
+		key, cert := data[keyField], data[certField]
+		if len(cert) > 0 {
+			return key, cert
+		}
+	}
+	return nil, nil
+}
+
 // NewKeyPair returns a KeyPair, which wraps a Secret object that contains a private key and a certificate. Whether certificate
 // management is configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
 func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) KeyPairInterface {
+	key, cert := GetKeyCertPEM(secret)
 	return &KeyPair{
 		Name:           secret.Name,
-		PrivateKeyPEM:  secret.Data[corev1.TLSPrivateKeyKey],
-		CertificatePEM: secret.Data[corev1.TLSCertKey],
+		PrivateKeyPEM:  key,
+		CertificatePEM: cert,
 		DNSNames:       dnsNames,
 		ClusterDomain:  clusterDomain,
 	}

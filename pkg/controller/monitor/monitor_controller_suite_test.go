@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,6 @@ import (
 func TestStatus(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/monitor_controller_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/monitor_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/monitor Suite", []Reporter{junitReporter})
 }

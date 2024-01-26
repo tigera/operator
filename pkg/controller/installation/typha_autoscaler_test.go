@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,8 +59,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		nlw = NewNodeListWatch(c)
 		tlw = NewTyphaListWatch(c)
 
-		// Create the indexer and informer shared by the typhaAutoscaler and
-		// calicoWindowsUpgrader.
+		// Create the indexer and informer used by the typhaAutoscaler
 		nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 		ctx, cancel = context.WithCancel(context.Background())

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	kerror "k8s.io/apimachinery/pkg/api/errors"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -39,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -75,10 +78,12 @@ var _ = Describe("apiserver controller tests", func() {
 		ctx = context.Background()
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 
+		// Create a CertificateManagement instance for tests that need it.
 		ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		Expect(err).NotTo(HaveOccurred())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		certificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
 		replicas := int32(2)
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
@@ -95,7 +100,11 @@ var _ = Describe("apiserver controller tests", func() {
 				Registry:             "some.registry.org/",
 			},
 		}
+
 		// Apply prerequisites for the basic reconcile to succeed.
+		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		})).ToNot(HaveOccurred())
@@ -104,7 +113,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
-		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureCertSecret, common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
+		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureServerCert, common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Authentication{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -123,7 +132,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Data: map[string][]byte{
 				render.ClientIDSecretField:     []byte("a"),
 				render.ClientSecretSecretField: []byte("a"),
-				render.RootCASecretField:       []byte("a"),
+				render.RootCASecretField:       []byte(dexSecret.Data[corev1.TLSCertKey]),
 			},
 		})).ToNot(HaveOccurred())
 
@@ -224,7 +233,7 @@ var _ = Describe("apiserver controller tests", func() {
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PacketCaptureCertSecret,
+					Name:      render.PacketCaptureServerCert,
 					Namespace: "tigera-operator",
 				},
 			}
@@ -310,7 +319,7 @@ var _ = Describe("apiserver controller tests", func() {
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PacketCaptureCertSecret,
+					Name:      render.PacketCaptureServerCert,
 					Namespace: "tigera-operator",
 				},
 			}
@@ -344,7 +353,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(apiSecret2.GetOwnerReferences()).To(HaveLen(0))
 
 			packetCaptureSecret2 := &corev1.Secret{}
-			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, packetCaptureSecret2)).ShouldNot(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureServerCert}, packetCaptureSecret2)).ShouldNot(HaveOccurred())
 			Expect(packetCaptureSecret2.GetOwnerReferences()).To(HaveLen(0))
 		})
 
@@ -368,7 +377,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 
-			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, secret)).ShouldNot(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureServerCert}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
@@ -678,6 +687,170 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+		Context("Management cluster reconciliation", func() {
+			BeforeEach(func() {
+				// Create the ManagementCluster CR needed to configure
+				// a management cluster for a multi-cluster setup
+				managementCluster := &operatorv1.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+					Spec: operatorv1.ManagementClusterSpec{
+						TLS: &operatorv1.TLS{
+							SecretName: render.VoltronTunnelSecretName,
+						},
+					},
+				}
+				Expect(cli.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+				// Create the APIServer CR needed to jumpstart the reconciliation
+				// for the api server
+				err := cli.Create(ctx, &operatorv1.APIServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("Should create management-cluster certificate with old cert keys", func() {
+				// Create the tunnel secret in operator namespace
+				// In a production cluster, this would be created by Manager controller in tigera-operator namespace
+				err := cli.Create(ctx, &corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+					Data: map[string][]byte{
+						"cert": []byte("certvalue"),
+						"key":  []byte("keyvalue"),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         false,
+				}
+
+				// Reconcile the API server
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				clusterConnectionInAppNs := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: "tigera-system",
+					},
+				}
+
+				// Ensure that the tunnel secret was copied in tigera-system namespace
+				err = test.GetResource(cli, &clusterConnectionInAppNs)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+				Expect(clusterConnectionInAppNs.Data).Should(HaveKeyWithValue("tls.crt", []byte("certvalue")))
+				Expect(clusterConnectionInAppNs.Data).Should(HaveKeyWithValue("tls.key", []byte("keyvalue")))
+			})
+
+			It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
+				// Create the tunnel secret in operator namespace
+				// In a production cluster, this would be created by Manager controller in tigera-operator namespace
+				err := cli.Create(ctx, &corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         false,
+				}
+
+				// Reconcile the API server
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-apiserver",
+						Namespace: "tigera-system",
+					},
+				}
+				clusterConnectionInAppNs := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: "tigera-system",
+					},
+				}
+
+				// Ensure a deployment was created for the API server
+				err = test.GetResource(cli, &deployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				// Ensure that the tunnel secret was copied in tigera-system namespace
+				err = test.GetResource(cli, &clusterConnectionInAppNs)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+			})
+
+			It("Should reconcile multi-cluster setup for a management cluster for a multiple tenant", func() {
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         true,
+				}
+
+				// Reconcile the API server
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-apiserver",
+						Namespace: "tigera-system",
+					},
+				}
+				clusterConnectionInAppNs := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: "tigera-system",
+					},
+				}
+
+				// Ensure a deployment was created for the API server
+				err = test.GetResource(cli, &deployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+				// Do not expect any secrets to be copied over
+				err = test.GetResource(cli, &clusterConnectionInAppNs)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
+			})
 		})
 	})
 })

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023, 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package convert
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -23,6 +24,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/migration/cni"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 const (
@@ -196,6 +198,46 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	} else {
 		hp := v1.HostPortsDisabled
 		install.Spec.CalicoNetwork.HostPorts = &hp
+	}
+
+	type TuningSpec struct {
+		Sysctl *map[string]string `json:"sysctl,omitempty"`
+		Type   string             `json:"type"`
+	}
+
+	// CNI tuning plugin
+	if pluginData, ok := c.cni.Plugins["tuning"]; ok {
+		// parse JSON data
+		var tuningSpecData TuningSpec
+		if err := json.Unmarshal([]byte(pluginData.Bytes), &tuningSpecData); err != nil {
+
+			return ErrIncompatibleCluster{
+				err:       "error parsing CNI config plugin type 'tuning'",
+				component: ComponentCNIConfig,
+				fix:       "fix CNI config",
+			}
+		}
+
+		sysctlTuning := []operatorv1.Sysctl{}
+		for k, v := range *tuningSpecData.Sysctl {
+			sysctl := operatorv1.Sysctl{
+				Key:   k,
+				Value: v,
+			}
+			sysctlTuning = append(sysctlTuning, sysctl)
+		}
+
+		if err = utils.VerifySysctl(sysctlTuning); err != nil {
+			return ErrIncompatibleCluster{
+				err:       err.Error(),
+				component: ComponentCNIConfig,
+				fix:       "remove unsupported Tuning parameter from CNI config",
+			}
+		}
+
+		if len(sysctlTuning) > 0 {
+			install.Spec.CalicoNetwork.Sysctl = sysctlTuning
+		}
 	}
 
 	if c.cni.ConfigName != "k8s-pod-network" {

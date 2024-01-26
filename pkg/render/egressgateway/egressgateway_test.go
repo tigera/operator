@@ -100,8 +100,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 					Namespace: "test-ns",
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			}}
-
+			},
+		}
 	})
 
 	It("should render EGW deployment", func() {
@@ -141,10 +141,10 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		Expect(len(resToBeDeleted)).To(Equal(len(expectedResToBeDeleted)))
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		for i, expectedResToBeDeleted := range expectedResToBeDeleted {
-			rtest.ExpectResource(resToBeDeleted[i], expectedResToBeDeleted.name, expectedResToBeDeleted.ns, expectedResToBeDeleted.group,
+			rtest.ExpectResourceTypeAndObjectMetadata(resToBeDeleted[i], expectedResToBeDeleted.name, expectedResToBeDeleted.ns, expectedResToBeDeleted.group,
 				expectedResToBeDeleted.version, expectedResToBeDeleted.kind)
 		}
 
@@ -234,10 +234,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 					Port: intstr.FromInt(int(egressgateway.DefaultHealthPort)),
 				},
 			},
-			InitialDelaySeconds: 3,
-			TimeoutSeconds:      1,
-			SuccessThreshold:    1,
-			PeriodSeconds:       3,
+			InitialDelaySeconds: 10,
 		}
 		Expect(egwContainer.ReadinessProbe).To(Equal(expectedRP))
 
@@ -300,7 +297,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 
@@ -329,7 +326,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 })

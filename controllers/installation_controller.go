@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,19 +36,6 @@ type InstallationReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
 
-//func (r *InstallationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-//	_ = context.Background()
-//	_ = r.Log.WithValues("logstorage", req.NamespacedName)
-//	return r.ri.Reconcile(req)
-//}
-
 func (r *InstallationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
 	return installation.Add(mgr, opts)
-	//if err != nil {
-	//	return err
-	//}
-
-	//return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.Installation{}).
-	//	Complete(r)
 }

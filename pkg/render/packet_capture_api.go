@@ -50,8 +50,7 @@ const (
 	PacketCapturePodSecurityPolicyName  = PacketCaptureName
 	PacketCapturePolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PacketCaptureName
 	PacketCapturePort                   = 8444
-
-	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
+	PacketCaptureServerCert             = "tigera-packetcapture-server-tls"
 )
 
 var (
@@ -316,7 +315,6 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 30,
-		PeriodSeconds:       10,
 	}
 }
 
@@ -372,7 +370,7 @@ func allowTigeraPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
 		ingressRules = append(ingressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   ManagerSourceEntityRule,
+			Source:   networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(PacketCapturePort),
 			},

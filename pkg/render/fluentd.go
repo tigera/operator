@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 package render
 
 import (
+	"crypto/x509"
 	"fmt"
-	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certkeyusage"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -54,6 +55,7 @@ const (
 	// use-case for this credential. However, it is used on all TLS connections served by fluentd.
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
+	FluentdMetricsServiceWindows             = "fluentd-metrics-windows"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
 	FluentdMetricsPort                       = 9081
 	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
@@ -62,7 +64,6 @@ const (
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
 	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
 	fluentdDefaultFlush                      = "5s"
-	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
 	ElasticsearchEksLogForwarderUserSecret   = "tigera-eks-log-forwarder-elasticsearch-access"
 	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
 	EksLogForwarderAwsId                     = "aws-id"
@@ -87,22 +88,14 @@ const (
 	LinseedVolumeMountPath = "/var/run/secrets/tigera.io/linseed/"
 	LinseedTokenPath       = "/var/run/secrets/tigera.io/linseed/token"
 
-	probeTimeoutSeconds        int32 = 5
-	probePeriodSeconds         int32 = 5
-	probeWindowsTimeoutSeconds int32 = 10
-	probeWindowsPeriodSeconds  int32 = 10
-
-	// Default failure threshold for probes is 3. For the startupProbe tolerate more failures.
-	probeFailureThreshold        int32 = 3
-	startupProbeFailureThreshold int32 = 10
-
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
 
 	FluentdNodeName        = "fluentd-node"
 	fluentdNodeWindowsName = "fluentd-node-windows"
 
-	eksLogForwarderName = "eks-log-forwarder"
+	EKSLogForwarderName          = "eks-log-forwarder"
+	EKSLogForwarderTLSSecretName = "tigera-eks-log-forwarder-tls"
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
@@ -113,7 +106,13 @@ var FluentdSourceEntityRule = v3.EntityRule{
 	Selector:          networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
 }
 
-var EKSLogForwarderEntityRule = networkpolicy.CreateSourceEntityRule(LogCollectorNamespace, eksLogForwarderName)
+var EKSLogForwarderEntityRule = networkpolicy.CreateSourceEntityRule(LogCollectorNamespace, EKSLogForwarderName)
+
+// Register secret/certs that need Server and Client Key usage
+func init() {
+	certkeyusage.SetCertKeyUsage(FluentdPrometheusTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	certkeyusage.SetCertKeyUsage(EKSLogForwarderTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+}
 
 type FluentdFilters struct {
 	Flow string
@@ -131,17 +130,10 @@ type SplunkCredential struct {
 }
 
 func Fluentd(cfg *FluentdConfiguration) Component {
-	timeout := probeTimeoutSeconds
-	period := probePeriodSeconds
-	if cfg.OSType == rmeta.OSTypeWindows {
-		timeout = probeWindowsTimeoutSeconds
-		period = probeWindowsPeriodSeconds
-	}
-
 	return &fluentdComponent{
 		cfg:          cfg,
-		probeTimeout: timeout,
-		probePeriod:  period,
+		probeTimeout: 10,
+		probePeriod:  60,
 	}
 }
 
@@ -156,12 +148,13 @@ type EksCloudwatchLogConfig struct {
 
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
-	LogCollector    *operatorv1.LogCollector
-	ESSecrets       []*corev1.Secret
+	LogCollector   *operatorv1.LogCollector
+	S3Credential   *S3Credential
+	SplkCredential *SplunkCredential
+	Filters        *FluentdFilters
+	// ESClusterConfig is only populated for when EKSConfig
+	// is also defined
 	ESClusterConfig *relasticsearch.ClusterConfig
-	S3Credential    *S3Credential
-	SplkCredential  *SplunkCredential
-	Filters         *FluentdFilters
 	EKSConfig       *EksCloudwatchLogConfig
 	PullSecrets     []*corev1.Secret
 	Installation    *operatorv1.InstallationSpec
@@ -171,10 +164,18 @@ type FluentdConfiguration struct {
 	TrustedBundle   certificatemanagement.TrustedBundle
 	ManagedCluster  bool
 
+	// Set if running as a multi-tenant management cluster. Configures the management cluster's
+	// own fluentd daemonset.
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
+
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 	// Whether to use User provided certificate or not.
 	UseSyslogCertificate bool
+
+	// EKSLogForwarderKeyPair contains the certificate presented by EKS LogForwarder when communicating with Linseed
+	EKSLogForwarderKeyPair certificatemanagement.KeyPairInterface
 }
 
 type fluentdComponent struct {
@@ -219,6 +220,16 @@ func (c *fluentdComponent) fluentdNodeName() string {
 		return fluentdNodeWindowsName
 	}
 	return FluentdNodeName
+}
+
+// Use different service names depending on the OS type ("fluentd-metrics"
+// vs "fluentd-metrics-windows") in order to help identify which OS daemonset
+// we are referring to.
+func (c *fluentdComponent) fluentdMetricsServiceName() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return FluentdMetricsServiceWindows
+	}
+	return FluentdMetricsService
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
@@ -284,12 +295,12 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.filtersConfigMap())
 	}
 	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+		objs = append(objs,
+			c.eksLogForwarderClusterRole(),
+			c.eksLogForwarderClusterRoleBinding())
+
 		if c.cfg.UsePSP {
-			objs = append(objs,
-				c.eksLogForwarderClusterRole(),
-				c.eksLogForwarderClusterRoleBinding(),
-				c.eksLogForwarderPodSecurityPolicy(),
-			)
+			objs = append(objs, c.eksLogForwarderPodSecurityPolicy())
 		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
@@ -301,6 +312,11 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		c.fluentdClusterRole(),
 		c.fluentdClusterRoleBinding(),
 	)
+	if c.cfg.ManagedCluster {
+		objs = append(objs, c.externalLinseedRoleBinding())
+	} else {
+		toDelete = append(toDelete, c.externalLinseedRoleBinding())
+	}
 
 	// Windows PSP does not support allowedHostPaths yet.
 	// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
@@ -308,12 +324,35 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.fluentdPodSecurityPolicy())
 	}
 
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
 
 	return objs, toDelete
+}
+
+func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
+	// in our namespace.
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: LogCollectorNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     TigeraLinseedSecretsClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
 }
 
 func (c *fluentdComponent) Ready() bool {
@@ -454,7 +493,9 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
-	maxUnavailable := intstr.FromInt(1)
+	// The rationale for this setting is that while there is no need for fluentd to be available, we want to avoid
+	// potentially negative consequences of an immediate roll-out on huge clusters.
+	maxUnavailable := intstr.FromInt(10)
 
 	annots := c.cfg.TrustedBundle.HashAnnotations()
 
@@ -475,7 +516,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		initContainers = append(initContainers, c.cfg.FluentdKeyPair.InitContainer(LogCollectorNamespace))
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annots,
 		},
@@ -489,7 +530,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			Volumes:                       c.volumes(),
 			ServiceAccountName:            c.fluentdNodeName(),
 		},
-	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -570,7 +611,7 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
+	return corev1.Container{
 		Name:            "fluentd",
 		Image:           c.image,
 		ImagePullPolicy: ImagePullPolicy(),
@@ -585,19 +626,19 @@ func (c *fluentdComponent) container() corev1.Container {
 			Name:          "metrics-port",
 			ContainerPort: FluentdMetricsPort,
 		}},
-	}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)
+	}
 }
 
 func (c *fluentdComponent) metricsService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      FluentdMetricsService,
+			Name:      c.fluentdMetricsServiceName(),
 			Namespace: LogCollectorNamespace,
-			Labels:    map[string]string{"k8s-app": FluentdNodeName},
+			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": FluentdNodeName},
+			Selector: map[string]string{"k8s-app": c.fluentdNodeName()},
 			// Important: "None" tells Kubernetes that we want a headless service with
 			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
 			// a huge set of iptables rules for this service since there's an instance
@@ -618,7 +659,9 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "LINSEED_ENABLED", Value: "true"},
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
+		// namespace. For multi-tenant management clusters, this may vary.
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant))},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},
@@ -628,6 +671,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
+	}
+
+	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
+		envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
@@ -776,29 +823,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
-	envs = append(envs,
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
-		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_REPLICAS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Replicas())},
+	envs = append(envs, corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.trustedBundlePath()})
 
-		corev1.EnvVar{Name: "ELASTIC_FLOWS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.FlowShards())},
-		corev1.EnvVar{Name: "ELASTIC_DNS_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_AUDIT_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_WAF_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_L7_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-		corev1.EnvVar{Name: "ELASTIC_RUNTIME_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
-	)
-
-	if c.SupportedOSType() != rmeta.OSTypeWindows {
-		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
-		)
-	}
 	return envs
 }
 
@@ -833,9 +859,10 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout * 2,
-		PeriodSeconds:    c.probePeriod * 2,
-		FailureThreshold: startupProbeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
+		// tolerate more failures for the startup probe
+		FailureThreshold: 10,
 	}
 }
 
@@ -846,9 +873,8 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout,
-		PeriodSeconds:    c.probePeriod,
-		FailureThreshold: probeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
 	}
 }
 
@@ -859,9 +885,8 @@ func (c *fluentdComponent) readiness() *corev1.Probe {
 				Command: c.readinessCmd(),
 			},
 		},
-		TimeoutSeconds:   c.probeTimeout,
-		PeriodSeconds:    c.probePeriod,
-		FailureThreshold: probeFailureThreshold,
+		TimeoutSeconds: c.probeTimeout,
+		PeriodSeconds:  c.probePeriod,
 	}
 }
 
@@ -995,13 +1020,21 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 			ResourceNames: []string{c.fluentdName()},
 		})
 	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PSSPrivileged},
+		})
+	}
 	return role
 }
 
 func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: eksLogForwarderName, Namespace: LogCollectorNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: EKSLogForwarderName, Namespace: LogCollectorNamespace},
 	}
 }
 
@@ -1039,6 +1072,17 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "AWS_REGION", Value: c.cfg.EKSConfig.AwsRegion},
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
+		{Name: "LINSEED_ENABLED", Value: "true"},
+		// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
+		// namespace. For multi-tenant management clusters, this may vary.
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant))},
+		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
+		{Name: "TLS_CRT_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath()},
+		{Name: "TLS_KEY_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},
+		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
+	}
+	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
+		envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 	}
 
 	var eksLogForwarderReplicas int32 = 1
@@ -1046,10 +1090,10 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      eksLogForwarderName,
+			Name:      EKSLogForwarderName,
 			Namespace: LogCollectorNamespace,
 			Labels: map[string]string{
-				"k8s-app": eksLogForwarderName,
+				"k8s-app": EKSLogForwarderName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -1059,39 +1103,39 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": eksLogForwarderName,
+					"k8s-app": EKSLogForwarderName,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      eksLogForwarderName,
+					Name:      EKSLogForwarderName,
 					Namespace: LogCollectorNamespace,
 					Labels: map[string]string{
-						"k8s-app": eksLogForwarderName,
+						"k8s-app": EKSLogForwarderName,
 					},
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
 					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
-					ServiceAccountName: eksLogForwarderName,
+					ServiceAccountName: EKSLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
-					InitContainers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:            eksLogForwarderName + "-startup",
+					InitContainers: []corev1.Container{{
+						Name:            EKSLogForwarderName + "-startup",
 						Image:           c.image,
 						ImagePullPolicy: ImagePullPolicy(),
 						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:             envVars,
 						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
-					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:            eksLogForwarderName,
+					}},
+					Containers: []corev1.Container{{
+						Name:            EKSLogForwarderName,
 						Image:           c.image,
 						ImagePullPolicy: ImagePullPolicy(),
 						Env:             envVars,
 						SecurityContext: c.securityContext(false),
 						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
-					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
+					}},
 					Volumes: c.eksLogForwarderVolumes(),
 				},
 			},
@@ -1111,8 +1155,8 @@ func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volu
 }
 
 func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		relasticsearch.DefaultVolumeMount(c.cfg.OSType),
+
+	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      "plugin-statefile-dir",
 			MountPath: c.path("/fluentd/cloudwatch-logs/"),
@@ -1122,10 +1166,24 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 			MountPath: c.path("/etc/fluentd/elastic/"),
 		},
 	}
+	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
+	if c.cfg.EKSLogForwarderKeyPair != nil {
+		volumeMounts = append(volumeMounts, c.cfg.EKSLogForwarderKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+
+	if c.cfg.ManagedCluster {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      LinseedTokenVolumeName,
+				MountPath: c.path(LinseedVolumeMountPath),
+			})
+	}
+	return volumeMounts
 }
 
 func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
-	return []corev1.Volume{
+
+	volumes := []corev1.Volume{
 		trustedBundleVolume(c.cfg.TrustedBundle),
 		{
 			Name: "plugin-statefile-dir",
@@ -1134,10 +1192,27 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 			},
 		},
 	}
+	if c.cfg.EKSLogForwarderKeyPair != nil {
+		volumes = append(volumes, c.cfg.EKSLogForwarderKeyPair.Volume())
+	}
+
+	if c.cfg.ManagedCluster {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: LinseedTokenVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: fmt.Sprintf(LinseedTokenSecret, EKSLogForwarderName),
+						Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					},
+				},
+			})
+	}
+	return volumes
 }
 
 func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy(eksLogForwarderName)
+	psp := podsecuritypolicy.NewBasePolicy(EKSLogForwarderName)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }
@@ -1146,17 +1221,17 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: eksLogForwarderName,
+			Name: EKSLogForwarderName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     eksLogForwarderName,
+			Name:     EKSLogForwarderName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      eksLogForwarderName,
+				Name:      EKSLogForwarderName,
 				Namespace: LogCollectorNamespace,
 			},
 		},
@@ -1164,21 +1239,44 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 }
 
 func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
+
+	rules := []rbacv1.PolicyRule{
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"auditlogs",
+			},
+			Verbs: []string{"get"},
+		},
+		{
+			// Add write access to Linseed APIs to flush eks kube audit logs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"kube_auditlogs",
+			},
+			Verbs: []string{"create"},
+		}}
+
+	if c.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+
+			// Allow access to the pod security policy in case this is enforced on the cluster
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{EKSLogForwarderName},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: eksLogForwarderName,
+			Name: EKSLogForwarderName,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{eksLogForwarderName},
-			},
-		},
+		Rules: rules,
 	}
+
 }
 
 func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {

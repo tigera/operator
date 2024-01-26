@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -88,6 +89,22 @@ func RequiresAmazonController(cfg *rest.Config) (bool, error) {
 			return true, nil
 		}
 	}
+	return false, nil
+}
+
+func MultiTenant(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	resources, err := c.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
+	if err != nil {
+		return false, err
+	}
+	for _, res := range resources.APIResources {
+		if strings.EqualFold(res.Kind, "Manager") {
+			// If the Manager is namespaced, it means we're operating in multi-tenant mode.
+			return res.Namespaced, nil
+		}
+	}
+
+	// Default to single-tenant.
 	return false, nil
 }
 
@@ -236,4 +253,20 @@ func SupportsPodSecurityPolicies(c kubernetes.Interface) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// UseExternalElastic returns true if this cluster is configured to use an external elasticsearch cluster,
+// and false otherwise.
+func UseExternalElastic(config *corev1.ConfigMap) bool {
+	if config == nil {
+		return false
+	}
+
+	// Load the operator bootstrap configuration from its configmap.
+	if val, ok := config.Data["ELASTIC_EXTERNAL"]; ok && val != "" {
+		if strings.ToLower(val) == "true" {
+			return true
+		}
+	}
+	return false
 }

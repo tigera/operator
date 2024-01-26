@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -43,7 +44,6 @@ import (
 )
 
 var _ = Describe("amazoncloudintegration controller tests", func() {
-
 	var (
 		cli        client.Client
 		scheme     *runtime.Scheme
@@ -73,6 +73,11 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
+		// Create the tigera CA needed by the controller.
+		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 		Expect(cli.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.AmazonCloudIntegrationCredentialName,
@@ -82,7 +87,8 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 			Data: map[string][]byte{
 				"key-id":     []byte("a.b.com"),
 				"key-secret": []byte("my-secret"),
-			}})).To(BeNil())
+			},
+		})).To(BeNil())
 
 		Expect(cli.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
@@ -97,6 +103,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				Registry: "some.registry.org/",
 			},
 		})).To(BeNil())
+
 		// Apply prerequisites for the basic reconcile to succeed.
 		Expect(cli.Create(ctx, &operatorv1.AmazonCloudIntegration{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -145,6 +152,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/cloud-controllers", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -305,6 +313,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "amazon-cloud-integration"},

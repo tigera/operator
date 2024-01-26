@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/go-logr/logr"
 
@@ -91,6 +90,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
 	})
 
+	for _, secretName := range []string{
+		render.PacketCaptureServerCert,
+		monitor.PrometheusServerTLSSecretName,
+		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
+		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
+	} {
+		if err = utils.AddSecretsWatch(controller, secretName, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
+		}
+	}
+
 	return add(mgr, controller)
 }
 
@@ -136,20 +146,20 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch for changes to the secrets associated with the PacketCapture APIs.
-	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureCertSecret, err)
+	if err = utils.AddSecretsWatch(c, render.PacketCaptureServerCert, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert, err)
 	}
 	// Watch for changes to the secrets associated with Prometheus.
-	if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusTLSSecretName, err)
+	if err = utils.AddSecretsWatch(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusServerTLSSecretName, err)
 	}
 
 	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, certificatemanagement.CASecretName, err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("%s failed to watch Network resource: %w", controllerName, err)
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("%s failed to watch Installation resource: %w", controllerName, err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -249,7 +259,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -278,7 +288,19 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	for _, secretName := range []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)} {
+	secretsToTrust := []string{render.PacketCaptureServerCert, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+	// If external prometheus is enabled, the secret will be signed by the Calico CA and won't get rendered. We can skip
+	// adding it to the bundle, as trusting the CA will suffice.
+	monitorCR := &operatorv1.Monitor{}
+	if err := r.Client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying required Monitor resource: ", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if monitorCR.Spec.ExternalPrometheus == nil {
+		secretsToTrust = append(secretsToTrust, monitor.PrometheusServerTLSSecretName)
+	}
+
+	for _, secretName := range secretsToTrust {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
@@ -286,7 +308,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		} else if secret == nil {
 			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
 			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+			return reconcile.Result{}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
 	}
@@ -294,7 +316,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
@@ -318,15 +340,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
 					r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+					return reconcile.Result{}, nil
 				}
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				return reconcile.Result{}, err
 			}
 
 			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				return reconcile.Result{}, nil
 			}
 		}
 	}

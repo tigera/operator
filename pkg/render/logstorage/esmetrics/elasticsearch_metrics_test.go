@@ -58,8 +58,10 @@ var _ = Describe("Elasticsearch metrics", func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-			certificateManager, err := certificatemanager.Create(cli, nil, "")
+
+			certificateManager, err := certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
+
 			bundle := certificateManager.CreateTrustedBundle()
 			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
@@ -70,7 +72,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 				ESConfig:     esConfig,
 				ESMetricsCredsSecret: &corev1.Secret{
 					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()},
+				},
 				ClusterDomain: "cluster.local",
 				ServerTLS:     secret,
 				TrustedBundle: bundle,
@@ -79,7 +82,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 		})
 
 		It("Successfully renders the Elasticsearch metrics resources", func() {
-
 			component := ElasticsearchMetrics(cfg)
 			Expect(component.ResolveImages(&operatorv1.ImageSet{
 				Spec: operatorv1.ImageSetSpec{
@@ -109,7 +111,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			}
 			Expect(resources).To(HaveLen(len(expectedResources)))
 			for i, expectedRes := range expectedResources {
-				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			deploy := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			service := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service").(*corev1.Service)
@@ -147,8 +149,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
-								"hash.operator.tigera.io/elasticsearch-configmap": "ae0242f242af19c4916434cb08e8f68f8c15f61d",
-								"hash.operator.tigera.io/elasticsearch-secrets":   "9718549725e37ca6a5f12ba2405392a04d7b5521",
+								"tigera-operator.hash.operator.tigera.io/elasticsearch-configmap": "ae0242f242af19c4916434cb08e8f68f8c15f61d",
+								"tigera-operator.hash.operator.tigera.io/elasticsearch-secrets":   "9718549725e37ca6a5f12ba2405392a04d7b5521",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -157,31 +159,16 @@ var _ = Describe("Elasticsearch metrics", func() {
 								Name:    ElasticsearchMetricsName,
 								Image:   "testregistry.com/tigera/elasticsearch-metrics@testdigest",
 								Command: []string{"/bin/elasticsearch_exporter"},
-								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
+								Args: []string{
+									"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
 									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
-									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt",
+								},
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: "false"},
-									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
-									{Name: "ELASTIC_SCHEME", Value: "https"},
-									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
-									{Name: "ELASTIC_PORT", Value: "9200"},
-									{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
-									{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-									{
-										Name: "ELASTIC_USER",
-										ValueFrom: &corev1.EnvVarSource{
-											SecretKeyRef: &corev1.SecretKeySelector{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: "tigera-ee-elasticsearch-metrics-elasticsearch-access",
-												},
-												Key: "username",
-											},
-										},
-									},
 									{
 										Name: "ELASTIC_USERNAME",
 										ValueFrom: &corev1.EnvVarSource{
@@ -204,9 +191,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 											},
 										},
 									},
+									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+									{Name: "ELASTIC_PORT", Value: "9200"},
 									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
-									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
-									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: append(
 									cfg.TrustedBundle.VolumeMounts(meta.OSTypeLinux),

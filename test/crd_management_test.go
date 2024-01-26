@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,9 +28,7 @@ import (
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -79,18 +77,7 @@ var _ = Describe("CRD management tests", func() {
 	})
 
 	AfterEach(func() {
-		defer func() {
-			cancel()
-			Eventually(func() error {
-				select {
-				case <-operatorDone:
-					return nil
-				default:
-					return fmt.Errorf("operator did not shutdown")
-				}
-			}, 60*time.Second).Should(BeNil())
-		}()
-		waitForProductTeardown(c)
+		cleanupResources(c)
 
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
@@ -118,34 +105,37 @@ var _ = Describe("CRD management tests", func() {
 
 		mgr = nil
 
-		_ = c.Delete(context.Background(), npCRD.DeepCopy())
+		// Need to make sure the operator is shut down prior to deleting and recreating the networkpolicies CRD otherwise
+		// the controller initialized within the tests can recreate the CRD between the deletion confirmation and recreation
+		// attempt, creating a timing window where failures can occur.
+		cancel()
 		Eventually(func() error {
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "apiextensions.k8s.io",
-				Version: "v1",
-				Kind:    "CustomResourceDefinition",
-			})
+			select {
+			case <-operatorDone:
+				return nil
+			default:
+				return fmt.Errorf("operator did not shutdown")
+			}
+		}, 60*time.Second).Should(BeNil())
 
-			k := client.ObjectKey{Name: npCRD.Name}
-			err := c.Get(context.Background(), k, u)
-			return err
-		}, 20*time.Second).ShouldNot(BeNil())
-		npCRD.SetResourceVersion("")
-		err := c.Create(context.Background(), npCRD)
+		err := c.Delete(context.Background(), npCRD)
 		Expect(err).NotTo(HaveOccurred())
+		// The "MustPassRepeatedly" here is important because there is some jitter that isn't fully understood that can
+		// cause flakes without it
 		Eventually(func() error {
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "apiextensions.k8s.io",
-				Version: "v1",
-				Kind:    "CustomResourceDefinition",
-			})
-
-			k := client.ObjectKey{Name: npCRD.Name}
-			err := c.Get(context.Background(), k, u)
-			return err
-		}, 20*time.Second).Should(BeNil())
+			err := GetResource(c, npCRD)
+			if kerror.IsNotFound(err) || kerror.IsGone(err) {
+				return nil
+			} else if err != nil {
+				return err
+			} else {
+				return fmt.Errorf("NetworkPolicy CRD still exists")
+			}
+		}, 20*time.Second).MustPassRepeatedly(50).ShouldNot(HaveOccurred())
+		npCRD.SetResourceVersion("")
+		err = c.Create(context.Background(), npCRD)
+		Expect(err).NotTo(HaveOccurred())
+		ExpectResourceCreated(c, npCRD)
 	})
 
 	Describe("Installing CRD", func() {
@@ -153,32 +143,11 @@ var _ = Describe("CRD management tests", func() {
 			// Delete the networkpolicies so we can tell that it gets created.
 			err := c.Delete(context.Background(), npCRD)
 			Expect(err).NotTo(HaveOccurred())
-			Eventually(func() error {
-				u := &unstructured.Unstructured{}
-				u.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   "apiextensions.k8s.io",
-					Version: "v1",
-					Kind:    "CustomResourceDefinition",
-				})
-
-				k := client.ObjectKey{Name: "networkpolicies.crd.projectcalico.org"}
-				err := c.Get(context.Background(), k, u)
-				if err == nil {
-					return fmt.Errorf("networkpolicies CRD still exists")
-				}
-				if kerror.IsNotFound(err) {
-					return nil
-				}
-				return err
-			}, 10*time.Second, 1*time.Second).Should(BeNil())
-		})
-		AfterEach(func() {
-			// Delete any CR that might have been created by the test.
-			removeInstallResourceCR(c, "default", context.Background())
+			ExpectResourceDestroyed(c, npCRD, 10*time.Second)
 		})
 
 		It("Should create CRD if it doesn't exist", func() {
-			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, false)
 			operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
 
 			np := npCRD.DeepCopy()
@@ -210,13 +179,8 @@ var _ = Describe("CRD management tests", func() {
 				return nil
 			}, 60*time.Second, 1*time.Second).Should(BeNil())
 		})
-		AfterEach(func() {
-			// Delete any CR that might have been created by the test.
-			removeInstallResourceCR(c, "default", context.Background())
-		})
-
 		It("Should add tier to networkpolicy CRD", func() {
-			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, false)
 			operatorDone = installResourceCRD(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
 
 			By("Checking that the networkpolicies CRD is updated with tier")

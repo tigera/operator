@@ -1,4 +1,4 @@
-// Copyright (c) 2020,2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
+
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
@@ -47,7 +48,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -90,6 +90,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
 	})
 
+	if opts.MultiTenant {
+		if err = controller.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	return add(mgr, controller)
 }
 
@@ -104,6 +110,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
+		multiTenant:     opts.MultiTenant,
+		externalElastic: opts.ElasticExternal,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -124,7 +132,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("logcollector-controller failed to watch APIServer resource: %v", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("logcollector-controller failed to watch Tigera network resource: %v", err)
 	}
@@ -134,10 +142,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
-		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert,
+		render.ElasticsearchEksLogForwarderUserSecret,
+		render.S3FluentdSecretName, render.EksLogForwarderSecret,
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusClientTLSSecretName,
+		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, render.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
@@ -145,7 +153,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}
@@ -178,6 +186,8 @@ type ReconcileLogCollector struct {
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
+	multiTenant     bool
+	externalElastic bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -301,14 +311,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		} else {
 			log.Error(err, "Error querying allow-tigera tier")
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
@@ -318,17 +328,17 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if !r.licenseAPIReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -344,29 +354,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -383,7 +373,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 	managedCluster := managementClusterConnection != nil
 
-	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
+	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -402,39 +398,55 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	} else if prometheusCertificate == nil {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus secrets are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
+	// Determine whether or not this is a multi-tenant management cluster.
+	multiTenantManagement := r.multiTenant && managementCluster != nil
+	if instance.Spec.MultiTenantManagementClusterNamespace != "" && !multiTenantManagement {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "multiTenantManagementClusterNamespace can only be set on multi-tenant management clusters", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
-	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
+	// The name of the Linseed certificate varies based on if this is a managed cluster or not.
 	// For standalone and management clusters, we just use Linseed's actual certificate.
-	linseedCertLocation := render.TigeraLinseedSecret
+	linseedCertName := render.TigeraLinseedSecret
+	linseedCertNamespace := common.OperatorNamespace()
+	var tenant *operatorv1.Tenant
 	if managedCluster {
 		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
 		// management cluster into the managed cluster by kube-controllers.
-		linseedCertLocation = render.VoltronLinseedPublicCert
+		linseedCertName = render.VoltronLinseedPublicCert
+	} else if multiTenantManagement {
+		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace. Instead, each Linseed has its own
+		// certificate in the namespace of the tenant it belongs to. We need to figure out which Linseed belongs to the management cluster itself,
+		// and use that certificate instead. We can find this out by looking at the multiTenantManagementClusterNamespace field.
+		if instance.Spec.MultiTenantManagementClusterNamespace == "" {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "multiTenantManagementClusterNamespace is not set", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		linseedCertNamespace = instance.Spec.MultiTenantManagementClusterNamespace
+
+		// Make sure that a tenant actually exists in the configured namespace before continuing.
+		tenant, _, err = utils.GetTenant(ctx, r.multiTenant, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Failed to retrieve tenant in ns %s", instance.Spec.MultiTenantManagementClusterNamespace), err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertName, linseedCertNamespace)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s/%s", linseedCertNamespace, linseedCertName), err, reqLogger)
 		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Linseed certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate are not available yet, waiting until they become available", nil, reqLogger)
+	} else if linseedCertificate == nil {
+		msg := fmt.Sprintf("Linseed certificate (%s/%s) is not yet available", linseedCertNamespace, linseedCertName)
+		log.Info(msg)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, msg, nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate, linseedCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, linseedCertificate)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
@@ -522,10 +534,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var eksConfig *render.EksCloudwatchLogConfig
+	var esClusterConfig *relasticsearch.ClusterConfig
+	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
 	if installation.KubernetesProvider == operatorv1.ProviderEKS {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+				esClusterConfig, err = utils.GetElasticsearchClusterConfig(ctx, r.client)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
+						return reconcile.Result{}, nil
+					}
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
+					return reconcile.Result{}, err
+				}
 				eksConfig, err = getEksCloudwatchLogConfig(r.client,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
@@ -533,6 +556,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix)
 				if err != nil {
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving EKS Cloudwatch Logs configuration", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+
+				// eksLogForwarderKeyPair is the key pair eks-log-forwarder presents to identify itself
+				eksLogForwarderKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{render.EKSLogForwarderTLSSecretName})
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating eks log forwarder TLS certificate", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			}
@@ -543,35 +573,49 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LogCollector:         instance,
-		ESSecrets:            esSecrets,
-		ESClusterConfig:      esClusterConfig,
-		S3Credential:         s3Credential,
-		SplkCredential:       splunkCredential,
-		Filters:              filters,
-		EKSConfig:            eksConfig,
-		PullSecrets:          pullSecrets,
-		Installation:         installation,
-		ClusterDomain:        r.clusterDomain,
-		OSType:               rmeta.OSTypeLinux,
-		FluentdKeyPair:       fluentdKeyPair,
-		TrustedBundle:        trustedBundle,
-		ManagedCluster:       managedCluster,
-		UsePSP:               r.usePSP,
-		UseSyslogCertificate: useSyslogCertificate,
+		LogCollector:           instance,
+		ESClusterConfig:        esClusterConfig,
+		S3Credential:           s3Credential,
+		SplkCredential:         splunkCredential,
+		Filters:                filters,
+		EKSConfig:              eksConfig,
+		PullSecrets:            pullSecrets,
+		Installation:           installation,
+		ClusterDomain:          r.clusterDomain,
+		OSType:                 rmeta.OSTypeLinux,
+		FluentdKeyPair:         fluentdKeyPair,
+		TrustedBundle:          trustedBundle,
+		ManagedCluster:         managedCluster,
+		UsePSP:                 r.usePSP,
+		UseSyslogCertificate:   useSyslogCertificate,
+		Tenant:                 tenant,
+		ExternalElastic:        r.externalElastic,
+		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
+
+	certificateComponent := rcertificatemanagement.Config{
+		Namespace:       render.LogCollectorNamespace,
+		ServiceAccounts: []string{render.FluentdNodeName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
+		},
+		TrustedBundle: trustedBundle,
+	}
+
+	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+		if instance.Spec.AdditionalSources != nil {
+			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
+				certificateComponent.ServiceAccounts = append(certificateComponent.ServiceAccounts, render.EKSLogForwarderName)
+				certificateComponent.KeyPairOptions = append(certificateComponent.KeyPairOptions, rcertificatemanagement.NewKeyPairOption(eksLogForwarderKeyPair, true, true))
+			}
+		}
+	}
+
 	components := []render.Component{
 		comp,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.LogCollectorNamespace,
-			ServiceAccounts: []string{render.FluentdNodeName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
+		rcertificatemanagement.CertificateManagement(&certificateComponent),
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
@@ -587,29 +631,29 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Render a fluentd component for Windows if the cluster has Windows nodes.
-	hasWindowsNodes, err := hasWindowsNodes(r.client)
+	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:         instance,
-			ESSecrets:            esSecrets,
-			ESClusterConfig:      esClusterConfig,
-			S3Credential:         s3Credential,
-			SplkCredential:       splunkCredential,
-			Filters:              filters,
-			EKSConfig:            eksConfig,
-			PullSecrets:          pullSecrets,
-			Installation:         installation,
-			ClusterDomain:        r.clusterDomain,
-			OSType:               rmeta.OSTypeWindows,
-			TrustedBundle:        trustedBundle,
-			ManagedCluster:       managedCluster,
-			UsePSP:               r.usePSP,
-			UseSyslogCertificate: useSyslogCertificate,
-			FluentdKeyPair:       fluentdKeyPair,
+			LogCollector:           instance,
+			ESClusterConfig:        esClusterConfig,
+			S3Credential:           s3Credential,
+			SplkCredential:         splunkCredential,
+			Filters:                filters,
+			EKSConfig:              eksConfig,
+			PullSecrets:            pullSecrets,
+			Installation:           installation,
+			ClusterDomain:          r.clusterDomain,
+			OSType:                 rmeta.OSTypeWindows,
+			TrustedBundle:          trustedBundle,
+			ManagedCluster:         managedCluster,
+			UsePSP:                 r.usePSP,
+			UseSyslogCertificate:   useSyslogCertificate,
+			FluentdKeyPair:         fluentdKeyPair,
+			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -633,7 +677,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future. Hopefully by then
 		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CR status.
@@ -642,16 +686,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-func hasWindowsNodes(c client.Client) (bool, error) {
-	nodes := corev1.NodeList{}
-	err := c.List(context.Background(), &nodes, client.MatchingLabels{"kubernetes.io/os": "windows"})
-	if err != nil {
-		return false, err
-	}
-
-	return len(nodes.Items) > 0, nil
 }
 
 func getS3Credential(client client.Client) (*render.S3Credential, error) {
@@ -815,7 +849,7 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName, corev1.TLSCertKey))
 		return nil, nil
 	}
-	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, []byte(cm.Data[corev1.TLSCertKey]), nil)
+	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
 
 	return syslogCert, nil
 }

@@ -25,6 +25,6 @@ import (
 
 func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/intrusiondetection_controller_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/intrusiondetection_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/intrustiondetection Controller Suite", []Reporter{junitReporter})
 }

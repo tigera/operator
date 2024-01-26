@@ -5,6 +5,10 @@
 For a major or minor release, you will need to create a new
 `release-vX.Y` branch based on the target minor version.
 
+Create the next minor release's first milestone at https://github.com/tigera/operator/milestones.
+This would mean if the branch release-v1.30 is being created, then the milestone v1.31.0 should be created too.
+This ensures that new PRs against master will be automatically given the correct tag.
+
 ## Preparing for the release
 
 Review the milestone for this release and ensure it is accurate. https://github.com/tigera/operator/milestones
@@ -16,27 +20,37 @@ operator version for the version of Calico or Calient that you are releasing. If
 check [the releases page](https://github.com/tigera/operator/releases) to find the most
 recent Operator release for your Calico or Calient minor version.
 
-Update the image versions and the title field with the appropriate versions in the
+Make sure pins are updated in `go.mod`
+
+Run the following command:
+
+```sh
+make release-prep GIT_PR_BRANCH_BASE=<RELEASE_BRANCH> GIT_REPO_SLUG=tigera/operator CONFIRM=true \
+  VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION> CALICO_ENTERPRISE_VERSION=<CALICO_ENTERPRISE_VERSION> COMMON_VERSION=<COMMON_VERSION>
+```
+
+The command does the following:
+
+- It updates the image version and the title field with the appropriate versions in the
 format `vX.Y.Z` for each of the following files:
+  1. `config/calico_versions.yml` (Calico OSS version)
+  2. `config/enterprise_versions.yml` (Calico Enterprise version)
+  3. `config/common_versions.yaml` (components common to both)
 
-1. `config/calico_versions.yml` (Calico OSS version)
-2. `config/enterprise_versions.yml` (Calico Enterprise version)
-3. `config/common_versions.yaml` (components common to both)
+- It updates the registry reference to `quay.io` from `gcr.io` for each of the following files:
 
-(When updating versions for enterprise, if necessary also update
-the `TigeraRegistry` field in `pkg/components/images.go`.)
+  1. `TigeraRegistry` in `pkg/components/images.go`
+  2. `defaultEnterpriseRegistry` in `hack/gen-versions/main.go`
 
-Then ensure `make gen-versions` has been ran and the resulting updates have been committed.
+- It ensures `make gen-versions` is run and the resulting updates committed.
+- It creates a PR with all the changes
 
-Make sure the branch is in a good state: 
+Go to the PR created and:
 
-1. Update any pins in go.mod
-2. Create a PR for all of the local changes (versions updates, gen-versions, etc)
-3. Ensure tests pass
+1. Ensure tests pass
+2. Update the labels in the PR  to include `docs-not-required` and `release-note-not-required`
 
-You should have no local changes and tests should be passing.
-
-## Releasing 
+## Releasing
 
 1. Merge your PR to the release branch
 
@@ -63,7 +77,9 @@ git push --tags
 
 1. Close the milestone for this release. https://github.com/tigera/operator/milestones
 
-1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist (e.g., next patch release)
+1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist
+   - Create the next patch version
+   - If a new minor was released (`.0`), also ensure the next minor has been created (this should have already been created as part of [Preparing a new release branch](#preparing-a-new-release-branch))
 
 ## Updates for new Calico CRDs
 

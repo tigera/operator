@@ -22,26 +22,13 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
-
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
-	"github.com/ghodss/yaml"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/tools/clientcmd"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/active"
@@ -53,7 +40,28 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/version"
+
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/tools/clientcmd"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/yaml"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -63,12 +71,16 @@ var (
 	setupLog                 = ctrl.Log.WithName("setup")
 )
 
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+// bootstrapConfigMapName is the name of the ConfigMap that contains cluster-wide
+// configuration for the operator loaded at startup.
+const bootstrapConfigMapName = "operator-bootstrap-config"
 
+func init() {
+	// +kubebuilder:scaffold:scheme
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatorv1.AddToScheme(scheme))
 	utilruntime.Must(operatorv1beta1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(apis.AddToScheme(scheme))
 }
 
@@ -91,6 +103,8 @@ func main() {
 	var printEnterpriseCRDs string
 	var sgSetup bool
 	var manageCRDs bool
+	var preDelete bool
+
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -108,6 +122,9 @@ func main() {
 		"Setup Security Groups in AWS (should only be used on OpenShift).")
 	flag.BoolVar(&manageCRDs, "manage-crds", false,
 		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
+	flag.BoolVar(&preDelete, "pre-delete", false,
+		"Run helm pre-deletion hook logic, then exit.")
+
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -161,7 +178,7 @@ func main() {
 
 	printVersion()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -169,7 +186,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	c, err := client.New(cfg, client.Options{})
+	c, err := client.New(cfg, client.Options{Scheme: scheme})
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
@@ -201,6 +218,25 @@ func main() {
 		os.Exit(0)
 	}
 
+	mapper, err := apiutil.NewDynamicRESTMapper(cfg)
+	if err != nil {
+		log.Error(err, "Failed to create dynamic rest mapper.")
+		os.Exit(1)
+	}
+
+	if preDelete {
+		// We've built a client - we can use it to clean up.
+		if err := executePreDeleteHook(ctx, c); err != nil {
+			log.Error(err, "Failed to complete pre-delete hook")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// sigHandler is a context that is canceled when we receive a termination
+	// signal. We don't want to immeditely terminate upon receipt of such a signal since
+	// there may be cleanup required. So, we will pass a separate context to our controllers.
+	// That context will be canceled after a successful cleanup.
 	sigHandler := ctrl.SetupSignalHandler()
 	active.WaitUntilActive(cs, c, sigHandler, setupLog)
 	log.Info("Active operator: proceeding")
@@ -233,12 +269,79 @@ func main() {
 				&v3.NetworkPolicy{}:       {Label: policySelector},
 				&v3.GlobalNetworkPolicy{}: {Label: policySelector},
 			},
+			// This commit https://github.com/kubernetes-sigs/controller-runtime/commit/b38c4a526b4cf9ffbcaebd0fe9363d9d64182dd2
+			// introduced a bug where if the cache builder is used and the Mapper is nil, it defaults it to the DiscoverRESTMapper
+			// even though the managers default mapper is the DynamicRESTMapper. To get around this issue, we explicitly
+			// set the mapper to the DynamicRESTMapper.
+			Mapper: mapper,
 		}),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	// Start a goroutine to handle termination.
+	go func() {
+		// Cancel the main context when we are done.
+		defer cancel()
+
+		// Wait for a signal.
+		<-sigHandler.Done()
+
+		// Check if we need to do any cleanup.
+		client := mgr.GetClient()
+		instance := &v1.Installation{}
+		retries := 0
+		for {
+			if err := client.Get(ctx, utils.DefaultInstanceKey, instance); errors.IsNotFound(err) {
+				// No installation - we can exit immediately.
+				return
+			} else if err != nil {
+				// Error querying - retry after a small sleep.
+				if retries >= 5 {
+					log.Errorf("Too many retries, exiting with error: %s", err)
+					return
+				}
+				log.Errorf("Error querying Installation, will retry: %s", err)
+				retries++
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// Success
+			break
+		}
+
+		if instance.DeletionTimestamp == nil {
+			// Installation isn't terminating, so we can exit immediately.
+			return
+		}
+
+		// We need to wait for termination to complete. We can do this by checking if the Installation
+		// resource has been cleaned up or not.
+		to := 60 * time.Second
+		log.Infof("Waiting up to %s for graceful termination to complete", to)
+		timeout := time.After(to)
+		for {
+			select {
+			case <-timeout:
+				// Timeout. Continue with shutdown.
+				log.Warning("Timed out waiting for graceful shutdown to complete")
+				return
+			default:
+				err := client.Get(ctx, utils.DefaultInstanceKey, instance)
+				if errors.IsNotFound(err) {
+					// Installation has been cleaned up, we can terminate.
+					log.Info("Graceful termination complete")
+					return
+				} else if err != nil {
+					log.Errorf("Error querying Installation: %s", err)
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
 
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
@@ -253,6 +356,14 @@ func main() {
 		os.Exit(1)
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
+
+	// Determine if we're running in single or multi-tenant mode.
+	multiTenant, err := utils.MultiTenant(ctx, clientset)
+	if err != nil {
+		log.Error(err, "Failed to discovery tenancy mode")
+		os.Exit(1)
+	}
+	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
 	// Determine if PodSecurityPolicies are supported. PSPs were removed in
 	// Kubernetes v1.25. We can remove this check once the operator not longer
@@ -295,6 +406,21 @@ func main() {
 		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
 	}
 
+	// Laod the operator's bootstrap configmap, if it exists.
+	bootConfig, err := clientset.CoreV1().ConfigMaps(common.OperatorNamespace()).Get(ctx, bootstrapConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to load bootstrap configmap")
+			os.Exit(1)
+		}
+	}
+
+	// Start a watch on our bootstrap configmap so we can restart if it changes.
+	if err = utils.MonitorConfigMap(clientset, bootstrapConfigMapName, bootConfig.Data); err != nil {
+		log.Error(err, "Failed to monitor bootstrap configmap")
+		os.Exit(1)
+	}
+
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
@@ -303,7 +429,15 @@ func main() {
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
-		ShutdownContext:     sigHandler,
+		ShutdownContext:     ctx,
+		MultiTenant:         multiTenant,
+		ElasticExternal:     utils.UseExternalElastic(bootConfig),
+	}
+
+	// Before we start any controllers, make sure our options are valid.
+	if err := verifyConfiguration(ctx, clientset, options); err != nil {
+		setupLog.Error(err, "Invalid configuration")
+		os.Exit(1)
 	}
 
 	err = controllers.AddToManager(mgr, options)
@@ -313,7 +447,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(sigHandler); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
@@ -393,4 +527,63 @@ func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
 	}
 
 	return nil
+}
+
+func executePreDeleteHook(ctx context.Context, c client.Client) error {
+	defer log.Info("preDelete hook exiting")
+
+	// Clean up any custom-resources first - this will trigger teardown of pods deloyed
+	// by the operator, and give the operator a chance to clean up gracefully.
+	installation := &operatorv1.Installation{}
+	installation.Name = utils.DefaultInstanceKey.Name
+	apiserver := &operatorv1.APIServer{}
+	apiserver.Name = utils.DefaultInstanceKey.Name
+	for _, o := range []client.Object{installation, apiserver} {
+		if err := c.Delete(ctx, o); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	// Wait for the Installation to be deleted.
+	to := time.After(5 * time.Minute)
+	for {
+		select {
+		case <-to:
+			return fmt.Errorf("Timeout waiting for pre-delete hook")
+		default:
+			if err := c.Get(ctx, utils.DefaultInstanceKey, installation); errors.IsNotFound(err) {
+				// It's gone! We can return.
+				return nil
+			}
+		}
+		log.Info("Waiting for Installation to be fully deleted")
+		time.Sleep(5 * time.Second)
+	}
+}
+
+// verifyConfiguration verifies that the final configuration of the operator is correct before starting any controllers.
+func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.AddOptions) error {
+	if opts.ElasticExternal {
+		// There should not be an internal-es cert
+		if _, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, render.TigeraElasticsearchInternalCertSecret, metav1.GetOptions{}); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("unexpected error encountered when confirming elastic is not currently internal: %v", err)
+		}
+		return fmt.Errorf("refusing to run: configured as external ES but secret/%s found which suggests internal ES", render.TigeraElasticsearchInternalCertSecret)
+	} else {
+		// There should not be an external-es cert
+		_, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, logstorage.ExternalCertsSecret, metav1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("unexpected error encountered when confirming elastic is not currently external: %v", err)
+		}
+		return fmt.Errorf("refusing to run: configured as internal-es but secret/%s found which suggests external ES", logstorage.ExternalCertsSecret)
+	}
 }

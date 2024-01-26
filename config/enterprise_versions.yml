@@ -24,6 +24,9 @@ components:
   cnx-node:
     image: tigera/cnx-node
     version: master
+  cnx-node-windows:
+    image: tigera/cnx-node-windows
+    version: master
   fluentd:
     image: tigera/fluentd
     version: master
@@ -43,12 +46,12 @@ components:
     image: tigera/dex
     version: master
   eck-kibana:
-    version: 7.17.11
+    version: 7.17.16
   kibana:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 7.17.11
+    version: 7.17.16
   elasticsearch:
     image: tigera/elasticsearch
     version: master
@@ -61,11 +64,8 @@ components:
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
     version: master
-  anomaly_detection_jobs:
-    image: tigera/anomaly_detection_jobs
-    version: master
-  anomaly-detection-api:
-    image: tigera/anomaly-detection-api
+  security-event-webhooks-processor:
+    image: tigera/webhooks-processor
     version: master
   compliance-controller:
     image: tigera/compliance-controller
@@ -88,6 +88,9 @@ components:
   tigera-cni:
     image: tigera/cni
     version: master
+  tigera-cni-windows:
+    image: tigera/cni-windows
+    version: master
   cloud-controllers:
     image: tigera/cloud-controllers
     version: master
@@ -103,7 +106,7 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v2.43.1
+    version: v2.48.1
   prometheus:
     image: tigera/prometheus
     version: master
@@ -119,9 +122,6 @@ components:
     version: master
   deep-packet-inspection:
     image: tigera/deep-packet-inspection
-    version: master
-  windows-upgrade:
-    image: tigera/calico-windows-upgrade
     version: master
   flexvol:
     image: tigera/pod2daemon-flexvol

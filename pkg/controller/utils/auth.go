@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,12 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/go-ldap/ldap"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -36,7 +39,7 @@ import (
 func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticationCR *operatorv1.Authentication, clusterDomain string) (rauth.KeyValidatorConfig, error) {
 	var keyValidatorConfig rauth.KeyValidatorConfig
 	if authenticationCR != nil {
-		idpSecret, err := GetIdpSecret(ctx, cli, authenticationCR)
+		idpSecret, err := GetIDPSecret(ctx, cli, authenticationCR)
 		if err != nil {
 			return nil, err
 		}
@@ -73,9 +76,9 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 	return keyValidatorConfig, nil
 }
 
-// GetIdpSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
+// GetIDPSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
 // operatorv1.Authentication CR.
-func GetIdpSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
+func GetIDPSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
 	var secretName string
 	var requiredFields []string
 	if authentication.Spec.OIDC != nil {
@@ -99,12 +102,36 @@ func GetIdpSecret(ctx context.Context, client client.Client, authentication *ope
 		if len(data) == 0 {
 			return nil, fmt.Errorf("%s is a required field for secret %s/%s", field, secret.Namespace, secret.Name)
 		}
+	}
 
-		if field == render.BindDNSecretField {
-			if _, err := ldap.ParseDN(string(data)); err != nil {
-				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", common.OperatorNamespace(), secretName, field)
-			}
+	// Validate LDAP fields.
+	bindDN := secret.Data[render.BindDNSecretField]
+	bindPW := secret.Data[render.BindPWSecretField]
+	if len(bindDN) > 0 && len(bindPW) > 0 {
+		if _, err := ldap.ParseDN(string(bindDN)); err != nil {
+			return nil, fmt.Errorf("secret %s/%s: should have a valid LDAP DN", common.OperatorNamespace(), secretName)
+		}
+
+		// When Dex starts, it uses os.ExpandEnv to set up its configuration inside a json formatted string. If we validate
+		// the input in the operator, the user will catch the configuration issue sooner.
+		const config = `{"bindDN": "$BIND_DN", "bindPW": "$BIND_PW"}`
+		data := []byte(os.Expand(config, func(s string) string {
+			return map[string]string{
+				"BIND_DN": string(bindDN),
+				"BIND_PW": string(bindPW),
+			}[s]
+		}))
+		if err := json.Unmarshal(data, &map[string]any{}); err != nil {
+			return nil, fmt.Errorf("fields bindDN and bindPW in secret %s/%s are not properly escaped", common.OperatorNamespace(), secretName)
 		}
 	}
+	rootCA := secret.Data[render.RootCASecretField]
+	if len(rootCA) > 0 {
+		_, err := certificatemanagement.ParseCertificate(rootCA)
+		if err != nil {
+			return nil, fmt.Errorf("secret %s/%s should have a valid certificate for field rootCA", common.OperatorNamespace(), secretName)
+		}
+	}
+
 	return secret, nil
 }

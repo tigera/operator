@@ -171,8 +171,12 @@ type InstallationSpec struct {
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
+	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
+
+	// CalicoNodeWindowsDaemonSet configures the calico-node-windows DaemonSet.
+	CalicoNodeWindowsDaemonSet *CalicoNodeWindowsDaemonSet `json:"calicoNodeWindowsDaemonSet,omitempty"`
 
 	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
 	// Default: Disabled
@@ -183,6 +187,14 @@ type InstallationSpec struct {
 	// Logging Configuration for Components
 	// +optional
 	Logging *Logging `json:"logging,omitempty"`
+
+	// Windows Configuration
+	// +optional
+	WindowsNodes *WindowsNodeSpec `json:"windowsNodes,omitempty"`
+
+	// Kubernetes Service CIDRs. Specifying this is required when using Calico for Windows.
+	// +optional
+	ServiceCIDRs []string `json:"serviceCIDRs,omitempty"`
 }
 
 type Logging struct {
@@ -256,6 +268,9 @@ type ComponentName string
 
 const (
 	ComponentNameNode            ComponentName = "Node"
+	ComponentNameNodeWindows     ComponentName = "NodeWindows"
+	ComponentNameFelixWindows    ComponentName = "FelixWindows"
+	ComponentNameConfdWindows    ComponentName = "ConfdWindows"
 	ComponentNameTypha           ComponentName = "Typha"
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
 )
@@ -327,6 +342,7 @@ var HostPortsTypes []HostPortsType = []HostPortsType{
 	HostPortsEnabled,
 	HostPortsDisabled,
 }
+
 var HostPortsTypesString []string = []string{
 	HostPortsEnabled.String(),
 	HostPortsDisabled.String(),
@@ -379,6 +395,20 @@ const (
 	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
 
+// +kubebuilder:validation:Enum=HNS;Disabled
+type WindowsDataplaneOption string
+
+const (
+	WindowsDataplaneDisabled WindowsDataplaneOption = "Disabled"
+	WindowsDataplaneHNS      WindowsDataplaneOption = "HNS"
+)
+
+type Sysctl struct {
+	// +kubebuilder:validation:Enum=net.ipv4.tcp_keepalive_intvl;net.ipv4.tcp_keepalive_probes;net.ipv4.tcp_keepalive_time
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
@@ -388,6 +418,13 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Iptables;BPF;VPP
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
+
+	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
+	// causes the operator to add required mounts and environment variables for the particular dataplane.
+	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
+	// Default: Disabled
+	// +optional
+	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
@@ -432,6 +469,10 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
+
+	// Sysctl configures sysctl parameters for tuning plugin
+	// +optional
+	Sysctl []Sysctl `json:"sysctl,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option
@@ -502,6 +543,7 @@ var EncapsulationTypes []EncapsulationType = []EncapsulationType{
 	EncapsulationVXLANCrossSubnet,
 	EncapsulationNone,
 }
+
 var EncapsulationTypesString []string = []string{
 	EncapsulationIPIPCrossSubnet.String(),
 	EncapsulationIPIP.String(),
@@ -524,6 +566,7 @@ var NATOutgoingTypes []NATOutgoingType = []NATOutgoingType{
 	NATOutgoingEnabled,
 	NATOutgoingDisabled,
 }
+
 var NATOutgoingTypesString []string = []string{
 	NATOutgoingEnabled.String(),
 	NATOutgoingDisabled.String(),
@@ -588,6 +631,7 @@ var CNIPluginTypes []CNIPluginType = []CNIPluginType{
 	PluginAmazonVPC,
 	PluginAzureVNET,
 }
+
 var CNIPluginTypesString []string = []string{
 	PluginCalico.String(),
 	PluginGKE.String(),
@@ -759,4 +803,35 @@ func IsFIPSModeEnabled(mode *FIPSMode) bool {
 // IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
 func IsFIPSModeEnabledString(mode *FIPSMode) string {
 	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
+}
+
+type WindowsNodeSpec struct {
+	// CNIBinDir is the path to the CNI binaries directory on Windows, it must match what is used as 'bin_dir' under
+	// [plugins]
+	//   [plugins."io.containerd.grpc.v1.cri"]
+	//     [plugins."io.containerd.grpc.v1.cri".cni]
+	// on the containerd 'config.toml' file on the Windows nodes.
+	// +optional
+	CNIBinDir string `json:"cniBinDir,omitempty"`
+
+	// CNIConfigDir is the path to the CNI configuration directory on Windows, it must match what is used as 'conf_dir' under
+	// [plugins]
+	//   [plugins."io.containerd.grpc.v1.cri"]
+	//     [plugins."io.containerd.grpc.v1.cri".cni]
+	// on the containerd 'config.toml' file on the Windows nodes.
+	// +optional
+	CNIConfigDir string `json:"cniConfigDir,omitempty"`
+
+	// CNILogDir is the path to the Calico CNI logs directory on Windows.
+	// +optional
+	CNILogDir string `json:"cniLogDir,omitempty"`
+
+	// VXLANMACPrefix is the prefix used when generating MAC addresses for virtual NICs
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}$`
+	VXLANMACPrefix string `json:"vxlanMACPrefix,omitempty"`
+
+	// VXLANAdapter is the Network Adapter used for VXLAN, leave blank for primary NIC
+	// +optional
+	VXLANAdapter string `json:"vxlanAdapter,omitempty"`
 }

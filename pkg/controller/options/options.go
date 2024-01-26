@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,6 +33,16 @@ type AddOptions struct {
 	KubernetesVersion   *common.VersionInfo
 	ManageCRDs          bool
 	ShutdownContext     context.Context
+
+	// Whether or not the operator is running in multi-tenant mode.
+	// When true, this means some CRDs are installed as namespace scoped
+	// instead of cluster scoped.
+	MultiTenant bool
+
+	// Whether or not the operator is running in a management cluster configured to
+	// use external elasticsearch. When set, the operator will not install Elasticsearch
+	// and instead will configure the cluster to use an external Elasticsearch.
+	ElasticExternal bool
 
 	// Whether or not the cluster supports PodSecurityPolicies.
 	UsePSP bool

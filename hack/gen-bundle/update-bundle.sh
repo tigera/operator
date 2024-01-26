@@ -43,7 +43,7 @@ yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE_DIGEST}
 TIMESTAMP=$(echo ${OPERATOR_IMAGE_INSPECT} | jq -r .[0].Created)
 yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
 
-# Add the features annotations
+# Add the features annotations per https://docs.openshift.com/container-platform/4.14/operators/operator_sdk/osdk-generating-csvs.html
 FEATURES=metadata.annotations.features.operators.openshift.io
 yq write -i ${CSV} ${FEATURES}/disconnected "false"
 yq write -i ${CSV} ${FEATURES}/fips-compliant "false"
@@ -58,6 +58,8 @@ yq write -i ${CSV} ${FEATURES}/csi "false"
 
 # Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.
 yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].image ${OPERATOR_IMAGE_DIGEST}
+yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].name tigera-operator
+yq write -i ${CSV} spec.install.spec.deployments[0].spec.selector.matchLabels.name tigera-operator
 
 # Set the CSV name.
 yq write -i ${CSV} metadata.name tigera-operator.v${VERSION}
@@ -66,6 +68,13 @@ yq write -i ${CSV} metadata.name tigera-operator.v${VERSION}
 if [[ "${PREV_VERSION}" != "0.0.0" ]]; then
     yq write -i ${CSV} spec.replaces tigera-operator.v${PREV_VERSION}
 fi
+
+# Add labels for each supported architecture in the CSV file, in the
+# metadata.labels section:
+# e.g. operatorframework.io/arch.arm64: supported
+# At least amd64 is needed so that we can use the SHA256 of the manifest image rather
+# than the specific SHA of the amd64 image.
+yq write -i ${CSV} 'metadata.labels."operatorframework.io/arch.amd64"' supported
 
 # Set the CSV to ignore previous versions when updating. Use brackets to preserve the
 # dot in the key "olm.skipRange".
@@ -86,7 +95,7 @@ yq write -i ${CSV} spec.relatedImages[0].image ${OPERATOR_IMAGE_DIGEST}
 sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1=tigera-operator/' bundle.Dockerfile
 
 # Supported OpenShift versions. Specify min version.
-openshiftVersions=v4.6
+openshiftVersions=v4.10
 
 # Add in required labels
 cat <<EOF >> bundle.Dockerfile

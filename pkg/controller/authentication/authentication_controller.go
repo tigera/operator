@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package authentication
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"k8s.io/client-go/kubernetes"
 
@@ -39,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -89,6 +89,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace},
 	})
 
+	// Watch for changes to the dex namespace.
+	if err = c.Watch(&source.Kind{Type: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("%s failed to watch dex namespace: %w", controllerName, err)
+	}
+
 	return add(mgr, c)
 }
 
@@ -101,6 +106,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady 
 		status:         status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
+		usePSP:         opts.UsePSP,
+		multiTenant:    opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -113,7 +120,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("%s failed to watch installation resource: %w", controllerName, err)
 	}
 
@@ -156,6 +163,8 @@ type ReconcileAuthentication struct {
 	status         status.StatusManager
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
+	usePSP         bool
+	multiTenant    bool
 }
 
 // Reconcile the cluster state with the Authentication object that is found in the cluster.
@@ -201,7 +210,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	updateAuthenticationWithDefaults(authentication)
 
 	// Validate the configuration
-	if err := validateAuthentication(authentication); err != nil {
+	if err := validateAuthentication(authentication, r.multiTenant); err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid Authentication provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -231,7 +240,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	if err := r.client.Get(ctx, client.ObjectKey{Name: render.DexObjectName}, &corev1.Namespace{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(oprv1.ResourceNotFound, "Waiting for namespace tigera-dex to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{}, nil
 		} else {
 			r.status.SetDegraded(oprv1.ResourceReadError, "Error querying tigera-dex namespace", err, reqLogger)
 			return reconcile.Result{}, err
@@ -241,14 +250,14 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(oprv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(oprv1.ResourceNotReady, "Waiting for allow-tigera tier to be created", err, reqLogger)
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			r.status.SetDegraded(oprv1.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
+			return reconcile.Result{}, nil
 		} else {
 			r.status.SetDegraded(oprv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
@@ -267,7 +276,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Secret used for TLS between dex and other components.
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -287,7 +296,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	idpSecret, err := utils.GetIdpSecret(ctx, r.client, authentication)
+	idpSecret, err := utils.GetIDPSecret(ctx, r.client, authentication)
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid or missing identity provider secret", err, reqLogger)
 		return reconcile.Result{}, err
@@ -310,10 +319,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	disableDex := false
-	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == oprv1.OIDCTypeTigera {
-		disableDex = true
-	}
+	disableDex := utils.IsDexDisabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
 	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, r.clusterDomain)
@@ -330,6 +336,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		DeleteDex:     disableDex,
 		TLSKeyPair:    tlsKeyPair,
 		TrustedBundle: trustedBundle,
+		UsePSP:        r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -365,7 +372,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.
@@ -399,7 +406,7 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 }
 
 // validateAuthentication makes sure that the authentication spec is ready for use.
-func validateAuthentication(authentication *oprv1.Authentication) error {
+func validateAuthentication(authentication *oprv1.Authentication, multiTenant bool) error {
 	oidc := authentication.Spec.OIDC
 	ldp := authentication.Spec.LDAP
 	// We support using only one connector at once.
@@ -422,6 +429,9 @@ func validateAuthentication(authentication *oprv1.Authentication) error {
 
 	// If the user has specified the deprecated and the new prefix field, but with different values, we cannot proceed.
 	if oidc != nil {
+		if multiTenant && authentication.Spec.OIDC.Type != oprv1.OIDCTypeTigera {
+			return fmt.Errorf("you set an unsupported authentication for multi-tenant, please set Authentication.Spec.OIDC.Type to Tigera")
+		}
 		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix != "" && authentication.Spec.OIDC.UsernamePrefix != authentication.Spec.UsernamePrefix {
 			return fmt.Errorf("you set username prefix twice, but with different values, please remove Authentication.Spec.OIDC.UsernamePrefix")
 		}

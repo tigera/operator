@@ -6,6 +6,22 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
+define yq_cmd
+	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
+endef
+YQ_V4 = $(call yq_cmd,4)
+
+GIT_CMD   = git
+CURL_CMD  = curl -fL
+
+ifdef CONFIRM
+GIT       = $(GIT_CMD)
+CURL      = $(CURL_CMD)
+else
+GIT       = echo [DRY RUN] $(GIT_CMD)
+CURL      = echo [DRY RUN] $(CURL_CMD)
+endif
+
 
 # Shortcut targets
 default: build
@@ -20,7 +36,7 @@ test: fmt vet ut
 # The target architecture is select by setting the ARCH variable.
 # When ARCH is undefined it is set to the detected host architecture.
 # When ARCH differs from the host architecture a crossbuild will be performed.
-ARCHES ?= $(patsubst build/Dockerfile.%,%,$(wildcard build/Dockerfile.*))
+ARCHES ?= amd64 arm64 ppc64le s390x
 
 # BUILDARCH is the host architecture
 # ARCH is the target architecture
@@ -30,10 +46,10 @@ BUILDOS ?= $(shell uname -s | tr A-Z a-z)
 
 # canonicalized names for host architecture
 ifeq ($(BUILDARCH),aarch64)
-        BUILDARCH=arm64
+    BUILDARCH=arm64
 endif
 ifeq ($(BUILDARCH),x86_64)
-        BUILDARCH=amd64
+    BUILDARCH=amd64
 endif
 
 # unless otherwise set, I am building for my own architecture, i.e. not cross-compiling
@@ -41,26 +57,11 @@ ARCH ?= $(BUILDARCH)
 
 # canonicalized names for target architecture
 ifeq ($(ARCH),aarch64)
-        override ARCH=arm64
+    override ARCH=arm64
 endif
 ifeq ($(ARCH),x86_64)
-        override ARCH=amd64
+    override ARCH=amd64
 endif
-
-# Required to prevent `FROM SCRATCH` from pulling an amd64 image in the build phase.
-ifeq ($(ARCH),arm64)
-	TARGET_PLATFORM=arm64/v8
-endif
-ifeq ($(ARCH),ppc64le)
-	TARGET_PLATFORM=ppc64le
-endif
-ifeq ($(ARCH),amd64)
-	TARGET_PLATFORM=amd64
-endif
-ifeq ($(ARCH),s390x)
-	TARGET_PLATFORM=s390x
-endif
-EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
 # location of docker credentials to push manifests
 DOCKER_CONFIG ?= $(HOME)/.docker/config.json
@@ -72,22 +73,6 @@ DOCKER_CONFIG ?= $(HOME)/.docker/config.json
 # in the target, we then unescape them back
 escapefs = $(subst :,---,$(subst /,___,$(1)))
 unescapefs = $(subst ---,:,$(subst ___,/,$(1)))
-
-# these macros create a list of valid architectures for pushing manifests
-space :=
-space +=
-comma := ,
-prefix_linux = $(addprefix linux/,$(strip $1))
-join_platforms = $(subst $(space),$(comma),$(call prefix_linux,$(strip $1)))
-
-# Targets used when cross building.
-.PHONY: register
-# Enable binfmt adding support for miscellaneous binary formats.
-# This is only needed when running non-native binaries.
-register:
-ifneq ($(BUILDARCH),$(ARCH))
-	docker run --rm --privileged multiarch/qemu-user-static:register --reset || true
-endif
 
 # list of arches *not* to build when doing *-all
 EXCLUDEARCH ?=
@@ -106,14 +91,15 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.87
-CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
+GO_BUILD_VER?=v0.90
+CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./controllers -name '*.go')
+SRC_FILES+=$(shell find ./test -name '*.go')
 SRC_FILES+=main.go
 
-EXTRA_DOCKER_ARGS += -e GO111MODULE=on -e GOPRIVATE=github.com/tigera/*
+EXTRA_DOCKER_ARGS += -e GOPRIVATE=github.com/tigera/*
 ifeq ($(GIT_USE_SSH),true)
 	GIT_CONFIG_SSH ?= git config --global url."ssh://git@github.com/".insteadOf "https://github.com/";
 endif
@@ -140,7 +126,11 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 		-e GOPATH=/go \
 		-e GOCACHE=/go-cache \
+		-e GOOS=linux \
+		-e GOARCH=$(ARCH) \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
+		-e ACK_GINKGO_RC=true \
+		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
@@ -184,9 +174,8 @@ sub-push-%:
 
 push-manifests: imagetag  $(addprefix sub-manifest-,$(call escapefs,$(PUSH_MANIFEST_IMAGE_PREFIXES)))
 sub-manifest-%:
-	# Docker login to hub.docker.com required before running this target as we are using $(DOCKER_CONFIG) holds the docker login credentials
-	# path to credentials based on manifest-tool's requirements here https://github.com/estesp/manifest-tool#sample-usage
-	docker run -t --entrypoint /bin/sh -v $(DOCKER_CONFIG):/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(VALIDARCHES)) --template $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))-ARCH --target $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))"
+	docker manifest create $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG)) $(addprefix --amend ,$(addprefix $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))-,$(VALIDARCHES)))
+	docker manifest push --purge $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))
 
 ## push default amd64 arch where multi-arch manifest is not supported
 push-non-manifests: imagetag $(addprefix sub-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))
@@ -241,14 +230,14 @@ endif
 image: build $(BUILD_IMAGE)
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
-$(BUILD_IMAGE)-$(ARCH): register $(BINDIR)/operator-$(ARCH)
-	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --platform=linux/$(TARGET_PLATFORM) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
+$(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
+	docker buildx build --load --platform=linux/$(ARCH) --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f build/Dockerfile .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
 
 .PHONY: images
-images: register image
+images: image
 
 # Build the images for the target architecture
 .PHONY: image-all
@@ -285,24 +274,26 @@ clean:
 ###############################################################################
 # Tests
 ###############################################################################
-WHAT?=.
-GINKGO_ARGS?= -v
+UT_DIR?=./pkg
+FV_DIR?=./test
+GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
+.PHONY: ut
 ut:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage "./vendor,./test" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
-fv: cluster-create run-fvs cluster-destroy
+fv: cluster-create load-container-images run-fvs cluster-destroy
 run-fvs:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -pkgdir test -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
-KUBECONFIG?=./kubeconfig.yaml
+KIND_KUBECONFIG?=./kubeconfig.yaml
 K8S_VERSION?=v1.21.14
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
@@ -311,7 +302,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
 	        --config ./deploy/kind-config.yaml \
-	        --kubeconfig $(KUBECONFIG) \
+	        --kubeconfig $(KIND_KUBECONFIG) \
 	        --image kindest/node:$(K8S_VERSION)
 
 	./deploy/scripts/ipv6_kind_cluster_update.sh
@@ -319,7 +310,74 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	$(MAKE) deploy-crds
 
 	# Wait for controller manager to be running and healthy.
-	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
+	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
+
+FV_IMAGE_REGISTRY := docker.io
+VERSION_TAG := master
+NODE_IMAGE := calico/node
+APISERVER_IMAGE := calico/apiserver
+CNI_IMAGE := calico/cni
+FLEXVOL_IMAGE := calico/pod2daemon-flexvol
+KUBECONTROLLERS_IMAGE := calico/kube-controllers
+TYPHA_IMAGE := calico/typha
+CSI_IMAGE := calico/csi
+NODE_DRIVER_REGISTRAR_IMAGE := calico/node-driver-registrar
+
+.PHONY: calico-node.tar
+calico-node.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(NODE_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-apiserver.tar
+calico-apiserver.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(APISERVER_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(APISERVER_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-cni.tar
+calico-cni.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(CNI_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(CNI_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-pod2daemon-flexvol.tar
+calico-pod2daemon-flexvol.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(FLEXVOL_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(FLEXVOL_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-kube-controllers.tar
+calico-kube-controllers.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-typha.tar
+calico-typha.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(TYPHA_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(TYPHA_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-csi.tar
+calico-csi.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(CSI_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(CSI_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-node-driver-registrar.tar
+calico-node-driver-registrar.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
+
+IMAGE_TARS := calico-node.tar \
+	calico-apiserver.tar \
+	calico-cni.tar \
+	calico-pod2daemon-flexvol.tar \
+	calico-kube-controllers.tar \
+	calico-typha.tar \
+	calico-csi.tar \
+	calico-node-driver-registrar.tar
+
+load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
+	# Load the latest tar files onto the currently running kind cluster.
+	KUBECONFIG=$(KIND_KUBECONFIG) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
+	# Restart the Calico containers so they launch with the newly loaded code.
+	# TODO: We should be able to do this without restarting everything in kube-system.
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl delete pods -n kube-system --all
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 ## kubectl create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
@@ -328,7 +386,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 ##   The CustomResourceDefinition "installations.operator.tigera.io" is invalid: metadata.annotations: Too long: must have at most 262144 bytes
 ##
 deploy-crds: kubectl
-	@export KUBECONFIG=$(KUBECONFIG) && \
+	@export KUBECONFIG=$(KIND_KUBECONFIG) && \
 		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
@@ -337,12 +395,12 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
-	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
 
 ## Destroy local kind cluster
 cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 	-$(BINDIR)/kind delete cluster
-	rm -f $(KUBECONFIG)
+	rm -f $(KIND_KUBECONFIG)
 
 
 
@@ -485,6 +543,41 @@ endif
 ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
+
+release-prep: var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
+	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
+	$(YQ_V4) ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
+	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
+	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
+	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
+
+GIT_REMOTE?=origin
+ifneq ($(if $(GIT_REPO_SLUG),$(shell dirname $(GIT_REPO_SLUG)),), $(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`))
+GIT_FORK_USER:=$(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`)
+endif
+GIT_PR_BRANCH_BASE?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_BRANCH),)
+GIT_REPO_SLUG?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_REPO_SLUG),)
+RELEASE_UPDATE_BRANCH?=$(if $(SEMAPHORE),semaphore-,)auto-build-updates-$(VERSION)
+GIT_PR_BRANCH_HEAD?=$(if $(GIT_FORK_USER),$(GIT_FORK_USER):$(RELEASE_UPDATE_BRANCH),$(RELEASE_UPDATE_BRANCH))
+release-prep/create-and-push-branch:
+ifeq ($(shell git rev-parse --abbrev-ref HEAD),$(RELEASE_UPDATE_BRANCH))
+	$(error Current branch is pull request head, cannot set it up.)
+endif
+	-git branch -D $(RELEASE_UPDATE_BRANCH)
+	-$(GIT) push $(GIT_REMOTE) --delete $(RELEASE_UPDATE_BRANCH)
+	git checkout -b $(RELEASE_UPDATE_BRANCH)
+	$(GIT) add config/*_versions.yml hack/gen-versions/main.go pkg/components/* pkg/crds/*
+	$(GIT) commit -m "Automatic version updates for $(VERSION) release"
+	$(GIT) push $(GIT_REMOTE) $(RELEASE_UPDATE_BRANCH)
+
+release-prep/create-pr:
+	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] $(if $(SEMAPHORE), Semaphore,) Auto Release Update for $(VERSION),$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
+	echo 'Created release update pull request for $(VERSION): $(PR_NUMBER)'
+
+release-prep/set-pr-labels:
+	$(call github_pr_add_comment,$(GIT_REPO_SLUG),$(PR_NUMBER),/merge-when-ready release-note-not-required docs-not-required delete-branch)
+	echo "Added labels to pull request $(PR_NUMBER): merge-when-ready, release-note-not-required, docs-not-required & delete-branch"
 
 ###############################################################################
 # Utilities
@@ -669,7 +762,7 @@ fmt:
 	go fmt ./...'
 
 # Run go vet against code
-vet: register
+vet:
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'
@@ -794,3 +887,57 @@ install-git-hooks:
 .PHONY: pre-commit
 pre-commit:
 	$(CONTAINERIZED) $(CALICO_BUILD) git-hooks/pre-commit-in-container
+
+# var-set-% checks if there is a non empty variable for the value describe by %. If FAIL_NOT_SET is set, then var-set-%
+# fails with an error message. If FAIL_NOT_SET is not set, then var-set-% appends a 1 to VARSET if the variable isn't
+# set.
+var-set-%:
+	$(if $($*),$(eval VARSET+=1),$(if $(FAIL_NOT_SET),$(error $* is required but not set),))
+
+# var-require is used to check if one or all of the variables are set in REQUIRED_VARS, and fails if not. The variables
+# in REQUIRE_VARS are hyphen separated.
+#
+# If FAIL_NOT_SET is set, then all variables described in REQUIRED_VARS must be set for var-require to not fail,
+# otherwise only one variable needs to be set for var-require to not fail.
+var-require: $(addprefix var-set-,$(subst -, ,$(REQUIRED_VARS)))
+	$(if $(VARSET),,$(error one of $(subst -, ,$(REQUIRED_VARS)) is not set or empty, but at least one is required))
+
+# var-require-all-% checks if the there are non empty variables set for the hyphen separated values in %, and fails if
+# there isn't a non empty variable for each given value. For instance, to require FOO and BAR both must be set you would
+# call var-require-all-FOO-BAR.
+var-require-all-%:
+	$(MAKE) var-require REQUIRED_VARS=$* FAIL_NOT_SET=true
+
+# var-require-one-of-% checks if the there are non empty variables set for the hyphen separated values in %, and fails
+# there isn't a non empty variable for at least one of the given values. For instance, to require either FOO or BAR both
+# must be set you would call var-require-all-FOO-BAR.
+var-require-one-of-%:
+	$(MAKE) var-require REQUIRED_VARS=$*
+
+GITHUB_API_EXIT_ON_FAILURE?=1
+# Call the github API. $(1) is the http method type for the https request, $(2) is the repo slug, and is $(3) is for json
+# data (if omitted then no data is set for the request). If GITHUB_API_EXIT_ON_FAILURE is set then the macro exits with 1
+# on failure. On success, the ENV variable GITHUB_API_RESPONSE will contain the response from github
+define github_call_api
+	$(eval CMD := $(CURL) -X $(1) \
+		-H "Content-Type: application/json"\
+		-H "Authorization: Bearer ${GITHUB_TOKEN}"\
+		https://api.github.com/repos/$(2) $(if $(3),--data '$(3)',))
+	$(eval GITHUB_API_RESPONSE := $(shell $(CMD) | sed -e 's/#/\\\#/g'))
+	$(if $(GITHUB_API_EXIT_ON_FAILURE), $(if $(GITHUB_API_RESPONSE),,exit 1),)
+endef
+
+# Create the pull request. $(1) is the repo slug, $(2) is the title, $(3) is the head branch and $(4) is the base branch.
+# If the call was successful then the ENV variable PR_NUMBER will contain the pull request number of the created pull request.
+define github_pr_create
+	$(eval JSON := {"title": "$(2)", "head": "$(3)", "base": "$(4)"})
+	$(call github_call_api,POST,$(1)/pulls,$(JSON))
+	$(eval PR_NUMBER := $(filter-out null,$(shell echo '$(GITHUB_API_RESPONSE)' | jq '.number')))
+endef
+
+# Create a comment on a pull request. $(1) is the repo slug, $(2) is the pull request number, and $(3) is the comment
+# body.
+define github_pr_add_comment
+	$(eval JSON := {"body":"$(3)"})
+	$(call github_call_api,POST,$(1)/issues/$(2)/comments,$(JSON))
+endef

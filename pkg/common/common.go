@@ -19,6 +19,7 @@ const (
 	TyphaDeploymentName           = "calico-typha"
 	NodeDaemonSetName             = "calico-node"
 	KubeControllersDeploymentName = "calico-kube-controllers"
+	WindowsDaemonSetName          = "calico-node-windows"
 
 	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"

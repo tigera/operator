@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
@@ -127,15 +126,6 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}, Status: operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ComplianceFeature}}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()},
-			Data: map[string]string{
-				"clusterName": "cluster",
-				"shards":      "2",
-				"replicas":    "1",
-				"flowShards":  "2",
-			},
-		})).NotTo(HaveOccurred())
 
 		// Create a bunch of empty secrets, such that the reconcile loop will make it to the render functionality.
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceBenchmarkerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
@@ -144,20 +134,18 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceSnapshotterUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceServerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
-		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 		esDNSNames := dns.GetServiceDNSNames(render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-		gwKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esDNSNames)
-		Expect(err).NotTo(HaveOccurred())
-		linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
+		linseedKeyPair, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
 		Expect(err).NotTo(HaveOccurred())
 
 		// For managed clusters, we also need the public cert for Linseed.
-		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronLinseedPublicCert, common.OperatorNamespace(), esDNSNames)
+		linseedPublicCert, err := certificateManager.GetOrCreateKeyPair(c, render.VoltronLinseedPublicCert, common.OperatorNamespace(), esDNSNames)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(c.Create(ctx, gwKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, linseedPublicCert.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -228,7 +216,7 @@ var _ = Describe("Compliance controller tests", func() {
 		testCA := test.MakeTestCA("compliance-test")
 		newSecret, err := secret.CreateTLSSecret(testCA,
 			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, oldDNSNames...,
+			corev1.TLSCertKey, tls.DefaultCertificateDuration, nil, oldDNSNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -265,7 +253,7 @@ var _ = Describe("Compliance controller tests", func() {
 		dnsNames := append(expectedDNSNames, "compliance.example.com", "192.168.10.13")
 		newSecret, err := secret.CreateTLSSecret(nil,
 			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...,
+			corev1.TLSCertKey, tls.DefaultCertificateDuration, nil, dnsNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
@@ -298,7 +286,7 @@ var _ = Describe("Compliance controller tests", func() {
 		testCA := test.MakeTestCA("compliance-test")
 		complianceSecret, err := secret.CreateTLSSecret(testCA,
 			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
-			rmeta.DefaultCertificateDuration, nil, dnsNames...,
+			tls.DefaultCertificateDuration, nil, dnsNames...,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, complianceSecret)).NotTo(HaveOccurred())
@@ -498,6 +486,7 @@ var _ = Describe("Compliance controller tests", func() {
 						{Image: "tigera/compliance-reporter", Digest: "sha256:reporterhash"},
 						{Image: "tigera/compliance-server", Digest: "sha256:serverhash"},
 						{Image: "tigera/compliance-snapshotter", Digest: "sha256:snapshotterhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -701,6 +690,7 @@ var _ = Describe("Compliance controller tests", func() {
 
 	Context("Reconcile for Condition status", func() {
 		generation := int64(2)
+
 		It("should reconcile with creating new status condition with one item", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
@@ -724,7 +714,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := GetCompliance(ctx, r.client)
+			instance, err := GetCompliance(ctx, r.client, false, "notused")
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -734,6 +724,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with empty tigerastatus conditions ", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
@@ -747,10 +738,11 @@ var _ = Describe("Compliance controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := GetCompliance(ctx, r.client)
+			instance, err := GetCompliance(ctx, r.client, false, "notused")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))
 		})
+
 		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
@@ -788,7 +780,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := GetCompliance(ctx, r.client)
+			instance, err := GetCompliance(ctx, r.client, false, "notused")
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -810,6 +802,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
@@ -847,7 +840,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := GetCompliance(ctx, r.client)
+			instance, err := GetCompliance(ctx, r.client, false, "notused")
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -868,6 +861,112 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+	})
+
+	Context("Multi-tenant/namespaced reconciliation", func() {
+		tenantANamespace := "tenant-a"
+		tenantBNamespace := "tenant-b"
+
+		BeforeEach(func() {
+			r.multiTenant = true
+		})
+
+		It("should reconcile both with and without namespace provided while namespaced compliance instances exist", func() {
+			// Create the Tenant resources for tenant-a and tenant-b.
+			tenantA := &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{ID: "tenant-a"},
+			}
+			Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
+			tenantB := &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: tenantBNamespace,
+				},
+				Spec: operatorv1.TenantSpec{ID: "tenant-b"},
+			}
+			Expect(c.Create(ctx, tenantB)).NotTo(HaveOccurred())
+
+			certificateManagerTenantA, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+			Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+
+			linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
+
+			certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
+			Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
+
+			linseedTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantBNamespace, []string{render.TigeraLinseedSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedTLSTenantB.Secret(tenantBNamespace))).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.Compliance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantANamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.Compliance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantBNamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			// We check for correct rendering of all resources in compliance_test.go, so use the SA
+			// merely as a proxy here that the creation of our Compliance went smoothly
+			tenantAServiceAccount := corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ComplianceControllerServiceAccount,
+				Namespace: tenantANamespace,
+			}}
+
+			tenantBServiceAccount := corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ComplianceControllerServiceAccount,
+				Namespace: tenantBNamespace,
+			}}
+
+			// We called Reconcile without specifying a namespace, so neither of these namespaced objects should
+			// exist yet
+			err = test.GetResource(c, &tenantAServiceAccount)
+			Expect(err).Should(HaveOccurred())
+
+			err = test.GetResource(c, &tenantBServiceAccount)
+			Expect(err).Should(HaveOccurred())
+
+			// Now reconcile only tenant A's namespace and check that its Compliance object exists, but tenant B's
+			// Compliance object still hasn't been reconciled so it should still not exist
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = test.GetResource(c, &tenantAServiceAccount)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = test.GetResource(c, &tenantBServiceAccount)
+			Expect(err).Should(HaveOccurred())
+
+			// Now reconcile tenant B's namespace and check that its Compliance object exists now alongside tenant A's
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = test.GetResource(c, &tenantAServiceAccount)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = test.GetResource(c, &tenantBServiceAccount)
+			Expect(err).ShouldNot(HaveOccurred())
 		})
 	})
 })

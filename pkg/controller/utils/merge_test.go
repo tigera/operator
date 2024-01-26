@@ -478,6 +478,44 @@ var _ = Describe("Installation merge tests", func() {
 					HostPorts: &_hpe,
 				}),
 		)
+
+		_sysctlTuningA := []opv1.Sysctl{
+			{
+				Key:   "net.ipv4.tcp_keepalive_intvl",
+				Value: "15",
+			}, {
+				Key:   "net.ipv4.tcp_keepalive_probes",
+				Value: "6",
+			},
+			{
+				Key:   "net.ipv4.tcp_keepalive_time",
+				Value: "40",
+			},
+		}
+		_sysctlTuningB := []opv1.Sysctl{}
+		DescribeTable("merge CNI Tuning", func(main, second, expect []opv1.Sysctl) {
+			m := opv1.InstallationSpec{}
+			s := opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoNetwork = &opv1.CalicoNetworkSpec{Sysctl: main}
+			}
+			if second != nil {
+				s.CalicoNetwork = &opv1.CalicoNetworkSpec{Sysctl: second}
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNetwork).To(BeNil())
+			} else {
+				Expect(inst.CalicoNetwork.Sysctl).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", _sysctlTuningA, nil, _sysctlTuningA),
+			Entry("Second only set", nil, _sysctlTuningB, _sysctlTuningB),
+			Entry("Both set equal", _sysctlTuningA, _sysctlTuningA, _sysctlTuningA),
+			Entry("Both set not matching", _sysctlTuningA, _sysctlTuningB, _sysctlTuningB),
+		)
+
 	})
 
 	DescribeTable("merge NodeMetricsPort", func(main, second, expect *int32) {
@@ -916,6 +954,300 @@ var _ = Describe("Installation merge tests", func() {
 							Spec: &opv1.CalicoNodeDaemonSetPodSpec{
 								Containers:     []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a},
 								InitContainers: []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a},
+								Affinity:       _aff1,
+								NodeSelector:   map[string]string{"overridden": "selector"},
+								Tolerations:    []v1.Toleration{},
+							},
+						},
+					},
+				},
+			))
+	})
+	Context("test CalicoNodeWindowsDaemonSet merge", func() {
+		var m opv1.InstallationSpec
+		var s opv1.InstallationSpec
+
+		BeforeEach(func() {
+			m = opv1.InstallationSpec{
+				CalicoNodeWindowsDaemonSet: &opv1.CalicoNodeWindowsDaemonSet{
+					Spec: &opv1.CalicoNodeWindowsDaemonSetSpec{
+						Template: &opv1.CalicoNodeWindowsDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoNodeWindowsDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+			s = opv1.InstallationSpec{
+				CalicoNodeWindowsDaemonSet: &opv1.CalicoNodeWindowsDaemonSet{
+					Spec: &opv1.CalicoNodeWindowsDaemonSetSpec{
+						Template: &opv1.CalicoNodeWindowsDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoNodeWindowsDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+
+		})
+
+		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
+			// start with empty installation spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoNodeWindowsDaemonSet = &opv1.CalicoNodeWindowsDaemonSet{Metadata: main}
+			}
+			if second != nil {
+				s.CalicoNodeWindowsDaemonSet = &opv1.CalicoNodeWindowsDaemonSet{Metadata: second}
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet).To(BeNil())
+			} else {
+				Expect(*inst.CalicoNodeWindowsDaemonSet.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
+			m.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds = main
+			s.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds).To(BeNil())
+			} else {
+				Expect(*inst.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", intPtr(23), nil, intPtr(23)),
+			Entry("Second only set", nil, intPtr(23), intPtr(23)),
+			Entry("Both set equal", intPtr(23), intPtr(23), intPtr(23)),
+			Entry("Both set not equal", intPtr(23), intPtr(42), intPtr(42)),
+		)
+		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
+			m.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata = main
+			s.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata).To(BeNil())
+			} else {
+				Expect(*inst.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		_resources1 := &v1.ResourceRequirements{
+			Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+			Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+		}
+		_resources2 := &v1.ResourceRequirements{
+			Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+			Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+		}
+		_calicoNodeInit1a := opv1.CalicoNodeWindowsDaemonSetInitContainer{Name: "init1", Resources: _resources1}
+		_calicoNodeInit1b := opv1.CalicoNodeWindowsDaemonSetInitContainer{Name: "init1", Resources: _resources2}
+		_calicoNodeInit2 := opv1.CalicoNodeWindowsDaemonSetInitContainer{Name: "init2", Resources: _resources2}
+
+		DescribeTable("merge initContainers", func(main, second, expect []opv1.CalicoNodeWindowsDaemonSetInitContainer) {
+			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.InitContainers = main
+			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.InitContainers = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.InitContainers).To(BeNil())
+			} else {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.InitContainers).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, nil, []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
+			Entry("Second only set", nil, []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
+			Entry("Both set equal", []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2},
+				[]opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
+			Entry("Both set not equal", []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1b, _calicoNodeInit2},
+				[]opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1b, _calicoNodeInit2}),
+		)
+
+		_calicoNode1a := opv1.CalicoNodeWindowsDaemonSetContainer{Name: "node1", Resources: _resources1}
+		_calicoNode1b := opv1.CalicoNodeWindowsDaemonSetContainer{Name: "node1", Resources: _resources2}
+		_calicoNode2 := opv1.CalicoNodeWindowsDaemonSetContainer{Name: "node2", Resources: _resources2}
+
+		DescribeTable("merge containers", func(main, second, expect []opv1.CalicoNodeWindowsDaemonSetContainer) {
+			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Containers = main
+			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Containers = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Containers).To(BeNil())
+			} else {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Containers).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode1b}, nil, []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode1b}),
+			Entry("Second only set", nil, []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode1b}, []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode1b}),
+			Entry("Both set equal", []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode1b}, []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode1b},
+				[]opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode1b}),
+			Entry("Both set not equal", []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a, _calicoNode2}, []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1b, _calicoNode2},
+				[]opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1b, _calicoNode2}),
+		)
+
+		_aff1 := &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "custom-affinity-key",
+							Operator: v1.NodeSelectorOpExists,
+						}},
+					}},
+				},
+			},
+		}
+		_aff2 := &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "custom-affinity-key2",
+							Operator: v1.NodeSelectorOpExists,
+						}},
+					}},
+				},
+			},
+		}
+		_affEmpty := &v1.Affinity{}
+
+		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
+			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Affinity = main
+			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Affinity = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Affinity).To(BeNil())
+			} else {
+				Expect(*inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", _aff1, nil, _aff1),
+			Entry("Second only set", nil, _aff1, _aff1),
+			Entry("Both set equal", _aff1, _aff1, _aff1),
+			Entry("Both set not equal", _aff1, _aff2, _aff2),
+			Entry("Both set not equal, override empty", _aff1, _affEmpty, _affEmpty),
+		)
+
+		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
+			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.NodeSelector = main
+			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.NodeSelector = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
+			} else {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.NodeSelector).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", map[string]string{"a1": "1"}, nil, map[string]string{"a1": "1"}),
+			Entry("Second only set", nil, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
+			Entry("Both set equal", map[string]string{"a1": "1"}, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
+			Entry("Both set not equal", map[string]string{"a1": "1"}, map[string]string{"a1": "2", "b1": "3"}, map[string]string{"a1": "2", "b1": "3"}),
+			Entry("Both set not equal, override empty", map[string]string{"a1": "1"}, map[string]string{}, map[string]string{}),
+		)
+
+		_toleration1 := v1.Toleration{
+			Key:      "foo",
+			Operator: v1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		_toleration2 := v1.Toleration{
+			Key:      "bar",
+			Operator: v1.TolerationOpEqual,
+			Value:    "baz",
+		}
+
+		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
+			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Tolerations = main
+			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Tolerations = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Tolerations).To(BeNil())
+			} else {
+				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main only set", []v1.Toleration{_toleration1}, nil, []v1.Toleration{_toleration1}),
+			Entry("Second only set", nil, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
+			Entry("Both set equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
+			Entry("Both set not equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration2}, []v1.Toleration{_toleration2}),
+			Entry("Both set not equal, override empty", []v1.Toleration{_toleration1}, []v1.Toleration{}, []v1.Toleration{}),
+		)
+
+		DescribeTable("merge multiple CalicoDaemonSet fields", func(main, second, expect *opv1.CalicoNodeWindowsDaemonSet) {
+			// start with empty spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoNodeWindowsDaemonSet = main
+			}
+			if second != nil {
+				s.CalicoNodeWindowsDaemonSet = second
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoNodeWindowsDaemonSet).To(BeNil())
+			} else {
+				Expect(*inst.CalicoNodeWindowsDaemonSet).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Different fields in the two are merged, some overridden",
+				&opv1.CalicoNodeWindowsDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels: map[string]string{"l": "1"},
+					},
+					Spec: &opv1.CalicoNodeWindowsDaemonSetSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CalicoNodeWindowsDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoNodeWindowsDaemonSetPodSpec{
+								Containers:   []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a},
+								NodeSelector: map[string]string{"selector": "test"},
+								Tolerations:  []v1.Toleration{_toleration1},
+							},
+						},
+					},
+				},
+				&opv1.CalicoNodeWindowsDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CalicoNodeWindowsDaemonSetSpec{
+						Template: &opv1.CalicoNodeWindowsDaemonSetPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CalicoNodeWindowsDaemonSetPodSpec{
+								InitContainers: []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a},
+								Affinity:       _aff1,
+								NodeSelector:   map[string]string{"overridden": "selector"},
+								Tolerations:    []v1.Toleration{},
+							},
+						},
+					},
+				},
+				&opv1.CalicoNodeWindowsDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CalicoNodeWindowsDaemonSetSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CalicoNodeWindowsDaemonSetPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CalicoNodeWindowsDaemonSetPodSpec{
+								Containers:     []opv1.CalicoNodeWindowsDaemonSetContainer{_calicoNode1a},
+								InitContainers: []opv1.CalicoNodeWindowsDaemonSetInitContainer{_calicoNodeInit1a},
 								Affinity:       _aff1,
 								NodeSelector:   map[string]string{"overridden": "selector"},
 								Tolerations:    []v1.Toleration{},

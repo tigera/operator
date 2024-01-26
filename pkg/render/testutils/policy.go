@@ -33,6 +33,7 @@ import (
 type AllowTigeraScenario struct {
 	ManagedCluster bool
 	Openshift      bool
+	DPIEnabled     bool
 }
 
 type IPMode string

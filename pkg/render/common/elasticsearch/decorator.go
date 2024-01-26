@@ -15,8 +15,6 @@
 package elasticsearch
 
 import (
-	"strconv"
-
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -26,8 +24,7 @@ import (
 )
 
 const (
-	elasticsearchSecretsAnnotation   = "hash.operator.tigera.io/elasticsearch-secrets"
-	elasticsearchConfigMapAnnotation = "hash.operator.tigera.io/elasticsearch-configmap"
+	elasticsearchSecretsAnnotation = "hash.operator.tigera.io/elasticsearch-secrets"
 )
 
 type Annotatable interface {
@@ -49,38 +46,20 @@ func elasticCertPath(osType rmeta.OSType) string {
 	return certificatemanagement.TrustedCertBundleMountPath
 }
 
-func DecorateAnnotations(obj Annotatable, config *ClusterConfig, secrets []*corev1.Secret) Annotatable {
+func DecorateAnnotations(obj Annotatable, secrets []*corev1.Secret) Annotatable {
 	annots := obj.GetAnnotations()
 	if annots == nil {
 		annots = map[string]string{}
 	}
-	annots[elasticsearchConfigMapAnnotation] = config.Annotation()
 	annots[elasticsearchSecretsAnnotation] = rmeta.SecretsAnnotationHash(secrets...)
 	obj.SetAnnotations(annots)
 
 	return obj
 }
 
-func ContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string, osType rmeta.OSType) corev1.Container {
-	return ContainerDecorateENVVars(c, cluster, secret, clusterDomain, osType)
-}
-
-func ContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
-	envVars := []corev1.EnvVar{
-		{Name: "ELASTIC_REPLICAS", Value: strconv.Itoa(replicas)},
-		{Name: "ELASTIC_SHARDS", Value: strconv.Itoa(shards)},
-	}
-	c.Env = append(c.Env, envVars...)
-
-	return c
-}
-
-func ContainerDecorateENVVars(
-	c corev1.Container,
-	cluster, esUserSecretName, clusterDomain string,
-	osType rmeta.OSType) corev1.Container {
+func DecorateEnvironment(c corev1.Container, namespace string, cluster, esUserSecretName, clusterDomain string, osType rmeta.OSType) corev1.Container {
 	certPath := elasticCertPath(osType)
-	esScheme, esHost, esPort, _ := url.ParseEndpoint(HTTPSEndpoint(osType, clusterDomain))
+	esScheme, esHost, esPort, _ := url.ParseEndpoint(GatewayEndpoint(osType, clusterDomain, namespace))
 	envVars := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: cluster},
 		{Name: "ELASTIC_SCHEME", Value: esScheme},
@@ -102,11 +81,73 @@ func ContainerDecorateENVVars(
 		},
 		{Name: "ELASTIC_CA", Value: certPath},
 		{Name: "ES_CA_CERT", Value: certPath},
-		{Name: "ES_CURATOR_BACKEND_CERT", Value: certPath},
 	}
 
 	c.Env = append(c.Env, envVars...)
 	return c
+}
+
+func ElasticCuratorBackendCertEnvVar(osType rmeta.OSType) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ES_CURATOR_BACKEND_CERT",
+		Value: elasticCertPath(osType),
+	}
+}
+
+func ElasticCAEnvVar(osType rmeta.OSType) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_CA",
+		Value: elasticCertPath(osType),
+	}
+}
+
+func ElasticSchemeEnvVar(esScheme string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_SCHEME",
+		Value: esScheme,
+	}
+}
+
+func ElasticHostEnvVar(esHost string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_HOST",
+		Value: esHost,
+	}
+}
+
+func ElasticPortEnvVar(esPort string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_PORT",
+		Value: esPort,
+	}
+}
+
+func ElasticIndexSuffixEnvVar(esIdxSuffix string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:  "ELASTIC_INDEX_SUFFIX",
+		Value: esIdxSuffix,
+	}
+}
+
+func ElasticUserEnvVar(esUserSecretName string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:      "ELASTIC_USER",
+		ValueFrom: secret.GetEnvVarSource(esUserSecretName, "username", false),
+	}
+}
+
+func ElasticUsernameEnvVar(esUsernameSecret string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:      "ELASTIC_USERNAME",
+		ValueFrom: secret.GetEnvVarSource(esUsernameSecret, "username", false),
+	}
+}
+
+func ElasticPasswordEnvVar(esUserSecretName string) corev1.EnvVar {
+	return corev1.EnvVar{
+		Name:      "ELASTIC_PASSWORD",
+		ValueFrom: secret.GetEnvVarSource(esUserSecretName, "password", false),
+	}
 }
 
 func DefaultVolumeMount(osType rmeta.OSType) corev1.VolumeMount {

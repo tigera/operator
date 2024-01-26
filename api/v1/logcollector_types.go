@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,11 @@ type LogCollectorSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	CollectProcessPath *CollectProcessPathOption `json:"collectProcessPath,omitempty"`
+
+	// If running as a multi-tenant management cluster, the namespace in which
+	// the management cluster's tenant services are running.
+	// +optional
+	MultiTenantManagementClusterNamespace string `json:"multiTenantManagementClusterNamespace,omitempty"`
 }
 
 type CollectProcessPathOption string

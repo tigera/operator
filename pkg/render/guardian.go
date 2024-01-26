@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -125,11 +125,15 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
-		// Add tigera-manager service account for impersonation
+
+		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
+		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
-		managerServiceAccount(),
-		managerClusterRole(false, true, c.cfg.UsePSP),
-		managerClusterRoleBinding(),
+		managerServiceAccount(ManagerNamespace),
+		managerClusterRole(false, true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
+		managerClusterRoleBinding([]string{ManagerNamespace}),
+
+		// Install default UI settings for this managed cluster.
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
 		managerClusterWideTigeraLayer(),
@@ -321,7 +325,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 90,
-				PeriodSeconds:       10,
 			},
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
@@ -331,7 +334,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 					},
 				},
 				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
 			},
 			SecurityContext: securitycontext.NewNonRootContext(),
 		},
@@ -419,6 +421,7 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
 
 	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(8080)}
+	networkpolicyHelper := networkpolicy.DefaultHelper()
 	ingressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -429,25 +432,25 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceBenchmarkerSourceEntityRule,
+			Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceReporterSourceEntityRule,
+			Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceSnapshotterSourceEntityRule,
+			Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      ComplianceControllerSourceEntityRule,
+			Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
 			Destination: guardianIngressDestinationEntityRule,
 		},
 		{

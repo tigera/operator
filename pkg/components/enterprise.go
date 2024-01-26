@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,12 +63,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version:  "7.17.11",
+		Version:  "7.17.16",
 		Registry: "",
 	}
 
 	ComponentEckKibana = component{
-		Version:  "7.17.11",
+		Version:  "7.17.16",
 		Registry: "",
 	}
 
@@ -98,12 +98,6 @@ var (
 	ComponentElasticsearchOperator = component{
 		Version:  "master",
 		Image:    "tigera/eck-operator",
-		Registry: "",
-	}
-
-	ComponentEsCurator = component{
-		Version:  "master",
-		Image:    "tigera/es-curator",
 		Registry: "",
 	}
 
@@ -149,15 +143,9 @@ var (
 		Registry: "",
 	}
 
-	ComponentAnomalyDetectionJobs = component{
+	ComponentSecurityEventWebhooksProcessor = component{
 		Version:  "master",
-		Image:    "tigera/anomaly_detection_jobs",
-		Registry: "",
-	}
-
-	ComponentAnomalyDetectionAPI = component{
-		Version:  "master",
-		Image:    "tigera/anomaly-detection-api",
+		Image:    "tigera/webhooks-processor",
 		Registry: "",
 	}
 
@@ -222,7 +210,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = component{
-		Version:  "v2.43.1",
+		Version:  "v2.48.1",
 		Registry: "",
 	}
 
@@ -267,6 +255,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraNodeWindows = component{
+		Version:  "master",
+		Image:    "tigera/cnx-node-windows",
+		Registry: "",
+	}
+
 	ComponentTigeraTypha = component{
 		Version:  "master",
 		Image:    "tigera/typha",
@@ -285,6 +279,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraCNIWindows = component{
+		Version:  "master",
+		Image:    "tigera/cni-windows",
+		Registry: "",
+	}
+
 	ComponentCloudControllers = component{
 		Version:  "master",
 		Image:    "tigera/cloud-controllers",
@@ -294,12 +294,6 @@ var (
 	ComponentElasticsearchMetrics = component{
 		Version:  "master",
 		Image:    "tigera/elasticsearch-metrics",
-		Registry: "",
-	}
-
-	ComponentTigeraWindowsUpgrade = component{
-		Version:  "master",
-		Image:    "tigera/calico-windows-upgrade",
 		Registry: "",
 	}
 
@@ -334,14 +328,12 @@ var (
 		ComponentElasticsearch,
 		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsCurator,
 		ComponentEsProxy,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
-		ComponentAnomalyDetectionJobs,
-		ComponentAnomalyDetectionAPI,
+		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
@@ -364,7 +356,6 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
-		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,

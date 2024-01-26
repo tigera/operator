@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ var _ = Describe("tier controller tests", func() {
 		ctx = context.Background()
 
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("ReadyToMonitor").Return()
+		mockStatus.On("OnCRFound").Return()
 
 		// Mark that the watches were successful.
 		readyFlag = &utils.ReadyFlag{}
@@ -115,6 +115,9 @@ var _ = Describe("tier controller tests", func() {
 
 	// Validate that the tier is created. Policy coverage is handled in the render tests.
 	It("reconciles the allow-tigera tier", func() {
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -126,6 +129,7 @@ var _ = Describe("tier controller tests", func() {
 		err := c.Delete(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", mock.Anything, mock.Anything).Return()
 		r = ReconcileTiers{
 			client:             c,
@@ -153,6 +157,7 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
 		}
+		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found", "licensekeies.projectcalico.org \"default\" not found", mock.Anything).Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
@@ -179,6 +184,7 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
 		}
+		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", mock.Anything, mock.Anything).Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())

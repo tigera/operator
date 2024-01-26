@@ -18,37 +18,35 @@ import (
 	"context"
 	"fmt"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/common"
-
-	apps "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-	ocsv1 "github.com/openshift/api/security/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	restMeta "k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	ocsv1 "github.com/openshift/api/security/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	apps "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	restMeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -77,9 +75,10 @@ var _ = Describe("Component handler tests", func() {
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
@@ -102,7 +101,7 @@ var _ = Describe("Component handler tests", func() {
 					Namespace: "default",
 				},
 				Spec: apps.DaemonSetSpec{
-					Template: v1.PodTemplateSpec{
+					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
 								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
@@ -143,7 +142,7 @@ var _ = Describe("Component handler tests", func() {
 					Namespace: "default",
 				},
 				Spec: apps.DaemonSetSpec{
-					Template: v1.PodTemplateSpec{
+					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
 								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
@@ -193,7 +192,7 @@ var _ = Describe("Component handler tests", func() {
 					Namespace: "default",
 				},
 				Spec: apps.DaemonSetSpec{
-					Template: v1.PodTemplateSpec{
+					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
 								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
@@ -222,7 +221,7 @@ var _ = Describe("Component handler tests", func() {
 	It("merges annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Annotations: map[string]string{
@@ -242,7 +241,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey := client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns := &v1.Namespace{}
+		ns := &corev1.Namespace{}
 		_ = c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
@@ -260,7 +259,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -269,7 +268,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Annotations: map[string]string{
@@ -288,7 +287,7 @@ var _ = Describe("Component handler tests", func() {
 			ocsv1.UIDRangeAnnotation:   "1-65535",
 			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -312,7 +311,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -321,7 +320,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Annotations: map[string]string{
@@ -341,7 +340,7 @@ var _ = Describe("Component handler tests", func() {
 			ocsv1.UIDRangeAnnotation:   "1-65535",
 			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
@@ -402,7 +401,7 @@ var _ = Describe("Component handler tests", func() {
 	It("merges labels and reconciles only operator added labels", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Labels: map[string]string{
@@ -422,7 +421,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey := client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns := &v1.Namespace{}
+		ns := &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -441,7 +440,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -450,7 +449,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Labels: map[string]string{
@@ -469,7 +468,7 @@ var _ = Describe("Component handler tests", func() {
 			"extra":               "extra-value",
 			fakeComponentLabelKey: fakeComponentLabelValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -493,7 +492,7 @@ var _ = Describe("Component handler tests", func() {
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -502,7 +501,7 @@ var _ = Describe("Component handler tests", func() {
 		// to resource update conflicts.
 		fc = &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
-			objs: []client.Object{&v1.Namespace{
+			objs: []client.Object{&corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-namespace",
 					Labels: map[string]string{
@@ -522,7 +521,7 @@ var _ = Describe("Component handler tests", func() {
 			"extra":               "extra-value",
 			fakeComponentLabelKey: fakeComponentLabelValue,
 		}
-		ns = &v1.Namespace{}
+		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
 		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
@@ -534,11 +533,11 @@ var _ = Describe("Component handler tests", func() {
 		switch o := obj.(type) {
 		case *apps.Deployment:
 			for _, c := range o.Spec.Template.Spec.Containers {
-				Expect(c.ImagePullPolicy).To(Equal(v1.PullIfNotPresent))
+				Expect(c.ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
 			}
 		case *apps.DaemonSet:
 			for _, c := range o.Spec.Template.Spec.Containers {
-				Expect(c.ImagePullPolicy).To(Equal(v1.PullIfNotPresent))
+				Expect(c.ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
 			}
 		default:
 			Expect(true).To(Equal(false), "Unexpected kind in test")
@@ -551,10 +550,10 @@ var _ = Describe("Component handler tests", func() {
 				&apps.DaemonSet{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
 					Spec: apps.DaemonSetSpec{
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
-								Containers: []v1.Container{
+								Containers: []corev1.Container{
 									{Image: "foo"},
 									{Image: "bar"},
 								},
@@ -570,10 +569,10 @@ var _ = Describe("Component handler tests", func() {
 				&apps.Deployment{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
 					Spec: apps.DeploymentSpec{
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
-								Containers: []v1.Container{
+								Containers: []corev1.Container{
 									{Image: "foo"},
 									{Image: "bar"},
 								},
@@ -591,7 +590,7 @@ var _ = Describe("Component handler tests", func() {
 
 		var nodeSelectors map[string]string
 		switch x := obj.(type) {
-		case *v1.PodTemplate:
+		case *corev1.PodTemplate:
 			nodeSelectors = x.Template.Spec.NodeSelector
 		case *apps.Deployment:
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
@@ -627,15 +626,15 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&v1.PodTemplate{
+					objs: []client.Object{&corev1.PodTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-podtemplate"}, &v1.PodTemplate{},
+				}, client.ObjectKey{Name: "test-podtemplate"}, &corev1.PodTemplate{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -646,15 +645,15 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&v1.PodTemplate{
+					objs: []client.Object{&corev1.PodTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Template: v1.PodTemplateSpec{
-							Spec: v1.PodSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
 								NodeSelector: map[string]string{},
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-podtemplate"}, &v1.PodTemplate{},
+				}, client.ObjectKey{Name: "test-podtemplate"}, &corev1.PodTemplate{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -668,8 +667,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -689,8 +688,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -710,8 +709,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -731,8 +730,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
 						Spec: apps.DaemonSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -752,8 +751,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -773,8 +772,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
 						Spec: apps.StatefulSetSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -796,8 +795,8 @@ var _ = Describe("Component handler tests", func() {
 						Spec: batchv1.CronJobSpec{
 							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
-									Template: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									Template: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: map[string]string{},
 										},
 									},
@@ -821,8 +820,8 @@ var _ = Describe("Component handler tests", func() {
 						Spec: batchv1.CronJobSpec{
 							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
-									Template: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									Template: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: map[string]string{},
 										},
 									},
@@ -844,8 +843,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -866,8 +865,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&batchv1.Job{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
 						Spec: batchv1.JobSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -888,8 +887,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
 						Spec: kbv1.KibanaSpec{
-							PodTemplate: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							PodTemplate: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
@@ -912,15 +911,15 @@ var _ = Describe("Component handler tests", func() {
 						Spec: esv1.ElasticsearchSpec{
 							NodeSets: []esv1.NodeSet{
 								{
-									PodTemplate: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									PodTemplate: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: map[string]string{},
 										},
 									},
 								},
 								{
-									PodTemplate: v1.PodTemplateSpec{
-										Spec: v1.PodSpec{
+									PodTemplate: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
 											NodeSelector: nil,
 										},
 									},
@@ -943,8 +942,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{
 										"kubernetes.io/foo": "bar",
 									},
@@ -967,8 +966,8 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&apps.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
 						Spec: apps.DeploymentSpec{
-							Template: v1.PodTemplateSpec{
-								Spec: v1.PodSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{
 										"kubernetes.io/foo": "bar",
 									},
@@ -1125,6 +1124,375 @@ var _ = Describe("Component handler tests", func() {
 		Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
 	})
 
+	It("recreates a RoleBinding if roleRef changes", func() {
+		// In a real cluster we get an error if we attempt to update an existing RoleBinding's RoleRef field because
+		// it is immutable. We can't properly check that update isn't called here because the fake client we use
+		// doesn't contain validation logic like that, so it will happily perform an update that would be rejected in
+		// a real cluster. As an indirect way to check that we're running our code that performs a delete/create instead
+		// of an update, we check the resource version of the RoleBinding after the create. If it's 1, we know it was
+		// deleted and recreated
+		rbOldRoleRef := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-rolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "old-roleref",
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				rbOldRoleRef,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-rolebinding"}, rbOldRoleRef)).NotTo(HaveOccurred())
+		Expect(rbOldRoleRef.RoleRef.Name).To(Equal("old-roleref"))
+
+		// Now pretend we're the new operator version, wanting to change the name of the roleRef.
+		rbNewRoleRef := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-rolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "new-roleref",
+			},
+		}
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				rbNewRoleRef,
+			},
+		}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-rolebinding"}, rbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(rbNewRoleRef.RoleRef.Name).To(Equal("new-roleref"))
+
+		// The fake client resets the resource version to 1 on create.
+		Expect(rbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("1"),
+			"Expected recreation of RoleBinding to reset resourceVersion to 1")
+
+		// Finally, make a normal change, this should result in an update rather than a delete/create
+		rbNewRoleRef.Labels = map[string]string{"new": "should-be-added"}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-rolebinding"}, rbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(rbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("2"),
+			"Expected update of RoleBinding to rev resourceversion to 2")
+	})
+
+	It("recreates a ClusterRoleBinding if roleRef changes", func() {
+		// In a real cluster we get an error if we attempt to update an existing ClusterRoleBinding's RoleRef field because
+		// it is immutable. We can't properly check that update isn't called here because the fake client we use
+		// doesn't contain validation logic like that, so it will happily perform an update that would be rejected in
+		// a real cluster. As an indirect way to check that we're running our code that performs a delete/create instead
+		// of an update, we check the resource version of the ClusterRoleBinding after the create. If it's 1, we know it was
+		// deleted and recreated
+		crbOldRoleRef := &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-clusterrolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "old-roleref",
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				crbOldRoleRef,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbOldRoleRef)).NotTo(HaveOccurred())
+		Expect(crbOldRoleRef.RoleRef.Name).To(Equal("old-roleref"))
+
+		// Now pretend we're the new operator version, wanting to change the name of the roleRef.
+		crbNewRoleRef := &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "my-clusterrolebinding",
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind: "Role",
+				Name: "new-roleref",
+			},
+		}
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				crbNewRoleRef,
+			},
+		}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(crbNewRoleRef.RoleRef.Name).To(Equal("new-roleref"))
+
+		// The fake client resets the resource version to 1 on create.
+		Expect(crbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("1"),
+			"Expected recreation of ClusterRoleBinding to reset resourceVersion to 1")
+
+		// Finally, make a normal change, this should result in an update rather than a delete/create
+		crbNewRoleRef.Labels = map[string]string{"new": "should-be-added"}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbNewRoleRef)).NotTo(HaveOccurred())
+		Expect(crbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("2"),
+			"Expected update of ClusterRoleBinding to rev resourceversion to 2")
+	})
+
+	Context("liveness and readiness probes", func() {
+		It("updates liveness and readiness probe default values", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-deployment",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name:           "test-deployment-container",
+											LivenessProbe:  &corev1.Probe{},
+											ReadinessProbe: &corev1.Probe{},
+										},
+									},
+								},
+							},
+						},
+					},
+					&apps.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-daemonset",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DaemonSetSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name:           "test-daemonset-container",
+											LivenessProbe:  &corev1.Probe{},
+											ReadinessProbe: &corev1.Probe{},
+										},
+									},
+								},
+							},
+						},
+					},
+					&esv1.Elasticsearch{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-elasticsearch",
+							Namespace: "test-namespace",
+						},
+						Spec: esv1.ElasticsearchSpec{
+							NodeSets: []esv1.NodeSet{
+								{
+									PodTemplate: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
+											Containers: []corev1.Container{
+												{
+													Name:           "test-elasticsearch-container",
+													LivenessProbe:  &corev1.Probe{},
+													ReadinessProbe: &corev1.Probe{},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					&kbv1.Kibana{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-kibana",
+							Namespace: "test-namespace",
+						},
+						Spec: kbv1.KibanaSpec{
+							PodTemplate: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name:           "test-kibana-container",
+											LivenessProbe:  &corev1.Probe{},
+											ReadinessProbe: &corev1.Probe{},
+										},
+									},
+								},
+							},
+						},
+					},
+					&monitoringv1.Prometheus{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-prometheus",
+							Namespace: "test-namespace",
+						},
+						Spec: monitoringv1.PrometheusSpec{
+							CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+								Containers: []corev1.Container{
+									{
+										Name:           "test-prometheus-container",
+										LivenessProbe:  &corev1.Probe{},
+										ReadinessProbe: &corev1.Probe{},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("checking that liveness and readiness probe default values are set")
+			var containers []corev1.Container
+
+			var deploy apps.Deployment
+			err = c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, &deploy)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, deploy.Spec.Template.Spec.Containers...)
+
+			var ds apps.DaemonSet
+			err = c.Get(ctx, client.ObjectKey{Name: "test-daemonset", Namespace: "test-namespace"}, &ds)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, ds.Spec.Template.Spec.Containers...)
+
+			var es esv1.Elasticsearch
+			err = c.Get(ctx, client.ObjectKey{Name: "test-elasticsearch", Namespace: "test-namespace"}, &es)
+			Expect(err).NotTo(HaveOccurred())
+			for _, nodeset := range es.Spec.NodeSets {
+				containers = append(containers, nodeset.PodTemplate.Spec.Containers...)
+			}
+
+			var kb kbv1.Kibana
+			err = c.Get(ctx, client.ObjectKey{Name: "test-kibana", Namespace: "test-namespace"}, &kb)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, kb.Spec.PodTemplate.Spec.Containers...)
+
+			var prom monitoringv1.Prometheus
+			err = c.Get(ctx, client.ObjectKey{Name: "test-prometheus", Namespace: "test-namespace"}, &prom)
+			Expect(err).NotTo(HaveOccurred())
+			containers = append(containers, prom.Spec.Containers...)
+
+			Expect(containers).To(HaveLen(5))
+			for _, c := range containers {
+				Expect(c.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+				Expect(c.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(60))
+				Expect(c.LivenessProbe.SuccessThreshold).To(BeEquivalentTo(1))
+				Expect(c.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+
+				Expect(c.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+				Expect(c.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(30))
+				Expect(c.ReadinessProbe.SuccessThreshold).To(BeEquivalentTo(1))
+				Expect(c.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+			}
+		})
+
+		It("should not modify liveness and readiness probes when values are set", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-deployment",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name: "test-deployment-container",
+											LivenessProbe: &corev1.Probe{
+												FailureThreshold: 2,
+												PeriodSeconds:    3,
+												SuccessThreshold: 5,
+												TimeoutSeconds:   7,
+											},
+											ReadinessProbe: &corev1.Probe{
+												FailureThreshold: 11,
+												PeriodSeconds:    13,
+												SuccessThreshold: 17,
+												TimeoutSeconds:   19,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("checking that liveness and readiness probe values are not changed")
+			var deploy apps.Deployment
+			err = c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, &deploy)
+			Expect(err).NotTo(HaveOccurred())
+			containers := deploy.Spec.Template.Spec.Containers
+
+			Expect(containers).To(HaveLen(1))
+			Expect(containers[0].LivenessProbe.FailureThreshold).To(BeEquivalentTo(2))
+			Expect(containers[0].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(3))
+			Expect(containers[0].LivenessProbe.SuccessThreshold).To(BeEquivalentTo(5))
+			Expect(containers[0].LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(7))
+			Expect(containers[0].ReadinessProbe.FailureThreshold).To(BeEquivalentTo(11))
+			Expect(containers[0].ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(13))
+			Expect(containers[0].ReadinessProbe.SuccessThreshold).To(BeEquivalentTo(17))
+			Expect(containers[0].ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(19))
+		})
+
+		It("should not modify liveness and readiness probes when nil", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-deployment",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name: "test-deployment-container",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("checking that liveness and readiness probes are still nil")
+			var deploy apps.Deployment
+			err = c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, &deploy)
+			Expect(err).NotTo(HaveOccurred())
+			containers := deploy.Spec.Template.Spec.Containers
+
+			Expect(containers).To(HaveLen(1))
+			Expect(containers[0].LivenessProbe).To(BeNil())
+			Expect(containers[0].ReadinessProbe).To(BeNil())
+		})
+	})
+
 	Context("common labels and labelselector", func() {
 		It("updates daemonsets", func() {
 			fc := &fakeComponent{
@@ -1272,6 +1640,34 @@ var _ = Describe("Component handler tests", func() {
 			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
 		})
 	})
+	Context("services account updates should not result in removal of data", func() {
+		It("preserves secrets and image pull secrets that were present before object updates", func() {
+			sa := &corev1.ServiceAccount{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a",
+					Namespace: "a",
+				},
+				Secrets:                      []corev1.ObjectReference{{Name: "a"}},
+				ImagePullSecrets:             []corev1.LocalObjectReference{{Name: "a"}},
+				AutomountServiceAccountToken: nil,
+			}
+			Expect(c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "a"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, sa)).NotTo(HaveOccurred())
+
+			sa.Secrets = nil
+			sa.ImagePullSecrets = nil
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs:            []client.Object{sa},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).NotTo(HaveOccurred())
+			Expect(c.Get(ctx, client.ObjectKey{Name: "a", Namespace: "a"}, sa)).NotTo(HaveOccurred())
+			Expect(sa.Secrets).To(HaveLen(1))
+			Expect(sa.ImagePullSecrets).To(HaveLen(1))
+		})
+	})
 })
 
 var _ = Describe("Mocked client Component handler tests", func() {
@@ -1300,7 +1696,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Namespace: "default",
 			},
 			Spec: apps.DaemonSetSpec{
-				Template: v1.PodTemplateSpec{
+				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
 							fakeComponentAnnotationKey: fakeComponentAnnotationValue,
@@ -1601,4 +1997,8 @@ func (mc *mockClient) Scheme() *runtime.Scheme {
 }
 func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
 	panic("RESTMapper not implemented in mockClient")
+}
+
+func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
+	panic("SubResource not implemented in mockClient")
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,9 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -156,5 +159,28 @@ func mergeContainers(current []corev1.Container, provided []corev1.Container) {
 		} else {
 			log.V(1).Info(fmt.Sprintf("WARNING: the container %q was provided for an override and passed CRD validation but the container does not currently exist", c.Name))
 		}
+	}
+}
+
+// ClusterRoleBinding returns a cluster role binding with the given name, that binds the given cluster role
+// to the service account in each of the provided namespaces.
+func ClusterRoleBinding(name, clusterRole, sa string, namespaces []string) *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{}
+	for _, ns := range namespaces {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      sa,
+			Namespace: ns,
+		})
+	}
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole,
+		},
+		Subjects: subjects,
 	}
 }

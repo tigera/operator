@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,9 +24,11 @@ import (
 
 var defaultImages = map[string]string{
 	"calico/cni":                 "calico/cni",
+	"calico/cni-windows":         "calico/cni-windows",
 	"calico/dikastes":            "calico/dikastes",
 	"calico/kube-controllers":    "calico/kube-controllers",
 	"calico/node":                "calico/node",
+	"calico/node-windows":        "calico/node-windows",
 	"calicoctl":                  "calico/ctl",
 	"flannel":                    "coreos/flannel",
 	"flexvol":                    "calico/pod2daemon-flexvol",
@@ -39,10 +41,12 @@ var defaultImages = map[string]string{
 	"coreos-prometheus":          "unused/image",
 	"coreos-alertmanager":        "unused/image",
 	"guardian":                   "tigera/guardian",
+	"cnx-node":                   "tigera/cnx-node",
+	"cnx-node-windows":           "tigera/cnx-node-windows",
 	"tigera-cni":                 "tigera/cni",
+	"tigera-cni-windows":         "tigera/cni-windows",
 	"key-cert-provisioner":       "tigera/key-cert-provisioner",
 	"calico/apiserver":           "calico/apiserver",
-	"calico/windows-upgrade":     "calico/windows-upgrade",
 	"tigera/linseed":             "tigera/linseed",
 }
 
@@ -54,7 +58,6 @@ var ignoredImages = map[string]struct{}{
 	"busybox":           {},
 	"calico/api":        {},
 	"libcalico-go":      {},
-	"calico/windows":    {},
 }
 
 type Release struct {

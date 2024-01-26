@@ -23,9 +23,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -63,7 +65,7 @@ var _ = Describe("Typha rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		cfg = render.TyphaConfiguration{
@@ -86,6 +88,22 @@ var _ = Describe("Typha rendering tests", func() {
 		for _, r := range resources {
 			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
+	})
+
+	It("should render security context constrains properly when provider is openshift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// calico-typha clusterRole should have openshift securitycontextconstraints PolicyRule
+		typhaRole := rtest.GetResource(resources, "calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(typhaRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -113,7 +131,7 @@ var _ = Describe("Typha rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 
@@ -395,7 +413,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 	It("should render all resources when certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.GetCertificatePEM()}
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 		expectedResources := []struct {
@@ -421,7 +439,7 @@ var _ = Describe("Typha rendering tests", func() {
 		// Should render the correct resources.
 		i := 0
 		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -469,6 +487,31 @@ var _ = Describe("Typha rendering tests", func() {
 		// Assert we set annotations properly.
 		Expect(d.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
 		Expect(d.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
+
+		metricsService := rtest.GetResource(resources, "calico-typha-metrics", "calico-system", "", "v1", "Service")
+		Expect(metricsService).To(Equal(&corev1.Service{
+			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "calico-typha-metrics",
+				Namespace: common.CalicoNamespace,
+				Labels: map[string]string{
+					"k8s-app": "calico-typha-metrics",
+				},
+			},
+			Spec: corev1.ServiceSpec{
+				Ports: []corev1.ServicePort{
+					{
+						Port:       typhaMetricsPort,
+						Protocol:   corev1.ProtocolTCP,
+						TargetPort: intstr.FromInt(int(typhaMetricsPort)),
+						Name:       "calico-typha-metrics",
+					},
+				},
+				Selector: map[string]string{
+					"k8s-app": "calico-typha",
+				},
+			},
+		}))
 	})
 
 	Context("With typha deployment overrides", func() {
@@ -593,8 +636,8 @@ var _ = Describe("Typha rendering tests", func() {
 			// - 2 added by the default typha render
 			// - 1 added by the calicoNodeDaemonSet override
 			Expect(d.Spec.Template.Annotations).To(HaveLen(3))
-			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
-			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/typha-certs"))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/typha-certs"))
 			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))

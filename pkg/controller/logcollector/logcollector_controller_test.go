@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
@@ -118,33 +117,38 @@ var _ = Describe("LogCollector controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, &v3.Tier{
 			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
 		})).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, &v3.LicenseKey{
-			ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-		certificateManager, err := certificatemanager.Create(c, nil, "")
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		})).NotTo(HaveOccurred())
+
+		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-		kibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchLogCollectorUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ElasticsearchEksLogForwarderUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
+				Namespace: "tigera-operator",
+			},
+		})).NotTo(HaveOccurred())
+
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
+		linseedTLS, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.LinseedServiceName})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, linseedTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 		// Apply the logcollector CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		})).NotTo(HaveOccurred())
 
 		// Mark that watches were successful.
 		r.licenseAPIReady.MarkAsReady()
@@ -179,6 +183,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					Images: []operatorv1.Image{
 						{Image: "tigera/fluentd", Digest: "sha256:fluentdhash"},
 						{Image: "tigera/fluentd-windows", Digest: "sha256:fluentdwindowshash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -223,8 +228,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 
 		Context("Forward to S3", func() {
-
-			var s3Vars = []corev1.EnvVar{
+			s3Vars := []corev1.EnvVar{
 				{
 					Name:  "AWS_KEY_ID",
 					Value: "",
@@ -253,12 +257,14 @@ var _ = Describe("LogCollector controller tests", func() {
 				{Name: "S3_BUCKET_NAME", Value: "s3Bucket"},
 				{Name: "AWS_REGION", Value: "s3Region"},
 				{Name: "S3_BUCKET_PATH", Value: "s3Path"},
-				{Name: "S3_FLUSH_INTERVAL", Value: "5s"}}
+				{Name: "S3_FLUSH_INTERVAL", Value: "5s"},
+			}
 
 			BeforeEach(func() {
 				By("Specify s3 log storage")
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				})).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, &operatorv1.LogCollector{
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 					Spec: operatorv1.LogCollectorSpec{
@@ -278,13 +284,13 @@ var _ = Describe("LogCollector controller tests", func() {
 				Expect(c.Create(ctx, &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "log-collector-s3-credentials",
-						Namespace: "tigera-operator"},
+						Namespace: "tigera-operator",
+					},
 					Data: map[string][]byte{
 						"key-secret": []byte("secret"),
 						"key-id":     []byte("id"),
 					},
 				})).NotTo(HaveOccurred())
-
 			})
 
 			It("should forward logs to s3", func() {
@@ -331,15 +337,16 @@ var _ = Describe("LogCollector controller tests", func() {
 
 			AfterEach(func() {
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				})).NotTo(HaveOccurred())
 				Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
 			})
 		})
 
 		Context("Forward to Splunk", func() {
-
-			var splunkVars = []corev1.EnvVar{
-				{Name: "SPLUNK_HEC_TOKEN",
+			splunkVars := []corev1.EnvVar{
+				{
+					Name: "SPLUNK_HEC_TOKEN",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -347,19 +354,22 @@ var _ = Describe("LogCollector controller tests", func() {
 							},
 							Key: "token",
 						},
-					}},
+					},
+				},
 				{Name: "SPLUNK_FLOW_LOG", Value: "true"},
 				{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
 				{Name: "SPLUNK_DNS_LOG", Value: "true"},
 				{Name: "SPLUNK_HEC_HOST", Value: "localhost"},
 				{Name: "SPLUNK_HEC_PORT", Value: "1234"},
 				{Name: "SPLUNK_PROTOCOL", Value: "https"},
-				{Name: "SPLUNK_FLUSH_INTERVAL", Value: "5s"}}
+				{Name: "SPLUNK_FLUSH_INTERVAL", Value: "5s"},
+			}
 
 			BeforeEach(func() {
 				By("Specify splunk log storage")
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				})).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, &operatorv1.LogCollector{
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 					Spec: operatorv1.LogCollectorSpec{
@@ -377,12 +387,12 @@ var _ = Describe("LogCollector controller tests", func() {
 				Expect(c.Create(ctx, &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "logcollector-splunk-credentials",
-						Namespace: "tigera-operator"},
+						Namespace: "tigera-operator",
+					},
 					Data: map[string][]byte{
 						"token": []byte("token"),
 					},
 				})).NotTo(HaveOccurred())
-
 			})
 
 			It("should forward logs to splunk", func() {
@@ -430,19 +440,20 @@ var _ = Describe("LogCollector controller tests", func() {
 
 			AfterEach(func() {
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				})).NotTo(HaveOccurred())
 				Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
 			})
 		})
 
 		Context("Forward to Syslog", func() {
-
-			var syslogVars = []corev1.EnvVar{
+			syslogVars := []corev1.EnvVar{
 				{Name: "SYSLOG_HOST", Value: "localhost"},
 				{Name: "SYSLOG_PORT", Value: "1234"},
 				{Name: "SYSLOG_PROTOCOL", Value: "https"},
 				{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s"},
-				{Name: "SYSLOG_HOSTNAME",
+				{
+					Name: "SYSLOG_HOSTNAME",
 					ValueFrom: &corev1.EnvVarSource{
 						FieldRef: &corev1.ObjectFieldSelector{
 							FieldPath: "spec.nodeName",
@@ -463,7 +474,8 @@ var _ = Describe("LogCollector controller tests", func() {
 			BeforeEach(func() {
 				By("Specify splunk log storage")
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				})).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, &operatorv1.LogCollector{
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 					Spec: operatorv1.LogCollectorSpec{
@@ -532,7 +544,8 @@ var _ = Describe("LogCollector controller tests", func() {
 
 			AfterEach(func() {
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				})).NotTo(HaveOccurred())
 				Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
 			})
 		})
@@ -743,7 +756,8 @@ var _ = Describe("LogCollector controller tests", func() {
 	Context("should test fillDefaults for logCollector", func() {
 		It("should set default values for CollectProcessPath, syslog types", func() {
 			logCollector := operatorv1.LogCollector{Spec: operatorv1.LogCollectorSpec{AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
-				Syslog: &operatorv1.SyslogStoreSpec{}}}}
+				Syslog: &operatorv1.SyslogStoreSpec{},
+			}}}
 			modifiedFields := fillDefaults(&logCollector)
 			expectedFields := []string{"CollectProcessPath", "AdditionalStores.Syslog.LogTypes", "AdditionalStores.Syslog.Encryption"}
 			expectedLogTypes := []operatorv1.SyslogLogType{
@@ -759,7 +773,8 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 		It("CollectProcessPath,syslog types should not be changed if set already", func() {
 			logCollector := operatorv1.LogCollector{Spec: operatorv1.LogCollectorSpec{AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
-				Syslog: &operatorv1.SyslogStoreSpec{}}}}
+				Syslog: &operatorv1.SyslogStoreSpec{},
+			}}}
 
 			processPath := operatorv1.CollectProcessPathDisable
 			logCollector.Spec.CollectProcessPath = &processPath
@@ -768,7 +783,8 @@ var _ = Describe("LogCollector controller tests", func() {
 			modifiedFields := fillDefaults(&logCollector)
 			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathDisable))
 			expectedLogTypes := []operatorv1.SyslogLogType{
-				operatorv1.SyslogLogAudit}
+				operatorv1.SyslogLogAudit,
+			}
 			Expect(len(modifiedFields)).To(Equal(0))
 			Expect(logCollector.Spec.AdditionalStores.Syslog.LogTypes).To(Equal(expectedLogTypes))
 		})

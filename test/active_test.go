@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,8 +27,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -74,21 +72,7 @@ var _ = Describe("pkg/active with apiserver", func() {
 		}
 		err := c.Delete(context.Background(), ns)
 		Expect(err).NotTo(HaveOccurred())
-		// Validate the calico-system namespace is deleted using an unstructured type.
-		// This hits the API server directly instead of using the client cache.
-		// This should help with flaky tests.
-		Eventually(func() error {
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Namespace",
-			})
-
-			k := client.ObjectKey{Name: "calico-system"}
-			err := c.Get(context.Background(), k, u)
-			return err
-		}, 240*time.Second).ShouldNot(BeNil())
+		ExpectResourceDestroyed(c, ns, 10*time.Second)
 		active.OsExitOverride = os.Exit
 		active.TickerRateOverride = originalTickRate
 	})

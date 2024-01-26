@@ -21,24 +21,35 @@ import (
 )
 
 const (
-	httpsEndpoint       = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"
-	linseedEndpoint     = "https://tigera-linseed.tigera-elasticsearch.svc"
-	httpsFQDNEndpoint   = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc.%s:9200"
-	linseedFQDNEndpoint = "https://tigera-linseed.tigera-elasticsearch.svc.%s"
+	httpsEndpoint       = "https://tigera-secure-es-gateway-http.%s.svc:9200"
+	linseedEndpoint     = "https://tigera-linseed.%s.svc"
+	httpsFQDNEndpoint   = "https://tigera-secure-es-gateway-http.%s.svc.%s:9200"
+	linseedFQDNEndpoint = "https://tigera-linseed.%s.svc.%s"
 )
 
-// HTTPSEndpoint returns the endpoint for the Elasticsearch service. For
-// Windows, the FQDN endpoint is returned.
-func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
+func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string) string {
 	if osType == rmeta.OSTypeWindows {
-		return fmt.Sprintf(httpsFQDNEndpoint, clusterDomain)
+		return fmt.Sprintf(linseedFQDNEndpoint, namespace, clusterDomain)
 	}
-	return httpsEndpoint
+	return fmt.Sprintf(linseedEndpoint, namespace)
 }
 
-func LinseedEndpoint(osType rmeta.OSType, clusterDomain string) string {
+// GatewayEndpoint returns the endpoint for the Elasticsearch service. For
+// Windows, the FQDN endpoint is returned.
+func GatewayEndpoint(osType rmeta.OSType, clusterDomain, namespace string) string {
 	if osType == rmeta.OSTypeWindows {
-		return fmt.Sprintf(linseedFQDNEndpoint, clusterDomain)
+		return fmt.Sprintf(httpsFQDNEndpoint, namespace, clusterDomain)
 	}
-	return linseedEndpoint
+	return fmt.Sprintf(httpsEndpoint, namespace)
+}
+
+// Deprecated - does not support multi-tenancy. Use GatewayEndpoint instead.
+func HTTPSEndpoint(osType rmeta.OSType, clusterDomain string) string {
+	return GatewayEndpoint(osType, clusterDomain, "tigera-elasticsearch")
+}
+
+// ECKElasticEndpoint returns the URL of the Elasticsearch provisioned by the ECK operator. This
+// endpoint is only valid when using internal elasticsearch.
+func ECKElasticEndpoint() string {
+	return "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 }

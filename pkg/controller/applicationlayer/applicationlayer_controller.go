@@ -16,10 +16,8 @@ package applicationlayer
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -30,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
+	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"
@@ -111,13 +110,13 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
 	}
 
 	// Watch for configmap changes in tigera-operator namespace; the cm contains ruleset for ModSecurity library:
-	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace())
+	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf(
 			"applicationlayer-controller failed to watch ConfigMap %s: %v",
@@ -131,7 +130,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		applicationlayer.ModSecurityRulesetConfigMapName,
 	}
 	for _, configMapName := range maps {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
 	}
@@ -311,7 +310,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future, hopefully by then things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.
@@ -420,23 +419,19 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 }
 
 func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
+	data, err := embed.AsMap()
+	if err != nil {
+		return nil, err
+	}
+
 	ruleset := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
 			Namespace: common.OperatorNamespace(),
 		},
-		Data: make(map[string]string),
+		Data: data,
 	}
-
-	for filename, dataBase64 := range applicationlayer.ModsecurityCoreRuleSet {
-		if data, err := base64.StdEncoding.DecodeString(dataBase64); err == nil {
-			ruleset.Data[filename] = string(data)
-		} else {
-			return nil, err
-		}
-	}
-
 	return ruleset, nil
 }
 

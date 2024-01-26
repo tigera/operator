@@ -17,7 +17,6 @@ package amazoncloudintegration
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -83,7 +82,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
+	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch Tigera network resource: %v", err)
 	}
@@ -206,9 +205,9 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to load CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -248,9 +247,8 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 	r.status.ClearDegraded()
 
 	if !r.status.IsAvailable() {
-		// Schedule a kick to check again in the near future. Hopefully by then
-		// things will be available.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		// Schedule a kick to check again in the near future. Hopefully by then things will be available.
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	// Everything is available - update the CRD status.

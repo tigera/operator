@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"time"
 
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
 	"github.com/tigera/operator/pkg/apis"
 
@@ -44,8 +44,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -60,8 +58,6 @@ import (
 )
 
 var _ = Describe("IntrusionDetection controller tests", func() {
-	const expectedADStorageClassName = "tigera-anomaly-detection"
-
 	var c client.Client
 	var ctx context.Context
 	var r ReconcileIntrusionDetection
@@ -83,7 +79,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 
-		// Create an object we can use throughout the test to do the compliance reconcile loops.
+		// Create an object we can use throughout the tests.
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
@@ -105,8 +101,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
-		// Create an object we can use throughout the test to do the compliance reconcile loops.
-		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileIntrusionDetection{
 			client:          c,
 			scheme:          scheme,
@@ -136,8 +130,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 
-		// The compliance reconcile loop depends on a ton of objects that should be available in your client as
-		// prerequisites. Without them, compliance will not even start creating objects. Let's create them now.
+		// The reconcile loop depends on a ton of objects that should be available in your client as
+		// prerequisites. Without them, the controller will not even start creating objects. Let's create them now.
 		Expect(c.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
@@ -157,7 +151,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			},
 		})).NotTo(HaveOccurred())
 
-		certificateManager, err := certificatemanager.Create(c, nil, "")
+		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
@@ -174,7 +168,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
-		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchADJobUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -224,7 +217,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
@@ -258,14 +251,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					Name:      render.ADJobPodTemplateBaseName + ".training",
 				},
 			}
-			Expect(test.GetResource(c, &training_pt)).To(BeNil())
-			Expect(training_pt.Template.Spec.Containers).To(HaveLen(1))
-			adjobs_training := test.GetContainer(training_pt.Template.Spec.Containers, "adjobs")
-			Expect(adjobs_training).ToNot(BeNil())
-			Expect(adjobs_training.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentAnomalyDetectionJobs.Image,
-					components.ComponentAnomalyDetectionJobs.Version)))
+			Expect(test.GetResource(c, &training_pt)).To(HaveOccurred())
 
 			detection_pt := corev1.PodTemplate{
 				TypeMeta: metav1.TypeMeta{
@@ -277,14 +263,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					Name:      render.ADJobPodTemplateBaseName + ".detection",
 				},
 			}
-			Expect(test.GetResource(c, &detection_pt)).To(BeNil())
-			Expect(detection_pt.Template.Spec.Containers).To(HaveLen(1))
-			adjobs_detection := test.GetContainer(detection_pt.Template.Spec.Containers, "adjobs")
-			Expect(adjobs_detection).ToNot(BeNil())
-			Expect(adjobs_detection.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentAnomalyDetectionJobs.Image,
-					components.ComponentAnomalyDetectionJobs.Version)))
+			Expect(test.GetResource(c, &detection_pt)).To(HaveOccurred())
 
 			adAPI := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -293,15 +272,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					Namespace: render.IntrusionDetectionNamespace,
 				},
 			}
-			Expect(test.GetResource(c, &adAPI)).To(BeNil())
-			Expect(adAPI.Spec.Template.Spec.Containers).To(HaveLen(1))
-			adAPIContainer := test.GetContainer(adAPI.Spec.Template.Spec.Containers, "anomaly-detection-api")
-			Expect(adAPIContainer).ToNot(BeNil())
-			Expect(adAPIContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentAnomalyDetectionAPI.Image,
-					components.ComponentAnomalyDetectionAPI.Version)))
+			Expect(test.GetResource(c, &adAPI)).To(HaveOccurred())
 		})
+
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
@@ -310,8 +283,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:intrusiondetectionjobinstallerhash"},
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
 						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
-						{Image: "tigera/anomaly_detection_jobs", Digest: "sha256:anomalydetectionjobs"},
-						{Image: "tigera/anomaly-detection-api", Digest: "sha256:anomalydetectionapi"},
+						{Image: "tigera/webhooks-processor", Digest: "sha256:webhooksprocessorhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -327,7 +300,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
@@ -366,60 +339,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentDeepPacketInspection.Image,
 					"sha256:deeppacketinspectionhash")))
-
-			training_pt := corev1.PodTemplate{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "PodTemplate",
-					APIVersion: "v1",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: render.IntrusionDetectionNamespace,
-					Name:      render.ADJobPodTemplateBaseName + ".training",
-				},
-			}
-			Expect(test.GetResource(c, &training_pt)).To(BeNil())
-			Expect(training_pt.Template.Spec.Containers).To(HaveLen(1))
-			adjobs_training := test.GetContainer(training_pt.Template.Spec.Containers, "adjobs")
-			Expect(adjobs_training).ToNot(BeNil())
-			Expect(adjobs_training.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentAnomalyDetectionJobs.Image,
-					"sha256:anomalydetectionjobs")))
-
-			detection_pt := corev1.PodTemplate{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "PodTemplate",
-					APIVersion: "v1",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: render.IntrusionDetectionNamespace,
-					Name:      render.ADJobPodTemplateBaseName + ".detection",
-				},
-			}
-			Expect(test.GetResource(c, &detection_pt)).To(BeNil())
-			Expect(detection_pt.Template.Spec.Containers).To(HaveLen(1))
-			adjobs_detection := test.GetContainer(detection_pt.Template.Spec.Containers, "adjobs")
-			Expect(adjobs_detection).ToNot(BeNil())
-			Expect(adjobs_detection.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentAnomalyDetectionJobs.Image,
-					"sha256:anomalydetectionjobs")))
-
-			adAPI := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "anomaly-detection-api",
-					Namespace: render.IntrusionDetectionNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &adAPI)).To(BeNil())
-			Expect(adAPI.Spec.Template.Spec.Containers).To(HaveLen(1))
-			adAPIContainer := test.GetContainer(adAPI.Spec.Template.Spec.Containers, "anomaly-detection-api")
-			Expect(adAPIContainer).ToNot(BeNil())
-			Expect(adAPIContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentAnomalyDetectionAPI.Image,
-					"sha256:anomalydetectionapi")))
 		})
 
 		It("should not register intrusion-detection-job-installer image when cluster is managed", func() {
@@ -429,6 +348,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					ManagementClusterAddr: "127.0.0.1:12345",
 				},
 			})).ToNot(HaveOccurred())
+
+			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("non-default-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -463,160 +384,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &j)).To(BeNil())
-		})
-
-		It("should not set AD Spec defaults in a managed cluster", func() {
-			defaultTSEEInstanceKey := client.ObjectKey{Name: "tigera-secure"}
-
-			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterConnectionSpec{
-					ManagementClusterAddr: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			result := &operatorv1.IntrusionDetection{}
-			err = c.Get(ctx, defaultTSEEInstanceKey, result)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			Expect(len(result.Spec.AnomalyDetection.StorageClassName)).To(Equal(0))
-		})
-
-		It("should not set AD Spec defaults if not originally not defined", func() {
-			defaultTSEEInstanceKey := client.ObjectKey{Name: "tigera-secure"}
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			result := &operatorv1.IntrusionDetection{}
-			err = c.Get(ctx, defaultTSEEInstanceKey, result)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			Expect(len(result.Spec.AnomalyDetection.StorageClassName)).To(Equal(0))
-		})
-
-		It("should degrade if AD Spec is set in managed cluster", func() {
-			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterConnectionSpec{
-					ManagementClusterAddr: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
-
-			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageClassName: expectedADStorageClassName,
-					},
-				},
-			})).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
-		})
-
-		It("should degrade if provided a non kubernets qualified AD storage name", func() {
-			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
-
-			malFormedStorageName := "malformed_storage_name"
-			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageClassName: malFormedStorageName,
-					},
-				},
-			})).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
-		})
-
-		It("should degrade when the storage class is not found if storage class is specified", func() {
-			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ShouldNot(HaveOccurred())
-
-			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageClassName: expectedADStorageClassName,
-					},
-				},
-			})).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
-		})
-
-		It("should continue with a persistent storage configuration if storage class is found", func() {
-			Expect(c.Create(ctx, &storagev1.StorageClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: expectedADStorageClassName,
-				},
-			})).ShouldNot(HaveOccurred())
-
-			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ShouldNot(HaveOccurred())
-
-			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageClassName: expectedADStorageClassName,
-					},
-				},
-			})).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-		})
-
-		It("should delete an existing PVC with a storageclass configuration that does not match the specified storage name in the AD spec", func() {
-			incorrectStorageClassName := "incorrect-storage-class"
-			storageClassNameQueryKey := client.ObjectKey{Name: incorrectStorageClassName}
-
-			Expect(c.Create(ctx, &storagev1.StorageClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: expectedADStorageClassName,
-				},
-			})).ShouldNot(HaveOccurred())
-
-			adPVC := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ADPersistentVolumeClaimName,
-					Namespace: render.IntrusionDetectionNamespace,
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					StorageClassName: &incorrectStorageClassName,
-				},
-			}
-			Expect(c.Create(ctx, adPVC)).ShouldNot(HaveOccurred())
-
-			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ShouldNot(HaveOccurred())
-
-			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageClassName: expectedADStorageClassName,
-					},
-				},
-			})).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			err = c.Get(ctx, storageClassNameQueryKey, adPVC)
-			Expect(err).Should(HaveOccurred())
-			Expect(errors.IsNotFound(err)).To(BeTrue())
 		})
 	})
 
@@ -664,9 +431,11 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
+			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("non-default-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 0)).To(BeTrue())
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
 		})
 
 		It("should wait on tigera-ee-installer-elasticsearch-access secret when in a management cluster", func() {
@@ -680,7 +449,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			// The missing secret should force utils.ElasticSearch to return a NotFound error which triggers r.status.SetDegraded.
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 1)
 		})
 	})
 
@@ -796,10 +565,28 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(memoryRequest)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
 		})
+
+		It("should error if Elasticsearch configuration ConfigMap contains default cluster-name field in managed cluster", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					ManagementClusterAddr: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+
+			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("managed-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		})
 	})
 
 	Context("Reconcile for Condition status", func() {
 		generation := int64(2)
+
 		It("should reconcile with creating new status condition with one item", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -835,6 +622,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with empty tigerastatus conditions ", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -855,6 +643,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 			Expect(instance.Status.Conditions).To(HaveLen(0))
 		})
+
 		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -916,6 +705,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
+
 		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
 			ts := &operatorv1.TigeraStatus{
@@ -976,6 +766,34 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+	})
+
+	Context("External ES mode", func() {
+		BeforeEach(func() {
+			// Delete the Elasticsearch CR. This is created for ECK only.
+			Expect(c.Delete(ctx, &esv1.Elasticsearch{
+				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace},
+			})).NotTo(HaveOccurred())
+
+			// Update the reconciler to run in external ES mode for these tests.
+			r.elasticExternal = true
+		})
+
+		It("should Reconcile with default values for intrusion detection resource", func() {
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			ids := operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(test.GetResource(c, &ids)).To(BeNil())
+			Expect(ids.Spec.ComponentResources).ShouldNot(BeNil())
+			Expect(len(ids.Spec.ComponentResources)).Should(Equal(1))
+			Expect(ids.Spec.ComponentResources[0].ComponentName).Should(Equal(operatorv1.ComponentNameDeepPacketInspection))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPURequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimit)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
 		})
 	})
 })

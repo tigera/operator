@@ -51,7 +51,6 @@ var _ = Describe("dex rendering tests", func() {
 	expectedDexOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/dex_ocp.json")
 
 	Context("dex is configured for oidc", func() {
-
 		const (
 			rbac           = "rbac.authorization.k8s.io"
 			pullSecretName = "tigera-pull-secret"
@@ -66,7 +65,7 @@ var _ = Describe("dex rendering tests", func() {
 			cfg            *render.DexComponentConfiguration
 		)
 
-		var expectedVolumeMounts = []corev1.VolumeMount{
+		expectedVolumeMounts := []corev1.VolumeMount{
 			{Name: "config", MountPath: "/etc/dex/baseCfg", ReadOnly: true},
 			{Name: "secrets", MountPath: "/etc/dex/secrets", ReadOnly: true},
 			{Name: "tigera-dex-tls", MountPath: "/tigera-dex-tls", ReadOnly: true},
@@ -74,8 +73,9 @@ var _ = Describe("dex rendering tests", func() {
 			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/cert.pem", SubPath: "ca-bundle.crt", ReadOnly: true},
 		}
 
-		var expectedVolumes = []corev1.Volume{
-			{Name: "config",
+		expectedVolumes := []corev1.Volume{
+			{
+				Name: "config",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -85,8 +85,10 @@ var _ = Describe("dex rendering tests", func() {
 							{Key: "config.yaml", Path: "config.yaml"},
 						},
 					},
-				}},
-			{Name: "secrets",
+				},
+			},
+			{
+				Name: "secrets",
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: "tigera-oidc-credentials",
@@ -95,15 +97,19 @@ var _ = Describe("dex rendering tests", func() {
 						},
 						DefaultMode: ptr.Int32ToPtr(420),
 					},
-				}},
-			{Name: "tigera-dex-tls",
+				},
+			},
+			{
+				Name: "tigera-dex-tls",
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  "tigera-dex-tls",
 						DefaultMode: ptr.Int32ToPtr(420),
 					},
-				}},
-			{Name: "tigera-ca-bundle",
+				},
+			},
+			{
+				Name: "tigera-ca-bundle",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -115,15 +121,18 @@ var _ = Describe("dex rendering tests", func() {
 							{Key: certificatemanagement.RHELRootCertificateBundleName, Path: certificatemanagement.RHELRootCertificateBundleName},
 						},
 					},
-				}},
+				},
+			},
 		}
 
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
+
 			dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, clusterDomain)
 			tlsKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
 			Expect(err).NotTo(HaveOccurred())
@@ -156,7 +165,8 @@ var _ = Describe("dex rendering tests", func() {
 					"clientID":             []byte("a.b.com"),
 					"clientSecret":         []byte("my-secret"),
 					"serviceAccountSecret": []byte("my-secret2"),
-				}}
+				},
+			}
 			pullSecrets = []*corev1.Secret{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -164,7 +174,8 @@ var _ = Describe("dex rendering tests", func() {
 						Namespace: common.OperatorNamespace(),
 					},
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				}}
+				},
+			}
 
 			replicas = 2
 
@@ -179,11 +190,11 @@ var _ = Describe("dex rendering tests", func() {
 				ClusterDomain: clusterName,
 				TLSKeyPair:    tlsKeyPair,
 				TrustedBundle: trustedCaBundle,
+				UsePSP:        true,
 			}
 		})
 
 		It("should render all resources for a OIDC setup", func() {
-
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 
@@ -207,10 +218,11 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
+				{"tigera-dex", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			for i, expectedRes := range expectedResources {
-				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -294,12 +306,25 @@ var _ = Describe("dex rendering tests", func() {
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{"tigera-dex:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+				{"tigera-dex", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			for i, expectedRes := range expectedResources {
-				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
+		})
+
+		It("should render properly when PSP is not supported by the cluster", func() {
+			cfg.UsePSP = false
+			component := render.Dex(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			// Should not contain any PodSecurityPolicies
+			for _, r := range resources {
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+			}
 		})
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
@@ -351,6 +376,5 @@ var _ = Describe("dex rendering tests", func() {
 				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
 			)
 		})
-
 	})
 })

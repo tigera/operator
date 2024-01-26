@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,17 +17,20 @@ package authentication
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -45,7 +48,6 @@ import (
 )
 
 var _ = Describe("authentication controller tests", func() {
-
 	var (
 		cli        client.Client
 		scheme     *runtime.Scheme
@@ -82,6 +84,9 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		// Apply prerequisites for the basic reconcile to succeed.
+		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
@@ -117,7 +122,8 @@ var _ = Describe("authentication controller tests", func() {
 			Data: map[string][]byte{
 				"clientID":     []byte("a.b.com"),
 				"clientSecret": []byte("my-secret"),
-			}}
+			},
+		}
 		auth = &operatorv1.Authentication{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.AuthenticationSpec{
@@ -163,7 +169,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -188,7 +194,7 @@ var _ = Describe("authentication controller tests", func() {
 
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -229,7 +235,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -289,7 +295,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -334,7 +340,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -344,6 +350,26 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(*authentication.Spec.OIDC.EmailVerification).To(Equal(operatorv1.EmailVerificationTypeVerify))
 			Expect(authentication.Spec.UsernamePrefix).To(Equal("u"))
 			Expect(authentication.Spec.GroupsPrefix).To(Equal("g"))
+		})
+	})
+
+	Context("multi-tenant OIDC connector config options", func() {
+		It("should reject non-Tigera OIDC setup", func() {
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+			auth.Spec.OIDC = &operatorv1.AuthenticationOIDC{
+				IssuerURL:      "https://example.com",
+				UsernameClaim:  "email",
+				GroupsClaim:    "group",
+				GroupsPrefix:   "g",
+				UsernamePrefix: "u",
+			}
+			// Apply an authentication spec that triggers all the logic in the updateAuthenticationWithDefaults() func.
+			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
+
+			// Reconcile
+			r := &ReconcileAuthentication{client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: readyFlag, usePSP: true, multiTenant: true}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
 		})
 	})
 
@@ -366,7 +392,6 @@ var _ = Describe("authentication controller tests", func() {
 		})
 
 		It("should use builtin images", func() {
-
 			r := ReconcileAuthentication{
 				client:         cli,
 				scheme:         scheme,
@@ -399,6 +424,7 @@ var _ = Describe("authentication controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/dex", Digest: "sha256:dexhash"},
+						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -471,9 +497,10 @@ var _ = Describe("authentication controller tests", func() {
 			utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
 		})
 	})
-
+	tls, err := secret.CreateTLSSecret(nil, "a", "a", corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, nil, "a")
+	Expect(err).NotTo(HaveOccurred())
+	validCert := tls.Data[corev1.TLSCertKey]
 	const (
-		validCA       = "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----"
 		validPW       = "dc=example,dc=com"
 		validDN       = "dc=example,dc=com"
 		invalidDN     = "dc=example,dc=com,pancake"
@@ -492,7 +519,7 @@ var _ = Describe("authentication controller tests", func() {
 		}
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, true, false}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())
@@ -509,64 +536,75 @@ var _ = Describe("authentication controller tests", func() {
 		Entry("Proper configuration",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
-				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
+			},
+			[]byte(validDN), []byte(validPW), []byte(validCert),
 			true),
 		Entry("Proper configuration w/o name attribute",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter},
-				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
+			},
+			[]byte(validDN), []byte(validPW), []byte(validCert),
 			true),
 		Entry("Proper configuration w/o groupSearch",
 			&operatorv1.AuthenticationLDAP{
-				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+			},
+			[]byte(validDN), []byte(validPW), []byte(validCert),
 			true),
 		Entry("Wrong DN in secret",
 			&operatorv1.AuthenticationLDAP{
-				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
-			[]byte(invalidDN), []byte(validPW), []byte(validCA),
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+			},
+			[]byte(invalidDN), []byte(validPW), []byte(validCert),
 			false),
 		Entry("Missing PW in secret",
 			&operatorv1.AuthenticationLDAP{
-				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
-			[]byte(validDN), []byte(""), []byte(validCA),
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+			},
+			[]byte(validDN), []byte(""), []byte(validCert),
 			false),
 		Entry("Missing CA field in secret",
 			&operatorv1.AuthenticationLDAP{
-				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}},
+				UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
+			},
 			[]byte(validDN), []byte(validPW), []byte(""),
 			false),
 		Entry("Wrong DN in LDAP spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
-				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
-			[]byte(invalidDN), []byte(validPW), []byte(validCA),
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
+			},
+			[]byte(invalidDN), []byte(validPW), []byte(validCert),
 			false),
 		Entry("Wrong filter in LDAP userSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: invalidFilter, NameAttribute: attribute},
-				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
+			},
+			[]byte(validDN), []byte(validPW), []byte(validCert),
 			false),
 		Entry("Proper spec, filter omitted in userSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, NameAttribute: attribute},
-				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: validFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
+			},
+			[]byte(validDN), []byte(validPW), []byte(validCert),
 			true),
 		Entry("Wrong filter in LDAP groupSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
-				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: invalidFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, Filter: invalidFilter, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
+			},
+			[]byte(validDN), []byte(validPW), []byte(validCert),
 			false),
 		Entry("Proper spec, filter omitted in groupSearch spec",
 			&operatorv1.AuthenticationLDAP{
 				UserSearch:  &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute},
-				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}},
-			[]byte(validDN), []byte(validPW), []byte(validCA),
+				GroupSearch: &operatorv1.GroupSearch{BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}},
+			},
+			[]byte(validDN), []byte(validPW), []byte(validCert),
 			true),
 	)
 	var (
@@ -575,22 +613,23 @@ var _ = Describe("authentication controller tests", func() {
 		ldap = &operatorv1.AuthenticationLDAP{UserSearch: &operatorv1.UserSearch{BaseDN: validDN}}
 		oidc = &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email"}
 	)
-	DescribeTable("should validate the authentication spec", func(auth *operatorv1.Authentication, expectPass bool) {
+	DescribeTable("should validate the authentication spec", func(auth *operatorv1.Authentication, multiTenant, expectPass bool) {
 		if expectPass {
-			Expect(validateAuthentication(auth)).NotTo(HaveOccurred())
+			Expect(validateAuthentication(auth, multiTenant)).NotTo(HaveOccurred())
 		} else {
-			Expect(validateAuthentication(auth)).To(HaveOccurred())
+			Expect(validateAuthentication(auth, multiTenant)).To(HaveOccurred())
 		}
 	},
-		Entry("Expect single Openshift config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{Openshift: ocp}}, true),
-		Entry("Expect single LDAP config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{LDAP: ldap}}, true),
-		Entry("Expect single OIDC config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc}}, true),
-		Entry("Expect 0 configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{}}, false),
-		Entry("Expect two configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap}}, false),
-		Entry("Expect three configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap, Openshift: ocp}}, false),
-		Entry("Expect prompt type to be used without other values", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone})}}, true),
-		Entry("Expect prompt type to fail when none is combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone, operatorv1.PromptTypeLogin})}}, false),
-		Entry("Expect prompt type to be able to be combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeSelectAccount, operatorv1.PromptTypeLogin})}}, true),
+		Entry("Expect single Openshift config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{Openshift: ocp}}, false, true),
+		Entry("Expect single LDAP config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{LDAP: ldap}}, false, true),
+		Entry("Expect single OIDC config to pass validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc}}, false, true),
+		Entry("Expect DEX OIDC to fail validation for multi-tenant", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc}}, true, false),
+		Entry("Expect 0 configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{}}, false, false),
+		Entry("Expect two configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap}}, false, false),
+		Entry("Expect three configs to fail validation", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: oidc, LDAP: ldap, Openshift: ocp}}, false, false),
+		Entry("Expect prompt type to be used without other values", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone})}}, false, true),
+		Entry("Expect prompt type to fail when none is combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeNone, operatorv1.PromptTypeLogin})}}, false, false),
+		Entry("Expect prompt type to be able to be combined", &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{OIDC: copyAndAddPromptTypes(oidc, []operatorv1.PromptType{operatorv1.PromptTypeSelectAccount, operatorv1.PromptTypeLogin})}}, false, true),
 	)
 })
 

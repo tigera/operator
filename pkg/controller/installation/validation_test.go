@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 var _ = Describe("Installation validation tests", func() {
@@ -73,7 +74,7 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should prevent IPv6 if BPF is enabled", func() {
+	It("should allow IPv6 if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -84,8 +85,38 @@ var _ = Describe("Installation validation tests", func() {
 				NodeSelector:  "all()",
 			},
 		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+			CanReach: "2001:4860:4860::8888",
+		}
 		err := validateCustomResource(instance)
-		Expect(err).To(MatchError("IPv6 IP pool is specified but eBPF mode does not support IPv6"))
+		Expect(err).To(BeNil())
+	})
+
+	It("should not allow dual stack (both IPv4 and IPv6) if BPF is enabled", func() {
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "1eef::/64",
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				Encapsulation: operator.EncapsulationNone,
+				NodeSelector:  "all()",
+			},
+			{
+				CIDR:          "192.168.0.0/27",
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
+			CanReach: "2001:4860:4860::8888",
+		}
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach: "8.8.8.8",
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("bpf dataplane does not support dual stack"))
 	})
 
 	It("should allow IPv6 VXLAN", func() {
@@ -216,6 +247,19 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 		instance.Spec.CalicoNetwork.HostPorts = &en
 		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should allow HostPorts=Disabled when using the AmazonVPC plugin", func() {
+		bpf := operator.LinuxDataplaneBPF
+		bgp := operator.BGPDisabled
+		dis := operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		instance.Spec.CalicoNetwork.BGP = &bgp
+		instance.Spec.CNI.Type = operator.PluginAmazonVPC
+		instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
+		instance.Spec.CalicoNetwork.HostPorts = &dis
+		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -376,6 +420,36 @@ var _ = Describe("Installation validation tests", func() {
 		np := operator.NonPrivilegedEnabled
 		instance.Spec.NonPrivileged = &np
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should pass on allowed CNI sysctl tuning plugin config", func() {
+		instance.Spec.CalicoNetwork.Sysctl = []operator.Sysctl{
+			{
+				Key:   "net.ipv4.tcp_keepalive_intvl",
+				Value: "15",
+			},
+			{
+				Key:   "net.ipv4.tcp_keepalive_probes",
+				Value: "6",
+			},
+			{
+				Key:   "net.ipv4.tcp_keepalive_time",
+				Value: "40",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).ShouldNot(HaveOccurred())
+	})
+
+	It("should error on not-allowed CNI sysctl tuning plugin config", func() {
+		instance.Spec.CalicoNetwork.Sysctl = []operator.Sysctl{
+			{
+				Key:   "net.ipv4.not_allowed_parameter",
+				Value: "1",
+			},
+		}
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
@@ -736,11 +810,17 @@ var _ = Describe("Installation validation tests", func() {
 						},
 					},
 				},
+				ServiceCIDRs: []string{"10.96.0.0/12"},
 				CNI: &operator.CNISpec{
 					Type: operator.PluginCalico,
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginHostLocal},
 				},
 			},
+		}
+		// Populate the k8s service endpoint (required for windows)
+		k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+			Host: "1.2.3.4",
+			Port: "6443",
 		}
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 		err := validateCustomResource(instance)
@@ -772,6 +852,39 @@ var _ = Describe("Installation validation tests", func() {
 			var invalidMinReadySeconds int32 = -1
 			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{
 				Spec: &operator.CalicoNodeDaemonSetSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("validate CalicoNodeWindowsDaemonSet", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CalicoNodeWindowsDaemonSet = &operator.CalicoNodeWindowsDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CalicoNodeWindowsDaemonSet = &operator.CalicoNodeWindowsDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CalicoNodeWindowsDaemonSet = &operator.CalicoNodeWindowsDaemonSet{
+				Spec: &operator.CalicoNodeWindowsDaemonSetSpec{
 					MinReadySeconds: &invalidMinReadySeconds,
 				},
 			}
@@ -845,16 +958,105 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+	Describe("validate Windows configuration", func() {
+		BeforeEach(func() {
+			winDpHNS := operator.WindowsDataplaneHNS
+			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+				WindowsDataplane: &winDpHNS,
+			}
+			instance.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
+			var twentyEight int32 = 28
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "192.168.0.0/16",
+					BlockSize:     &twentyEight,
+					Encapsulation: operator.EncapsulationVXLAN,
+					NATOutgoing:   operator.NATOutgoingEnabled,
+					NodeSelector:  "all()",
+				},
+			}
+			var disabled operator.BGPOption = operator.BGPDisabled
+			instance.Spec.CalicoNetwork.BGP = &disabled
+			k8sapi.Endpoint = k8sapi.ServiceEndpoint{
+				Host: "1.2.3.4",
+				Port: "6443",
+			}
+		})
+		Context("Windows disabled", func() {
+			It("should return an error if WindowsNodes is configured but WindowsDataplane is disabled", func() {
+				winDpDisabled := operator.WindowsDataplaneDisabled
+				instance.Spec.CalicoNetwork.WindowsDataplane = &winDpDisabled
+				instance.Spec.WindowsNodes = &operator.WindowsNodeSpec{}
 
-	Describe("validate CalicoWindowsUpgradeDaemonSet", func() {
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled"))
+			})
+		})
+		Context("Calico CNI", func() {
+			BeforeEach(func() {
+				instance.Spec.CNI = &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				}
+			})
+			It("should return an error if the k8s service endpoint configmap is not configured correctly", func() {
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+			})
+			It("should return an error if instance.Spec.ServiceCIDRs is not configured", func() {
+				instance.Spec.ServiceCIDRs = []string{}
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
+			})
+			It("should return an error if IP pool encapsulation is IPIP", func() {
+				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationIPIP
+				var enabled operator.BGPOption = operator.BGPEnabled
+				instance.Spec.CalicoNetwork.BGP = &enabled
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"))
+			})
+			It("should return an error if IP pool encapsulation is VXLANCrossSubnet", func() {
+				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLANCrossSubnet
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("IPv4 IPPool encapsulation VXLANCrossSubnet is not supported by Calico for Windows"))
+			})
+		})
+		Context("AzureVNET CNI (to validate any non-Calico)", func() {
+			BeforeEach(func() {
+				instance.Spec.CNI = &operator.CNISpec{
+					Type: operator.PluginAzureVNET,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginAzureVNET},
+				}
+				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationNone
+			})
+			It("should return an error if the k8s service endpoint configmap is not configured correctly", func() {
+				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
+				err := validateCustomResource(instance)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+			})
+			It("should not return an error if instance.Spec.ServiceCIDRs is not configured", func() {
+				instance.Spec.ServiceCIDRs = []string{}
+				err := validateCustomResource(instance)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+	})
+	Describe("validate CSIDaemonset", func() {
 		It("should return nil when it is empty", func() {
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{}
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{}
 			err := validateCustomResource(instance)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should return an error if it is invalid", func() {
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
 				Metadata: &operator.Metadata{
 					Labels: map[string]string{
 						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
@@ -866,16 +1068,37 @@ var _ = Describe("Installation validation tests", func() {
 				},
 			}
 			err := validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(HaveOccurred(), "Should error because the labels and annotations are invalid")
 
 			var invalidMinReadySeconds int32 = -1
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
-				Spec: &operator.CalicoWindowsUpgradeDaemonSetSpec{
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
 					MinReadySeconds: &invalidMinReadySeconds,
 				},
 			}
-			err = validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(HaveOccurred(), "Should error because the minReadySeconds is invalid")
+		})
+
+		It("should validate with container", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
+					Template: &operator.CSINodeDriverDaemonSetPodTemplateSpec{
+						Spec: &operator.CSINodeDriverDaemonSetPodSpec{
+							Containers: []operator.CSINodeDriverDaemonSetContainer{
+								{
+									Name: "csi-node-driver",
+									Resources: &v1.ResourceRequirements{
+										Limits: v1.ResourceList{
+											"cpu": resource.MustParse("2"),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		})
 	})
 })

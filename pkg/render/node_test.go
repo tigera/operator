@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -124,8 +124,10 @@ var _ = Describe("Node rendering tests", func() {
 				scheme := runtime.NewScheme()
 				Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 				cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				// Create a dummy secret to pass as input.
 				typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 
@@ -183,7 +185,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -446,7 +448,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -772,7 +774,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -862,7 +864,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -1013,7 +1015,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -1427,7 +1429,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -1777,9 +1779,18 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
+
+				// calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
+				nodeRole := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"privileged"},
+				}))
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -1851,8 +1862,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					// The OpenShift envvar overrides.
-					{Name: "FELIX_HEALTHPORT", Value: "9199"},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -1895,9 +1904,18 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
+
+				// calico-node clusterRole should have openshift securitycontextconstraints PolicyRule
+				nodeRole := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(nodeRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"privileged"},
+				}))
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -1947,9 +1965,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
-
-					// The OpenShift envvar overrides.
-					{Name: "FELIX_HEALTHPORT", Value: "9199"},
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
 					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
@@ -1993,7 +2008,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -2090,7 +2105,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -2586,7 +2601,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -2664,6 +2679,85 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 				}
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+			})
+
+			It("should render cni config with sysctl parameters", func() {
+				sysctl := []operatorv1.Sysctl{
+					{
+						Key:   "net.ipv4.tcp_keepalive_intvl",
+						Value: "15",
+					}, {
+						Key:   "net.ipv4.tcp_keepalive_probes",
+						Value: "6",
+					},
+					{
+						Key:   "net.ipv4.tcp_keepalive_time",
+						Value: "40",
+					},
+				}
+				defaultInstance.CalicoNetwork.Sysctl = sysctl
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+				// Should render the correct resources.
+				cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+				Expect(cniCmResource).ToNot(BeNil())
+				cniCm := cniCmResource.(*corev1.ConfigMap)
+				Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "container_settings": {
+        "allow_ip_forwarding": false
+      },
+      "datastore_type": "kubernetes",
+        "ipam": {
+          "assign_ipv4":  "%t",
+          "assign_ipv6":  "%t",
+          "type": "calico-ipam"
+      },
+      "kubernetes": {
+        "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      },
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
+      "log_file_max_size": 1,
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_level": "Debug",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "policy": {
+        "type": "k8s"
+      },
+      "type": "calico"
+    },
+    {
+      "capabilities": {
+        "bandwidth": true
+      },
+      "type": "bandwidth"
+    },
+    {
+      "capabilities": {
+        "portMappings": true
+      },
+      "snat": true,
+      "type": "portmap"
+    },
+    {
+      "sysctl":
+		  {
+			"net.ipv4.tcp_keepalive_intvl": "15",
+			"net.ipv4.tcp_keepalive_probes": "6",
+			"net.ipv4.tcp_keepalive_time": "40"
+		  },
+      "type": "tuning"
+	}
+  ]
+  }`, enableIPv4, enableIPv6)))
 			})
 
 			It("should render a proper 'allow_ip_forwarding' container setting in the cni config", func() {
@@ -3050,7 +3144,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 
@@ -3267,8 +3361,10 @@ var _ = Describe("Node rendering tests", func() {
 				ca, _ := tls2.MakeCA(rmeta.DefaultOperatorCASignerName())
 				cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 				cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cert}
-				certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+
+				certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 				expectedResources := []struct {
 					name    string
@@ -3286,7 +3382,6 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-					{name: certificatemanagement.CSRClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				}
 
 				component := render.Node(&cfg)
@@ -3295,7 +3390,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Should render the correct resources.
 				i := 0
 				for _, expectedRes := range expectedResources {
-					rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+					rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 					i++
 				}
 				Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -3346,14 +3441,18 @@ var _ = Describe("Node rendering tests", func() {
 				cfg.Installation.FIPSMode = &fipsEnabled
 				cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
 				cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				cfg.PrometheusServerTLS = certificateManager.KeyPair()
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
+
 				resources, _ := component.Objects()
 				nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
 				Expect(nodeDSObj).ToNot(BeNil())
+
 				nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
 				Expect(ok).To(BeTrue())
 
@@ -3369,14 +3468,18 @@ var _ = Describe("Node rendering tests", func() {
 				cfg.Installation.FIPSMode = &fipsEnabled
 				cfg.Installation.Variant = operatorv1.Calico
 				cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+
+				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
+
 				cfg.PrometheusServerTLS = certificateManager.KeyPair()
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
+
 				resources, _ := component.Objects()
 				nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
 				Expect(nodeDSObj).ToNot(BeNil())
+
 				nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
 				Expect(ok).To(BeTrue())
 
@@ -3487,7 +3590,7 @@ var _ = Describe("Node rendering tests", func() {
 					// - 2 added by the operator by default
 					// - 1 added by the calicoNodeDaemonSet override
 					Expect(ds.Spec.Template.Annotations).To(HaveLen(3))
-					Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+					Expect(ds.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
 					Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/cni-config"))
 					Expect(ds.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
@@ -3543,8 +3646,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
 		ProbeHandler:   corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
-		TimeoutSeconds: 5,
-		PeriodSeconds:  10,
+		TimeoutSeconds: 10,
 	}
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{

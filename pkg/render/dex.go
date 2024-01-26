@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -35,18 +36,20 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	DexNamespace     = "tigera-dex"
-	DexObjectName    = "tigera-dex"
-	DexPort          = 5556
-	DexTLSSecretName = "tigera-dex-tls"
-	DexClientId      = "tigera-manager"
-	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
+	DexNamespace             = "tigera-dex"
+	DexObjectName            = "tigera-dex"
+	DexPodSecurityPolicyName = "tigera-dex"
+	DexPort                  = 5556
+	DexTLSSecretName         = "tigera-dex-tls"
+	DexClientId              = "tigera-manager"
+	DexPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
 )
 
 var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
@@ -68,6 +71,9 @@ type DexComponentConfiguration struct {
 	DeleteDex     bool
 	TLSKeyPair    certificatemanagement.KeyPairInterface
 	TrustedBundle certificatemanagement.TrustedBundle
+
+	// Whether the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type dexComponent struct {
@@ -132,6 +138,10 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, certificatemanagement.CSRClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
+	if c.cfg.UsePSP {
+		objs = append(objs, c.podSecurityPolicy())
+	}
+
 	if c.cfg.DeleteDex {
 		return nil, objs
 	}
@@ -151,23 +161,34 @@ func (c *dexComponent) serviceAccount() *corev1.ServiceAccount {
 }
 
 func (c *dexComponent) clusterRole() client.Object {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"dex.coreos.com"},
+			Resources: []string{"*"},
+			Verbs:     []string{"*"},
+		},
+		{
+			APIGroups: []string{"apiextensions.k8s.io"},
+			Resources: []string{"customresourcedefinitions"},
+			Verbs:     []string{"create"},
+		},
+	}
+
+	if c.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{DexPodSecurityPolicyName},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DexObjectName,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"dex.coreos.com"},
-				Resources: []string{"*"},
-				Verbs:     []string{"*"},
-			},
-			{
-				APIGroups: []string{"apiextensions.k8s.io"},
-				Resources: []string{"customresourcedefinitions"},
-				Verbs:     []string{"create"},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -190,6 +211,10 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 			},
 		},
 	}
+}
+
+func (c *dexComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	return podsecuritypolicy.NewBasePolicy(DexPodSecurityPolicyName)
 }
 
 func (c *dexComponent) deployment() client.Object {
@@ -305,7 +330,6 @@ func (c *dexComponent) probe() *corev1.Probe {
 			},
 		},
 		InitialDelaySeconds: 90,
-		PeriodSeconds:       10,
 	}
 }
 
@@ -387,6 +411,9 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 	dexIngressPortDestination := v3.EntityRule{
 		Ports: networkpolicy.Ports(DexPort),
 	}
+
+	networkpolicyHelper := networkpolicy.DefaultHelper()
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -402,19 +429,19 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      ManagerSourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
 					Destination: dexIngressPortDestination,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.ESGatewaySourceEntityRule,
+					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
 					Destination: dexIngressPortDestination,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      ComplianceServerSourceEntityRule,
+					Source:      networkpolicyHelper.ComplianceServerSourceEntityRule(),
 					Destination: dexIngressPortDestination,
 				},
 				{

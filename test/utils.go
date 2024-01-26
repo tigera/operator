@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,7 +33,6 @@ import (
 	"github.com/openshift/library-go/pkg/crypto"
 
 	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -52,12 +51,18 @@ func ExpectResourceCreated(c client.Client, obj client.Object) {
 }
 
 // ExpectResourceDestroyed asserts that the given object no longer exists.
-func ExpectResourceDestroyed(c client.Client, obj client.Object) {
+func ExpectResourceDestroyed(c client.Client, obj client.Object, timeout time.Duration) {
 	var err error
 	EventuallyWithOffset(1, func() error {
 		err = GetResource(c, obj)
-		return err
-	}, 10*time.Second).ShouldNot(BeNil(), fmt.Sprintf("GetResource %s should return error", obj.GetName()))
+		if errors.IsNotFound(err) || errors.IsGone(err) {
+			return nil
+		} else if err != nil {
+			return err
+		} else {
+			return fmt.Errorf("%T '%s' should no longer exist", obj, obj.GetName())
+		}
+	}, timeout).ShouldNot(HaveOccurred())
 
 	serr, ok := err.(*errors.StatusError)
 	ExpectWithOffset(1, ok).To(BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))
@@ -128,7 +133,7 @@ func VerifyCertSANs(certBytes []byte, expectedSANs ...string) {
 func MakeTestCA(signer string) *crypto.CA {
 	caConfig, err := crypto.MakeSelfSignedCAConfigForDuration(
 		signer,
-		100*365*24*time.Hour, //100years*365days*24hours
+		100*365*24*time.Hour, // 100years*365days*24hours
 	)
 	Expect(err).To(BeNil(), "Error creating CA config")
 	return &crypto.CA{
@@ -147,6 +152,7 @@ type nodeListWatch struct {
 func NewNodeListWatch(cs kubernetes.Interface) nodeListWatch {
 	return nodeListWatch{cs: cs}
 }
+
 func (n nodeListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
 	return n.cs.CoreV1().Nodes().List(context.Background(), options)
 }
@@ -197,10 +203,7 @@ func CreateNode(c kubernetes.Interface, name string, labels map[string]string, a
 func CreateWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *v1.Node {
 	return CreateNode(cs, name,
 		map[string]string{"kubernetes.io/os": "windows"},
-		map[string]string{
-			common.CalicoVersionAnnotation: version,
-			common.CalicoVariantAnnotation: string(variant),
-		})
+		map[string]string{})
 }
 
 func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {
@@ -209,29 +212,6 @@ func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {
 		Expect(err).To(BeNil())
 		if !reflect.DeepEqual(node, newNode) {
 			return fmt.Errorf("expected node %q to be unchanged", node.Name)
-		}
-	}
-	return nil
-}
-
-func AssertNodesHadUpgradeTriggered(c kubernetes.Interface, nodes ...*v1.Node) error {
-	for _, node := range nodes {
-		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
-		Expect(err).To(BeNil())
-
-		if _, ok := newNode.Labels[common.CalicoWindowsUpgradeLabel]; !ok {
-			return fmt.Errorf("expected node %q to have upgrade label", node.Name)
-		}
-
-		var found bool
-		for _, taint := range newNode.Spec.Taints {
-			if taint.MatchTaint(common.CalicoWindowsUpgradingTaint) {
-				found = true
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("expected node %q to have upgrade taint", node.Name)
 		}
 	}
 	return nil

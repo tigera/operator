@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -114,13 +114,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "es-curator" }}
-	ComponentEsCurator = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "es-proxy" }}
 	ComponentEsProxy = component{
 		Version:  "{{ .Version }}",
@@ -170,15 +163,8 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "anomaly_detection_jobs" }}
-	ComponentAnomalyDetectionJobs = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
-{{ with index .Components "anomaly-detection-api" }}
-	ComponentAnomalyDetectionAPI = component{
+{{ with index .Components "security-event-webhooks-processor" }}
+	ComponentSecurityEventWebhooksProcessor = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -308,6 +294,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "cnx-node-windows" }}
+	ComponentTigeraNodeWindows = component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with .Components.typha }}
 	ComponentTigeraTypha = component{
 		Version:  "{{ .Version }}",
@@ -329,6 +322,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "tigera-cni-windows" }}
+	ComponentTigeraCNIWindows = component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "cloud-controllers" }}
 	ComponentCloudControllers = component{
 		Version:  "{{ .Version }}",
@@ -338,13 +338,6 @@ var (
 {{- end }}
 {{ with index .Components "elasticsearch-metrics" }}
 	ComponentElasticsearchMetrics = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
-{{ with index .Components "windows-upgrade" }}
-	ComponentTigeraWindowsUpgrade = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -385,14 +378,12 @@ var (
 		ComponentElasticsearch,
 		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsCurator,
 		ComponentEsProxy,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
-		ComponentAnomalyDetectionJobs,
-		ComponentAnomalyDetectionAPI,
+		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
@@ -415,7 +406,6 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
-		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,

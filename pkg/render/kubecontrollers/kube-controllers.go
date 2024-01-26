@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"strings"
 
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/url"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -28,13 +31,11 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -87,13 +88,18 @@ type KubeControllersConfiguration struct {
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
-	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	KubeControllersGatewaySecret *corev1.Secret
-	TrustedBundle                certificatemanagement.TrustedBundle
+	TrustedBundle                certificatemanagement.TrustedBundleRO
 
 	// Whether the cluster supports pod security policies.
 	UsePSP           bool
 	MetricsServerTLS certificatemanagement.KeyPairInterface
+
+	// Namespace to be installed into.
+	Namespace string
+
+	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
+	BindingNamespaces []string
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -149,6 +155,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
 			},
+			// TODO: This should be provided via a separate namespaced role / role binding once we have a namespaced version of this.
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
@@ -165,6 +172,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}
+
 	if cfg.ManagementCluster != nil {
 		enabledControllers = append(enabledControllers, "managedcluster")
 	}
@@ -233,8 +241,8 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 	objectsToCreate = append(objectsToCreate,
 		c.controllersServiceAccount(),
-		c.controllersRole(),
-		c.controllersRoleBinding(),
+		c.controllersClusterRole(),
+		c.controllersClusterRoleBinding(),
 		c.controllersDeployment(),
 	)
 
@@ -244,7 +252,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	objectsToDelete := []client.Object{}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
+			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
 
 	if c.cfg.UsePSP {
@@ -395,13 +403,13 @@ func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAc
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerServiceAccountName,
-			Namespace: common.CalicoNamespace,
+			Namespace: c.cfg.Namespace,
 			Labels:    map[string]string{},
 		},
 	}
 }
 
-func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
+func (c *kubeControllersComponent) controllersClusterRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -431,7 +439,7 @@ func (c *kubeControllersComponent) controllersOCPFederationRoleBinding() *rbacv1
 			{
 				Kind:      "ServiceAccount",
 				Name:      KubeController,
-				Namespace: common.CalicoNamespace,
+				Namespace: c.cfg.Namespace,
 			},
 		},
 	}
@@ -461,8 +469,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 				)
 			}
 		}
-		if c.cfg.ManagerInternalSecret != nil {
-			env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.cfg.ManagerInternalSecret.VolumeMountCertificateFilePath()})
+		if c.cfg.TrustedBundle != nil {
+			env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.cfg.TrustedBundle.MountPath()})
 		}
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
@@ -495,7 +503,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Env:             env,
 		Resources:       c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
-			PeriodSeconds: int32(10),
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -507,9 +514,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			TimeoutSeconds: 10,
 		},
 		LivenessProbe: &corev1.Probe{
-			PeriodSeconds:       int32(10),
-			InitialDelaySeconds: int32(10),
-			FailureThreshold:    int32(6),
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -518,19 +522,28 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 					},
 				},
 			},
-			TimeoutSeconds: 10,
+			FailureThreshold:    6,
+			InitialDelaySeconds: 10,
+			TimeoutSeconds:      10,
 		},
 		SecurityContext: sc,
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}
 
 	if c.kubeControllerName == EsKubeController {
-		container = relasticsearch.ContainerDecorate(container, render.DefaultElasticsearchClusterName,
-			ElasticsearchKubeControllersUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
+		_, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.ElasticsearchNamespace))
+		container.Env = append(container.Env, []corev1.EnvVar{
+			relasticsearch.ElasticHostEnvVar(esHost),
+			relasticsearch.ElasticPortEnvVar(esPort),
+			relasticsearch.ElasticUsernameEnvVar(ElasticsearchKubeControllersUserSecret),
+			relasticsearch.ElasticPasswordEnvVar(ElasticsearchKubeControllersUserSecret),
+			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
+		}...)
 	}
+
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(common.CalicoNamespace))
+		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace))
 	}
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -548,7 +561,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerName,
-			Namespace: common.CalicoNamespace,
+			Namespace: c.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -558,7 +571,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        c.kubeControllerName,
-					Namespace:   common.CalicoNamespace,
+					Namespace:   c.cfg.Namespace,
 					Annotations: c.annotations(),
 				},
 				Spec: podSpec,
@@ -573,7 +586,15 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	return &d
 }
 
-func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{}
+	for _, ns := range c.cfg.BindingNamespaces {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      c.kubeControllerServiceAccountName,
+			Namespace: ns,
+		})
+	}
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -585,13 +606,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 			Kind:     "ClusterRole",
 			Name:     c.kubeControllerRoleName,
 		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      c.kubeControllerServiceAccountName,
-				Namespace: common.CalicoNamespace,
-			},
-		},
+		Subjects: subjects,
 	}
 }
 
@@ -602,7 +617,7 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerMetricsName,
-			Namespace: common.CalicoNamespace,
+			Namespace: c.cfg.Namespace,
 			Annotations: map[string]string{
 				"prometheus.io/scrape": "true",
 				"prometheus.io/port":   fmt.Sprintf("%d", c.cfg.MetricsPort),
@@ -642,9 +657,6 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	if c.cfg.MetricsServerTLS != nil {
 		am[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
 	}
-	if c.cfg.ManagerInternalSecret != nil {
-		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
-	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
 	}
@@ -657,9 +669,6 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
 	var mounts []corev1.VolumeMount
-	if c.cfg.ManagerInternalSecret != nil {
-		mounts = append(mounts, c.cfg.ManagerInternalSecret.VolumeMount(c.SupportedOSType()))
-	}
 	if c.cfg.TrustedBundle != nil {
 		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
@@ -671,9 +680,6 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 
 func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	var volumes []corev1.Volume
-	if c.cfg.ManagerInternalSecret != nil {
-		volumes = append(volumes, c.cfg.ManagerInternalSecret.Volume())
-	}
 	if c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 	}
@@ -706,26 +712,27 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.ManagerEntityRule,
+			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
 		})
 	}
 
-	ingressRules := []v3.Rule{
-		{
+	ingressRules := []v3.Rule{}
+	if cfg.MetricsPort != 0 {
+		ingressRules = append(ingressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Source:   networkpolicy.PrometheusSourceEntityRule,
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(uint16(cfg.MetricsPort)),
 			},
-		},
+		})
 	}
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KubeControllerNetworkPolicyName,
-			Namespace: common.CalicoNamespace,
+			Namespace: cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
@@ -756,12 +763,12 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ESGatewayEntityRule,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.ManagerEntityRule,
+			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
 		},
 	}...)
 
@@ -769,7 +776,7 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      EsKubeControllerNetworkPolicyName,
-			Namespace: common.CalicoNamespace,
+			Namespace: cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,

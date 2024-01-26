@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -579,6 +580,9 @@ func (nt NATOutgoingType) String() string {
 const NodeSelectorDefault string = "all()"
 
 type IPPool struct {
+	// Name is the name of the IP pool. If omitted, this will be generated.
+	Name string `json:"name,omitempty"`
+
 	// CIDR contains the address range for the IP Pool in classless inter-domain routing format.
 	CIDR string `json:"cidr"`
 
@@ -611,6 +615,52 @@ type IPPool struct {
 	// +optional
 	// +kubebuilder:default:=false
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
+}
+
+// ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
+func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
+	pool := pcv1.IPPool{
+		TypeMeta:   metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: p.Name},
+		Spec:       pcv1.IPPoolSpec{CIDR: p.CIDR},
+	}
+
+	// Set encap.
+	switch p.Encapsulation {
+	case EncapsulationIPIP:
+		pool.Spec.IPIPMode = pcv1.IPIPModeAlways
+		pool.Spec.VXLANMode = pcv1.VXLANModeNever
+	case EncapsulationIPIPCrossSubnet:
+		pool.Spec.IPIPMode = pcv1.IPIPModeCrossSubnet
+		pool.Spec.VXLANMode = pcv1.VXLANModeNever
+	case EncapsulationVXLAN:
+		pool.Spec.VXLANMode = pcv1.VXLANModeAlways
+		pool.Spec.IPIPMode = pcv1.IPIPModeNever
+	case EncapsulationVXLANCrossSubnet:
+		pool.Spec.VXLANMode = pcv1.VXLANModeCrossSubnet
+		pool.Spec.IPIPMode = pcv1.IPIPModeNever
+	}
+
+	// Set NAT
+	switch p.NATOutgoing {
+	case NATOutgoingEnabled:
+		pool.Spec.NATOutgoing = true
+	}
+
+	// Set BlockSize
+	if p.BlockSize != nil {
+		pool.Spec.BlockSize = int(*p.BlockSize)
+	}
+
+	// Set selector.
+	pool.Spec.NodeSelector = p.NodeSelector
+
+	// Set BGP export.
+	if p.DisableBGPExport != nil {
+		pool.Spec.DisableBGPExport = *p.DisableBGPExport
+	}
+
+	return &pool, nil
 }
 
 // CNIPluginType describes the type of CNI plugin used.

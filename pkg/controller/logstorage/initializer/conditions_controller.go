@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/controller/logstorage/secrets"
+	"github.com/tigera/operator/pkg/controller/logstorage/users"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -91,7 +95,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Fetch the current status condition for log storage
-	currentCondition := getCurrentConditions(ls.Status.Conditions)
+	currentConditions := getCurrentConditions(ls.Status.Conditions)
 
 	// Aggregate TigeraStatus conditions from all logstorage subcontrollers into a map,
 	// using the condition type (e.g., Available, Progressing, and Degraded) as the key.
@@ -101,7 +105,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Compare and update the current StatusCondition if there are any new changes
-	ls.Status.Conditions = updateConditions(currentCondition, desiredConditions)
+	ls.Status.Conditions = updateConditions(currentConditions, desiredConditions)
 
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
@@ -112,20 +116,20 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 }
 
 func getCurrentConditions(lsConditions []metav1.Condition) map[string]metav1.Condition {
-	statusCondition := make(map[string]metav1.Condition)
+	statusConditions := make(map[string]metav1.Condition)
 	for _, condition := range lsConditions {
-		statusCondition[condition.Type] = condition
+		statusConditions[condition.Type] = condition
 	}
-	return statusCondition
+	return statusConditions
 }
 
 func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[string]metav1.Condition, error) {
 
-	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
+	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, secrets.TigeraStatusLogStorageSecrets}
 	if r.multiTenant {
-		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
+		expectedInstances = append(expectedInstances, users.TigeraStatusLogStorageUsers)
 	} else {
-		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		expectedInstances = append(expectedInstances, esmetrics.TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
 	}
 
 	// Keep track of which instances are in which state.
@@ -167,6 +171,7 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 		condition := metav1.Condition{
 			Type:               statusType,
 			ObservedGeneration: observedGeneration,
+			Reason:             string(operatorv1.Unknown),
 		}
 		if statusType != string(operatorv1.ComponentAvailable) && len(instances) != 0 {
 			// This condition is true.
@@ -176,12 +181,10 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 		} else if statusType != string(operatorv1.ComponentAvailable) {
 			// This condition is false.
 			condition.Status = metav1.ConditionFalse
-			condition.Reason = string(operatorv1.Unknown)
 		} else {
 			// This is the available condition, which is only true if all statuses are available.
 			condition.Type = string(operatorv1.ComponentReady)
-			condition.Reason = string(operatorv1.ResourceNotReady)
-			// Available will be mapped to Ready while storing in ls Conditions. Update the key type to Ready when Available is true
+			// Available will be mapped to Ready while storing in ls Conditions. Update the key type to Ready for Available
 			statusType = condition.Type
 			if len(instances) == len(expectedInstances) {
 				condition.Status = metav1.ConditionTrue
@@ -199,19 +202,19 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 
 func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {
 
-	statusCondition := []metav1.Condition{}
+	statusConditions := []metav1.Condition{}
 
 	//Update the current log storage condition only when the aggregate desired status have new changes
 	for _, desired := range desiredConditions {
 
 		current, ok := currentConditions[desired.Type]
-		if !ok || current.Status != desired.Status {
+		if !ok || current.Status != desired.Status || current.Message != desired.Message {
 			desired.LastTransitionTime = metav1.NewTime(time.Now())
 		} else {
 			desired.LastTransitionTime = current.LastTransitionTime
 		}
 
-		statusCondition = append(statusCondition, desired)
+		statusConditions = append(statusConditions, desired)
 	}
-	return statusCondition
+	return statusConditions
 }

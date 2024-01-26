@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -78,7 +80,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		clusterDomain:   opts.ClusterDomain,
-		status:          status.New(mgr.GetClient(), "log-storage-kubecontrollers", opts.KubernetesVersion),
+		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageKubeController, opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
 		tierWatchReady:  &utils.ReadyFlag{},
 	}
@@ -106,7 +108,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, "log-storage-kubecontrollers"); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageKubeController); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 

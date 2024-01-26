@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -113,7 +115,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, "log-storage-access"); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageAccess); err != nil {
 		return fmt.Errorf("logstorage-access-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {

@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,8 @@ import (
 var log = logf.Log.WithName("controller_logstorage_users")
 
 const (
-	userCleanupFinalizer = "tigera.io/es-user-cleanup"
+	userCleanupFinalizer        = "tigera.io/es-user-cleanup"
+	TigeraStatusLogStorageUsers = "log-storage-users"
 )
 
 type UserController struct {
@@ -80,7 +81,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		multiTenant:     opts.MultiTenant,
-		status:          status.New(mgr.GetClient(), "log-storage-users", opts.KubernetesVersion),
+		status:          status.New(mgr.GetClient(), TigeraStatusLogStorageUsers, opts.KubernetesVersion),
 		esClientFn:      utils.NewElasticClient,
 		elasticExternal: opts.ElasticExternal,
 	}
@@ -109,7 +110,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, "log-storage-users"); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, TigeraStatusLogStorageUsers); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {

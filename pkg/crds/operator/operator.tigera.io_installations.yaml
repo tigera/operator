@@ -1388,6 +1388,7 @@ spec:
                       required:
                       - cidr
                       type: object
+                    maxItems: 25
                     type: array
                   linuxDataplane:
                     description: 'LinuxDataplane is used to select the dataplane used
@@ -10509,6 +10510,7 @@ spec:
                           required:
                           - cidr
                           type: object
+                        maxItems: 25
                         type: array
                       linuxDataplane:
                         description: 'LinuxDataplane is used to select the dataplane

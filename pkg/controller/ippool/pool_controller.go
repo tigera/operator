@@ -266,17 +266,22 @@ func updateInstallationForKubeadm(i *operator.Installation, c *corev1.ConfigMap)
 // ValidatePools validates the IP pools specified in the Installation object.
 func ValidatePools(instance *operator.Installation) error {
 	cidrs := map[string]bool{}
+	names := map[string]bool{}
 	for _, pool := range instance.Spec.CalicoNetwork.IPPools {
 		_, cidr, err := net.ParseCIDR(pool.CIDR)
 		if err != nil {
 			return fmt.Errorf("IP pool CIDR (%s) is invalid: %s", pool.CIDR, err)
 		}
 
-		// Validate that there is only a single instance of each CIDR.
+		// Validate that there is only a single instance of each CIDR and Name.
 		if cidrs[pool.CIDR] {
 			return fmt.Errorf("IP pool %v is specified more than once", pool.CIDR)
 		}
 		cidrs[pool.CIDR] = true
+		if names[pool.Name] {
+			return fmt.Errorf("IP pool %v is specified more than once", pool.Name)
+		}
+		names[pool.Name] = true
 
 		// Verify NAT outgoing values.
 		switch pool.NATOutgoing {
@@ -519,7 +524,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 // - Populate Installation status with ALL IP pools in the cluster.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling IP pools")
+	reqLogger.V(1).Info("Reconciling IP pools")
 
 	// Get the Installation object - this is the source of truth for IP pools managed by
 	// this controller.
@@ -601,7 +606,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			ourPools[p.Spec.CIDR] = p
 		}
 	}
-	reqLogger.Info("Found IP pools owned by us", "count", len(ourPools))
+	reqLogger.V(1).Info("Found IP pools owned by us", "count", len(ourPools))
 
 	// For each pool that is desired, but doesn't exist, create it.
 	// We will install pools at start-of-day using the CRD API, but otherwise
@@ -615,7 +620,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			log.Info("Converted to v1res", "pool", v1res, "orig", p)
 
 			if apiAvailable {
 				// The v3 API is available, so use it to create / update the pool.
@@ -644,7 +648,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// the Installation resource.
 	toDelete := []client.Object{}
 	for cidr, v1res := range ourPools {
-		reqLogger.WithValues("cidr", cidr).Info("Checking if pool is still valid")
+		reqLogger.WithValues("cidr", cidr).V(1).Info("Checking if pool is still valid")
 		found := false
 		for _, p := range installation.Spec.CalicoNetwork.IPPools {
 			if p.CIDR == cidr {

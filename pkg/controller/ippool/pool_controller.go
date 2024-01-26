@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/netip"
 	"reflect"
 	"strings"
 	"time"
@@ -333,6 +334,34 @@ func ValidatePools(instance *operator.Installation) error {
 	return nil
 }
 
+// cidrToName returns a valid Kubernetes resource name given a CIDR. Kubernetes names must be valid DNS
+// names. We do the following:
+// - Expand the CIDR so that we get consistent results and remove IPv6 shorthand "::".
+// - Replace any slashes with dashes.
+// - Replace any : with dots.
+func cidrToName(cidr string) (string, error) {
+	// First, canonicalize the CIDR. e.g., 192.168.0.1/24 -> 192.168.0.0/24.
+	_, nw, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", err
+	}
+
+	// Parse the CIDR and expand it to its full form.
+	// e.g., fe80::/64 -> fe80:0000:0000:0000:0000:0000:0000:0000/64
+	pre, err := netip.ParsePrefix(nw.String())
+	if err != nil {
+		return "", err
+	}
+	name := pre.Addr().StringExpanded()
+
+	// Replace invalid characters.
+	// e.g., fe80:0000:0000:0000:0000:0000:0000:0000/64 -> fe80.0000.0000.0000.0000.0000.0000.0000-64
+	name = strings.ReplaceAll(name, ":", ".")
+	name += fmt.Sprintf("-%d", pre.Bits())
+
+	return name, nil
+}
+
 // fillDefaults fills in IP pool defaults on the Installation object. Defaulting of fields other than IP pools occurs
 // in pkg/controller/installation/
 func fillDefaults(ctx context.Context, client client.Client, instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
@@ -389,13 +418,17 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 				// and also use VXLAN encap by default.
 				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 					{
+						Name:          "default-ipv4-ippool",
 						CIDR:          "172.16.0.0/16",
 						Encapsulation: operator.EncapsulationVXLAN,
 					},
 				}
 			default:
 				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-					{CIDR: "192.168.0.0/16"},
+					{
+						Name: "default-ipv4-ippool",
+						CIDR: "192.168.0.0/16",
+					},
 				}
 			}
 		}
@@ -413,6 +446,11 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 	// assumes that there are CalicoNetwork settings to default.
 	if instance.Spec.CalicoNetwork == nil {
 		return nil
+	}
+
+	currentPoolLookup := map[string]string{}
+	for _, cur := range currentPools.Items {
+		currentPoolLookup[cur.Spec.CIDR] = cur.Name
 	}
 
 	// Default any fields on each IP pool declared in the Installation object.
@@ -452,6 +490,21 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 			if pool.BlockSize == nil {
 				var oneTwentyTwo int32 = 122
 				pool.BlockSize = &oneTwentyTwo
+			}
+		}
+
+		// Default the name if it's not set.
+		if pool.Name == "" {
+			if name, ok := currentPoolLookup[pool.CIDR]; ok {
+				// There's an existing IP pool with the same CIDR - use that. This allows us to
+				// assume control of IP pools that are already in the cluster.
+				pool.Name = name
+			} else {
+				// Use the CIDR to generate a name.
+				pool.Name, err = cidrToName(pool.CIDR)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -543,6 +596,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if hasOwner(&p, installation) {
 			// This pool is owned by the Installation object, so consider it ours.
 			ourPools[p.Spec.CIDR] = p
+		} else if p.Name == "default-ipv4-ippool" {
+			// For legacy installs, this is the IP pool that was created. Consider it ours.
+			ourPools[p.Spec.CIDR] = p
 		}
 	}
 	reqLogger.Info("Found IP pools owned by us", "count", len(ourPools))
@@ -559,6 +615,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
 				return reconcile.Result{}, err
 			}
+			log.Info("Converted to v1res", "pool", v1res, "orig", p)
 
 			if apiAvailable {
 				// The v3 API is available, so use it to create / update the pool.

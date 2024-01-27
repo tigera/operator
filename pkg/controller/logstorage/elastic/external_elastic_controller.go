@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package elastic
 import (
 	"context"
 	"fmt"
+
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -61,7 +63,7 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	r := &ExternalESController{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
-		status:        status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		status:        status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
 		usePSP:        opts.UsePSP,
 		clusterDomain: opts.ClusterDomain,
 		provider:      opts.DetectedProvider,
@@ -90,7 +92,7 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-external-es-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageElastic); err != nil {
 		return fmt.Errorf("log-storage-external-es-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 

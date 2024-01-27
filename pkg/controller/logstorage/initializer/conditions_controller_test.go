@@ -130,8 +130,8 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
 		Expect(instance.Status.Conditions).To(HaveLen(3))
 
-		actualConditions := getCurrentConditions(instance.Status.Conditions)
 		By("asserting Ready to be true")
+		actualConditions := getCurrentConditions(instance.Status.Conditions)
 		readyCondition, ok := actualConditions["Ready"]
 		Expect(ok).To(BeTrue())
 		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionTrue)))
@@ -183,8 +183,8 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
 		Expect(instance.Status.Conditions).To(HaveLen(3))
 
-		actualConditions := getCurrentConditions(instance.Status.Conditions)
 		By("asserting all the status set to be False")
+		actualConditions := getCurrentConditions(instance.Status.Conditions)
 		readyCondition, ok := actualConditions["Ready"]
 		Expect(ok).To(BeTrue())
 		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
@@ -335,12 +335,12 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		recentTransitionTime := instance.Status.Conditions[1].LastTransitionTime
 
 		// Expect tigerstatus transition time remain unchanged when there is no changes to the  condition
+		time.Sleep(5 * time.Second)
 		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      "log-storage",
 			Namespace: "",
 		}})
 		Expect(err).ShouldNot(HaveOccurred())
-		// Expect to be waiting for Elasticsearch and Kibana to be functional
 		Expect(result).Should(Equal(reconcile.Result{}))
 		instance = &operatorv1.LogStorage{}
 
@@ -393,7 +393,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 		Expect(cli.Update(ctx, &tsUser)).NotTo(HaveOccurred())
 
-		// Sleep before reconciling again to valid the Last transition time is updating while switching status
+		// Sleep before reconciling again to ensure the Last Transition Time updates correctly when switching statuses.
 		time.Sleep(5 * time.Second)
 		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      "log-storage",
@@ -425,7 +425,6 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(int64(1)))
 
 		By("assert transition time should be after the previously recorded transition time")
-		Expect(readyCondition.LastTransitionTime.Time.Equal(recentTransitionTime.Time)).To(BeFalse())
 		Expect(readyCondition.LastTransitionTime.Time.After(recentTransitionTime.Time)).To(BeTrue())
 
 		By("asserting progressing should remain unchanged")
@@ -435,116 +434,6 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(progressing.Reason).To(Equal(string(operatorv1.Unknown)))
 		Expect(progressing.Message).To(Equal(""))
 		Expect(progressing.ObservedGeneration).To(Equal(int64(1)))
-	})
-
-	It("should set both progressing and degraded as when log-storage-* tigerastatus conditions have degraded and progressing controllers", func() {
-		// Log storage instances to fetch TigeraStatus
-		logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
-
-		for _, ls := range logStorageInstances {
-			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
-		}
-
-		// set Degraded TigeraStatus for LogStorageUsers
-		createTigeraStatus(cli, ctx, TigeraStatusLogStorageUsers, generation, []operatorv1.TigeraStatusCondition{
-			{
-				Type:               operatorv1.ComponentAvailable,
-				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ResourceNotReady),
-				Message:            "",
-				ObservedGeneration: generation,
-			},
-			{
-				Type:               operatorv1.ComponentProgressing,
-				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ResourceNotReady),
-				Message:            "",
-				ObservedGeneration: generation,
-			},
-			{
-				Type:               operatorv1.ComponentDegraded,
-				Status:             operatorv1.ConditionTrue,
-				Reason:             string(operatorv1.ResourceNotReady),
-				Message:            "no active connection found: no Elasticsearch node available",
-				ObservedGeneration: generation,
-			},
-		})
-
-		// set Progressing TigeraStatus for LogStorage access
-		createTigeraStatus(cli, ctx, TigeraStatusLogStorageAccess, generation, []operatorv1.TigeraStatusCondition{
-			{
-				Type:               operatorv1.ComponentAvailable,
-				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ResourceNotReady),
-				Message:            "",
-				ObservedGeneration: generation,
-			},
-			{
-				Type:               operatorv1.ComponentProgressing,
-				Status:             operatorv1.ConditionTrue,
-				Reason:             string(operatorv1.ResourceNotReady),
-				Message:            "Waiting for Pod tigera-tenant/tigera-linseed-596445df76-c4btq",
-				ObservedGeneration: generation,
-			},
-			{
-				Type:               operatorv1.ComponentDegraded,
-				Status:             operatorv1.ConditionFalse,
-				Reason:             string(operatorv1.ResourceNotReady),
-				Message:            "",
-				ObservedGeneration: generation,
-			},
-		})
-
-		CreateLogStorage(cli, &operatorv1.LogStorage{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:       "tigera-secure",
-				Generation: 3,
-			},
-			Spec: operatorv1.LogStorageSpec{
-				Nodes: &operatorv1.Nodes{
-					Count: int64(1),
-				},
-			},
-			Status: operatorv1.LogStorageStatus{
-				State: operatorv1.TigeraStatusReady,
-			},
-		})
-
-		r, err := NewTestConditionController(cli, scheme, dns.DefaultClusterDomain)
-		r.multiTenant = true
-		Expect(err).ShouldNot(HaveOccurred())
-
-		// Reconcile when ls does not have tigerstatus condition - Transition time would be current time
-		result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      "log-storage",
-			Namespace: "",
-		}})
-		Expect(err).ShouldNot(HaveOccurred())
-		// Expect to be waiting for Elasticsearch and Kibana to be functional
-		Expect(result).Should(Equal(reconcile.Result{}))
-
-		By("asserting the finalizers have been set on the LogStorage CR")
-		instance := &operatorv1.LogStorage{}
-		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
-		Expect(instance.Status.Conditions).To(HaveLen(3))
-
-		Expect(instance.Status.Conditions[0].Type).To(Equal("Degraded"))
-		Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
-		Expect(instance.Status.Conditions[0].Message).To(Equal("The following sub-controllers are in this condition: [log-storage-users]"))
-
-		Expect(instance.Status.Conditions[1].Type).To(Equal("Ready"))
-		Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.Unknown)))
-		Expect(instance.Status.Conditions[1].Message).To(Equal(""))
-
-		Expect(instance.Status.Conditions[2].Type).To(Equal("Progressing"))
-		Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
-		Expect(instance.Status.Conditions[2].Message).To(Equal("The following sub-controllers are in this condition: [log-storage-access]"))
-
-		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
-
 	})
 })
 

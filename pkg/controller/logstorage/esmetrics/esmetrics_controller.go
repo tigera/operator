@@ -53,7 +53,7 @@ import (
 var log = logf.Log.WithName("controller_logstorage_esmetrics")
 
 const (
-	tigeraStatusName = "log-storage-esmetrics"
+	TigeraStatusLogStorageESMetrics = "log-storage-esmetrics"
 )
 
 type ESMetricsSubController struct {
@@ -81,7 +81,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r := &ESMetricsSubController{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		status:         status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		status:         status.New(mgr.GetClient(), TigeraStatusLogStorageESMetrics, opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
 		tierWatchReady: &utils.ReadyFlag{},

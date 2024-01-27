@@ -17,6 +17,9 @@ package kubecontrollers_test
 import (
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -1099,5 +1102,142 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		csrInitContainer := dp.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", kubecontrollers.KubeControllerPrometheusTLSSecret)))
+	})
+
+	Context("multi-tenant rendering", func() {
+		//var installation *operatorv1.InstallationSpec
+		var tenant *operatorv1.Tenant
+		var tenantCfg kubecontrollers.KubeControllersConfiguration
+		var instance *operatorv1.InstallationSpec
+
+		BeforeEach(func() {
+			tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tenant",
+					Namespace: "test-tenant-ns",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID:      "test-tenant",
+					Indices: []operatorv1.Index{},
+				},
+			}
+
+			miMode := operatorv1.MultiInterfaceModeNone
+			instance = &operatorv1.InstallationSpec{
+				CalicoNetwork: &operatorv1.CalicoNetworkSpec{
+					IPPools:            []operatorv1.IPPool{{CIDR: "192.168.1.0/16"}},
+					MultiInterfaceMode: &miMode,
+				},
+				Variant:  operatorv1.TigeraSecureEnterprise,
+				Registry: "test-reg/",
+			}
+
+			certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			tenantCfg = kubecontrollers.KubeControllersConfiguration{
+				K8sServiceEp:                 k8sServiceEp,
+				Installation:                 instance,
+				ClusterDomain:                dns.DefaultClusterDomain,
+				MetricsPort:                  9094,
+				TrustedBundle:                certificateManager.CreateTrustedBundle(),
+				UsePSP:                       true,
+				Namespace:                    tenant.Namespace,
+				BindingNamespaces:            []string{tenant.Namespace},
+				LogStorageExists:             true,
+				ManagementCluster:            &operatorv1.ManagementCluster{},
+				KubeControllersGatewaySecret: nil,
+				Tenant:                       tenant,
+			}
+		})
+
+		It("should render all resources", func() {
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: kubecontrollers.EsKubeControllerNetworkPolicyName, ns: tenant.Namespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: kubecontrollers.KubeControllerServiceAccount, ns: tenant.Namespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: kubecontrollers.EsKubeController, ns: tenant.Namespace, group: "apps", version: "v1", kind: "Deployment"},
+				{name: kubecontrollers.EsKubeControllerPodSecurityPolicy, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+				{name: kubecontrollers.EsKubeControllerMetrics, ns: tenant.Namespace, group: "", version: "v1", kind: "Service"},
+			}
+
+			component := kubecontrollers.NewElasticsearchKubeControllers(&tenantCfg)
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(len(expectedResources)))
+
+			// Should render the correct resources.
+			i := 0
+			for _, expectedRes := range expectedResources {
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+				i++
+			}
+		})
+
+		It("should render all multi-tenant environment variables", func() {
+			component := kubecontrollers.NewElasticsearchKubeControllers(&tenantCfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			// The Deployment should have the correct configuration.
+			dp := rtest.GetResource(resources, kubecontrollers.EsKubeController, tenant.Namespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElements(
+				corev1.EnvVar{
+					Name:  "ENABLED_CONTROLLERS",
+					Value: "managedclusterlicensing",
+				},
+				corev1.EnvVar{
+					Name:  "TENANT_NAMESPACE",
+					Value: tenant.Namespace,
+				},
+				corev1.EnvVar{
+					Name:  "TENANT_ID",
+					Value: tenant.Spec.ID,
+				},
+				corev1.EnvVar{
+					Name:  "MULTI_CLUSTER_FORWARDING_ENDPOINT",
+					Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenant.Namespace),
+				},
+				corev1.EnvVar{
+					Name:  "KUBE_CONTROLLERS_CONFIG_NAME",
+					Value: fmt.Sprintf("tenant-%s", tenant.Spec.ID),
+				},
+			),
+			)
+		})
+
+		It("should enable multi-tenant RBAC", func() {
+			component := kubecontrollers.NewElasticsearchKubeControllers(&tenantCfg)
+			resources, _ := component.Objects()
+
+			cr := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{kubecontrollers.KubeControllerServiceAccount},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, common.CalicoNamespace),
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
+		})
 	})
 })

@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -50,10 +52,6 @@ import (
 
 var log = logf.Log.WithName("controller_logstorage_esmetrics")
 
-const (
-	tigeraStatusName = "log-storage-esmetrics"
-)
-
 type ESMetricsSubController struct {
 	client         client.Client
 	scheme         *runtime.Scheme
@@ -79,7 +77,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r := &ESMetricsSubController{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		status:         status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageESMetrics, opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
 		tierWatchReady: &utils.ReadyFlag{},

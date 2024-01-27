@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -52,10 +54,6 @@ import (
 
 var log = logf.Log.WithName("controller_logstorage_esmetrics")
 
-const (
-	tigeraStatusName = "log-storage-esmetrics"
-)
-
 type ESMetricsSubController struct {
 	client         client.Client
 	scheme         *runtime.Scheme
@@ -81,7 +79,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r := &ESMetricsSubController{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		status:         status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageESMetrics, opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
 		tierWatchReady: &utils.ReadyFlag{},

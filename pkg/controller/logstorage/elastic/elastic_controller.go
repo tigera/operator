@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -42,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -64,7 +66,6 @@ var log = logf.Log.WithName("controller_logstorage_elastic")
 
 const (
 	LogStorageFinalizer = "tigera.io/eck-cleanup"
-	tigeraStatusName    = "log-storage-elastic"
 )
 
 // ElasticSubController is a sub-controller of the main LogStorage controller
@@ -97,7 +98,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:         mgr.GetScheme(),
 		esCliCreator:   utils.NewElasticClient,
 		tierWatchReady: &utils.ReadyFlag{},
-		status:         status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
 		usePSP:         opts.UsePSP,
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
@@ -132,7 +133,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageElastic); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{}); err != nil {

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
@@ -61,7 +63,7 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	r := &ExternalESController{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
-		status:        status.New(mgr.GetClient(), TigeraStatusLogStorageElastic, opts.KubernetesVersion),
+		status:        status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
 		usePSP:        opts.UsePSP,
 		clusterDomain: opts.ClusterDomain,
 		provider:      opts.DetectedProvider,
@@ -90,7 +92,7 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-external-es-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, TigeraStatusLogStorageElastic); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageElastic); err != nil {
 		return fmt.Errorf("log-storage-external-es-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 

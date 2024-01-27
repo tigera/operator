@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
@@ -46,8 +48,7 @@ import (
 var log = logf.Log.WithName("controller_logstorage_users")
 
 const (
-	userCleanupFinalizer        = "tigera.io/es-user-cleanup"
-	TigeraStatusLogStorageUsers = "log-storage-users"
+	userCleanupFinalizer = "tigera.io/es-user-cleanup"
 )
 
 type UserController struct {
@@ -81,7 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		multiTenant:     opts.MultiTenant,
-		status:          status.New(mgr.GetClient(), TigeraStatusLogStorageUsers, opts.KubernetesVersion),
+		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageUsers, opts.KubernetesVersion),
 		esClientFn:      utils.NewElasticClient,
 		elasticExternal: opts.ElasticExternal,
 	}
@@ -110,7 +111,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, TigeraStatusLogStorageUsers); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageUsers); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {

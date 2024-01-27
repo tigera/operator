@@ -21,9 +21,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/controller/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/controller/logstorage/secrets"
-	"github.com/tigera/operator/pkg/controller/logstorage/users"
-
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -87,7 +84,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 	generation := int64(2)
 	subControllers := []string{TigeraStatusName, TigeraStatusLogStorageAccess,
-		TigeraStatusLogStorageElastic, secrets.TigeraStatusLogStorageSecrets}
+		TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
 
 	It("should reconcile with one item in tigerastatus conditions", func() {
 
@@ -292,7 +289,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 	It("should reconcile with all log-storage-* tigerastatus conditions as Available and later move to degraded", func() {
 
-		subControllers = append(subControllers, users.TigeraStatusLogStorageUsers)
+		subControllers = append(subControllers, TigeraStatusLogStorageUsers)
 		for _, ls := range subControllers {
 			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
 		}
@@ -367,7 +364,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		// update LogStorageUsers  Tigerastatus to degraded
 		tsUser := operatorv1.TigeraStatus{}
 		_ = cli.Get(ctx, client.ObjectKey{
-			Name: users.TigeraStatusLogStorageUsers,
+			Name: TigeraStatusLogStorageUsers,
 		}, &tsUser)
 
 		tsUser.Status.Conditions = []operatorv1.TigeraStatusCondition{
@@ -442,14 +439,14 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 	It("should set both progressing and degraded as when log-storage-* tigerastatus conditions have degraded and progressing controllers", func() {
 		// Log storage instances to fetch TigeraStatus
-		logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageElastic, secrets.TigeraStatusLogStorageSecrets}
+		logStorageInstances := []string{TigeraStatusName, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
 
 		for _, ls := range logStorageInstances {
 			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
 		}
 
 		// set Degraded TigeraStatus for LogStorageUsers
-		createTigeraStatus(cli, ctx, users.TigeraStatusLogStorageUsers, generation, []operatorv1.TigeraStatusCondition{
+		createTigeraStatus(cli, ctx, TigeraStatusLogStorageUsers, generation, []operatorv1.TigeraStatusCondition{
 			{
 				Type:               operatorv1.ComponentAvailable,
 				Status:             operatorv1.ConditionFalse,
@@ -474,30 +471,29 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		})
 
 		// set Progressing TigeraStatus for LogStorage access
-		createTigeraStatus(cli, ctx, TigeraStatusLogStorageAccess, generation,
-			[]operatorv1.TigeraStatusCondition{
-				{
-					Type:               operatorv1.ComponentAvailable,
-					Status:             operatorv1.ConditionFalse,
-					Reason:             string(operatorv1.ResourceNotReady),
-					Message:            "",
-					ObservedGeneration: generation,
-				},
-				{
-					Type:               operatorv1.ComponentProgressing,
-					Status:             operatorv1.ConditionTrue,
-					Reason:             string(operatorv1.ResourceNotReady),
-					Message:            "Waiting for Pod tigera-tenant/tigera-linseed-596445df76-c4btq",
-					ObservedGeneration: generation,
-				},
-				{
-					Type:               operatorv1.ComponentDegraded,
-					Status:             operatorv1.ConditionFalse,
-					Reason:             string(operatorv1.ResourceNotReady),
-					Message:            "",
-					ObservedGeneration: generation,
-				},
-			})
+		createTigeraStatus(cli, ctx, TigeraStatusLogStorageAccess, generation, []operatorv1.TigeraStatusCondition{
+			{
+				Type:               operatorv1.ComponentAvailable,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentProgressing,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "Waiting for Pod tigera-tenant/tigera-linseed-596445df76-c4btq",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentDegraded,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "",
+				ObservedGeneration: generation,
+			},
+		})
 
 		CreateLogStorage(cli, &operatorv1.LogStorage{
 			ObjectMeta: metav1.ObjectMeta{

@@ -20,9 +20,6 @@ import (
 	"time"
 
 	"github.com/tigera/operator/pkg/controller/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/controller/logstorage/secrets"
-	"github.com/tigera/operator/pkg/controller/logstorage/users"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -125,9 +122,9 @@ func getCurrentConditions(lsConditions []metav1.Condition) map[string]metav1.Con
 
 func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[string]metav1.Condition, error) {
 
-	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, secrets.TigeraStatusLogStorageSecrets}
+	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
 	if r.multiTenant {
-		expectedInstances = append(expectedInstances, users.TigeraStatusLogStorageUsers)
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 	} else {
 		expectedInstances = append(expectedInstances, esmetrics.TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
 	}

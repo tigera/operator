@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/common"
@@ -48,8 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const TigeraStatusLogStorageSecrets = "log-storage-secrets"
-
 var log = logf.Log.WithName("controller_logstorage_secrets")
 
 // SecretSubController is a sub controller for managing secrets related to Elasticsearch and log storage components.
@@ -74,7 +74,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:          mgr.GetScheme(),
 		clusterDomain:   opts.ClusterDomain,
 		multiTenant:     opts.MultiTenant,
-		status:          status.New(mgr.GetClient(), TigeraStatusLogStorageSecrets, opts.KubernetesVersion),
+		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageSecrets, opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -105,7 +105,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(c, TigeraStatusLogStorageSecrets); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageSecrets); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {

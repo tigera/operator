@@ -48,6 +48,8 @@ const (
 	TigeraStatusLogStorageKubeController = "log-storage-kubecontrollers"
 	TigeraStatusLogStorageAccess         = "log-storage-access"
 	TigeraStatusLogStorageElastic        = "log-storage-elastic"
+	TigeraStatusLogStorageSecrets        = "log-storage-secrets"
+	TigeraStatusLogStorageUsers          = "log-storage-users"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller

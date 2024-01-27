@@ -158,6 +158,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Check if something modifies resources this controller creates.
+	// ALINA: why ?
 	if err := utils.AddServiceWatch(c, esgateway.ServiceName, helper.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch Service resource: %w", err)
 	}
@@ -167,6 +168,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err := utils.AddDeploymentWatch(c, render.LinseedServiceName, helper.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch Deployment resource: %w", err)
 	}
+	// ALINA: why ?
 	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, helper.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}

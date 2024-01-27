@@ -100,6 +100,8 @@ type KubeControllersConfiguration struct {
 
 	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
 	BindingNamespaces []string
+
+	MultiTenant bool
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -171,7 +173,11 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 		kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
 	}
 
-	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}
+	enabledControllers := []string{"authorization"}
+
+	if !cfg.MultiTenant {
+		enabledControllers = append(enabledControllers, "elasticsearchconfiguration")
+	}
 
 	if cfg.ManagementCluster != nil {
 		enabledControllers = append(enabledControllers, "managedcluster")

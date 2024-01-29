@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/controller/logstorage/esmetrics"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -126,7 +125,7 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 	if r.multiTenant {
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 	} else {
-		expectedInstances = append(expectedInstances, esmetrics.TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
 	}
 
 	// Keep track of which instances are in which state.

@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"

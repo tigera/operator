@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -51,10 +52,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_logstorage_esmetrics")
-
-const (
-	tigeraStatusName = "log-storage-esmetrics"
-)
 
 type ESMetricsSubController struct {
 	client         client.Client
@@ -81,7 +78,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r := &ESMetricsSubController{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		status:         status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageESMetrics, opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
 		tierWatchReady: &utils.ReadyFlag{},

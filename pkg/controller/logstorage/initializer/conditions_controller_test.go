@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@ package initializer
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -82,24 +82,21 @@ var _ = Describe("LogStorage Conditions controller", func() {
 	})
 
 	generation := int64(2)
+	subControllers := []string{TigeraStatusName, TigeraStatusLogStorageAccess,
+		TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
 
 	It("should reconcile with one item in tigerastatus conditions", func() {
-		ts := &operatorv1.TigeraStatus{
-			ObjectMeta: metav1.ObjectMeta{Name: "log-storage"},
-			Spec:       operatorv1.TigeraStatusSpec{},
-			Status: operatorv1.TigeraStatusStatus{
-				Conditions: []operatorv1.TigeraStatusCondition{
-					{
-						Type:               operatorv1.ComponentAvailable,
-						Status:             operatorv1.ConditionTrue,
-						Reason:             string(operatorv1.AllObjectsAvailable),
-						Message:            "All Objects are available",
-						ObservedGeneration: generation,
-					},
-				},
-			},
+
+		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		for _, ls := range lsControllers {
+			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{{
+				Type:               operatorv1.ComponentAvailable,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.AllObjectsAvailable),
+				Message:            "All Objects are available",
+				ObservedGeneration: generation,
+			}})
 		}
-		Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
 		CreateLogStorage(cli, &operatorv1.LogStorage{
 			ObjectMeta: metav1.ObjectMeta{
@@ -130,85 +127,41 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		By("asserting the finalizers have been set on the LogStorage CR")
 		instance := &operatorv1.LogStorage{}
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
-		Expect(instance.Status.Conditions).To(HaveLen(1))
+		Expect(instance.Status.Conditions).To(HaveLen(3))
 
-		Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
-		Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
-		Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
-		Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+		By("asserting Ready to be true")
+		actualConditions := getCurrentConditions(instance.Status.Conditions)
+		readyCondition, ok := actualConditions["Ready"]
+		Expect(ok).To(BeTrue())
+		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(readyCondition.Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+		Expect(readyCondition.Message).To(Equal("All sub-controllers are available"))
+		Expect(readyCondition.ObservedGeneration).To(Equal(generation))
+
+		degCondition, ok := actualConditions["Degraded"]
+		Expect(ok).To(BeTrue())
+		Expect(string(degCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(degCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(degCondition.Message).To(Equal(""))
+		progCondition, ok := actualConditions["Progressing"]
+		Expect(ok).To(BeTrue())
+		Expect(string(progCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(progCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(progCondition.Message).To(Equal(""))
+
 	})
 
 	It("should reconcile with empty tigerastatus conditions", func() {
-		ts := &operatorv1.TigeraStatus{
-			ObjectMeta: metav1.ObjectMeta{Name: "log-storage"},
-			Spec:       operatorv1.TigeraStatusSpec{},
-			Status:     operatorv1.TigeraStatusStatus{},
+
+		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		for _, ls := range lsControllers {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: ls},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status:     operatorv1.TigeraStatusStatus{},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 		}
-		Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-
-		CreateLogStorage(cli, &operatorv1.LogStorage{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:       "tigera-secure",
-				Generation: 3,
-			},
-			Spec: operatorv1.LogStorageSpec{
-				Nodes: &operatorv1.Nodes{
-					Count: int64(1),
-				},
-			},
-			Status: operatorv1.LogStorageStatus{
-				State: operatorv1.TigeraStatusReady,
-			},
-		})
-
-		r, err := NewTestConditionController(cli, scheme, dns.DefaultClusterDomain)
-		Expect(err).ShouldNot(HaveOccurred())
-		result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      "log-storage",
-			Namespace: "",
-		}})
-		Expect(err).ShouldNot(HaveOccurred())
-		// Expect to be waiting for Elasticsearch and Kibana to be functional
-		Expect(result).Should(Equal(reconcile.Result{}))
-
-		By("asserting the finalizers have been set on the LogStorage CR")
-		instance := &operatorv1.LogStorage{}
-		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
-		Expect(instance.Status.Conditions).To(HaveLen(0))
-	})
-
-	It("should reconcile with creating new status condition with multiple conditions as true", func() {
-		ts := &operatorv1.TigeraStatus{
-			ObjectMeta: metav1.ObjectMeta{Name: "log-storage"},
-			Spec:       operatorv1.TigeraStatusSpec{},
-			Status: operatorv1.TigeraStatusStatus{
-				Conditions: []operatorv1.TigeraStatusCondition{
-					{
-						Type:               operatorv1.ComponentAvailable,
-						Status:             operatorv1.ConditionTrue,
-						Reason:             string(operatorv1.AllObjectsAvailable),
-						Message:            "All Objects are available",
-						ObservedGeneration: generation,
-					},
-					{
-						Type:               operatorv1.ComponentProgressing,
-						Status:             operatorv1.ConditionTrue,
-						Reason:             string(operatorv1.ResourceNotReady),
-						Message:            "Progressing Installation.operatorv1.tigera.io",
-						ObservedGeneration: generation,
-					},
-					{
-						Type:               operatorv1.ComponentDegraded,
-						Status:             operatorv1.ConditionTrue,
-						Reason:             string(operatorv1.ResourceUpdateError),
-						Message:            "Error resolving ImageSet for components",
-						ObservedGeneration: generation,
-					},
-				},
-			},
-		}
-		Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
 		CreateLogStorage(cli, &operatorv1.LogStorage{
 			ObjectMeta: metav1.ObjectMeta{
@@ -240,56 +193,56 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
 		Expect(instance.Status.Conditions).To(HaveLen(3))
 
-		Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
-		Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
-		Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
-		Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
-
-		Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
-		Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
-		Expect(instance.Status.Conditions[1].Message).To(Equal("Progressing Installation.operatorv1.tigera.io"))
-		Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
-
-		Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
-		Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceUpdateError)))
-		Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
-		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		By("asserting all the status set to be False")
+		actualConditions := getCurrentConditions(instance.Status.Conditions)
+		readyCondition, ok := actualConditions["Ready"]
+		Expect(ok).To(BeTrue())
+		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(readyCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(readyCondition.Message).To(Equal(""))
+		degCondition, ok := actualConditions["Degraded"]
+		Expect(ok).To(BeTrue())
+		Expect(string(degCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(degCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(degCondition.Message).To(Equal(""))
+		progCondition, ok := actualConditions["Progressing"]
+		Expect(ok).To(BeTrue())
+		Expect(string(progCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(progCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(progCondition.Message).To(Equal(""))
 	})
 
-	It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
-		ts := &operatorv1.TigeraStatus{
-			ObjectMeta: metav1.ObjectMeta{Name: "log-storage"},
-			Spec:       operatorv1.TigeraStatusSpec{},
-			Status: operatorv1.TigeraStatusStatus{
-				Conditions: []operatorv1.TigeraStatusCondition{
-					{
-						Type:               operatorv1.ComponentAvailable,
-						Status:             operatorv1.ConditionTrue,
-						Reason:             string(operatorv1.AllObjectsAvailable),
-						Message:            "All Objects are available",
-						ObservedGeneration: generation,
-					},
-					{
-						Type:               operatorv1.ComponentProgressing,
-						Status:             operatorv1.ConditionFalse,
-						Reason:             string(operatorv1.NotApplicable),
-						Message:            "Not Applicable",
-						ObservedGeneration: generation,
-					},
-					{
-						Type:               operatorv1.ComponentDegraded,
-						Status:             operatorv1.ConditionFalse,
-						Reason:             string(operatorv1.NotApplicable),
-						Message:            "Not Applicable",
-						ObservedGeneration: generation,
-					},
-				},
-			},
+	It("should reconcile multiple conditions as true", func() {
+
+		lsControllers := append(subControllers, TigeraStatusLogStorageKubeController)
+		for _, ls := range lsControllers {
+			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
 		}
-		Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+
+		// Create esmetrics with multiple conditions true
+		createTigeraStatus(cli, ctx, TigeraStatusLogStorageESMetrics, generation, []operatorv1.TigeraStatusCondition{
+			{
+				Type:               operatorv1.ComponentAvailable,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.AllObjectsAvailable),
+				Message:            "All Objects are available",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentProgressing,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "Progressing Installation.operatorv1.tigera.io",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentDegraded,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.ResourceUpdateError),
+				Message:            "Error resolving ImageSet for components",
+				ObservedGeneration: generation,
+			},
+		})
 
 		CreateLogStorage(cli, &operatorv1.LogStorage{
 			ObjectMeta: metav1.ObjectMeta{
@@ -313,7 +266,6 @@ var _ = Describe("LogStorage Conditions controller", func() {
 			Namespace: "",
 		}})
 		Expect(err).ShouldNot(HaveOccurred())
-
 		// Expect to be waiting for Elasticsearch and Kibana to be functional
 		Expect(result).Should(Equal(reconcile.Result{}))
 
@@ -322,23 +274,182 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
 		Expect(instance.Status.Conditions).To(HaveLen(3))
 
-		Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
-		Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-		Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
-		Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
-		Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+		actualConditions := getCurrentConditions(instance.Status.Conditions)
 
-		Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
-		Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-		Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.NotApplicable)))
-		Expect(instance.Status.Conditions[1].Message).To(Equal("Not Applicable"))
-		Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+		By("asserting degraded is marked as true with esmetrics subcontroller")
+		degraded, ok := actualConditions["Degraded"]
+		Expect(ok).To(BeTrue())
 
-		Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
-		Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-		Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
-		Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
-		Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		msg := "The following sub-controllers are in this condition: [log-storage-esmetrics]"
+		Expect(string(degraded.Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(degraded.Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+		Expect(degraded.Message).To(Equal(msg))
+		Expect(degraded.ObservedGeneration).To(Equal(int64(2)))
+
+		By("asserting progressing is marked as True with esmetrics subcontroller")
+		progressing, ok := actualConditions["Progressing"]
+		Expect(ok).To(BeTrue())
+		Expect(string(progressing.Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(progressing.Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+		Expect(progressing.Message).To(Equal(msg))
+		Expect(progressing.ObservedGeneration).To(Equal(int64(2)))
+
+		By("asserting available is marked as True")
+		readyCondition, ok := actualConditions["Ready"]
+		Expect(ok).To(BeTrue())
+		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(readyCondition.Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+		Expect(readyCondition.ObservedGeneration).To(Equal(int64(2)))
+
+	})
+
+	It("should reconcile with all log-storage-* tigerastatus conditions as Available and later move to degraded", func() {
+
+		subControllers = append(subControllers, TigeraStatusLogStorageUsers)
+		for _, ls := range subControllers {
+			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
+		}
+		CreateLogStorage(cli, &operatorv1.LogStorage{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "tigera-secure",
+				Generation: 3,
+			},
+			Spec: operatorv1.LogStorageSpec{
+				Nodes: &operatorv1.Nodes{
+					Count: int64(1),
+				},
+			},
+			Status: operatorv1.LogStorageStatus{
+				State: operatorv1.TigeraStatusReady,
+			},
+		})
+
+		r, err := NewTestConditionController(cli, scheme, dns.DefaultClusterDomain)
+		r.multiTenant = true
+		Expect(err).ShouldNot(HaveOccurred())
+
+		result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+			Name:      "log-storage",
+			Namespace: "",
+		}})
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(result).Should(Equal(reconcile.Result{}))
+
+		instance := &operatorv1.LogStorage{}
+		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
+		Expect(instance.Status.Conditions).To(HaveLen(3))
+
+		actualConditions := getCurrentConditions(instance.Status.Conditions)
+
+		By("asserting Ready status to be true")
+		readyCondition, ok := actualConditions["Ready"]
+		Expect(ok).To(BeTrue())
+		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(readyCondition.Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+		Expect(readyCondition.Message).To(Equal("All sub-controllers are available"))
+		Expect(readyCondition.ObservedGeneration).To(Equal(generation))
+		recentTransitionTime := instance.Status.Conditions[1].LastTransitionTime
+
+		// Expect tigerstatus transition time remain unchanged when there is no changes to the  condition
+		time.Sleep(5 * time.Second)
+		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+			Name:      "log-storage",
+			Namespace: "",
+		}})
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(result).Should(Equal(reconcile.Result{}))
+		instance = &operatorv1.LogStorage{}
+
+		By("Assert last transition time is not affected when tigerastatus condition is untouched")
+		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
+		Expect(instance.Status.Conditions).To(HaveLen(3))
+
+		actualConditions = getCurrentConditions(instance.Status.Conditions)
+
+		By("asserting Ready status remains untouched after reconcilation")
+		readyCondition, ok = actualConditions["Ready"]
+		Expect(ok).To(BeTrue())
+		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(readyCondition.Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+		Expect(readyCondition.Message).To(Equal("All sub-controllers are available"))
+		Expect(readyCondition.ObservedGeneration).To(Equal(generation))
+		Expect(readyCondition.LastTransitionTime.Time.Equal(recentTransitionTime.Time)).To(BeTrue())
+		recentTransitionTime = instance.Status.Conditions[1].LastTransitionTime
+
+		// Expect tigerastatus set to be degraded with a different transistion time.
+		// update LogStorageUsers  Tigerastatus to degraded
+		tsUser := operatorv1.TigeraStatus{}
+		_ = cli.Get(ctx, client.ObjectKey{
+			Name: TigeraStatusLogStorageUsers,
+		}, &tsUser)
+
+		tsUser.Status.Conditions = []operatorv1.TigeraStatusCondition{
+			{
+				Type:               operatorv1.ComponentAvailable,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "",
+				ObservedGeneration: int64(1),
+			},
+			{
+				Type:               operatorv1.ComponentProgressing,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "",
+				ObservedGeneration: int64(1),
+			},
+			{
+				Type:               operatorv1.ComponentDegraded,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.ResourceNotReady),
+				Message:            "no active connection found: no Elasticsearch node available",
+				ObservedGeneration: int64(1),
+			},
+		}
+
+		Expect(cli.Update(ctx, &tsUser)).NotTo(HaveOccurred())
+
+		// Sleep before reconciling again to ensure the Last Transition Time updates correctly when switching statuses.
+		time.Sleep(5 * time.Second)
+		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+			Name:      "log-storage",
+			Namespace: "",
+		}})
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(result).Should(Equal(reconcile.Result{}))
+		instance = &operatorv1.LogStorage{}
+
+		Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, instance)).ShouldNot(HaveOccurred())
+		Expect(instance.Status.Conditions).To(HaveLen(3))
+
+		actualConditions = getCurrentConditions(instance.Status.Conditions)
+
+		By("asserting degraded is marked as true and observed generation is updated to the oldest")
+		degraded, ok := actualConditions["Degraded"]
+		Expect(ok).To(BeTrue())
+
+		degradedMsg := "The following sub-controllers are in this condition: [log-storage-users]"
+		Expect(string(degraded.Status)).To(Equal(string(operatorv1.ConditionTrue)))
+		Expect(degraded.Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+		Expect(degraded.Message).To(Equal(degradedMsg))
+		Expect(degraded.ObservedGeneration).To(Equal(int64(1)))
+
+		By("asserting available is marked as false")
+		readyCondition, ok = actualConditions["Ready"]
+		Expect(ok).To(BeTrue())
+		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(int64(1)))
+
+		By("assert transition time should be after the previously recorded transition time")
+		Expect(readyCondition.LastTransitionTime.Time.After(recentTransitionTime.Time)).To(BeTrue())
+
+		By("asserting progressing should remain unchanged")
+		progressing, ok := actualConditions["Progressing"]
+		Expect(ok).To(BeTrue())
+		Expect(string(progressing.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(progressing.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(progressing.Message).To(Equal(""))
+		Expect(progressing.ObservedGeneration).To(Equal(int64(1)))
 	})
 })
 
@@ -350,4 +461,44 @@ func CreateLogStorage(client client.Client, ls *operatorv1.LogStorage) {
 
 	// Create the LogStorage object.
 	ExpectWithOffset(1, client.Create(context.Background(), ls)).ShouldNot(HaveOccurred())
+}
+
+func createTigeraStatus(cli client.Client, ctx context.Context, name string, generation int64, conditions []operatorv1.TigeraStatusCondition) {
+
+	// set All objects Available by default
+	if len(conditions) == 0 {
+		conditions = []operatorv1.TigeraStatusCondition{
+			{
+				Type:               operatorv1.ComponentAvailable,
+				Status:             operatorv1.ConditionTrue,
+				Reason:             string(operatorv1.AllObjectsAvailable),
+				Message:            "All Objects are available",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentProgressing,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.AllObjectsAvailable),
+				Message:            "All Objects are available",
+				ObservedGeneration: generation,
+			},
+			{
+				Type:               operatorv1.ComponentDegraded,
+				Status:             operatorv1.ConditionFalse,
+				Reason:             string(operatorv1.AllObjectsAvailable),
+				Message:            "All Objects are available",
+				ObservedGeneration: generation,
+			},
+		}
+	}
+
+	ts := &operatorv1.TigeraStatus{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec:       operatorv1.TigeraStatusSpec{},
+		Status: operatorv1.TigeraStatusStatus{
+			Conditions: conditions,
+		},
+	}
+
+	Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 }

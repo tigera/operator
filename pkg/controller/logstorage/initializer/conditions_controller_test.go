@@ -138,6 +138,17 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(readyCondition.Message).To(Equal("All sub-controllers are available"))
 		Expect(readyCondition.ObservedGeneration).To(Equal(generation))
 
+		degCondition, ok := actualConditions["Degraded"]
+		Expect(ok).To(BeTrue())
+		Expect(string(degCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(degCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(degCondition.Message).To(Equal(""))
+		progCondition, ok := actualConditions["Progressing"]
+		Expect(ok).To(BeTrue())
+		Expect(string(progCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(progCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(progCondition.Message).To(Equal(""))
+
 	})
 
 	It("should reconcile with empty tigerastatus conditions", func() {
@@ -187,12 +198,18 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		readyCondition, ok := actualConditions["Ready"]
 		Expect(ok).To(BeTrue())
 		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(readyCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(readyCondition.Message).To(Equal(""))
 		degCondition, ok := actualConditions["Degraded"]
 		Expect(ok).To(BeTrue())
 		Expect(string(degCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(degCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(degCondition.Message).To(Equal(""))
 		progCondition, ok := actualConditions["Progressing"]
 		Expect(ok).To(BeTrue())
 		Expect(string(progCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
+		Expect(progCondition.Reason).To(Equal(string(operatorv1.Unknown)))
+		Expect(progCondition.Message).To(Equal(""))
 	})
 
 	It("should reconcile multiple conditions as true", func() {

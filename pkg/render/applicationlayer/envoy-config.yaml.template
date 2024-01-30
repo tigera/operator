@@ -54,11 +54,14 @@ static_resources:
           port_value: 16001
       listener_filters:
         - name: envoy.filters.listener.tls_inspector
-          typed_config: {}
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
         - name: envoy.filters.listener.http_inspector
-          typed_config: {}
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.http_inspector.v3.HttpInspector
         - name: envoy.filters.listener.original_dst
-          typed_config: {}
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.original_dst.v3.OriginalDst
         - name: envoy.filters.listener.original_src
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.filters.listener.original_src.v3.OriginalSrc
@@ -97,7 +100,8 @@ static_resources:
                 http_filters:
                   {{if or .ALPEnabled .WAFEnabled}}{{template "DIKASTES"}}{{end}}
                   - name: envoy.filters.http.router
-                    typed_config: {}
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
                 codec_type: auto
         - filter_chain_match:
             application_protocols:
@@ -123,7 +127,8 @@ static_resources:
                 http_filters:
                   {{if or .ALPEnabled .WAFEnabled}}{{template "DIKASTES"}}{{end}}
                   - name: envoy.filters.http.router
-                    typed_config: {}
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
                 codec_type: auto
         - filter_chain_match: {}
           filters:
@@ -141,11 +146,14 @@ static_resources:
           port_value: 16002 # must be services port + 1
       listener_filters:
         - name: envoy.filters.listener.tls_inspector
-          typed_config: {}
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
         - name: envoy.filters.listener.http_inspector
-          typed_config: {}
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.http_inspector.v3.HttpInspector
         - name: envoy.filters.listener.original_dst
-          typed_config: {}
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.original_dst.v3.OriginalDst
         - name: envoy.filters.listener.original_src
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.filters.listener.original_src.v3.OriginalSrc

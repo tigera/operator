@@ -87,7 +87,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 	It("should reconcile with one item in tigerastatus conditions", func() {
 
-		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
 		for _, ls := range lsControllers {
 			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{{
 				Type:               operatorv1.ComponentAvailable,
@@ -153,7 +153,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 	It("should reconcile with empty tigerastatus conditions", func() {
 
-		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController)
+		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
 		for _, ls := range lsControllers {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: ls},
@@ -214,7 +214,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 	It("should reconcile multiple conditions as true", func() {
 
-		lsControllers := append(subControllers, TigeraStatusLogStorageKubeController)
+		lsControllers := append(subControllers, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
 		for _, ls := range lsControllers {
 			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
 		}

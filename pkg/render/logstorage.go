@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1799,6 +1799,12 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
+					Destination: kibanaPortIngressDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.DefaultHelper().DashboardInstallerSourceEntityRule(),
 					Destination: kibanaPortIngressDestination,
 				},
 				{

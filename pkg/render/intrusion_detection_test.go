@@ -129,7 +129,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.originate"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.servfail"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.dos"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"}},
 		}
 		rtest.ExpectResources(resources, expected)
 
@@ -297,7 +296,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.originate"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.servfail"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.dos"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"}},
 		}
 		rtest.ExpectResources(resources, expected)
 
@@ -639,7 +637,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: tenantANamespace}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantANamespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-es-job-installer", Namespace: tenantANamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},

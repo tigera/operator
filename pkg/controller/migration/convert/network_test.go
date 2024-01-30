@@ -41,7 +41,7 @@ func int32Ptr(x int32) *int32 {
 }
 
 var _ = Describe("Convert network tests", func() {
-	var ctx = context.Background()
+	ctx := context.Background()
 	var v4pool *crdv1.IPPool
 	var v6pool *crdv1.IPPool
 	var scheme *runtime.Scheme
@@ -142,13 +142,15 @@ var _ = Describe("Convert network tests", func() {
 						MaxUnavailable: &_1intstr,
 					},
 				},
-				ComponentResources: []operatorv1.ComponentResource{{
-					ComponentName: operatorv1.ComponentNameNode,
-					ResourceRequirements: &corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("250m"),
+				ComponentResources: []operatorv1.ComponentResource{
+					{
+						ComponentName: operatorv1.ComponentNameNode,
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("250m"),
+							},
 						},
-					}},
+					},
 				},
 			}}))
 		})
@@ -796,19 +798,20 @@ var _ = Describe("Convert network tests", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(cfg).ToNot(BeNil())
 					Expect(cfg.Spec.CalicoNetwork.Sysctl).ToNot(BeNil())
-					Expect(cfg.Spec.CalicoNetwork.Sysctl).To(ConsistOf([]operatorv1.Sysctl{
-						{
+					Expect(cfg.Spec.CalicoNetwork.Sysctl).To(ConsistOf(
+						operatorv1.Sysctl{
 							Key:   "net.ipv4.tcp_keepalive_intvl",
 							Value: "15",
-						}, {
+						},
+						operatorv1.Sysctl{
 							Key:   "net.ipv4.tcp_keepalive_probes",
 							Value: "6",
 						},
-						{
+						operatorv1.Sysctl{
 							Key:   "net.ipv4.tcp_keepalive_time",
 							Value: "40",
 						},
-					}))
+					))
 				})
 
 				It("not allowed sysctl tuning in config", func() {
@@ -1032,10 +1035,12 @@ var _ = Describe("Convert network tests", func() {
 		Entry("should error if implicitly IPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should error if explicitlyIPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{
 			{Name: "IP", Value: "autodetect"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+		}, true),
 		Entry("should error if IP6=none but FELIX_IPV6SUPPORT=true", []corev1.EnvVar{
 			{Name: "IP6", Value: "none"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+		}, true),
 		Entry("should not error if IP6=none and FELIX_IPV6SUPPORT is undefined", []corev1.EnvVar{{Name: "IP6", Value: "none"}}, false),
 		Entry("should error if IPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should error if IPv6 only with bird and CALICO_ROUTER_ID != `hash`",
@@ -1044,14 +1049,16 @@ var _ = Describe("Convert network tests", func() {
 				{Name: "IP6", Value: "autodetect"},
 				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
 				{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
-				{Name: "CALICO_ROUTER_ID", Value: "not hash"}}, true),
+				{Name: "CALICO_ROUTER_ID", Value: "not hash"},
+			}, true),
 		Entry("should error if IPv6 only with vxlan and CALICO_ROUTER_ID == `hash`",
 			[]corev1.EnvVar{
 				{Name: "IP", Value: "none"},
 				{Name: "IP6", Value: "autodetect"},
 				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
 				{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
-				{Name: "CALICO_ROUTER_ID", Value: "hash"}}, true),
+				{Name: "CALICO_ROUTER_ID", Value: "hash"},
+			}, true),
 	)
 
 	It("handle both IP_AUTODETECTION_METHOD and IP6_AUTODETECTION_METHOD", func() {

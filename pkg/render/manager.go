@@ -159,6 +159,7 @@ type ManagerConfiguration struct {
 	Replicas                *int32
 	Compliance              *operatorv1.Compliance
 	ComplianceLicenseActive bool
+	ComplianceNamespace     string
 
 	// Whether the cluster supports pod security policies.
 	UsePSP            bool
@@ -498,7 +499,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
-		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", c.cfg.Namespace, c.cfg.ClusterDomain)},
+		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", c.cfg.ComplianceNamespace, c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_LOGLEVEL", Value: "Info"},
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},

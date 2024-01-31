@@ -18,15 +18,23 @@ import (
 	"context"
 	"fmt"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
-	"k8s.io/apimachinery/pkg/types"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -39,21 +47,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const tigeraStatusName = "intrusion-detection"
@@ -76,7 +74,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, tierWatchReady)
 
 	// Create a new controller
-	c, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := cruntime.NewController("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return fmt.Errorf("failed to create intrusiondetection-controller: %v", err)
 	}
@@ -111,22 +109,22 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	// Watch for changes to operator.tigera.io APIs.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.IntrusionDetection{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %v", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.LogCollector{}, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementCluster{}, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.Installation{}, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch Installation resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.APIServer{}, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ImageSet{}, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch ImageSet: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {

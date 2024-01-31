@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -49,7 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_logstorage_dashboards")
@@ -82,7 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-dashboards-controller", mgr, controller.Options{Reconciler: r})
+	c, err := cruntime.NewController("log-storage-dashboards-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -95,20 +95,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch LogStorage resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.Installation{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch Installation resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageDashboards); err != nil {
 		return fmt.Errorf("logstorage-dashboards-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-dashboards-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -145,10 +145,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Check if something modifies resources this controller creates.
-	err = c.Watch(&source.Kind{Type: &batchv1.Job{ObjectMeta: metav1.ObjectMeta{
+	err = c.WatchObject(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{
 		Namespace: helper.InstallNamespace(),
 		Name:      dashboards.Name,
-	}}}, &handler.EnqueueRequestForObject{})
+	}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch installer job: %v", err)
 	}

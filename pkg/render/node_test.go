@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -45,6 +44,7 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	tls2 "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 var (
@@ -123,7 +123,7 @@ var _ = Describe("Node rendering tests", func() {
 				}
 				scheme := runtime.NewScheme()
 				Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-				cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+				cli = test.DefaultFakeClientBuilder(scheme).Build()
 
 				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())

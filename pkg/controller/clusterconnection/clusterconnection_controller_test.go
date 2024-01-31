@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -68,7 +67,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		err := operatorv1.SchemeBuilder.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = test.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()

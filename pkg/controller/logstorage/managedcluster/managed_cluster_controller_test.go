@@ -30,7 +30,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -40,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
+	"github.com/tigera/operator/test"
 )
 
 func NewReconcilerWithShims(
@@ -81,7 +81,7 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = test.DefaultFakeClientBuilder(scheme).Build()
 
 		var replicas int32 = 2
 		install = &operatorv1.Installation{

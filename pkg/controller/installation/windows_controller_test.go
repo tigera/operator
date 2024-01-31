@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,7 +45,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -72,7 +71,7 @@ var _ = Describe("windows-controller installation tests", func() {
 			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			c = test.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create an object we can use throughout the test to do the core reconcile loops.
@@ -524,7 +523,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 					// Create a client that will have a crud interface of k8s objects.
-					c = fake.NewClientBuilder().WithScheme(scheme).Build()
+					c = test.DefaultFakeClientBuilder(scheme).Build()
 					ctx, cancel = context.WithCancel(context.Background())
 
 					// Create dns service which is autodetected by windows-controller

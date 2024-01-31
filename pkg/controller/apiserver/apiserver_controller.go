@@ -30,7 +30,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -49,6 +48,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -61,7 +61,7 @@ var log = logf.Log.WithName("controller_apiserver")
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r := newReconciler(mgr, opts)
 
-	c, err := controller.New("apiserver-controller", mgr, controller.Options{Reconciler: r})
+	c, err := cruntime.NewController("apiserver-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
@@ -105,9 +105,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 }
 
 // add adds watches for resources that are available at startup
-func add(c controller.Controller, r *ReconcileAPIServer) error {
+func add(c cruntime.Controller, r *ReconcileAPIServer) error {
 	// Watch for changes to primary resource APIServer
-	err := c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, &handler.EnqueueRequestForObject{})
+	err := c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create APIServer watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
@@ -123,7 +123,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 	}
 
 	if r.amazonCRDExists {
-		err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&operatorv1.AmazonCloudIntegration{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
@@ -132,13 +132,13 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 
 	if r.enterpriseCRDsExist {
 		// Watch for changes to primary resource ManagementCluster
-		err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
 		// Watch for changes to primary resource ManagementClusterConnection
-		err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
@@ -152,7 +152,7 @@ func add(c controller.Controller, r *ReconcileAPIServer) error {
 		}
 
 		// Watch for changes to authentication
-		err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&operatorv1.Authentication{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 		}

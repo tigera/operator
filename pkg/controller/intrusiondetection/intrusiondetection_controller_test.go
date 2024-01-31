@@ -53,7 +53,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -76,7 +75,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(esv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = test.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 
 		// Create an object we can use throughout the tests.

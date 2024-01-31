@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,12 +17,17 @@ package egressgateway
 import (
 	"testing"
 
+	uzap "go.uber.org/zap"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/reporters"
 	. "github.com/onsi/gomega"
 )
 
 func TestStatus(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("../../../report/ut/egressgateway_controller_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/egressgateway Controller Suite", []Reporter{junitReporter})

@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,7 +45,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -71,7 +70,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			c = test.DefaultFakeClientBuilder(scheme).Build()
 			ctx = context.Background()
 			installation = &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -899,9 +898,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			var mgr manager.Manager
 			err := add(mgr, m)
 			Expect(err).ShouldNot(HaveOccurred())
-			for _, watch := range m.watches {
-				kind := watch.(*source.Kind)
-				Expect(len(kind.Type.GetNamespace())).To(Equal(0))
+			for _, obj := range m.watchedObjects {
+				Expect(len(obj.GetNamespace())).To(Equal(0))
 			}
 		})
 	})
@@ -909,12 +907,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 type mockController struct {
 	mock.Mock
-	watches []source.Source
+	watchedObjects []client.Object
+}
+
+func (m *mockController) WatchObject(object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	m.watchedObjects = append(m.watchedObjects, object)
+	return nil
 }
 
 func (m *mockController) Watch(src source.Source, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
-	m.watches = append(m.watches, src)
-	return nil
+	panic("not implemented")
 }
 
 func (m *mockController) Start(ctx context.Context) error {

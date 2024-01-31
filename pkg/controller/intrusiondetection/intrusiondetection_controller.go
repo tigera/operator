@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,7 +55,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const ResourceName = "intrusion-detection"
@@ -77,7 +77,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, tierWatchReady)
 
 	// Create a new controller
-	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := cruntime.NewController("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return fmt.Errorf("failed to create intrusiondetection-controller: %v", err)
 	}
@@ -88,13 +88,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
 
-	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady,
+	go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
 		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: render.IntrusionDetectionNamespace},
 		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: render.IntrusionDetectionNamespace},
 		{Name: render.ADAPIPolicyName, Namespace: render.IntrusionDetectionNamespace},
@@ -103,7 +103,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace},
 	})
 
-	return add(mgr, controller)
+	return add(mgr, c)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -125,32 +125,32 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 }
 
 // add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c cruntime.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource IntrusionDetection
-	err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.IntrusionDetection{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %v", err)
 	}
 
-	err = c.Watch(&source.Kind{Type: &batchv1.Job{ObjectMeta: metav1.ObjectMeta{
+	err = c.WatchObject(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{
 		Namespace: render.IntrusionDetectionNamespace,
 		Name:      render.IntrusionDetectionInstallerJobName,
-	}}}, &handler.EnqueueRequestForObject{})
+	}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch installer job: %v", err)
 	}
 
 	// Watch for changes to to primary resource LogCollector, to determine if syslog forwarding is
 	// turned on or off.
-	err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
 	}
 
 	// Watch for changes to primary resource ManagementCluster
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %w", err)
 	}
@@ -164,7 +164,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch for changes in storage classes to queue changes if new storage classes may be made available for AD API.
-	if err = c.Watch(&source.Kind{Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&storagev1.StorageClass{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch StorageClass resource: %w", err)
 	}
 

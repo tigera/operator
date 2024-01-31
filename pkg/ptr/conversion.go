@@ -34,3 +34,7 @@ func IntOrStrPtr(v string) *intstr.IntOrString {
 	ios := intstr.Parse(v)
 	return &ios
 }
+
+func ToPtr[V any](v V) *V {
+	return &v
+}

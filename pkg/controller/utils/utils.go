@@ -41,7 +41,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -53,6 +52,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 )
 
 const (
@@ -100,35 +100,35 @@ func IgnoreObject(obj runtime.Object) bool {
 	return false
 }
 
-func AddInstallationWatch(c controller.Controller) error {
-	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
+func AddInstallationWatch(c cruntime.Controller) error {
+	return c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{})
 }
 
-func AddAPIServerWatch(c controller.Controller) error {
-	return c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, &handler.EnqueueRequestForObject{})
+func AddAPIServerWatch(c cruntime.Controller) error {
+	return c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
 }
 
-func AddComplianceWatch(c controller.Controller) error {
-	return c.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
+func AddComplianceWatch(c cruntime.Controller) error {
+	return c.WatchObject(&operatorv1.Compliance{}, &handler.EnqueueRequestForObject{})
 }
 
-func AddNamespaceWatch(c controller.Controller, name string) error {
+func AddNamespaceWatch(c cruntime.Controller, name string) error {
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
 
-	return c.Watch(&source.Kind{Type: ns}, &handler.EnqueueRequestForObject{})
+	return c.WatchObject(ns, &handler.EnqueueRequestForObject{})
 }
 
 type MetaMatch func(metav1.ObjectMeta) bool
 
-func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
+func AddSecretsWatch(c cruntime.Controller, name, namespace string, metaMatches ...MetaMatch) error {
 	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
 }
 
-func AddSecretsWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
+func AddSecretsWatchWithHandler(c cruntime.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -136,7 +136,7 @@ func AddSecretsWatchWithHandler(c controller.Controller, name, namespace string,
 	return AddNamespacedWatch(c, s, h, metaMatches...)
 }
 
-func AddConfigMapWatch(c controller.Controller, name, namespace string, h handler.EventHandler) error {
+func AddConfigMapWatch(c cruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	cm := &corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -144,32 +144,32 @@ func AddConfigMapWatch(c controller.Controller, name, namespace string, h handle
 	return AddNamespacedWatch(c, cm, h)
 }
 
-func AddServiceWatch(c controller.Controller, name, namespace string) error {
+func AddServiceWatch(c cruntime.Controller, name, namespace string) error {
 	return AddServiceWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
 }
 
-func AddServiceWatchWithHandler(c controller.Controller, name, namespace string, h handler.EventHandler) error {
+func AddServiceWatchWithHandler(c cruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}, h)
 }
 
-func AddDeploymentWatch(c controller.Controller, name, namespace string) error {
+func AddDeploymentWatch(c cruntime.Controller, name, namespace string) error {
 	return AddNamespacedWatch(c, &appsv1.Deployment{
 		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}, &handler.EnqueueRequestForObject{})
 }
 
-func AddPeriodicReconcile(c controller.Controller, period time.Duration, handler handler.EventHandler) error {
+func AddPeriodicReconcile(c cruntime.Controller, period time.Duration, handler handler.EventHandler) error {
 	return c.Watch(&source.Channel{Source: createPeriodicReconcileChannel(period)}, handler)
 }
 
 // AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.
 // If no namespace is provided, it watches cluster-wide.
-func AddSecretWatchWithLabel(c controller.Controller, ns, label string) error {
-	return c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
+func AddSecretWatchWithLabel(c cruntime.Controller, ns, label string) error {
+	return c.WatchObject(&corev1.Secret{}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			_, hasLabel := e.Object.GetLabels()[label]
 			return (ns == "" || e.Object.GetNamespace() == ns) && hasLabel
@@ -187,8 +187,8 @@ func AddSecretWatchWithLabel(c controller.Controller, ns, label string) error {
 
 // AddCSRWatchWithRelevancyFn adds a watch for CSRs with the given label. isRelevantFn is a function that returns true for
 // items that are relevant to the caller.
-func AddCSRWatchWithRelevancyFn(c controller.Controller, isRelevantFn func(*certificatesv1.CertificateSigningRequest) bool) error {
-	return c.Watch(&source.Kind{Type: &certificatesv1.CertificateSigningRequest{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
+func AddCSRWatchWithRelevancyFn(c cruntime.Controller, isRelevantFn func(*certificatesv1.CertificateSigningRequest) bool) error {
+	return c.WatchObject(&certificatesv1.CertificateSigningRequest{}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			csr, ok := e.Object.(*certificatesv1.CertificateSigningRequest)
 			return ok && isRelevantFn(csr)
@@ -220,15 +220,15 @@ func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEven
 	return periodicReconcileEvents
 }
 
-func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+func WaitToAddLicenseKeyWatch(controller cruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
 }
 
-func WaitToAddPolicyRecommendationScopeWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+func WaitToAddPolicyRecommendationScopeWatch(controller cruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.PolicyRecommendationScope{TypeMeta: metav1.TypeMeta{Kind: v3.KindPolicyRecommendationScope}}})
 }
 
-func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, policies []types.NamespacedName) {
+func WaitToAddNetworkPolicyWatches(controller cruntime.Controller, c kubernetes.Interface, log logr.Logger, policies []types.NamespacedName) {
 	objs := []client.Object{}
 	for _, policy := range policies {
 		objs = append(objs, &v3.NetworkPolicy{
@@ -242,7 +242,7 @@ func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernete
 	WaitToAddResourceWatch(controller, c, log, nil, objs)
 }
 
-func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+func WaitToAddTierWatch(tierName string, controller cruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	obj := &v3.Tier{
 		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: tierName},
@@ -255,10 +255,10 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
-func AddNamespacedWatch(c controller.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
+func AddNamespacedWatch(c cruntime.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)
-	return c.Watch(&source.Kind{Type: obj}, h, pred)
+	return c.WatchObject(obj, h, pred)
 }
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
@@ -593,7 +593,7 @@ type resourceWatchContext struct {
 
 // WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
+func WaitToAddResourceWatch(controller cruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
 	// Track resources left to watch and establish their watch context.
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
 	for _, obj := range objs {
@@ -626,7 +626,7 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 				}
 			} else if !ok {
 				objLog.Info("Waiting for resource to be ready - will retry")
-			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
+			} else if err := controller.WatchObject(obj, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
 				objLog.WithValues("Error", err).Info("Failed to watch resource - will retry")
 			} else {
 				objLog.V(2).Info("Successfully watching resource")
@@ -722,8 +722,8 @@ func ValidateResourceNameIsQualified(name string) error {
 }
 
 // AddTigeraStatusWatch creates a watch on the given object. It uses predicates to only return matching objects.
-func AddTigeraStatusWatch(c controller.Controller, name string) error {
-	return c.Watch(&source.Kind{Type: &operatorv1.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: name}}}, &handler.EnqueueRequestForObject{}, predicate.NewPredicateFuncs(func(object client.Object) bool {
+func AddTigeraStatusWatch(c cruntime.Controller, name string) error {
+	return c.WatchObject(&operatorv1.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: name}}, &handler.EnqueueRequestForObject{}, predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return object.GetName() == name
 	}))
 }
@@ -773,14 +773,14 @@ func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, erro
 }
 
 // AddNodeLocalDNSWatch creates a watch on the node-local-dns pods.
-func AddNodeLocalDNSWatch(c controller.Controller) error {
+func AddNodeLocalDNSWatch(c cruntime.Controller) error {
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
 			Name:      "node-local-dns",
 		},
 	}
-	return c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
+	return c.WatchObject(&appsv1.DaemonSet{}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }
 
 func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operatorv1.Provider) ([]string, error) {

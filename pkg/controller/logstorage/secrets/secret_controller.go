@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"github.com/go-logr/logr"
@@ -47,7 +48,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_logstorage_secrets")
@@ -80,7 +80,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-secrets-controller", mgr, controller.Options{Reconciler: r})
+	c, err := cruntime.NewController("log-storage-secrets-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -93,23 +93,23 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Installation resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementCluster{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch ManagementCluster resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageSecrets); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-secrets-controller failed to watch Tenant resource: %w", err)
 		}
 	}

@@ -34,15 +34,14 @@ import (
 	"github.com/tigera/operator/pkg/controller/logcollector"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/tenancy"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +56,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const ResourceName = "intrusion-detection"
+const tigeraStatusName = "intrusion-detection"
 
 var log = logf.Log.WithName("controller_intrusiondetection")
 
@@ -73,11 +72,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	dpiAPIReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
 
-	// create the reconciler
+	// Create the reconciler
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, tierWatchReady)
 
 	// Create a new controller
-	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return fmt.Errorf("failed to create intrusiondetection-controller: %v", err)
 	}
@@ -88,22 +87,82 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
+	installNS, truthNS, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, render.IntrusionDetectionNamespace)
 
-	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady,
-		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
+	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
+	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
+	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
+	if opts.MultiTenant {
+		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+	}
 
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
-		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: render.ADAPIPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: render.ADDetectorPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.IntrusionDetectionNamespace},
-		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace},
-	})
+	policiesToWatch := []types.NamespacedName{
+		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: installNS},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
+	}
+	if !opts.MultiTenant {
+		// DPI is only supported in single-tenant mode.
+		go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
+			[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
+		policiesToWatch = append(policiesToWatch, types.NamespacedName{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace})
+	}
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, policiesToWatch)
+	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
-	return add(mgr, controller)
+	// Watch for changes to operator.tigera.io APIs.
+	if err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %v", err)
+	}
+	if err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
+	}
+	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %w", err)
+	}
+	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch Installation resource: %w", err)
+	}
+	if err = c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %w", err)
+	}
+	if err = c.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch ImageSet: %w", err)
+	}
+	if err = utils.AddTigeraStatusWatch(c, tigeraStatusName); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch intrusion-detection Tigerastatus: %w", err)
+	}
+
+	for _, secretName := range []string{
+		render.ManagerInternalTLSSecretName,
+		render.NodeTLSSecretName,
+		render.TyphaTLSSecretName,
+		render.TigeraLinseedSecret,
+		render.VoltronLinseedPublicCert,
+		certificatemanagement.CASecretName,
+	} {
+		if err = utils.AddSecretsWatch(c, secretName, truthNS); err != nil {
+			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
+		}
+	}
+
+	if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, installNS); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, installNS); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, truthNS, eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, truthNS, eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
+	return nil
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -112,108 +171,16 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "intrusion-detection", opts.KubernetesVersion),
+		status:          status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		dpiAPIReady:     dpiAPIReady,
 		tierWatchReady:  tierWatchReady,
-		usePSP:          opts.UsePSP,
+		multiTenant:     opts.MultiTenant,
 		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
-}
-
-// add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c controller.Controller) error {
-	var err error
-
-	// Watch for changes to primary resource IntrusionDetection
-	err = c.Watch(&source.Kind{Type: &operatorv1.IntrusionDetection{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %v", err)
-	}
-
-	err = c.Watch(&source.Kind{Type: &batchv1.Job{ObjectMeta: metav1.ObjectMeta{
-		Namespace: render.IntrusionDetectionNamespace,
-		Name:      render.IntrusionDetectionInstallerJobName,
-	}}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch installer job: %v", err)
-	}
-
-	// Watch for changes to to primary resource LogCollector, to determine if syslog forwarding is
-	// turned on or off.
-	err = c.Watch(&source.Kind{Type: &operatorv1.LogCollector{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch LogCollector resource: %v", err)
-	}
-
-	// Watch for changes to primary resource ManagementCluster
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch primary resource: %w", err)
-	}
-
-	if err = utils.AddInstallationWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch Installation resource: %v", err)
-	}
-
-	if err = imageset.AddImageSetWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch ImageSet: %w", err)
-	}
-
-	// Watch for changes in storage classes to queue changes if new storage classes may be made available for AD API.
-	if err = c.Watch(&source.Kind{Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch StorageClass resource: %w", err)
-	}
-
-	if err = utils.AddAPIServerWatch(c); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch APIServer resource: %v", err)
-	}
-
-	for _, secretName := range []string{
-		render.ElasticsearchIntrusionDetectionUserSecret,
-		render.ElasticsearchIntrusionDetectionJobUserSecret,
-		render.ElasticsearchPerformanceHotspotsUserSecret,
-		render.ManagerInternalTLSSecretName,
-		render.NodeTLSSecretName,
-		render.TyphaTLSSecretName,
-		render.TigeraLinseedSecret,
-		render.VoltronLinseedPublicCert,
-		certificatemanagement.CASecretName,
-	} {
-		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
-		}
-	}
-
-	if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, render.IntrusionDetectionNamespace); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, render.IntrusionDetectionNamespace); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
-	}
-
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
-	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
-	// Watch for changes to TigeraStatus.
-	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch intrusion-detection Tigerastatus: %w", err)
-	}
-
-	return nil
 }
 
 // blank assignment to verify that ReconcileIntrusionDetection implements reconcile.Reconciler
@@ -231,8 +198,22 @@ type ReconcileIntrusionDetection struct {
 	licenseAPIReady *utils.ReadyFlag
 	dpiAPIReady     *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-	usePSP          bool
+	multiTenant     bool
 	elasticExternal bool
+}
+
+func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.IntrusionDetection, error) {
+	key := client.ObjectKey{Name: "tigera-secure"}
+	if mt {
+		key.Namespace = ns
+	}
+
+	instance := &operatorv1.IntrusionDetection{}
+	err := cli.Get(ctx, key, instance)
+	if err != nil {
+		return nil, err
+	}
+	return instance, nil
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -241,18 +222,30 @@ type ReconcileIntrusionDetection struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	helper := utils.NewNamespaceHelper(r.multiTenant, render.IntrusionDetectionNamespace, request.Namespace)
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling IntrusionDetection")
 
+	// We skip requests without a namespace specified in multi-tenant setups.
+	if r.multiTenant && request.Namespace == "" {
+		return reconcile.Result{}, nil
+	}
+
+	// Check if this is a tenant-scoped request.
+	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	if errors.IsNotFound(err) {
+		reqLogger.Info("No Tenant in this Namespace, skip")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Fetch the IntrusionDetection instance
-	instance := &operatorv1.IntrusionDetection{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	instance, err := getIntrusionDetection(ctx, r.client, r.multiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(3).Info("IntrusionDetection CR not found", "err", err)
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
@@ -266,9 +259,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	defer r.status.SetMetaData(&instance.ObjectMeta)
 
 	// Changes for updating IntrusionDetection status conditions
-	if request.Name == ResourceName && request.Namespace == "" {
+	if request.Name == tigeraStatusName && request.Namespace == "" {
 		ts := &operatorv1.TigeraStatus{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts)
+		err := r.client.Get(ctx, types.NamespacedName{Name: tigeraStatusName}, ts)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -284,7 +277,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read ManagementClusterConnection", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
 	isManagedCluster := managementClusterConnection != nil
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
@@ -292,7 +284,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
 	isManagementCluster := managementCluster != nil
 
 	if err := r.fillDefaults(ctx, instance); err != nil {
@@ -306,7 +297,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	if !isManagedCluster && !r.elasticExternal {
-		// check es-gateway to be available
+		// Check if Elasticsearch is ready.
 		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
@@ -378,62 +369,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 	}
 
-	esClusterConfig, err := utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-		return reconcile.Result{}, err
+	// When creating the certificate manager, pass in the logger and tenant (if one exists).
+	opts := []certificatemanager.Option{
+		certificatemanager.WithLogger(reqLogger),
+		certificatemanager.WithTenant(tenant),
 	}
-
-	if isManagedCluster {
-		if esClusterConfig.ClusterName() == render.DefaultElasticsearchClusterName {
-			msg := fmt.Sprintf("%s/%s ConfigMap must contain a 'clusterName' field that is not '%s'", common.OperatorNamespace(), relasticsearch.ClusterConfigConfigMapName, render.DefaultElasticsearchClusterName)
-			err = fmt.Errorf("Elasticsearch cluster name must be non-default value in managed clusters")
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, msg, err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
-	secrets := []string{
-		render.ElasticsearchIntrusionDetectionUserSecret,
-		render.ElasticsearchPerformanceHotspotsUserSecret,
-	}
-
-	if !isManagedCluster {
-		secrets = append(secrets, render.ElasticsearchIntrusionDetectionJobUserSecret)
-	}
-
-	esSecrets, err := utils.ElasticsearchSecrets(
-		context.Background(),
-		secrets,
-		r.client,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-
-	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-		return reconcile.Result{}, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
@@ -441,7 +385,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if isManagedCluster {
 		linseedCertLocation = render.VoltronLinseedPublicCert
 	}
-	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, common.OperatorNamespace())
+	linseedCertificate, err := certificateManager.GetCertificate(r.client, linseedCertLocation, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", render.TigeraLinseedSecret), err, reqLogger)
 		return reconcile.Result{}, err
@@ -452,13 +396,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// intrusionDetectionKeyPair is the key pair intrusion detection presents to identify itself
-	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if !r.dpiAPIReady.IsReady() {
+	if !r.multiTenant && !r.dpiAPIReady.IsReady() {
+		// DPI is only supported in single-tenant clusters, so we don't need to check for it in multi-tenant.
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -466,30 +411,44 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	// Intrusion detection controller sometimes needs to make requests to outside sources. Therefore, we include
 	// the system root certificate bundle.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(esgwCertificate, linseedCertificate)
+	bundleMaker, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	bundleMaker.AddCertificates(linseedCertificate)
 
-	var esLicenseType render.ElasticsearchLicenseType
 	if !isManagedCluster {
-		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 
-		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
-		trustedBundle.AddCertificates(managerInternalTLSSecret)
+		bundleMaker.AddCertificates(managerInternalTLSSecret)
+	}
+
+	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
+	if r.multiTenant {
+		// For multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
+		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		bundleMaker = nil
 	}
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+	// Determine the namespaces to which we must bind the cluster role.
+	namespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving tenant namespaces", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
@@ -497,42 +456,23 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
 		IntrusionDetection:           *instance,
 		LogCollector:                 lc,
-		ESSecrets:                    esSecrets,
 		Installation:                 network,
-		ESClusterConfig:              esClusterConfig,
 		PullSecrets:                  pullSecrets,
 		Openshift:                    r.provider == operatorv1.ProviderOpenShift,
 		ClusterDomain:                r.clusterDomain,
-		ESLicenseType:                esLicenseType,
 		ManagedCluster:               isManagedCluster,
 		ManagementCluster:            isManagementCluster,
 		HasNoLicense:                 hasNoLicense,
 		TrustedCertBundle:            trustedBundle,
 		IntrusionDetectionCertSecret: intrusionDetectionKeyPair,
-		UsePSP:                       r.usePSP,
+		Namespace:                    helper.InstallNamespace(),
+		BindNamespaces:               namespaces,
+		Tenant:                       tenant,
 	}
-	comp := render.IntrusionDetection(intrusionDetectionCfg)
+	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, intrusionDetectionComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
-	// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
-	// makes tests fail, this needs to be looked at.
-	typhaNodeTLS, err := installation.GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with Typha/Felix secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
-
-	// dpiKeyPair is the key pair dpi presents to identify itself
-	dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, common.OperatorNamespace(), []string{render.IntrusionDetectionTLSSecretName})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -542,33 +482,62 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	hasNoDPIResource := len(dpiList.Items) == 0
-
-	dpiComponent := dpi.DPI(&dpi.DPIConfig{
-		IntrusionDetection: instance,
-		Installation:       network,
-		TyphaNodeTLS:       typhaNodeTLS,
-		PullSecrets:        pullSecrets,
-		Openshift:          r.provider == operatorv1.ProviderOpenShift,
-		ManagedCluster:     isManagedCluster,
-		ManagementCluster:  isManagementCluster,
-		HasNoLicense:       hasNoLicense,
-		HasNoDPIResource:   hasNoDPIResource,
-		ClusterDomain:      r.clusterDomain,
-		DPICertSecret:      dpiKeyPair,
-	})
+	if !hasNoDPIResource && r.multiTenant {
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "DeepPacketInspection resource is not supported in multi-tenant mode", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 
 	components := []render.Component{
-		comp,
-		dpiComponent,
+		intrusionDetectionComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.IntrusionDetectionNamespace,
+			Namespace:       helper.InstallNamespace(),
 			ServiceAccounts: []string{render.IntrusionDetectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.IntrusionDetectionCertSecret, true, true),
 			},
-			TrustedBundle: trustedBundle,
+			TrustedBundle: bundleMaker,
 		}),
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+	}
+
+	if !r.multiTenant {
+		// DPI is only supported in single-tenant / zero-tenant clusters.
+
+		// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
+		// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
+		// makes tests fail, this needs to be looked at.
+		typhaNodeTLS, err := installation.GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error with Typha/Felix secrets", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
+
+		// dpiKeyPair is the key pair dpi presents to identify itself
+		dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		dpiComponent := dpi.DPI(&dpi.DPIConfig{
+			IntrusionDetection: instance,
+			Installation:       network,
+			TyphaNodeTLS:       typhaNodeTLS,
+			PullSecrets:        pullSecrets,
+			Openshift:          r.provider == operatorv1.ProviderOpenShift,
+			ManagedCluster:     isManagedCluster,
+			ManagementCluster:  isManagementCluster,
+			HasNoLicense:       hasNoLicense,
+			HasNoDPIResource:   hasNoDPIResource,
+			ClusterDomain:      r.clusterDomain,
+			DPICertSecret:      dpiKeyPair,
+		})
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		components = append(components, dpiComponent)
+		components = append(components, rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       dpi.DeepPacketInspectionNamespace,
 			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
@@ -576,12 +545,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 				rcertificatemanagement.NewKeyPairOption(dpiKeyPair, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
-		}),
-	}
-
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
+		}))
 	}
 
 	for _, comp := range components {
@@ -618,20 +582,22 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 // ComponentResources is not populated.
 func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
 	if ids.Spec.ComponentResources == nil {
-		ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
-			{
-				ComponentName: operatorv1.ComponentNameDeepPacketInspection,
-				ResourceRequirements: &corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryLimit),
-						corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPULimit),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryRequest),
-						corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPURequest),
+		if !r.multiTenant {
+			ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
+				{
+					ComponentName: operatorv1.ComponentNameDeepPacketInspection,
+					ResourceRequirements: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryLimit),
+							corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPULimit),
+						},
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryRequest),
+							corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPURequest),
+						},
 					},
 				},
-			},
+			}
 		}
 	}
 

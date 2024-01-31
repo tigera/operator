@@ -17,7 +17,6 @@ package render_test
 import (
 	"fmt"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	"github.com/tigera/operator/pkg/common"
@@ -94,7 +93,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			TrustedCertBundle:            bundle,
 			IntrusionDetectionCertSecret: keyPair,
 			Installation:                 &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ESClusterConfig:              relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
 			ClusterDomain:                dns.DefaultClusterDomain,
 			ESLicenseType:                render.ElasticsearchLicenseTypeUnknown,
 			ManagedCluster:               notManagedCluster,
@@ -673,11 +671,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 						Selector:          "k8s-app == 'kube-dns'",
 						Ports:             networkpolicy.Ports(53),
 					},
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Destination: networkpolicy.CreateEntityRule(tenantANamespace, "tigera-secure-es-gateway", 5554),
 				},
 				{
 					Action:      v3.Allow,

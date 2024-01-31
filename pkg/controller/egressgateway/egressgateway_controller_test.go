@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -899,9 +899,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			var mgr manager.Manager
 			err := add(mgr, m)
 			Expect(err).ShouldNot(HaveOccurred())
-			for _, watch := range m.watches {
-				kind := watch.(*source.Kind)
-				Expect(len(kind.Type.GetNamespace())).To(Equal(0))
+			for _, obj := range m.watchedObjects {
+				Expect(len(obj.GetNamespace())).To(Equal(0))
 			}
 		})
 	})
@@ -909,12 +908,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 type mockController struct {
 	mock.Mock
-	watches []source.Source
+	watchedObjects []client.Object
+}
+
+func (m *mockController) WatchObject(object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	m.watchedObjects = append(m.watchedObjects, object)
+	return nil
 }
 
 func (m *mockController) Watch(src source.Source, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
-	m.watches = append(m.watches, src)
-	return nil
+	panic("not implemented")
 }
 
 func (m *mockController) Start(ctx context.Context) error {

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1923,6 +1923,14 @@ type mockReturn struct {
 type mockClient struct {
 	Info  []mockReturn
 	Index int
+}
+
+func (mc *mockClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	panic("not implemented")
+}
+
+func (mc *mockClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	panic("not implemented")
 }
 
 func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {

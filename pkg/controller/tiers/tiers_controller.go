@@ -31,6 +31,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/tiers"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,7 +43,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // The Tiers controller reconciles Tiers and NetworkPolicies that are shared across components or do not directly
@@ -60,7 +60,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts)
 
-	c, err := controller.New("tiers-controller", mgr, controller.Options{Reconciler: reconciler})
+	c, err := cruntime.NewController("tiers-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	})
 
 	if opts.MultiTenant {
-		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("tiers-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -113,7 +113,7 @@ type ReconcileTiers struct {
 }
 
 // add adds watches for resources that are available at startup.
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c cruntime.Controller) error {
 	if err := utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("tiers-controller failed to watch Tigera network resource: %v", err)
 	}

@@ -418,12 +418,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 	bundleMaker.AddCertificates(linseedCertificate)
 
-	var esLicenseType render.ElasticsearchLicenseType
 	if !isManagedCluster {
-		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 
 		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, helper.TruthNamespace())
 		if err != nil {
@@ -465,7 +460,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		PullSecrets:                  pullSecrets,
 		Openshift:                    r.provider == operatorv1.ProviderOpenShift,
 		ClusterDomain:                r.clusterDomain,
-		ESLicenseType:                esLicenseType,
 		ManagedCluster:               isManagedCluster,
 		ManagementCluster:            isManagementCluster,
 		HasNoLicense:                 hasNoLicense,

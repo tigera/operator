@@ -96,9 +96,7 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 type IntrusionDetectionConfiguration struct {
 	IntrusionDetection operatorv1.IntrusionDetection
 	LogCollector       *operatorv1.LogCollector
-	ESSecrets          []*corev1.Secret
 	Installation       *operatorv1.InstallationSpec
-	ESClusterConfig    *relasticsearch.ClusterConfig
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	ClusterDomain      string
@@ -160,9 +158,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	if !c.cfg.Tenant.MultiTenant() {
 		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
 		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)))
-
-		// ES Secrets are only used for the Kibana dashboard installer Job, which is not run in multi-tenant mode.
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.ESSecrets...)...)...)
 
 		// GlobalAlertTemplates are not used in multi-tenant management clusters.
 		objs = append(objs, c.globalAlertTemplates()...)
@@ -972,14 +967,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: helper.ESGatewayEntityRule(),
-		})
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: helper.LinseedEntityRule(),
 		})
-
 	}
 	egressRules = append(egressRules, []v3.Rule{
 		{

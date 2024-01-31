@@ -41,7 +41,6 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -99,9 +98,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	policiesToWatch := []types.NamespacedName{
 		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: installNS},
-		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: installNS},
-		{Name: render.ADAPIPolicyName, Namespace: installNS},
-		{Name: render.ADDetectorPolicyName, Namespace: installNS},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
 	}
 	if !opts.MultiTenant {
@@ -137,16 +133,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch intrusion-detection Tigerastatus: %w", err)
 	}
 
-	err = c.Watch(&source.Kind{Type: &batchv1.Job{ObjectMeta: metav1.ObjectMeta{
-		Namespace: installNS,
-		Name:      render.IntrusionDetectionInstallerJobName,
-	}}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch installer job: %v", err)
-	}
-
 	for _, secretName := range []string{
-		render.ElasticsearchIntrusionDetectionJobUserSecret,
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
@@ -168,10 +155,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, truthNS, eventHandler); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
-	}
-
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
@@ -397,44 +380,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// For now, these are only needed in single-tenant mode, since for multi-tenant we don't install Kibana.
-	var esgwCertificate certificatemanagement.CertificateInterface
-	var esClusterConfig *relasticsearch.ClusterConfig
-	var esSecrets []*corev1.Secret
-	if !r.multiTenant && !isManagedCluster {
-		esClusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		secrets := []string{render.ElasticsearchIntrusionDetectionJobUserSecret}
-
-		esSecrets, err = utils.ElasticsearchSecrets(context.Background(), secrets, r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		esgwCertificate, err = certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, helper.TruthNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		} else if esgwCertificate == nil {
-			log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch gateway certificate are not available yet, waiting until they become available", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-	}
-
 	// The location of the Linseed certificate varies based on if this is a managed cluster or not.
 	linseedCertLocation := render.TigeraLinseedSecret
 	if isManagedCluster {
@@ -471,7 +416,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	bundleMaker.AddCertificates(esgwCertificate, linseedCertificate)
+	bundleMaker.AddCertificates(linseedCertificate)
 
 	var esLicenseType render.ElasticsearchLicenseType
 	if !isManagedCluster {
@@ -516,9 +461,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
 		IntrusionDetection:           *instance,
 		LogCollector:                 lc,
-		ESSecrets:                    esSecrets,
 		Installation:                 network,
-		ESClusterConfig:              esClusterConfig,
 		PullSecrets:                  pullSecrets,
 		Openshift:                    r.provider == operatorv1.ProviderOpenShift,
 		ClusterDomain:                r.clusterDomain,

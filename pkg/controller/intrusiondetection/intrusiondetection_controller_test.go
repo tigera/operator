@@ -84,6 +84,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
 		mockStatus.On("RemoveDeployments", mock.Anything).Return()
+		mockStatus.On("RemoveDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("IsAvailable").Return(true)
@@ -190,13 +191,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 	Context("image reconciliation", func() {
 		BeforeEach(func() {
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ElasticsearchIntrusionDetectionJobUserSecret,
-					Namespace: "tigera-operator",
-				},
-			})).NotTo(HaveOccurred())
-
 			Expect(c.Create(ctx, &esv1.Elasticsearch{
 				ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName},
 				Status: esv1.ElasticsearchStatus{
@@ -340,41 +334,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		})
 	})
 
-	Context("secret availability", func() {
-		BeforeEach(func() {
-			mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
-		})
-
-		It("should not wait on tigera-ee-installer-elasticsearch-access secret when cluster is managed", func() {
-			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterConnectionSpec{
-					ManagementClusterAddr: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("non-default-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
-		})
-
-		It("should wait on tigera-ee-installer-elasticsearch-access secret when in a management cluster", func() {
-			Expect(c.Create(ctx, &operatorv1.ManagementCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterSpec{
-					Address: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			// The missing secret should force utils.ElasticSearch to return a NotFound error which triggers r.status.SetDegraded.
-			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 1)
-		})
-	})
-
 	Context("Feature intrusion detection not active", func() {
 		BeforeEach(func() {
 			By("Deleting the previous license")
@@ -384,8 +343,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		})
 
 		It("should not create resources", func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature").Return()
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available - Error: secrets \"tigera-ee-installer-elasticsearch-access\" not found").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, mock.Anything).Return()
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
@@ -401,17 +359,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(test.GetResource(c, &d)).NotTo(BeNil())
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).To(BeNil())
-
-			j := batchv1.Job{
-				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.IntrusionDetectionInstallerJobName,
-					Namespace: render.IntrusionDetectionNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &j)).NotTo(BeNil())
-			installer := test.GetContainer(j.Spec.Template.Spec.Containers, "elasticsearch-job-installer")
-			Expect(installer).To(BeNil())
 		})
 
 		AfterEach(func() {
@@ -486,23 +433,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(cpuLimit)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(memoryRequest)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
-		})
-
-		It("should error if Elasticsearch configuration ConfigMap contains default cluster-name field in managed cluster", func() {
-			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ManagementClusterConnectionSpec{
-					ManagementClusterAddr: "127.0.0.1:12345",
-				},
-			})).ToNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-
-			Expect(c.Update(ctx, relasticsearch.NewClusterConfig("managed-cluster-name", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
 		})
 	})
 

@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	"github.com/tigera/operator/pkg/common"
 
@@ -27,8 +27,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -96,7 +98,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			ClusterDomain:                dns.DefaultClusterDomain,
 			ESLicenseType:                render.ElasticsearchLicenseTypeUnknown,
 			ManagedCluster:               notManagedCluster,
-			UsePSP:                       true,
+			Namespace:                    render.IntrusionDetectionNamespace,
+			BindNamespaces:               []string{"tigera-intrusion-detection"},
+			Tenant:                       nil,
 		}
 	})
 
@@ -105,44 +109,33 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
-		// Should render the correct resources.
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		expected := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.pod"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkpolicy"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkset"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.serviceaccount"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.cloudapi"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.ssh"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.access"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.originate"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.servfail"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.dos"}},
 		}
+		rtest.ExpectResources(resources, expected)
 
-		Expect(resources).To(HaveLen(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-
-			if expectedRes.kind == "GlobalAlertTemplate" {
+		// Check that GlobalAlertTemplates are populated
+		for i, res := range resources {
+			switch res.(type) {
+			case *v3.GlobalAlertTemplate:
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
@@ -158,13 +151,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{Name: "LINSEED_CLIENT_CERT", Value: "/intrusion-detection-tls/tls.crt"},
 			{Name: "LINSEED_CLIENT_KEY", Value: "/intrusion-detection-tls/tls.key"},
 			{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
-			{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
-			{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchIntrusionDetectionUserSecret, "username", false)},
-			{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchIntrusionDetectionUserSecret, "password", false)},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
-			{Name: "ELASTIC_SCHEME", Value: "https"},
-			{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(Equal(idcExpectedEnvVars))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
@@ -290,43 +276,33 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
-		// Should render the correct resources.
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		expected := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.pod"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkpolicy"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkset"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.serviceaccount"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.cloudapi"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.ssh"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.access"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.originate"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.servfail"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.dos"}},
 		}
+		rtest.ExpectResources(resources, expected)
 
-		Expect(resources).To(HaveLen(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			if expectedRes.kind == "GlobalAlertTemplate" {
+		// Check that GlobalAlertTemplates are populated
+		for i, res := range resources {
+			switch res.(type) {
+			case *v3.GlobalAlertTemplate:
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
@@ -374,44 +350,34 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
-		// Should render the correct resources.
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "tigera-linseed", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+		expected := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.pod"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkpolicy"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkset"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.serviceaccount"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.cloudapi"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.ssh"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.access"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.originate"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.servfail"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.dos"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-intrusion-detection"}},
 		}
+		rtest.ExpectResources(resources, expected)
 
-		Expect(resources).To(HaveLen(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			if expectedRes.kind == "GlobalAlertTemplate" {
+		// Check that GlobalAlertTemplates are populated
+		for i, res := range resources {
+			switch res.(type) {
+			case *v3.GlobalAlertTemplate:
 				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
 			}
 		}
@@ -445,7 +411,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should render properly when PSP is not supported by the cluster", func() {
-		cfg.UsePSP = false
 		component := render.IntrusionDetection(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -534,117 +499,97 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		component := render.IntrusionDetection(cfg)
 		toCreate, toRemove := component.Objects()
 
-		// Should render the correct resources.
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "allow-tigera.intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "allow-tigera.default-deny", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		expected := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.pod"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkpolicy"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkset"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.serviceaccount"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.cloudapi"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.ssh"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.access"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.originate"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.servfail"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.dos"}},
 		}
+		rtest.ExpectResources(toCreate, expected)
 
-		Expect(toCreate).To(HaveLen(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-
-			if expectedRes.kind == "GlobalAlertTemplate" {
+		// Check that GlobalAlertTemplates are populated
+		for i, res := range toCreate {
+			switch res.(type) {
+			case *v3.GlobalAlertTemplate:
 				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
 			}
 		}
 
-		expectedResourcesToRemove := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera.io.detector.dga", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.dga", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.http-connection-spike", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.http-connection-spike", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.http-response-codes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.http-response-codes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.http-verbs", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.http-verbs", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.port-scan", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.port-scan", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.generic-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.generic-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.generic-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.generic-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.multivariable-flow", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.multivariable-flow", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.generic-l7", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.generic-l7", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.dns-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.dns-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.dns-tunnel", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.dns-tunnel", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.l7-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.l7-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.bytes-in", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.bytes-in", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.bytes-out", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.bytes-out", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.process-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.process-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
-			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlert"},
-			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-anomaly-detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PersistentVolumeClaim"},
-			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
-			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: "anomaly-detectors", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "anomaly-detectors", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera.io.detectors.training", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
-			{name: "tigera.io.detectors.detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
-			{name: "anomaly-detection-api", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
-			{name: "tigera-linseed", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+		expectedDeletes := []client.Object{
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dga"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dga"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-connection-spike"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-connection-spike"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-response-codes"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-response-codes"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-verbs"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-verbs"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.port-scan"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.port-scan"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-dns"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-dns"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-flows"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-flows"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.multivariable-flow"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.multivariable-flow"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-l7"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-l7"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-latency"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-latency"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-tunnel"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-tunnel"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-bytes"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-bytes"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-latency"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-latency"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-in"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-in"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-out"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-out"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-bytes"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-bytes"}},
+			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-restarts"}},
+			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-restarts"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api"}},
+			&corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "tigera-anomaly-detection", Namespace: "tigera-intrusion-detection"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors"}},
+			&corev1.PodTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detectors.training", Namespace: "tigera-intrusion-detection"}},
+			&corev1.PodTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detectors.detection", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"}},
+			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-es-job-installer", Namespace: "tigera-intrusion-detection"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-es-job-installer", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-intrusion-detection"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-psp"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-psp"}},
 		}
 
-		Expect(toRemove).To(HaveLen(len(expectedResourcesToRemove)))
-
-		for i, expectedRes := range expectedResourcesToRemove {
-			rtest.ExpectResourceTypeAndObjectMetadata(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(toRemove, expectedDeletes)
 	})
 
 	It("should render an init container for pods when certificate management is enabled", func() {
@@ -666,6 +611,90 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		csrInitContainer := intrusionDetectionDeploy.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.IntrusionDetectionTLSSecretName)))
+	})
+
+	Context("multi-tenant rendering", func() {
+		tenantANamespace := "tenant-a-ns"
+		tenantBNamespace := "tenant-b-ns"
+		var tenantA *operatorv1.Tenant
+
+		BeforeEach(func() {
+			// Configure a tenant.
+			tenantA = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: tenantANamespace},
+				Spec:       operatorv1.TenantSpec{},
+			}
+			cfg.Namespace = tenantANamespace
+			cfg.BindNamespaces = []string{tenantANamespace, tenantBNamespace}
+			cfg.Tenant = tenantA
+		})
+
+		It("should render multi-tenant resources", func() {
+			component := render.IntrusionDetection(cfg)
+			toCreate, _ := component.Objects()
+
+			expected := []client.Object{
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: tenantANamespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantANamespace}},
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+			}
+			rtest.ExpectResources(toCreate, expected)
+
+			netpol, err := rtest.GetResourceOfType[*v3.NetworkPolicy](toCreate, render.IntrusionDetectionControllerPolicyName, tenantANamespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(netpol.Spec.Ingress).To(ConsistOf(v3.Rule{Action: v3.Deny}))
+
+			expectedEgressRules := []v3.Rule{
+				{
+					Action:   v3.Deny,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets: []string{"169.254.0.0/16"},
+					},
+				},
+				{
+					Action:   v3.Deny,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets: []string{"fe80::/10"},
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.UDPProtocol,
+					Destination: v3.EntityRule{
+						NamespaceSelector: "projectcalico.org/name == 'kube-system'",
+						Selector:          "k8s-app == 'kube-dns'",
+						Ports:             networkpolicy.Ports(53),
+					},
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: networkpolicy.CreateEntityRule(tenantANamespace, "tigera-secure-es-gateway", 5554),
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: networkpolicy.CreateEntityRule(tenantANamespace, "tigera-linseed", 8444),
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: networkpolicy.KubeAPIServerEntityRule,
+				},
+				{
+					Action: v3.Pass,
+				},
+			}
+			Expect(netpol.Spec.Egress).To(ConsistOf(expectedEgressRules))
+		})
 	})
 })
 

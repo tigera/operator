@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,15 +20,15 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/tigera/api/pkg/lib/numorstring"
-	"github.com/tigera/operator/pkg/apis"
-
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/tigera/api/pkg/lib/numorstring"
+	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("felix env parser", func() {
@@ -134,7 +134,7 @@ var _ = Describe("felix env parser", func() {
 
 			scheme := kscheme.Scheme
 			Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
-			c.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyFelixConfig()).Build()
+			c.client = test.DefaultFakeClientBuilder(scheme).WithObjects(emptyFelixConfig()).Build()
 		})
 
 		It("sets a boolean", func() {

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,7 +39,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -62,7 +61,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			c = test.DefaultFakeClientBuilder(scheme).Build()
 			ctx = context.Background()
 			installation = &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},

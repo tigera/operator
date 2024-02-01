@@ -1,7 +1,7 @@
 package k8svalidation
 
 /*
-Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 Copyright 2014 The Kubernetes Authors.
 Licensed under the Apache License, Version 2.0 (the "License");

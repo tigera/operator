@@ -23,12 +23,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -47,24 +46,12 @@ func AddConditionsController(mgr manager.Manager, opts options.AddOptions) error
 		multiTenant: opts.MultiTenant,
 	}
 
-	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-conditions-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-conditions-controller failed to watch LogStorage resource: %w", err)
-	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-conditions-controller failed to watch Installation resource: %w", err)
-	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.TigeraStatus{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-conditions-controller failed to watch TigeraStatus resource: %w", err)
-	}
-
-	return nil
+	return ctrl.NewControllerManagedBy(mgr).
+		Named("log-storage-conditions-controller").
+		Watches(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{}).
+		Watches(&operatorv1.TigeraStatus{}, &handler.EnqueueRequestForObject{}).
+		For(&operatorv1.LogStorage{}).
+		Complete(r)
 }
 
 var _ reconcile.Reconciler = &LogStorageConditions{}

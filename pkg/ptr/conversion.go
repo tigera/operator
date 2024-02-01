@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,4 +33,8 @@ func Int32ToPtr(i int32) *int32 {
 func IntOrStrPtr(v string) *intstr.IntOrString {
 	ios := intstr.Parse(v)
 	return &ios
+}
+
+func ToPtr[V any](v V) *V {
+	return &v
 }

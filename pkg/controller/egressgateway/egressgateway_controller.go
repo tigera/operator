@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,11 +22,10 @@ import (
 
 	"github.com/go-logr/logr"
 	ocsv1 "github.com/openshift/api/security/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-
 	"github.com/tigera/operator/pkg/components"
-
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -34,6 +33,9 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/egressgateway"
+	cruntime "github.com/tigera/operator/pkg/runtime"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,9 +47,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	v1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -67,7 +66,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
-	c, err := controller.New("egressgateway-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := cruntime.NewController("egressgateway-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return err
 	}
@@ -102,11 +101,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 // Watching namespaced resources must be avoided as the controller
 // can't differentiate if the request namespaced resource is an
 // Egress Gateway resource or not.
-func add(_ manager.Manager, c controller.Controller) error {
+func add(_ manager.Manager, c cruntime.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource Egress Gateway.
-	err = c.Watch(&source.Kind{Type: &operatorv1.EgressGateway{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.EgressGateway{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -121,7 +120,7 @@ func add(_ manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("egressGateway-controller failed to watch FelixConfiguration resource: %w", err)
 	}

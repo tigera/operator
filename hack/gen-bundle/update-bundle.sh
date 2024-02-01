@@ -43,6 +43,19 @@ yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE_DIGEST}
 TIMESTAMP=$(echo ${OPERATOR_IMAGE_INSPECT} | jq -r .[0].Created)
 yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
 
+# Add the features annotations per https://docs.openshift.com/container-platform/4.14/operators/operator_sdk/osdk-generating-csvs.html
+FEATURES=metadata.annotations.features.operators.openshift.io
+yq write -i ${CSV} ${FEATURES}/disconnected "false"
+yq write -i ${CSV} ${FEATURES}/fips-compliant "false"
+yq write -i ${CSV} ${FEATURES}/proxy-aware "false"
+yq write -i ${CSV} ${FEATURES}/tls-profiles "false"
+yq write -i ${CSV} ${FEATURES}/token-auth-aws "false"
+yq write -i ${CSV} ${FEATURES}/token-auth-azure "false"
+yq write -i ${CSV} ${FEATURES}/token-auth-gcp "false"
+yq write -i ${CSV} ${FEATURES}/cnf "false"
+yq write -i ${CSV} ${FEATURES}/cni "true"
+yq write -i ${CSV} ${FEATURES}/csi "false"
+
 # Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.
 yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].image ${OPERATOR_IMAGE_DIGEST}
 yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].name tigera-operator

@@ -37,6 +37,9 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 
+// This test suite covers the installation of IP pools. The vast majority should be covered in the pkg/controller/ippool UTs
+// However, the defaulting behavior for the Installation resource is split between the core installation
+// controller and the IP pool controller, making an FV appropriate for testing those interactions.
 var _ = Describe("IPPool FV tests", func() {
 	var c client.Client
 	var mgr manager.Manager
@@ -124,7 +127,7 @@ var _ = Describe("IPPool FV tests", func() {
 		ipPools := &crdv1.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
-		}).ShouldNot(HaveOccurred())
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
 
 		// We should have one v4 and one v6 pool, based on the kubeadm config in the cluster.
 		Expect(len(ipPools.Items)).To(Equal(2), fmt.Sprintf("Expected 2 IP pools, but got: %+v", ipPools.Items))
@@ -149,5 +152,40 @@ var _ = Describe("IPPool FV tests", func() {
 		for _, p := range ipPools.Items {
 			Expect(p.OwnerReferences).To(HaveLen(1))
 		}
+	})
+
+	It("should not default pools if explicit pools are given", func() {
+		// Specify a single IPv4 pool within the cluster CIDR. This should prevent the operator from creating the defaulting
+		// pools, but still allow Calico to deploy.
+		spec := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						Name:          "my-pool-name",
+						CIDR:          "192.168.0.0/24",
+						Encapsulation: operator.EncapsulationNone,
+					},
+				},
+			},
+		}
+		operatorDone = installResourceCRD(c, mgr, shutdownContext, &spec)
+		verifyCalicoHasDeployed(c)
+
+		// Get IP pools installed in the cluster.
+		ipPools := &crdv1.IPPoolList{}
+		Eventually(func() error {
+			return c.List(context.Background(), ipPools)
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+
+		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
+
+		// Verify that a default IPv4 pool was created.
+		Expect(ipPools.Items[0].Name).To(Equal("my-pool-name"))
+		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/24"))
+		Expect(ipPools.Items[0].Spec.NATOutgoing).To(Equal(true))
+		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
+		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
+		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
+		Expect(ipPools.Items[0].OwnerReferences).To(HaveLen(1))
 	})
 })

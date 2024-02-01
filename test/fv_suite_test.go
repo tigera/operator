@@ -22,11 +22,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/onsi/ginkgo/reporters"
+	uzap "go.uber.org/zap"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestFeatureVerification(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter)))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("../report/fv/fv_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "FV test Suite", []Reporter{junitReporter})

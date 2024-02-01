@@ -126,13 +126,28 @@ var _ = Describe("IPPool FV tests", func() {
 			return c.List(context.Background(), ipPools)
 		}).ShouldNot(HaveOccurred())
 
-		// Verify that one default IPv4 pool was created.
+		// We should have one v4 and one v6 pool, based on the kubeadm config in the cluster.
 		Expect(len(ipPools.Items)).To(Equal(2), fmt.Sprintf("Expected 2 IP pools, but got: %+v", ipPools.Items))
+
+		// Verify that a default IPv4 pool was created.
 		Expect(ipPools.Items[0].Name).To(Equal("default-ipv4-ippool"))
 		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/16"))
 		Expect(ipPools.Items[0].Spec.NATOutgoing).To(Equal(true))
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
-		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(int32(26)))
+		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
+
+		// Verify that a default IPv6 pool was created.
+		Expect(ipPools.Items[1].Name).To(Equal("default-ipv6-ippool"))
+		Expect(ipPools.Items[1].Spec.CIDR).To(Equal("fd00:10:244::/64"))
+		Expect(ipPools.Items[1].Spec.NATOutgoing).To(Equal(false))
+		Expect(ipPools.Items[1].Spec.Disabled).To(Equal(false))
+		Expect(ipPools.Items[1].Spec.BlockSize).To(Equal(122))
+		Expect(ipPools.Items[1].Spec.NodeSelector).To(Equal("all()"))
+
+		// Expect the default pools to be marked as managed by the operator.
+		for _, p := range ipPools.Items {
+			Expect(p.OwnerReferences).To(HaveLen(1))
+		}
 	})
 })

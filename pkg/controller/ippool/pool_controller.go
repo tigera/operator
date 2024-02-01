@@ -175,17 +175,21 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 			}
 
 			if addr.To4() == nil {
+				// Treat the first IPv6 CIDR as the default. Subsequent CIDRs will be named based on their CIDR.
+				name := "default-ipv6-ippool"
 				if v6found {
-					continue
+					name = ""
 				}
 				v6found = true
-				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{Name: name, CIDR: c})
 			} else {
+				// Treat the first IPv4 CIDR as the default. Subsequent CIDRs will be named based on their CIDR.
+				name := "default-ipv4-ippool"
 				if v4found {
-					continue
+					name = ""
 				}
 				v4found = true
-				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{CIDR: c})
+				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{Name: name, CIDR: c})
 			}
 		}
 	} else if len(i.Spec.CalicoNetwork.IPPools) == 0 {
@@ -381,7 +385,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 		// then we assume that the user has configured them correctly out-of-band and we should not install any others.
 		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 			// If configured to run in openshift, then also fetch the openshift configuration API.
-			log.V(5).Info("Fetching OpenShift network configuration")
+			log.V(1).Info("Fetching OpenShift network configuration")
 			openshiftConfig := &configv1.Network{}
 			openshiftNetworkConfig := "cluster"
 			if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig); err != nil {
@@ -394,7 +398,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 			}
 		} else {
 			// Check if we're running on kubeadm by getting the config map.
-			log.V(5).Info("Fetching kubeadm config map")
+			log.V(1).Info("Fetching kubeadm config map")
 			kubeadmConfig := &corev1.ConfigMap{}
 			key := types.NamespacedName{Name: kubeadmConfigMap, Namespace: metav1.NamespaceSystem}
 			if err := client.Get(ctx, key, kubeadmConfig); err == nil {
@@ -411,7 +415,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 		// Defaulting of the Spec.CNI field occurs in pkg/controller/installation/
 		poolsUnspecified := instance.Spec.CalicoNetwork == nil || instance.Spec.CalicoNetwork.IPPools == nil
 		calicoIPAM := instance.Spec.CNI != nil && instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico
-		log.V(5).Info("Checking if we should default IP pool configuration", "calicoIPAM", calicoIPAM, "poolsUnspecified", poolsUnspecified)
+		log.V(1).Info("Checking if we should default IP pool configuration", "calicoIPAM", calicoIPAM, "poolsUnspecified", poolsUnspecified)
 		if poolsUnspecified && calicoIPAM {
 			if instance.Spec.CalicoNetwork == nil {
 				instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
@@ -682,7 +686,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, installation)
 
-	passThru := render.NewPassthrough(toCreateOrUpdate...)
+	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating IPPools", err, log)
 		return reconcile.Result{}, err

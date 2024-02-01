@@ -1370,6 +1370,10 @@ spec:
                           - VXLANCrossSubnet
                           - None
                           type: string
+                        name:
+                          description: Name is the name of the IP pool. If omitted,
+                            this will be generated.
+                          type: string
                         natOutgoing:
                           description: 'NATOutgoing specifies if NAT will be enabled
                             or disabled for outgoing traffic. Default: Enabled'
@@ -1384,6 +1388,7 @@ spec:
                       required:
                       - cidr
                       type: object
+                    maxItems: 25
                     type: array
                   linuxDataplane:
                     description: 'LinuxDataplane is used to select the dataplane used
@@ -10487,6 +10492,10 @@ spec:
                               - VXLANCrossSubnet
                               - None
                               type: string
+                            name:
+                              description: Name is the name of the IP pool. If omitted,
+                                this will be generated.
+                              type: string
                             natOutgoing:
                               description: 'NATOutgoing specifies if NAT will be enabled
                                 or disabled for outgoing traffic. Default: Enabled'
@@ -10501,6 +10510,7 @@ spec:
                           required:
                           - cidr
                           type: object
+                        maxItems: 25
                         type: array
                       linuxDataplane:
                         description: 'LinuxDataplane is used to select the dataplane

@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -59,7 +60,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_logstorage_elastic")
@@ -107,7 +107,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-elastic-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-elastic-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.LogStorage{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = utils.AddInstallationWatch(c); err != nil {
@@ -127,16 +127,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ImageSet: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ManagementCluster resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageElastic); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.Authentication{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Authentication resource: %w", err)
 	}
 
@@ -152,24 +152,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	})
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
-	err = c.Watch(&source.Kind{Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&storagev1.StorageClass{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch StorageClass resource: %w", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
+	if err = c.WatchObject(&apps.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKOperatorName},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
+	}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch StatefulSet resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{
+	if err = c.WatchObject(&esv1.Elasticsearch{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
+	}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Elasticsearch resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{
+	if err = c.WatchObject(&kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
+	}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Kibana resource: %w", err)
 	}
 

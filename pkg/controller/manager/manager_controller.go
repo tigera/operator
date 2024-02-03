@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +29,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -43,10 +40,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -71,7 +70,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
-	managerController, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController("manager-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return fmt.Errorf("failed to create manager-controller: %w", err)
 	}
@@ -92,50 +91,50 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Make a helper for determining which namespaces to use based on tenancy mode.
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
-	if err := utils.AddSecretsWatch(managerController, render.VoltronLinseedTLS, helper.InstallNamespace()); err != nil {
+	if err := utils.AddSecretsWatch(c, render.VoltronLinseedTLS, helper.InstallNamespace()); err != nil {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(managerController, k8sClient, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, managerController, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(managerController, k8sClient, log, []types.NamespacedName{
+	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: helper.InstallNamespace()},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
 	})
 
 	// Watch for changes to primary resource Manager
-	err = managerController.Watch(&source.Kind{Type: &operatorv1.Manager{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for other operator.tigera.io resources.
-	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.Installation{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch Installation resource: %w", err)
 	}
-	if err = managerController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.APIServer{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.Compliance{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementCluster{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
-	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
-	if err = managerController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.Authentication{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
-	if err = utils.AddTigeraStatusWatch(managerController, ResourceName); err != nil {
+	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("manager-controller failed to watch manager Tigerastatus: %w", err)
 	}
-	if err = managerController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ImageSet{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = managerController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -151,26 +150,26 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
-			if err = utils.AddSecretsWatch(managerController, secretName, namespace); err != nil {
+			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(managerController, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddConfigMapWatch(c, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
 	}
 
-	if err = utils.AddConfigMapWatch(managerController, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
-	if err = utils.AddNamespaceWatch(managerController, common.TigeraPrometheusNamespace); err != nil {
+	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the '%s' namespace: %w", common.TigeraPrometheusNamespace, err)
 	}
 
 	if !opts.ElasticExternal {
-		if err = utils.AddConfigMapWatch(managerController, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
+		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 		}
 	}

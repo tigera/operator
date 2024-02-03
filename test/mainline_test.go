@@ -23,10 +23,7 @@ import (
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-
 	"k8s.io/apimachinery/pkg/api/errors"
-	kmeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -279,7 +276,8 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 	return nil
 }
 
-func newNonCachingClient(cache cache.Cache, config *rest.Config, options client.Options, uncachedObjects ...client.Object) (client.Client, error) {
+func newNonCachingClient(config *rest.Config, options client.Options) (client.Client, error) {
+	options.Cache = nil
 	return client.New(config, options)
 }
 
@@ -289,15 +287,15 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	Expect(err).NotTo(HaveOccurred())
 	// Create a manager to use in the tests.
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:          "",
 		MetricsBindAddress: "0",
 		// Upgrade notes fro v0.14.0 (https://sdk.operatorframework.io/docs/upgrading-sdk-version/version-upgrade-guide/#v014x)
 		// say to replace restmapper but the NewDynamicRestMapper did not satisfy the
 		// MapperProvider interface
-		MapperProvider: func(c *rest.Config) (kmeta.RESTMapper, error) { return apiutil.NewDynamicRESTMapper(c) },
+		MapperProvider: apiutil.NewDynamicRESTMapper,
 		// Use a non-caching client because we've had issues with flakes in the past where the cache
 		// was not updating and tests were failing as a result of looking at stale cluster state
 		NewClient: newNonCachingClient,
+		Client:    client.Options{},
 	})
 	Expect(err).NotTo(HaveOccurred())
 

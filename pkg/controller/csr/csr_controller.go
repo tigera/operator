@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
@@ -49,7 +50,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // LabelName label that we set on our CSRs, this helps us exclude irrelevant CSRs.
@@ -85,22 +85,22 @@ func relevantCSR(csr *certificatesv1.CertificateSigningRequest) bool {
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	ctrl, err := controller.New(controllerName, mgr, controller.Options{Reconciler: newReconciler(mgr, opts)})
+	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: newReconciler(mgr, opts)})
 	if err != nil {
 		return err
 	}
 
 	if opts.EnterpriseCRDExists {
-		if err = ctrl.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Monitor{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
 		}
 	}
 
-	if err = ctrl.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
 	}
 
-	return utils.AddCSRWatchWithRelevancyFn(ctrl, relevantCSR)
+	return utils.AddCSRWatchWithRelevancyFn(c, relevantCSR)
 }
 
 type tlsAsset struct {

@@ -20,16 +20,15 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/test"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -76,7 +75,7 @@ var _ = Describe("convert bpf config", func() {
 	It("converts bpfenabled felixconfig set to true", func() {
 		bpfEnabled := true
 		f.Spec.BPFEnabled = &bpfEnabled
-		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
+		comps.client = test.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		err := handleBPF(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(*i.Spec.CalicoNetwork.LinuxDataplane).To(BeEquivalentTo(operatorv1.LinuxDataplaneBPF))
@@ -89,7 +88,7 @@ var _ = Describe("convert bpf config", func() {
 	It("converts bpfenabled felixconfig set to false", func() {
 		bpfEnabled := false
 		f.Spec.BPFEnabled = &bpfEnabled
-		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
+		comps.client = test.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		err := handleBPF(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(i.Spec.CalicoNetwork).To(BeNil())
@@ -102,7 +101,7 @@ var _ = Describe("convert bpf config", func() {
 	})
 
 	It("check with no felixconfig", func() {
-		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM).Build()
+		comps.client = test.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM).Build()
 		err := handleBPF(&comps, i)
 		Expect(err).To(HaveOccurred())
 		err, data := getEndPointCM(&comps, "kube-system")
@@ -111,7 +110,7 @@ var _ = Describe("convert bpf config", func() {
 	})
 
 	It("converts bpfenabled env var set to true", func() {
-		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
+		comps.client = test.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
 			Value: "true",
@@ -126,7 +125,7 @@ var _ = Describe("convert bpf config", func() {
 	})
 
 	It("converts bpfenabled env var set to false", func() {
-		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
+		comps.client = test.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
 			Value: "false",
@@ -145,7 +144,7 @@ var _ = Describe("convert bpf config", func() {
 	It("returns error when configmap is not present", func() {
 		bpfEnabled := true
 		f.Spec.BPFEnabled = &bpfEnabled
-		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(f).Build()
+		comps.client = test.DefaultFakeClientBuilder(scheme).WithObjects(f).Build()
 		err := handleBPF(&comps, i)
 		Expect(err).To(HaveOccurred())
 		Expect(i.Spec.CalicoNetwork).To(BeNil())

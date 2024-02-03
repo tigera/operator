@@ -30,10 +30,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/egressgateway"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -66,7 +66,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
-	c, err := cruntime.NewController("egressgateway-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := ctrlruntime.NewController("egressgateway-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 // Watching namespaced resources must be avoided as the controller
 // can't differentiate if the request namespaced resource is an
 // Egress Gateway resource or not.
-func add(_ manager.Manager, c cruntime.Controller) error {
+func add(_ manager.Manager, c ctrlruntime.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource Egress Gateway.

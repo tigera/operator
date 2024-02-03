@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -50,7 +51,6 @@ import (
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -70,7 +70,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
 
 	// Create a new controller
-	c, err := cruntime.NewController("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return fmt.Errorf("failed to create monitor-controller: %w", err)
 	}
@@ -121,7 +121,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	return r
 }
 
-func add(_ manager.Manager, c cruntime.Controller) error {
+func add(_ manager.Manager, c ctrlruntime.Controller) error {
 	var err error
 
 	// watch for primary resource changes

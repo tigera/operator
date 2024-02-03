@@ -32,9 +32,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	certificatesv1 "k8s.io/api/certificates/v1"
@@ -85,7 +85,7 @@ func relevantCSR(csr *certificatesv1.CertificateSigningRequest) bool {
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	c, err := cruntime.NewController(controllerName, mgr, controller.Options{Reconciler: newReconciler(mgr, opts)})
+	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: newReconciler(mgr, opts)})
 	if err != nil {
 		return err
 	}

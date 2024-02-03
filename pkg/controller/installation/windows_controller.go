@@ -29,10 +29,10 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	apiv3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -66,7 +66,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create Windows Reconciler: %w", err)
 	}
 
-	c, err := cruntime.NewController("tigera-windows-controller", mgr, controller.Options{Reconciler: ri})
+	c, err := ctrlruntime.NewController("tigera-windows-controller", mgr, controller.Options{Reconciler: ri})
 	if err != nil {
 		return fmt.Errorf("Failed to create tigera-windows-controller: %w", err)
 	}

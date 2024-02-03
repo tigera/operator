@@ -25,8 +25,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -55,7 +55,7 @@ func AddClusterCAController(mgr manager.Manager, opts options.AddOptions) error 
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := cruntime.NewController("cluster-ca-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("cluster-ca-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

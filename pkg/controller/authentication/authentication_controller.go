@@ -32,10 +32,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -73,7 +73,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, tierWatchReady)
 
 	// Create a new controller
-	c, err := cruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
@@ -114,7 +114,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady 
 }
 
 // add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c cruntime.Controller) error {
+func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	err := c.WatchObject(&oprv1.Authentication{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)

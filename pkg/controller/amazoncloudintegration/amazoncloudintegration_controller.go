@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	cruntime "github.com/tigera/operator/pkg/runtime"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -70,7 +70,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := cruntime.NewController("amazoncloudintegration-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("amazoncloudintegration-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create amazoncloudintegration-controller: %v", err)
 	}

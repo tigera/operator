@@ -42,13 +42,13 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -61,7 +61,7 @@ var log = logf.Log.WithName("controller_apiserver")
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r := newReconciler(mgr, opts)
 
-	c, err := cruntime.NewController("apiserver-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("apiserver-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
@@ -105,7 +105,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 }
 
 // add adds watches for resources that are available at startup
-func add(c cruntime.Controller, r *ReconcileAPIServer) error {
+func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	// Watch for changes to primary resource APIServer
 	err := c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {

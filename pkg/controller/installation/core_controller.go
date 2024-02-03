@@ -70,6 +70,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/crds"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -78,7 +79,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -130,7 +130,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create Core Reconciler: %w", err)
 	}
 
-	c, err := cruntime.NewController("tigera-installation-controller", mgr, controller.Options{Reconciler: ri})
+	c, err := ctrlruntime.NewController("tigera-installation-controller", mgr, controller.Options{Reconciler: ri})
 	if err != nil {
 		return fmt.Errorf("Failed to create tigera-installation-controller: %w", err)
 	}
@@ -201,7 +201,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 }
 
 // add adds watches for resources that are available at startup
-func add(c cruntime.Controller, r *ReconcileInstallation) error {
+func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	// Watch for changes to primary resource Installation
 	err := c.WatchObject(&operator.Installation{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -1921,7 +1921,7 @@ func cidrWithinCidr(cidr, pool string) bool {
 	return false
 }
 
-func addCRDWatches(c cruntime.Controller, v operator.ProductVariant) error {
+func addCRDWatches(c ctrlruntime.Controller, v operator.ProductVariant) error {
 	pred := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Create occurs because we've created it, so we can safely ignore it.

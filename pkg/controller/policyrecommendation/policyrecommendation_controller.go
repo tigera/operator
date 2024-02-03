@@ -33,9 +33,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -69,7 +69,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady, policyRecScopeWatchReady)
 
-	c, err := cruntime.NewController(PolicyRecommendationControllerName, mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController(PolicyRecommendationControllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return err
 	}

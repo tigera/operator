@@ -24,8 +24,8 @@ import (
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/controller/options"
@@ -90,7 +90,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := cruntime.NewController("log-storage-user-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-user-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	usersCleanupController, err := cruntime.NewController("log-storage-cleanup-controller", mgr, controller.Options{Reconciler: usersCleanupReconciler})
+	usersCleanupController, err := ctrlruntime.NewController("log-storage-cleanup-controller", mgr, controller.Options{Reconciler: usersCleanupReconciler})
 	if err != nil {
 		return err
 	}

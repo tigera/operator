@@ -41,13 +41,13 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
@@ -71,7 +71,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
-	c, err := cruntime.NewController("logcollector-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := ctrlruntime.NewController("logcollector-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return fmt.Errorf("Failed to create logcollector-controller: %v", err)
 	}
@@ -116,7 +116,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 }
 
 // add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c cruntime.Controller) error {
+func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource LogCollector

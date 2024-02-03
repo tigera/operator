@@ -41,12 +41,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -84,7 +84,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	r.status.Run(opts.ShutdownContext)
 
-	c, err := cruntime.NewController("log-storage-esmetrics-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-esmetrics-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("log-storage-esmetrics-controller failed to establish a connection to k8s: %w", err)
 	}

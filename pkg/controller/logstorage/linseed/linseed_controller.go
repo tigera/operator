@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -53,7 +54,6 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -90,7 +90,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := cruntime.NewController("log-storage-access-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-access-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

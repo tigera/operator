@@ -19,7 +19,7 @@
 // Future additions to this package might include tooling to help with cache management, specifically reducing the size
 // of the cache through specific dynamic namespace caching.
 
-package runtime
+package ctrlruntime
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"

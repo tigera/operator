@@ -42,10 +42,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -70,7 +70,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, opts)
 
 	// Create a new controller
-	c, err := cruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
@@ -127,7 +127,7 @@ func newReconciler(
 }
 
 // add adds a new controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, c cruntime.Controller) error {
+func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	// Watch for changes to primary resource ManagementCluster
 	err := c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
 	if err != nil {

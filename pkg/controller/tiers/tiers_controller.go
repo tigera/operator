@@ -27,11 +27,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/tiers"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -60,7 +60,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts)
 
-	c, err := cruntime.NewController("tiers-controller", mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController("tiers-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ type ReconcileTiers struct {
 }
 
 // add adds watches for resources that are available at startup.
-func add(mgr manager.Manager, c cruntime.Controller) error {
+func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err := utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("tiers-controller failed to watch Tigera network resource: %v", err)
 	}

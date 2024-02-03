@@ -30,8 +30,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 )
 
 var log = logf.Log.WithName("controller_logstorage_managed")
@@ -60,7 +60,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := cruntime.NewController("log-storage-managedcluster-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-managedcluster-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

@@ -21,8 +21,8 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
-	cruntime "github.com/tigera/operator/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
@@ -43,7 +43,7 @@ func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVaria
 }
 
 // Utility function to add a watch on ImageSet resources.
-func AddImageSetWatch(c cruntime.Controller) error {
+func AddImageSetWatch(c ctrlruntime.Controller) error {
 	return c.WatchObject(&operator.ImageSet{}, &handler.EnqueueRequestForObject{})
 }
 

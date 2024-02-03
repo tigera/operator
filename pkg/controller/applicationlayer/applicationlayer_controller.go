@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	cruntime "github.com/tigera/operator/pkg/runtime"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,7 +44,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const ResourceName = "applicationlayer"
@@ -65,7 +65,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
-	c, err := controller.New("applicationlayer-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := cruntime.NewController("applicationlayer-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return err
 	}
@@ -97,11 +97,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 }
 
 // add adds watches for resources that are available at startup.
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c cruntime.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource applicationlayer.
-	err = c.Watch(&source.Kind{Type: &operatorv1.ApplicationLayer{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.ApplicationLayer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("applicationlayer-controller failed to watch FelixConfiguration resource: %w", err)
 	}

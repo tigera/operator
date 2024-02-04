@@ -303,8 +303,8 @@ func (c *component) containers() []corev1.Container {
 				"--waf-ruleset-base-dir", ModSecurityRulesetVolumePath,
 				"--waf-directive", "Include modsecdefault.conf",
 				"--waf-directive", "Include crs-setup.conf",
-				"--waf-directive", "Include tigera.conf",
 				"--waf-directive", "Include rules/*.conf",
+				"--waf-directive", "Include tigera.conf",
 			)
 			volMounts = append(
 				volMounts,

@@ -443,10 +443,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		i := 0
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
+		for i := range expectedResources {
+			ExpectWithOffset(1, rtest.ExpectResource(resources[i], resources)).ShouldNot(HaveOccurred())
 		}
 
 		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -566,8 +564,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			"--waf-ruleset-base-dir", applicationlayer.ModSecurityRulesetVolumePath,
 			"--waf-directive", "Include modsecdefault.conf",
 			"--waf-directive", "Include crs-setup.conf",
-			"--waf-directive", "Include tigera.conf",
 			"--waf-directive", "Include rules/*.conf",
+			"--waf-directive", "Include tigera.conf",
 		}
 		for _, element := range expectedDikastesArgs {
 			Expect(dikastesArgs).To(ContainElement(element))

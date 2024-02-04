@@ -444,7 +444,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		for i := range expectedResources {
-			rtest.ExpectResource(resources[i], resources)
+			ExpectWithOffset(1, rtest.ExpectResource(resources[i], resources)).ShouldNot(HaveOccurred())
 		}
 
 		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)

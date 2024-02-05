@@ -26,16 +26,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -43,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -70,7 +70,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
 
 	// Create a new controller
-	controller, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return fmt.Errorf("failed to create monitor-controller: %w", err)
 	}
@@ -91,13 +91,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, policyNames)
 
-	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
+	go waitToAddPrometheusWatch(c, k8sClient, log, prometheusReady)
 
-	return add(mgr, controller)
+	return add(mgr, c)
 }
 
 func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
@@ -121,11 +121,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	return r
 }
 
-func add(_ manager.Manager, c controller.Controller) error {
+func add(_ manager.Manager, c ctrlruntime.Controller) error {
 	var err error
 
 	// watch for primary resource changes
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.Monitor{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
 	}
 
@@ -138,7 +138,7 @@ func add(_ manager.Manager, c controller.Controller) error {
 	}
 
 	// ManagementClusterConnection (in addition to Installation/Network) is used as input to determine whether network policy should be reconciled.
-	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
@@ -158,12 +158,12 @@ func add(_ manager.Manager, c controller.Controller) error {
 	}
 
 	// Namespaces are watched in case external monitoring config is used.
-	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&corev1.Namespace{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
 	}
 
-	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.Authentication{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
 	}

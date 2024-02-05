@@ -564,7 +564,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			"--waf-ruleset-base-dir", applicationlayer.ModSecurityRulesetVolumePath,
 			"--waf-directive", "Include modsecdefault.conf",
 			"--waf-directive", "Include crs-setup.conf",
-			"--waf-directive", "Include REQUEST-*.conf",
+			"--waf-directive", "Include rules/*.conf",
 			"--waf-directive", "Include tigera.conf",
 		}
 		for _, element := range expectedDikastesArgs {

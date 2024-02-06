@@ -15,6 +15,7 @@
 package applicationlayer_test
 
 import (
+	"fmt"
 	"path/filepath"
 
 	. "github.com/onsi/ginkgo"
@@ -561,8 +562,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedDikastesArgs := []string{
 			"--waf-enabled",
 			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
-			"--waf-ruleset-base-dir", applicationlayer.ModSecurityRulesetVolumePath,
-			"--waf-directive", "Include tigera.conf",
+			"--waf-directive", fmt.Sprintf("Include %s/tigera.conf", applicationlayer.ModSecurityRulesetVolumePath),
 		}
 		for _, element := range expectedDikastesArgs {
 			Expect(dikastesArgs).To(ContainElement(element))

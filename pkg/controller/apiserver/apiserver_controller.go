@@ -408,7 +408,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	var pcPolicy render.Component
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant == operatorv1.TigeraSecureEnterprise && (!r.multiTenant || managementCluster == nil) {
 		packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
 			render.PacketCaptureServerCert,

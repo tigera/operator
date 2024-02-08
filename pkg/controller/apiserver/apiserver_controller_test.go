@@ -851,6 +851,87 @@ var _ = Describe("apiserver controller tests", func() {
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 			})
+
+			It("Should reconcile and not create packet capture resources for a management cluster in multi tenant mode", func() {
+				// Create the tunnel secret in operator namespace
+				// In a production cluster, this would be created by Manager controller in tigera-operator namespace
+				err := cli.Create(ctx, &corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         true,
+				}
+
+				// Reconcile the API server
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-packetcapture",
+						Namespace: "tigera-packetcapture",
+					},
+				}
+
+				// Ensure a deployment was created for the API server
+				err = test.GetResource(cli, &deployment)
+				Expect(kerror.IsNotFound(err)).Should(BeTrue())
+
+			})
+			It("Should reconcile and create packet capture resources for a management cluster in single tenant mode", func() {
+				// Create the tunnel secret in operator namespace
+				// In a production cluster, this would be created by Manager controller in tigera-operator namespace
+				err := cli.Create(ctx, &corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.VoltronTunnelSecretName,
+						Namespace: common.OperatorNamespace(),
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					provider:            operatorv1.ProviderNone,
+					enterpriseCRDsExist: true,
+					amazonCRDExists:     false,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					multiTenant:         false,
+				}
+
+				// Reconcile the API server
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-packetcapture",
+						Namespace: "tigera-packetcapture",
+					},
+				}
+
+				// Ensure a deployment was created for the API server
+				err = test.GetResource(cli, &deployment)
+				Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+			})
 		})
 	})
 })

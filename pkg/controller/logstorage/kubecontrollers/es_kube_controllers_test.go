@@ -18,9 +18,10 @@ import (
 	"context"
 	"fmt"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 
-	controllerruntime "sigs.k8s.io/controller-runtime"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -83,6 +84,7 @@ func NewControllerWithShims(
 		status:         status,
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
+		multiTenant:    multiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -281,19 +283,6 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		Expect(kc.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentTigeraKubeControllers.Image, "sha256:kubecontrollershash")))
 	})
 
-	It("should not create es-kube-controller controller in multi-tenant mode", func() {
-		mgr, err := controllerruntime.NewManager(nil, controllerruntime.Options{})
-		Expect(err).To(Not(BeNil()))
-
-		options := options.AddOptions{
-			MultiTenant:         true,
-			EnterpriseCRDExists: true,
-		}
-
-		err = Add(mgr, options)
-		Expect(err).To(BeNil())
-	})
-
 	Context("External ES mode", func() {
 		BeforeEach(func() {
 			// Delete the Elasticsearch CR. This is created for ECK only.
@@ -346,6 +335,96 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      esgateway.DeploymentName,
 					Namespace: render.ElasticsearchNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &dep)).To(BeNil())
+		})
+	})
+
+	Context("Multi-tenant", func() {
+		var (
+			tenantNS string
+			tenant   *operatorv1.Tenant
+		)
+
+		BeforeEach(func() {
+			tenantNS = "tenant-namespace"
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: tenantNS}})).ShouldNot(HaveOccurred())
+
+			// Create the Tenant object.
+			tenant = &operatorv1.Tenant{}
+			tenant.Name = "default"
+			tenant.Namespace = tenantNS
+			tenant.Spec.ID = "test-tenant-id"
+			tenant.Spec.Indices = []operatorv1.Index{}
+			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
+
+			// Create a CA secret for the test, and create its KeyPair.
+			opts := []certificatemanager.Option{
+				certificatemanager.AllowCACreation(),
+				certificatemanager.WithTenant(tenant),
+			}
+			cm, err := certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, tenantNS, opts...)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, cm.KeyPair().Secret(tenantNS))).ShouldNot(HaveOccurred())
+			bundle := cm.CreateTrustedBundle()
+			Expect(cli.Create(ctx, bundle.ConfigMap(tenantNS))).ShouldNot(HaveOccurred())
+
+			// Create the reconciler for the tests.
+			r, err = NewControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, true, readyFlag)
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+
+		It("should wait for the tenant CA to be provisioned", func() {
+			// Delete the CA secret for this test.
+			caSecret := &corev1.Secret{}
+			caSecret.Name = certificatemanagement.TenantCASecretName
+			caSecret.Namespace = tenantNS
+			Expect(cli.Delete(ctx, caSecret)).ShouldNot(HaveOccurred())
+
+			// Run the reconciler.
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("CA secret"))
+		})
+
+		It("should not reconcile any resources if no Namespace was given", func() {
+			// Run the reconciler, passing in a Request with no Namespace. It should return successfully.
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Check that nothing was installed on the cluster.
+			dep := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kubecontrollers.EsKubeController,
+					Namespace: tenantNS,
+				},
+			}
+			err = cli.Get(ctx, types.NamespacedName{Name: dep.Name, Namespace: dep.Namespace}, &dep)
+			Expect(err).Should(HaveOccurred())
+			Expect(errors.IsNotFound(err)).Should(BeTrue())
+
+			// Check that OnCRFound was not called.
+			mockStatus.AssertNotCalled(GinkgoT(), "OnCRFound")
+		})
+
+		It("should reconcile resources for a cluster", func() {
+			// Run the reconciler.
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).Should(Equal(successResult))
+
+			// SetDegraded should not have been called.
+			mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)
+
+			// Check that kube-controllers was created as expected. We don't need to check every resource in detail, since
+			// the render package has its own tests which cover this in more detail.
+			dep := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kubecontrollers.EsKubeController,
+					Namespace: tenantNS,
 				},
 			}
 			Expect(test.GetResource(cli, &dep)).To(BeNil())

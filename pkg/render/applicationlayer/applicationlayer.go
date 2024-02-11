@@ -300,7 +300,7 @@ func (c *component) containers() []corev1.Container {
 				commandArgs,
 				"--waf-enabled",
 				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
-				"--waf-directive", fmt.Sprintf("Include %s/tigera.conf", ModSecurityRulesetVolumePath),
+				"--waf-ruleset-file", ModSecurityRulesetVolumePath,
 			)
 			volMounts = append(
 				volMounts,

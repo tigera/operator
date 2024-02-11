@@ -61,12 +61,21 @@ func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
 // the current scheduled pods also equals the number available.  When all these
 // checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
 func isRolloutComplete(ds *appsv1.DaemonSet) bool {
+	log.Info("Song into isRolloutComplete")
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
-			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+			//return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+			if ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable {
+				log.Info("Song rollout completed")
+				return true
+			} else {
+				log.Info("Song volume exists, but rollout not done yet")
+				return false
+			}
 		}
 	}
 
+	log.Info("Song rollout not complete, volume not exists")
 	return false
 }
 
@@ -82,13 +91,16 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
 	// when performing an update to determine if another entity has modified the value since the last write.
 	var fcAnnotations map[string]string
 	if fc.Annotations == nil {
+		log.Info("Song: setBPFEnabled make new annotations.")
 		fcAnnotations = make(map[string]string)
 	} else {
+		log.Info("Song: setBPFEnabled get existing annotations.")
 		fcAnnotations = fc.Annotations
 	}
 	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
 	fc.Spec.BPFEnabled = &bpfEnabled
+	log.WithValues("annotations", fc.Annotations, "specBPFEnabled", fc.Spec.BPFEnabled).Info("Song: setBPFEnabled set annotations and fc spec to enable bpf.")
 
 	return nil
 }

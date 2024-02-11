@@ -1205,6 +1205,8 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 		},
 	}
 
+	log.Info("Song: bpfInitContainers created.")
+
 	return corev1.Container{
 		Name:            "mount-bpffs",
 		Image:           c.nodeImage,

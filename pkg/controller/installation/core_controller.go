@@ -1152,6 +1152,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
+	log.Info("Song just before pathch felix config")
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
 		return r.setDefaultsOnFelixConfiguration(instance, &calicoNodeDaemonset, fc, reqLogger)
 	})
@@ -1750,6 +1751,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *opera
 
 	bpfEnabledOnInstall := install.Spec.BPFEnabled()
 	if bpfEnabledOnInstall {
+		log.Info("Song BPF enabled on installation. setBPFUpdateOnFelixConfiguration")
 		if (fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)) && isRolloutComplete(ds) {
 			err := setBPFEnabled(fc, bpfEnabledOnInstall)
 			if err != nil {

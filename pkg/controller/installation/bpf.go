@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// updateBPFEnabledAllowed validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
-func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
+// bpfValidateAnnotations validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
+func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 	var annotationValue *bool
 	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
 		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
@@ -60,18 +60,22 @@ func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
 // to compare the DS status current scheduled pods equals the updated number and
 // the current scheduled pods also equals the number available.  When all these
 // checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
-func isRolloutComplete(ds *appsv1.DaemonSet) bool {
+func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
-			return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+			//return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+			if ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable {
+				return true
+			} else {
+				return false
+			}
 		}
 	}
-
 	return false
 }
 
-func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
-	err := updateBPFEnabledAllowed(fc)
+func setBPFEnabledOnFelixConfiguration(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
+	err := bpfValidateAnnotations(fc)
 	if err != nil {
 		return err
 	}
@@ -89,11 +93,10 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
 	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
 	fc.Spec.BPFEnabled = &bpfEnabled
-
 	return nil
 }
 
-func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) (bool, error) {
+func bpfEnabledOnDaemonsetWithEnvVar(ds *appsv1.DaemonSet) (bool, error) {
 	bpfEnabledStatus := false
 	var err error
 

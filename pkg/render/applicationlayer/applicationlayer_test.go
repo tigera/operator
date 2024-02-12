@@ -561,7 +561,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedDikastesArgs := []string{
 			"--waf-enabled",
 			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
-			"--waf-ruleset-file", applicationlayer.ModSecurityRulesetVolumePath,
+			"--waf-ruleset-file", filepath.Join(applicationlayer.ModSecurityRulesetVolumePath, "tigera.conf"),
 		}
 		for _, element := range expectedDikastesArgs {
 			Expect(dikastesArgs).To(ContainElement(element))

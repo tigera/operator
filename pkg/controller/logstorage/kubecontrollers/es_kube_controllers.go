@@ -118,12 +118,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the calico-system namespace.
-	// Make a helper for determining which namespaces to use based on tenancy mode.
-	esGatewayHelper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, common.CalicoNamespace, "")
-
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
 		render.TigeraElasticsearchGatewaySecret,
@@ -140,23 +134,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	// Catch if something modifies the resources that this controller consumes.
-	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, esGatewayHelper.InstallNamespace()); err != nil {
+	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
+	// For single-tenant, everything is installed in the calico-system namespace.
+	// Make a helper for determining which namespaces to use based on tenancy mode.
+	esKubeControllersNamespace := utils.NewNamespaceHelper(opts.MultiTenant, common.CalicoNamespace, "")
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, esKubeControllersNamespace.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddServiceWatch(c, esgateway.ServiceName, esGatewayHelper.InstallNamespace()); err != nil {
-		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
-	}
-	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, esGatewayHelper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
-	}
-	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
-	}
-	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, helper.InstallNamespace()); err != nil {
+	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, esKubeControllersNamespace.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddDeploymentWatch(c, kubecontrollers.EsKubeController, helper.InstallNamespace()); err != nil {
+	if err := utils.AddDeploymentWatch(c, kubecontrollers.EsKubeController, esKubeControllersNamespace.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -172,11 +160,26 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-kubecontrollers failed to establish a connection to k8s: %w", err)
 	}
 
+	if !opts.MultiTenant {
+		// Catch if something modifies the resources that this controller consumes.
+		if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
+			return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
+		}
+		if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
+			return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
+		}
+		if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
+		}
+		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+			{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
+		})
+	}
+
 	// Start goroutines to establish watches against projectcalico.org/v3 resources.
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
-		{Name: esgateway.PolicyName, Namespace: esGatewayHelper.InstallNamespace()},
-		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: helper.InstallNamespace()},
+		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: esKubeControllersNamespace.InstallNamespace()},
 	})
 
 	return nil

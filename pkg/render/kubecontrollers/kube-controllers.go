@@ -206,9 +206,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			enabledControllers = append(enabledControllers, "managedcluster")
 		}
 	} else {
-		if cfg.ManagementCluster != nil {
-			enabledControllers = append(enabledControllers, "managedclusterlicensing")
-		}
+		enabledControllers = append(enabledControllers, "managedclusterlicensing")
 	}
 
 	kubeControllerConfigName := "elasticsearch"
@@ -627,7 +625,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	if !c.cfg.Tenant.MultiTenant() {
-		render.SetClusterCriticalPod(&(d.Spec.Template))
+		render.SetClusterCriticalPod(&d.Spec.Template)
 	}
 
 	if overrides := c.cfg.Installation.CalicoKubeControllersDeployment; overrides != nil {

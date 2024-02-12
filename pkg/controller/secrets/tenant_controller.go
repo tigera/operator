@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
@@ -45,11 +46,12 @@ import (
 // TenantControllers runs in multi-tenant mode and provisions a CA per-tenant, as well as generating
 // a trusted bundle to place in each tenant's namespace.
 type TenantController struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	clusterDomain string
-	log           logr.Logger
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	clusterDomain   string
+	log             logr.Logger
+	elasticExternal bool
 }
 
 func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
@@ -58,11 +60,12 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	r := &TenantController{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		clusterDomain: opts.ClusterDomain,
-		status:        status.New(mgr.GetClient(), "secrets", opts.KubernetesVersion),
-		log:           logf.Log.WithName("controller_tenant_secrets"),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clusterDomain:   opts.ClusterDomain,
+		elasticExternal: opts.ElasticExternal,
+		status:          status.New(mgr.GetClient(), "secrets", opts.KubernetesVersion),
+		log:             logf.Log.WithName("controller_tenant_secrets"),
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -156,10 +159,10 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		rcertificatemanagement.NewKeyPairOption(cm.KeyPair(), true, false),
 	}
 
-	// Get the cluster-scoped CA certificate.
-	clusterCA, err := cm.GetCertificate(r.client, certificatemanagement.CASecretName, common.OperatorNamespace())
+	// Get upstream certificates that we need to trust.
+	certs, err := r.upstreamCertificates(cm)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying CA certificate", err, logc)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying upstream certificates for trusted bundle", err, logc)
 		return reconcile.Result{}, err
 	}
 
@@ -167,8 +170,9 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	// each other's certificates. Each tenant needs to trust:
 	// - Certificates signed by its own CA
 	// - Certificates signed by the cluster-scoped Tigera CA
+	// - Certificates for external ES and Kibana, if configured.
 	trustedBundle := cm.CreateTrustedBundle()
-	trustedBundle.AddCertificates(clusterCA)
+	trustedBundle.AddCertificates(certs...)
 
 	// We also need a trusted bundle that includes the system root certificates in addition to the certificates
 	// listed above, so that components that talk to public endpoints can verify them. In a multi-tenant cluster, this
@@ -178,7 +182,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying system root certificates", err, logc)
 		return reconcile.Result{}, err
 	}
-	trustedBundleWithSystemCAs.AddCertificates(clusterCA)
+	trustedBundleWithSystemCAs.AddCertificates(certs...)
 
 	component := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:      tenant.Namespace,
@@ -207,4 +211,30 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *TenantController) upstreamCertificates(cm certificatemanager.CertificateManager) ([]certificatemanagement.CertificateInterface, error) {
+	toQuery := map[string]string{
+		// By default, we only need the operator's CA cert.
+		certificatemanagement.CASecretName: common.OperatorNamespace(),
+	}
+
+	if r.elasticExternal {
+		// If configured to use external Elasticsearch, get the Elasticsearch and Kibana public certs.
+		toQuery[logstorage.ExternalESPublicCertName] = common.OperatorNamespace()
+		toQuery[logstorage.ExternalKBPublicCertName] = common.OperatorNamespace()
+	}
+
+	// Query each certificate.
+	certs := []certificatemanagement.CertificateInterface{}
+	for name, namespace := range toQuery {
+		if cert, err := cm.GetCertificate(r.client, name, namespace); err != nil {
+			return nil, fmt.Errorf("error querying certificate %s/%s: %w", namespace, name, err)
+		} else if cert == nil {
+			return nil, fmt.Errorf("certificate %s/%s not found", namespace, name)
+		} else {
+			certs = append(certs, cert)
+		}
+	}
+	return certs, nil
 }

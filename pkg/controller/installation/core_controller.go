@@ -1152,7 +1152,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	log.Info("Song just before pathch felix config")
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
 		return r.setDefaultsOnFelixConfiguration(instance, &calicoNodeDaemonset, fc, reqLogger)
 	})
@@ -1510,8 +1509,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Next, delegate logic implementation here using the state of the installation and dependent resources.
 	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
-		return r.setBPFUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, felixConfiguration, reqLogger)
+		return r.setBPFUpdatesOnFelixConfiguration(instance, &calicoNodeDaemonset, fc, reqLogger)
 	})
+
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err

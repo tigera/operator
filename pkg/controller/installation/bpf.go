@@ -91,17 +91,13 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
 	// when performing an update to determine if another entity has modified the value since the last write.
 	var fcAnnotations map[string]string
 	if fc.Annotations == nil {
-		log.Info("Song: setBPFEnabled make new annotations.")
 		fcAnnotations = make(map[string]string)
 	} else {
-		log.Info("Song: setBPFEnabled get existing annotations.")
 		fcAnnotations = fc.Annotations
 	}
 	fcAnnotations[render.BPFOperatorAnnotation] = text
 	fc.SetAnnotations(fcAnnotations)
 	fc.Spec.BPFEnabled = &bpfEnabled
-	log.WithValues("annotations", fc.Annotations, "specBPFEnabled", fc.Spec.BPFEnabled).Info("Song: setBPFEnabled set annotations and fc spec to enable bpf.")
-
 	return nil
 }
 

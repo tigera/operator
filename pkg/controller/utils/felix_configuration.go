@@ -47,7 +47,6 @@ func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(
 			if err := c.Patch(ctx, fc, patchFrom); err != nil {
 				return nil, err
 			}
-			log.WithValues("annotations", fc.Annotations, "specBPFEnabled", fc.Spec.BPFEnabled).Info("Song: PatchFelixConfiguration. Patch done.")
 		}
 	}
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,12 +51,19 @@ type NamespaceHelper interface {
 	// binding global resources to potentially several different Tenant namespaces.
 	// For single-tenant clusters, this simply returns the InstallNamespace.
 	TenantNamespaces(client.Client) ([]string, error)
+
+	// Returns whether or not this is a multi-tenant helper.
+	MultiTenant() bool
 }
 
 type namespacer struct {
 	multiTenant           bool
 	singleTenantNamespace string
 	multiTenantNamespace  string
+}
+
+func (r *namespacer) MultiTenant() bool {
+	return r.multiTenant
 }
 
 func (r *namespacer) InstallNamespace() string {

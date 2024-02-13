@@ -119,7 +119,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
+	}
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -217,19 +220,20 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	// Query the trusted bundle from the namespace.
-	trustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 
 	// Get the Authentication resource.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
+	// Query the trusted bundle from the namespace.
+	gwTrustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, gwNSHelper.InstallNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting trusted bundle in %s", gwNSHelper.InstallNamespace()), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -243,15 +247,22 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// via this gateway. However, in multi-tenant mode we disable the elasticsearch controller and so this isn't needed.
 	if err := r.createESGateway(
 		ctx,
-		utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace),
+		gwNSHelper,
 		install,
 		variant,
 		pullSecrets,
 		hdler,
 		reqLogger,
-		trustedBundle,
+		gwTrustedBundle,
 		r.usePSP,
 	); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Query the trusted bundle from the namespace.
+	trustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting trusted bundle in %s", gwNSHelper.InstallNamespace()), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

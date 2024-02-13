@@ -588,7 +588,7 @@ func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client clie
 	// Augment it with annotations from the actual ConfigMap so that we inherit the hash annotations used to
 	// detect changes to the ConfigMap's contents.
 	for key, val := range obj.Annotations {
-		if strings.HasPrefix(key, "hash.operator.tigera.io/") {
+		if strings.Contains(key, "hash.operator.tigera.io/") {
 			a.annotations[key] = val
 		}
 	}

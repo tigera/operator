@@ -118,7 +118,6 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayRole())
 	toCreate = append(toCreate, e.esGatewayRoleBinding())
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
-	toCreate = append(toCreate, e.esGatewayDeployment())
 
 	// The following secret is used by kube controllers and sent to managed clusters. It is also used by manifests in our docs.
 	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
@@ -129,6 +128,8 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	if e.cfg.UsePSP {
 		toCreate = append(toCreate, e.esGatewayPodSecurityPolicy())
 	}
+	// Create the deployment last to ensure all secrets have been created
+	toCreate = append(toCreate, e.esGatewayDeployment())
 	return toCreate, toDelete
 }
 

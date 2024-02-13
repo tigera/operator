@@ -1725,9 +1725,10 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 		}
 	}
 
-	// If BPF is enabled, but not set on FelixConfiguration, do so here. Older versions of the operator
-	// used an environment variable to enable BPF, but we no longer do so. In order to prevent disruption
-	// when the environment variable is removed by the render code, make sure
+	// If BPF is enabled, but not set on FelixConfiguration, do so here. This could happen when an older
+	// version of operator is replaced by the new one. Older versions of the operator used an
+	// environment variable to enable BPF, but we no longer do so. In order to prevent disruption
+	// when the environment variable is removed by the render code of the new operator, make sure
 	// FelixConfiguration has the correct value set.
 	bpfEnabledOnDaemonSet, err := bpfEnabledOnDaemonSet(ds)
 	if err != nil {

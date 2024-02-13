@@ -1730,10 +1730,10 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	// environment variable to enable BPF, but we no longer do so. In order to prevent disruption
 	// when the environment variable is removed by the render code of the new operator, make sure
 	// FelixConfiguration has the correct value set.
-	bpfEnabledOnDaemonSet, err := bpfEnabledOnDaemonSet(ds)
+	bpfEnabledOnDaemonsetWithEnvVar, err := bpfEnabledOnDaemonsetWithEnvVar(ds)
 	if err != nil {
 		reqLogger.Error(err, "An error occurred when querying the Daemonset resource")
-	} else if bpfEnabledOnDaemonSet && !bpfEnabledOnFelixConfig(fc) {
+	} else if bpfEnabledOnDaemonsetWithEnvVar && !bpfEnabledOnFelixConfig(fc) {
 		err = setBPFEnabled(fc, true)
 		if err != nil {
 			reqLogger.Error(err, "Unable to enable eBPF data plane")
@@ -1753,7 +1753,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(install *opera
 	bpfEnabledOnInstall := install.Spec.BPFEnabled()
 	if bpfEnabledOnInstall {
 		log.Info("Song BPF enabled on installation. setBPFUpdateOnFelixConfiguration")
-		if (fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)) && isRolloutComplete(ds) {
+		if (fc.Spec.BPFEnabled == nil || !(*fc.Spec.BPFEnabled)) && isRolloutCompleteWithBPFVolumes(ds) {
 			err := setBPFEnabled(fc, bpfEnabledOnInstall)
 			if err != nil {
 				reqLogger.Error(err, "Unable to enable eBPF data plane")

@@ -60,7 +60,7 @@ func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
 // to compare the DS status current scheduled pods equals the updated number and
 // the current scheduled pods also equals the number available.  When all these
 // checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
-func isRolloutComplete(ds *appsv1.DaemonSet) bool {
+func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 	log.Info("Song into isRolloutComplete")
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
@@ -101,7 +101,7 @@ func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
 	return nil
 }
 
-func bpfEnabledOnDaemonSet(ds *appsv1.DaemonSet) (bool, error) {
+func bpfEnabledOnDaemonsetWithEnvVar(ds *appsv1.DaemonSet) (bool, error) {
 	bpfEnabledStatus := false
 	var err error
 

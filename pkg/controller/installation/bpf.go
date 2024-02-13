@@ -28,8 +28,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// updateBPFEnabledAllowed validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
-func updateBPFEnabledAllowed(fc *crdv1.FelixConfiguration) error {
+// bpfValidateAnnotations validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
+func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 	var annotationValue *bool
 	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
 		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
@@ -80,7 +80,7 @@ func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 }
 
 func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
-	err := updateBPFEnabledAllowed(fc)
+	err := bpfValidateAnnotations(fc)
 	if err != nil {
 		return err
 	}

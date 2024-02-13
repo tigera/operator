@@ -1050,6 +1050,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+		defaultInstance.CNI = &operatorv1.CNISpec{Type: AwsCIName}
 		defaultInstance.CalicoNetwork.BGP = &bgpDisabled
 		defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationVXLAN
 		component := render.Windows(&cfg)

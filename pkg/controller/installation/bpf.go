@@ -79,7 +79,7 @@ func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 	return false
 }
 
-func setBPFEnabled(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
+func setBPFEnabledOnFelixConfiguration(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
 	err := bpfValidateAnnotations(fc)
 	if err != nil {
 		return err

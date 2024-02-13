@@ -221,18 +221,30 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 
 // isRKE2 returns true if running on an RKE2 cluster, and false otherwise.
 // While the presence of Rancher can be determined based on API Groups, it's important to
-// differentiate between versions, which requires another approach. In this case,
-// the presence of an "rke2" configmap in kube-system namespace is used.
+// differentiate between versions, which requires another approach. In this case we use
+// the presence of an "rke2" configmap or an "rke2-coredns-rke2-coredns" service in the
+// kube-system namespace
 func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
-	cm, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "rke2", metav1.GetOptions{})
-	if err != nil {
-		if kerrors.IsNotFound(err) {
-			return false, nil
-		}
+	foundRKE2Resource := false
+	_, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "rke2", metav1.GetOptions{})
+	if err == nil {
+		foundRKE2Resource = true
+	} else if !kerrors.IsNotFound(err) {
 		return false, err
 	}
 
-	return (cm != nil), nil
+	// In current RKE2 the above ConfigMap no longer exists, but we leave that code in place in
+	// case there are variants where it is useful.  Check also for the RKE2 DNS service - which
+	// is especially relevant because one of the main uses of the RKE2 autodetection is to set
+	// DNS config.
+	_, err = c.CoreV1().Services("kube-system").Get(ctx, "rke2-coredns-rke2-coredns", metav1.GetOptions{})
+	if err == nil {
+		foundRKE2Resource = true
+	} else if !kerrors.IsNotFound(err) {
+		return false, err
+	}
+
+	return foundRKE2Resource, nil
 }
 
 // SupportsPodSecurityPolicies returns true if the cluster contains the policy/v1beta1 PodSecurityPolicy API,

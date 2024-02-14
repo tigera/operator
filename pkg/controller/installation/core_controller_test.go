@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -334,7 +335,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = test.DefaultFakeClientBuilder(scheme).Build()
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
@@ -716,7 +717,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = test.DefaultFakeClientBuilder(scheme).Build()
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
@@ -904,7 +905,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = test.DefaultFakeClientBuilder(scheme).Build()
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.

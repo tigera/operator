@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package client
 
 import (
 	"reflect"
@@ -20,9 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 func TypesWithStatuses(scheme *runtime.Scheme, groupVersions ...schema.GroupVersion) []client.Object {
@@ -59,10 +56,4 @@ func TypesWithStatuses(scheme *runtime.Scheme, groupVersions ...schema.GroupVers
 	}
 
 	return statusObjects
-}
-
-func DefaultFakeClientBuilder(scheme *runtime.Scheme) *fake.ClientBuilder {
-	return fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(TypesWithStatuses(scheme, operatorv1.GroupVersion)...)
 }

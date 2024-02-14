@@ -44,9 +44,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/status"
+	ctrlrclient "github.com/tigera/operator/pkg/ctrlruntime/client"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("CSR controller tests", func() {
@@ -69,7 +70,7 @@ var _ = Describe("CSR controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		// Create a client that will have a crud interface of k8s objects.
-		cli = test.DefaultFakeClientBuilder(scheme).WithStatusSubresource(test.TypesWithStatuses(scheme, certificatesv1.SchemeGroupVersion)...).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).WithStatusSubresource(ctrlrclient.TypesWithStatuses(scheme, certificatesv1.SchemeGroupVersion)...).Build()
 		ctx = context.Background()
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},

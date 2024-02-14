@@ -23,7 +23,8 @@ import (
 
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/test"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,24 +49,24 @@ var _ = Describe("Parser", func() {
 	})
 
 	It("should not detect an installation if none exists", func() {
-		c := test.DefaultFakeClientBuilder(scheme).Build()
+		c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		Expect(NeedsConversion(ctx, c)).To(BeFalse())
 	})
 
 	It("should detect an installation if one exists", func() {
-		c := test.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
+		c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should detect a valid installation", func() {
-		c := test.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
+		c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should error if it detects a canal installation", func() {
-		c := test.DefaultFakeClientBuilder(scheme).WithObjects(&appsv1.DaemonSet{
+		c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(&appsv1.DaemonSet{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      "canal-node",
 				Namespace: "kube-system",
@@ -81,7 +82,7 @@ var _ = Describe("Parser", func() {
 			Name:  "FOO",
 			Value: "bar",
 		}}
-		c := test.DefaultFakeClientBuilder(scheme).WithObjects(node, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
+		c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(node, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
@@ -99,7 +100,7 @@ var _ = Describe("Parser", func() {
 			},
 		}
 
-		c := test.DefaultFakeClientBuilder(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
+		c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		cfg, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
@@ -114,7 +115,7 @@ var _ = Describe("Parser", func() {
 			Value: "{",
 		}}
 
-		c := test.DefaultFakeClientBuilder(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
+		c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
@@ -149,7 +150,7 @@ var _ = Describe("Parser", func() {
 					},
 				}
 
-				cli := test.DefaultFakeClientBuilder(scheme).WithObjects(emptyKubeControllerSpec()).Build()
+				cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyKubeControllerSpec()).Build()
 				c := components{
 					node: CheckedDaemonSet{
 						DaemonSet:   *ds,

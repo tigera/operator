@@ -40,9 +40,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Monitor controller tests", func() {
@@ -63,7 +63,7 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create a client that will have a crud interface of k8s objects.
 		ctx = context.Background()
-		cli = test.DefaultFakeClientBuilder(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		mockStatus = &status.MockStatus{}

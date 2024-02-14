@@ -36,7 +36,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/test"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
 var _ = Describe("Status reporting tests", func() {
@@ -57,7 +57,7 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
-		client = test.DefaultFakeClientBuilder(scheme).Build()
+		client = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		sm = New(client, "test-component", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
 		Expect(sm.IsAvailable()).To(BeFalse())

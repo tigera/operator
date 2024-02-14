@@ -34,7 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/test"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
 var _ = Describe("tier controller tests", func() {
@@ -53,7 +53,7 @@ var _ = Describe("tier controller tests", func() {
 		Expect(appsv1.AddToScheme(scheme))
 
 		// Create a client that will have a crud interface of k8s objects.
-		c = test.DefaultFakeClientBuilder(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 
 		mockStatus = &status.MockStatus{}

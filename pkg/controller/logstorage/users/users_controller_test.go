@@ -31,7 +31,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	tigeraelastic "github.com/tigera/operator/pkg/controller/logstorage/elastic"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/test"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
 var _ = Describe("LogStorage cleanup controller", func() {
@@ -43,7 +43,7 @@ var _ = Describe("LogStorage cleanup controller", func() {
 		scheme := runtime.NewScheme()
 		Expect(operatorv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli = test.DefaultFakeClientBuilder(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 	})
 
 	It("should clean up Elastic users for tenants that no longer exist", func() {

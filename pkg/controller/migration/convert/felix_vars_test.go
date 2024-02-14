@@ -27,8 +27,9 @@ import (
 
 	"github.com/tigera/api/pkg/lib/numorstring"
 	"github.com/tigera/operator/pkg/apis"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("felix env parser", func() {
@@ -134,7 +135,7 @@ var _ = Describe("felix env parser", func() {
 
 			scheme := kscheme.Scheme
 			Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
-			c.client = test.DefaultFakeClientBuilder(scheme).WithObjects(emptyFelixConfig()).Build()
+			c.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyFelixConfig()).Build()
 		})
 
 		It("sets a boolean", func() {

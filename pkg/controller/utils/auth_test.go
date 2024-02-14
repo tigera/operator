@@ -31,7 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/test"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
 var _ = Describe("LDAP secrets tests", func() {
@@ -48,7 +48,7 @@ var _ = Describe("LDAP secrets tests", func() {
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		cli = test.DefaultFakeClientBuilder(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		ctx = context.Background()
 		certificateManager, err := certificatemanager.Create(cli, &operatorv1.InstallationSpec{}, ".cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())

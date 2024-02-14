@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/test"
 
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -58,7 +59,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = test.DefaultFakeClientBuilder(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}

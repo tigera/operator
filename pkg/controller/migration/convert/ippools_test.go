@@ -25,11 +25,11 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Convert network tests", func() {
@@ -109,7 +109,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CNI_NETWORK_CONFIG",
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
 			}}
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, emptyFelixConfig()).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, v4pool1, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(Equal([]operatorv1.IPPool{{
@@ -128,7 +128,7 @@ var _ = Describe("Convert network tests", func() {
 				{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			}
 
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyFelixConfig()).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, emptyFelixConfig()).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -142,7 +142,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_IPV4POOL_CIDR",
 				Value: envcidr,
 			}}
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, v4pool2, v4pooldefault, emptyFelixConfig()).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, v4pool1, v4pool2, v4pooldefault, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -164,7 +164,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_IPV6POOL_CIDR",
 				Value: envcidr,
 			}}
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v6pool1, v6pool2, v6pooldefault, emptyFelixConfig()).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, v6pool1, v6pool2, v6pooldefault, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -182,7 +182,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			v4pool1.Spec.CIDR = "1.168.0/24"
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, v4pool1).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 		})
@@ -198,7 +198,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "3.168.4.0/24",
 			}}
 			v4pooldefault.Spec.Disabled = true
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pooldefault, v4pool2, emptyFelixConfig()).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, v4pooldefault, v4pool2, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -210,7 +210,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CNI_NETWORK_CONFIG",
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv6":"true"}}`,
 			}}
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, v6pool1, emptyFelixConfig()).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ds, v4pool1, v6pool1, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ConsistOf([]operatorv1.IPPool{{
@@ -242,7 +242,7 @@ var _ = Describe("Convert network tests", func() {
 				}
 				pools = append(pools, p)
 			}
-			c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(append([]runtime.Object{ds}, pools...)...).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithRuntimeObjects(append([]runtime.Object{ds}, pools...)...).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 		},

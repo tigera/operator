@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,7 +29,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -70,13 +70,13 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("amazoncloudintegration-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("amazoncloudintegration-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create amazoncloudintegration-controller: %v", err)
 	}
 
 	// Watch for changes to primary resource AmazonCloudIntegration
-	err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.AmazonCloudIntegration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %v", err)

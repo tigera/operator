@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/logstorage"
@@ -40,7 +41,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // TenantControllers runs in multi-tenant mode and provisions a CA per-tenant, as well as generating
@@ -70,16 +70,16 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("tenant-secrets-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("tenant-secrets-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("tenant-secrets-controller failed to watch Tenant resource: %w", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("tenant-controller failed to watch Installation resource: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {

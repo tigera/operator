@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,29 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ptr
+package fake
 
 import (
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	ctrlrclient "github.com/tigera/operator/pkg/ctrlruntime/client"
 )
 
-func BoolToPtr(b bool) *bool {
-	return &b
-}
-
-func Int64ToPtr(i int64) *int64 {
-	return &i
-}
-
-func Int32ToPtr(i int32) *int32 {
-	return &i
-}
-
-func IntOrStrPtr(v string) *intstr.IntOrString {
-	ios := intstr.Parse(v)
-	return &ios
-}
-
-func ToPtr[V any](v V) *V {
-	return &v
+func DefaultFakeClientBuilder(scheme *runtime.Scheme) *fake.ClientBuilder {
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(ctrlrclient.TypesWithStatuses(scheme, operatorv1.GroupVersion)...)
 }

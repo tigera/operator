@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -27,14 +26,6 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	ocsv1 "github.com/openshift/api/security/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/test"
-	"k8s.io/apimachinery/pkg/types"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -44,13 +35,23 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Egress Gateway controller tests", func() {
@@ -71,7 +72,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx = context.Background()
 			installation = &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -839,16 +840,15 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			mockStatus.On("ReadyToMonitor")
 			installation.Status.CalicoVersion = "3.15"
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-			var replicas int32 = 2
-			logSeverity := operatorv1.LogLevelInfo
+
 			var requeueInterval time.Duration = 30 * time.Second
-			var wg sync.WaitGroup
+
 			labels := map[string]string{"egress-code": "red"}
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
-					Replicas:    &replicas,
-					LogSeverity: &logSeverity,
+					Replicas:    ptr.ToPtr(int32(2)),
+					LogSeverity: ptr.ToPtr(operatorv1.LogLevelInfo),
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-1"},
 					},
@@ -858,20 +858,12 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					State: operatorv1.TigeraStatusReady,
 				},
 			}
+
 			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(requeueInterval))
-			wg.Add(1)
-			go func() {
-				// wait for 50 seconds before setting the appropriate version.
-				time.Sleep(50 * time.Second)
-				defer wg.Done()
-				ins := &operatorv1.Installation{}
-				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, ins)).NotTo(HaveOccurred())
-				ins.Status.CalicoVersion = components.EnterpriseRelease
-				Expect(c.Update(ctx, ins)).NotTo(HaveOccurred())
-			}()
+
 			dep := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -879,19 +871,23 @@ var _ = Describe("Egress Gateway controller tests", func() {
 					Namespace: "calico-egress",
 				},
 			}
-			By("ensuring the egw resources are created after correct calico version in installed")
+			By("ensuring the egw resources are created after correct calico version is installed")
 			Expect(test.GetResource(c, &dep)).NotTo(BeNil())
-			for {
-				result, err = r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-				if result.RequeueAfter == requeueInterval {
-					time.Sleep(requeueInterval)
-				} else {
-					break
-				}
-			}
+
+			result, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result.RequeueAfter).Should(Equal(requeueInterval))
+
+			ins := &operatorv1.Installation{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, ins)).NotTo(HaveOccurred())
+			ins.Status.CalicoVersion = components.EnterpriseRelease
+			Expect(c.Status().Update(ctx, ins)).NotTo(HaveOccurred())
+
+			result, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result.RequeueAfter).Should(BeEquivalentTo(0))
+
 			Expect(test.GetResource(c, &dep)).To(BeNil())
-			wg.Wait()
 		})
 
 		It("should not watch namespaced resources", func() {
@@ -899,9 +895,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			var mgr manager.Manager
 			err := add(mgr, m)
 			Expect(err).ShouldNot(HaveOccurred())
-			for _, watch := range m.watches {
-				kind := watch.(*source.Kind)
-				Expect(len(kind.Type.GetNamespace())).To(Equal(0))
+			for _, obj := range m.watchedObjects {
+				Expect(len(obj.GetNamespace())).To(Equal(0))
 			}
 		})
 	})
@@ -909,12 +904,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 type mockController struct {
 	mock.Mock
-	watches []source.Source
+	watchedObjects []client.Object
+}
+
+func (m *mockController) WatchObject(object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	m.watchedObjects = append(m.watchedObjects, object)
+	return nil
 }
 
 func (m *mockController) Watch(src source.Source, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
-	m.watches = append(m.watches, src)
-	return nil
+	panic("not implemented")
 }
 
 func (m *mockController) Start(ctx context.Context) error {

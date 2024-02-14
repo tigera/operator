@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/go-logr/logr"
@@ -30,12 +29,6 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	opv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/render"
-
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,8 +38,16 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
+	opv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Utils elasticsearch license type tests", func() {
@@ -67,7 +68,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 		log = logf.Log.WithName("utils-test-logger")
 	})
@@ -146,7 +147,7 @@ var _ = Describe("Utils APIServer type tests", func() {
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 		log = logf.Log.WithName("utils-test-logger")
 	})
@@ -241,7 +242,7 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 	})
 

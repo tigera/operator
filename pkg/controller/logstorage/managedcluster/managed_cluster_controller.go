@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,10 +26,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -61,22 +60,22 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-managedcluster-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-managedcluster-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.LogStorage{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch Installation resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch ManagementCluster resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-managedcluster-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 

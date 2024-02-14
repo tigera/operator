@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,17 +15,21 @@
 package render
 
 import (
-	glog "log"
 	"testing"
+
+	uzap "go.uber.org/zap"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/onsi/ginkgo/reporters"
 )
 
 func TestRender(t *testing.T) {
-	glog.SetOutput(GinkgoWriter)
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
 	junitReporter := reporters.NewJUnitReporter("../../report/ut/render_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render Suite", []Reporter{junitReporter})

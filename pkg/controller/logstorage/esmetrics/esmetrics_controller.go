@@ -19,21 +19,18 @@ import (
 	"fmt"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -44,9 +41,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -85,18 +84,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	r.status.Run(opts.ShutdownContext)
 
-	c, err := controller.New("log-storage-esmetrics-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-esmetrics-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("log-storage-esmetrics-controller failed to establish a connection to k8s: %w", err)
 	}
 
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.LogStorage{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-esmetrics-controller failed to watch LogStorage resource: %w", err)
 	}
 	if err = utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("log-storage-esmetrics-controller failed to watch Installation resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-esmetrics-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {

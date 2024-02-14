@@ -24,6 +24,7 @@ import (
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
 	corev1 "k8s.io/api/core/v1"
 
@@ -43,7 +44,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_logstorage_users")
@@ -90,7 +90,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := controller.New("log-storage-user-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-user-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -103,26 +103,26 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
-	if err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to watch LogStorage resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementCluster{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to watch ManagementCluster resource: %w", err)
 	}
-	if err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageUsers); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-user-controller failed to watch Tenant resource: %w", err)
 		}
 	}
 
 	// Watch for Elasticsearch.
-	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{}}, eventHandler); err != nil {
+	if err = c.WatchObject(&esv1.Elasticsearch{}, eventHandler); err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to watch Elasticsearch resource: %w", err)
 	}
 
@@ -142,12 +142,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	usersCleanupController, err := controller.New("log-storage-cleanup-controller", mgr, controller.Options{Reconciler: usersCleanupReconciler})
+	usersCleanupController, err := ctrlruntime.NewController("log-storage-cleanup-controller", mgr, controller.Options{Reconciler: usersCleanupReconciler})
 	if err != nil {
 		return err
 	}
 
-	if err = usersCleanupController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = usersCleanupController.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-cleanup-controller failed to watch Tenant resource: %w", err)
 	}
 

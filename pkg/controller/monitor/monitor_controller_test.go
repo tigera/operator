@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -41,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 )
@@ -63,7 +63,7 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create a client that will have a crud interface of k8s objects.
 		ctx = context.Background()
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		mockStatus = &status.MockStatus{}

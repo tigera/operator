@@ -20,6 +20,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -29,13 +30,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 )
 
@@ -75,7 +76,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		readyFlag = &utils.ReadyFlag{}
 		readyFlag.MarkAsReady()
@@ -304,7 +305,6 @@ var _ = Describe("LogStorage Conditions controller", func() {
 	})
 
 	It("should reconcile with all log-storage-* tigerastatus conditions as Available and later move to degraded", func() {
-
 		subControllers = append(subControllers, TigeraStatusLogStorageUsers)
 		for _, ls := range subControllers {
 			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
@@ -348,10 +348,17 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(readyCondition.Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
 		Expect(readyCondition.Message).To(Equal("All sub-controllers are available"))
 		Expect(readyCondition.ObservedGeneration).To(Equal(generation))
+
+		// Update the instance condition times so that we can verify they're changed after subsequent calls to Reconcile.
+		for i := range instance.Status.Conditions {
+			instance.Status.Conditions[i].LastTransitionTime = metav1.NewTime(time.Now().Add(-2 * time.Minute))
+		}
+
+		Expect(cli.Status().Update(ctx, instance)).ShouldNot(HaveOccurred())
+
 		recentTransitionTime := instance.Status.Conditions[1].LastTransitionTime
 
 		// Expect tigerstatus transition time remain unchanged when there is no changes to the  condition
-		time.Sleep(5 * time.Second)
 		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      "log-storage",
 			Namespace: "",
@@ -407,10 +414,8 @@ var _ = Describe("LogStorage Conditions controller", func() {
 			},
 		}
 
-		Expect(cli.Update(ctx, &tsUser)).NotTo(HaveOccurred())
+		Expect(cli.Status().Update(ctx, &tsUser)).NotTo(HaveOccurred())
 
-		// Sleep before reconciling again to ensure the Last Transition Time updates correctly when switching statuses.
-		time.Sleep(5 * time.Second)
 		result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      "log-storage",
 			Namespace: "",

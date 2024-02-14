@@ -40,26 +40,26 @@ type enqueueAllTenants struct {
 }
 
 // Create is called in response to a create event - e.g. Pod Creation.
-func (h *enqueueAllTenants) Create(e event.CreateEvent, q workqueue.RateLimitingInterface) {
+func (h *enqueueAllTenants) Create(ctx context.Context, e event.CreateEvent, q workqueue.RateLimitingInterface) {
 	elog.V(2).Info("Create event triggered reconciliation for all tenants", "event", e)
 	h.enqueue(q)
 }
 
 // Update is called in response to an update event -  e.g. Pod Updated.
-func (h *enqueueAllTenants) Update(e event.UpdateEvent, q workqueue.RateLimitingInterface) {
+func (h *enqueueAllTenants) Update(ctx context.Context, e event.UpdateEvent, q workqueue.RateLimitingInterface) {
 	elog.V(2).Info("Update event triggered reconciliation for all tenants", "event", e)
 	h.enqueue(q)
 }
 
 // Delete is called in response to a delete event - e.g. Pod Deleted.
-func (h *enqueueAllTenants) Delete(e event.DeleteEvent, q workqueue.RateLimitingInterface) {
+func (h *enqueueAllTenants) Delete(ctx context.Context, e event.DeleteEvent, q workqueue.RateLimitingInterface) {
 	elog.V(2).Info("Delete event triggered reconciliation for all tenants", "event", e)
 	h.enqueue(q)
 }
 
 // Generic is called in response to an event of an unknown type or a synthetic event triggered as a cron or
 // external trigger request - e.g. reconcile Autoscaling, or a Webhook.
-func (h *enqueueAllTenants) Generic(e event.GenericEvent, q workqueue.RateLimitingInterface) {
+func (h *enqueueAllTenants) Generic(ctx context.Context, e event.GenericEvent, q workqueue.RateLimitingInterface) {
 	elog.V(2).Info("Generic event triggered reconciliation for all tenants", "event", e)
 	h.enqueue(q)
 }

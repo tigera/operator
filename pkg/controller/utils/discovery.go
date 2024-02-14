@@ -225,15 +225,26 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 // differentiate between versions, which requires another approach. In this case,
 // the presence of an "rke2" configmap in kube-system namespace is used.
 func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
-	cm, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "rke2", metav1.GetOptions{})
-	if err != nil {
-		if kerrors.IsNotFound(err) {
-			return false, nil
-		}
+	foundRKE2Resource := false
+	_, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "rke2", metav1.GetOptions{})
+	if err == nil {
+		foundRKE2Resource = true
+	} else if !kerrors.IsNotFound(err) {
 		return false, err
 	}
 
-	return (cm != nil), nil
+	// In current RKE2 the above ConfigMap no longer exists, but we leave that code in place in
+	// case there are variants where it is useful.  Check also for the RKE2 DNS service - which
+	// is especially relevant because one of the main uses of the RKE2 autodetection is to set
+	// DNS config.
+	_, err = c.CoreV1().Services("kube-system").Get(ctx, "rke2-coredns-rke2-coredns", metav1.GetOptions{})
+	if err == nil {
+		foundRKE2Resource = true
+	} else if !kerrors.IsNotFound(err) {
+		return false, err
+	}
+
+	return foundRKE2Resource, nil
 }
 
 // SupportsPodSecurityPolicies returns true if the cluster contains the policy/v1beta1 PodSecurityPolicy API,

@@ -23,14 +23,15 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	tigeraelastic "github.com/tigera/operator/pkg/controller/logstorage/elastic"
-	"github.com/tigera/operator/pkg/controller/utils"
 	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	tigeraelastic "github.com/tigera/operator/pkg/controller/logstorage/elastic"
+	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
 var _ = Describe("LogStorage cleanup controller", func() {
@@ -42,7 +43,7 @@ var _ = Describe("LogStorage cleanup controller", func() {
 		scheme := runtime.NewScheme()
 		Expect(operatorv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 	})
 
 	It("should clean up Elastic users for tenants that no longer exist", func() {

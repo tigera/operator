@@ -19,14 +19,12 @@ import (
 	"fmt"
 	"strings"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
 // ApplyImageSet gets the appropriate ImageSet, validates the ImageSet, and calls ResolveImages
@@ -45,8 +43,8 @@ func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVaria
 }
 
 // Utility function to add a watch on ImageSet resources.
-func AddImageSetWatch(c controller.Controller) error {
-	return c.Watch(&source.Kind{Type: &operator.ImageSet{}}, &handler.EnqueueRequestForObject{})
+func AddImageSetWatch(c ctrlruntime.Controller) error {
+	return c.WatchObject(&operator.ImageSet{}, &handler.EnqueueRequestForObject{})
 }
 
 func getSetName(v operator.ProductVariant) string {

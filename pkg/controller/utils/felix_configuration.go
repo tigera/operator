@@ -51,6 +51,7 @@ func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(
 			if err := c.Patch(ctx, fc, patchFrom); err != nil {
 				return nil, err
 			}
+			log.Info("Song: Patch done")
 		}
 	}
 

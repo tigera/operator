@@ -1735,6 +1735,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 		reqLogger.Error(err, "An error occurred when querying the Daemonset resource")
 		return false, err
 	} else if bpfEnabledOnDaemonsetWithEnvVar && !bpfEnabledOnFelixConfig(fc) {
+		log.Info("Song: bpfEnabledOnDaemonsetWithEnvVar and Felix config is not set, set it now")
 		err = setBPFEnabledOnFelixConfiguration(fc, true)
 		if err != nil {
 			reqLogger.Error(err, "Unable to enable eBPF data plane")

@@ -146,7 +146,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret,
+			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret, relasticsearch.PublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
@@ -398,6 +398,15 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
 		}
+		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, logc)
+			return reconcile.Result{}, err
+		}
+		if esgwCertificate != nil {
+			trustedSecretNames = append(trustedSecretNames, relasticsearch.PublicCertSecret)
+		}
+
 		// If external prometheus is enabled, the secret will be signed by the Calico CA and no secret will be created. We can skip
 		// adding it to the bundle, as trusting the CA will suffice.
 		monitorCR := &operatorv1.Monitor{}

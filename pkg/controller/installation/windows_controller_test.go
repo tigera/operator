@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
@@ -45,7 +46,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -72,7 +72,7 @@ var _ = Describe("windows-controller installation tests", func() {
 			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create an object we can use throughout the test to do the core reconcile loops.
@@ -524,7 +524,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 					// Create a client that will have a crud interface of k8s objects.
-					c = fake.NewClientBuilder().WithScheme(scheme).Build()
+					c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 					ctx, cancel = context.WithCancel(context.Background())
 
 					// Create dns service which is autodetected by windows-controller

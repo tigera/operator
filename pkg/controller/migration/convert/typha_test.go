@@ -19,17 +19,17 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
-	//. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
 func getK8sNodes(x int) *corev1.NodeList {
@@ -67,7 +67,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -75,7 +75,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(3)).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(3)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -85,7 +85,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(5)).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(5)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -93,7 +93,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(4)
 
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(8)).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(8)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -103,19 +103,19 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(0)
 
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("should not error with no replicas", func() {
 			td := emptyTyphaDeployment()
 
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("should not error with no typha deployment", func() {
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).WithLists(getK8sNodes(2)).Build()
+			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})

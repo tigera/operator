@@ -15,6 +15,8 @@
 package applicationlayer_test
 
 import (
+	"path/filepath"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
+	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
@@ -404,6 +407,172 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedDikastesVolMounts := []corev1.VolumeMount{
 			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
 			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
+		}
+		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))
+		for _, expected := range expectedDikastesVolMounts {
+			Expect(dikastesVolMounts).To(ContainElement(expected))
+		}
+	})
+
+	It("should render with default l7 WAF configuration", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: applicationlayer.ModSecurityRulesetConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+		// Should render the correct resources.
+		cm, err := embed.AsConfigMap(
+			applicationlayer.ModSecurityRulesetConfigMapName,
+			common.OperatorNamespace(),
+		)
+		Expect(err).To(BeNil())
+		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
+			PullSecrets:          nil,
+			Installation:         installation,
+			OsType:               rmeta.OSTypeLinux,
+			WAFEnabled:           true,
+			ModSecurityConfigMap: cm,
+		})
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		for i := range expectedResources {
+			ExpectWithOffset(1, rtest.ExpectResource(resources[i], resources)).ShouldNot(HaveOccurred())
+		}
+
+		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+		// Check rendering of daemonset.
+		Expect(ds.Spec.Template.Spec.HostNetwork).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.HostIPC).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+		Expect(len(ds.Spec.Template.Spec.Containers)).To(Equal(2))
+		Expect(len(ds.Spec.Template.Spec.Tolerations)).To(Equal(3))
+
+		// Ensure each volume rendered correctly.
+		dsVols := ds.Spec.Template.Spec.Volumes
+		hp := corev1.HostPathDirectoryOrCreate
+		expectedVolumes := []corev1.Volume{
+			{
+				Name: applicationlayer.EnvoyLogsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: applicationlayer.EnvoyConfigMapName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.EnvoyConfigMapName},
+					},
+				},
+			},
+			{
+				Name: applicationlayer.FelixSync,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver: "csi.tigera.io",
+					},
+				},
+			},
+			{
+				Name: applicationlayer.DikastesSyncVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: applicationlayer.CalicoLogsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log/calico",
+						Type: &hp,
+					},
+				},
+			},
+			{
+				Name: applicationlayer.ModSecurityRulesetConfigMapName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.ModSecurityRulesetConfigMapName},
+					},
+				},
+			},
+		}
+
+		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(expectedVolumes)))
+		for i, expected := range expectedVolumes {
+			Expect(dsVols[i]).To(Equal(expected))
+		}
+
+		// Ensure that tolerations rendered correctly.
+		dsTolerations := ds.Spec.Template.Spec.Tolerations
+		expectedToleration := rmeta.TolerateAll
+		for _, expected := range expectedToleration {
+			Expect(dsTolerations).To(ContainElement(expected))
+		}
+
+		// Check proxy container rendering.
+		proxyContainer := ds.Spec.Template.Spec.Containers[0]
+
+		proxyEnvs := proxyContainer.Env
+		expectedProxyEnvs := []corev1.EnvVar{
+			{Name: "ENVOY_UID", Value: "0"},
+			{Name: "ENVOY_GID", Value: "0"},
+		}
+		Expect(len(proxyEnvs)).To(Equal(len(expectedProxyEnvs)))
+
+		for _, expected := range expectedProxyEnvs {
+			Expect(proxyEnvs).To(ContainElement(expected))
+		}
+
+		proxyVolMounts := proxyContainer.VolumeMounts
+		expectedProxyVolMounts := []corev1.VolumeMount{
+			{Name: applicationlayer.EnvoyConfigMapName, MountPath: "/etc/envoy"},
+			{Name: applicationlayer.EnvoyLogsVolumeName, MountPath: "/tmp/"},
+			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
+		}
+		Expect(len(proxyVolMounts)).To(Equal(len(expectedProxyVolMounts)))
+
+		for _, expected := range expectedProxyVolMounts {
+			Expect(proxyVolMounts).To(ContainElement(expected))
+		}
+
+		dikastesContainer := ds.Spec.Template.Spec.Containers[1]
+
+		dikastesEnvs := dikastesContainer.Env
+		expectedDikastesEnvs := []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "Info"},
+			{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
+		}
+		Expect(len(dikastesEnvs)).To(Equal(len(expectedDikastesEnvs)))
+		for _, element := range expectedDikastesEnvs {
+			Expect(dikastesEnvs).To(ContainElement(element))
+		}
+
+		dikastesArgs := dikastesContainer.Command
+		expectedDikastesArgs := []string{
+			"--waf-enabled",
+			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
+			"--waf-ruleset-file", filepath.Join(applicationlayer.ModSecurityRulesetVolumePath, "tigera.conf"),
+		}
+		for _, element := range expectedDikastesArgs {
+			Expect(dikastesArgs).To(ContainElement(element))
+		}
+
+		dikastesVolMounts := dikastesContainer.VolumeMounts
+		expectedDikastesVolMounts := []corev1.VolumeMount{
+			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
+			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
+			{Name: applicationlayer.CalicoLogsVolumeName, MountPath: applicationlayer.CalicologsVolumePath},
+			{Name: applicationlayer.ModSecurityRulesetConfigMapName, MountPath: applicationlayer.ModSecurityRulesetVolumePath, ReadOnly: true},
 		}
 		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))
 		for _, expected := range expectedDikastesVolMounts {

@@ -26,10 +26,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
 var _ = Describe("test active pkg", func() {
@@ -50,7 +50,7 @@ var _ = Describe("test active pkg", func() {
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 		//log = logf.Log.WithName("active-test-logger")
 	})

@@ -37,14 +37,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -80,7 +81,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 		sm = status.New(c, "fake-component", &common.VersionInfo{Major: 1, Minor: 19})
 
@@ -1923,6 +1924,14 @@ type mockReturn struct {
 type mockClient struct {
 	Info  []mockReturn
 	Index int
+}
+
+func (mc *mockClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	panic("not implemented")
+}
+
+func (mc *mockClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	panic("not implemented")
 }
 
 func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {

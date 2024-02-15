@@ -218,12 +218,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	mapper, err := apiutil.NewDynamicRESTMapper(cfg)
-	if err != nil {
-		log.Error(err, "Failed to create dynamic rest mapper.")
-		os.Exit(1)
-	}
-
 	if preDelete {
 		// We've built a client - we can use it to clean up.
 		if err := executePreDeleteHook(ctx, c); err != nil {
@@ -254,9 +248,19 @@ func main() {
 		// for the LicenseKey. We should test again in the future to see if the cache issue is fixed
 		// and we can remove this. Here is a link to the upstream issue
 		// https://github.com/kubernetes-sigs/controller-runtime/issues/1316
-		ClientDisableCacheFor: []client.Object{
-			&v3.LicenseKey{},
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{
+					&v3.LicenseKey{},
+				},
+			},
 		},
+
+		// Explicitly set the MapperProvider to the NewDynamicRESTMapper, as we had previously had issues with the default
+		// not being this mapper (which has since been rectified). It was a tough issue to figure out when the default
+		// had changed out from under us, so better to continue to explicitly set it as we know this is the mapper we want.
+		MapperProvider: apiutil.NewDynamicRESTMapper,
+
 		// NetworkPolicy is served through the Tigera API Server, which currently restricts List and Watch
 		// operations on NetworkPolicy to a single tier only, specified via label or field selector. If no
 		// selector is specified, List and Watch return policies from the 'default' tier. The manager cache
@@ -264,17 +268,12 @@ func main() {
 		// within so that it can receive the expected resources for List and Watch. If the operator needs to
 		// reconcile policy within multiple tiers, the API Server should be updated to serve policy from all
 		// tiers that the user is authorized for.
-		NewCache: cache.BuilderWithOptions(cache.Options{
-			SelectorsByObject: cache.SelectorsByObject{
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
 				&v3.NetworkPolicy{}:       {Label: policySelector},
 				&v3.GlobalNetworkPolicy{}: {Label: policySelector},
 			},
-			// This commit https://github.com/kubernetes-sigs/controller-runtime/commit/b38c4a526b4cf9ffbcaebd0fe9363d9d64182dd2
-			// introduced a bug where if the cache builder is used and the Mapper is nil, it defaults it to the DiscoverRESTMapper
-			// even though the managers default mapper is the DynamicRESTMapper. To get around this issue, we explicitly
-			// set the mapper to the DynamicRESTMapper.
-			Mapper: mapper,
-		}),
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

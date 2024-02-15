@@ -37,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -49,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -71,7 +71,7 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 		replicas = 2
 		Expect(c.Create(ctx, &operatorv1.Monitor{
@@ -689,7 +689,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			It("should degrade if compliance CR and compliance-enabled license is present, but compliance is not ready", func() {
 				compliance.Status.State = ""
-				Expect(c.Update(ctx, compliance)).NotTo(HaveOccurred())
+				Expect(c.Status().Update(ctx, compliance)).NotTo(HaveOccurred())
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return()

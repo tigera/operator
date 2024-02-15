@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -45,7 +46,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const ResourceName = "compliance"
@@ -66,7 +66,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
 
 	// Create a new controller
-	complianceController, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconciler})
+	complianceController, err := ctrlruntime.NewController("compliance-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
 		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
-		if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Tenant{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = complianceController.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("compliance-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -99,20 +99,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	})
 
 	// Watch for changes to primary resource Compliance
-	err = complianceController.Watch(&source.Kind{Type: &operatorv1.Compliance{}}, &handler.EnqueueRequestForObject{})
+	err = complianceController.WatchObject(&operatorv1.Compliance{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
 
-	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Installation{}}, eventHandler); err != nil {
+	if err = complianceController.WatchObject(&operatorv1.Installation{}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch Installation resource: %w", err)
 	}
 
-	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ImageSet{}}, eventHandler); err != nil {
+	if err = complianceController.WatchObject(&operatorv1.ImageSet{}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, eventHandler); err != nil {
+	if err = complianceController.WatchObject(&operatorv1.APIServer{}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch APIServer resource: %w", err)
 	}
 
@@ -133,16 +133,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to primary resource ManagementCluster
-	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementCluster{}}, eventHandler); err != nil {
+	if err = complianceController.WatchObject(&operatorv1.ManagementCluster{}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to primary resource ManagementClusterConnection
-	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, eventHandler); err != nil {
+	if err = complianceController.WatchObject(&operatorv1.ManagementClusterConnection{}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch primary resource: %w", err)
 	}
 
-	if err = complianceController.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, eventHandler); err != nil {
+	if err = complianceController.WatchObject(&operatorv1.Authentication{}, eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch resource: %w", err)
 	}
 

@@ -29,6 +29,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -53,7 +54,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var logw = logf.Log.WithName("controller_windows")
@@ -66,13 +66,13 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create Windows Reconciler: %w", err)
 	}
 
-	c, err := controller.New("tigera-windows-controller", mgr, controller.Options{Reconciler: ri})
+	c, err := ctrlruntime.NewController("tigera-windows-controller", mgr, controller.Options{Reconciler: ri})
 	if err != nil {
 		return fmt.Errorf("Failed to create tigera-windows-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Installation
-	err = c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to watch primary resource: %w", err)
 	}
@@ -85,7 +85,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 	if ri.autoDetectedProvider == operatorv1.ProviderOpenShift {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
-		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&configv1.Network{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				return fmt.Errorf("tigera-windows-controller failed to watch openshift network config: %w", err)
@@ -107,7 +107,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Only watch AmazonCloudIntegration if the CRD is available
 	if ri.amazonCRDExists {
-		err = c.Watch(&source.Kind{Type: &operatorv1.AmazonCloudIntegration{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&operatorv1.AmazonCloudIntegration{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			logw.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
 			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %w", err)
@@ -140,17 +140,18 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 				return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
 			},
 		}
-		err = c.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &operatorv1.Installation{},
-		}, pred)
+		err = c.WatchObject(t,
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(), mgr.GetRESTMapper(), &operatorv1.Installation{}, handler.OnlyControllerOwner(),
+			),
+			pred)
 		if err != nil {
 			return fmt.Errorf("tigera-windows-controller failed to watch %s: %w", t, err)
 		}
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to watch FelixConfiguration resource: %w", err)
 	}

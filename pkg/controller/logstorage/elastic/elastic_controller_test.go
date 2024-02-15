@@ -38,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -51,6 +50,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrclient "github.com/tigera/operator/pkg/ctrlruntime/client"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -125,7 +126,7 @@ var _ = Describe("LogStorage controller", func() {
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).WithStatusSubresource(ctrlrclient.TypesWithStatuses(scheme, esv1.GroupVersion, kbv1.GroupVersion)...).Build()
 		var err error
 		certificateManager, err = certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
@@ -1114,11 +1115,14 @@ var _ = Describe("LogStorage controller", func() {
 				By("setting the DeletionTimestamp on the LogStorage CR")
 				ls := &operatorv1.LogStorage{}
 				Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-				// The fake library does seem to respect finalizers when Delete is called, so we need to manually set the
-				// DeletionTimestamp.
-				now := metav1.Now()
-				ls.DeletionTimestamp = &now
-				Expect(cli.Update(ctx, ls)).ShouldNot(HaveOccurred())
+
+				Expect(cli.Delete(ctx, ls)).ShouldNot(HaveOccurred())
+
+				// We don't expect LogStorage to be removed since it has the finalizer (and it seems like the fake client
+				// actually respects the finalizers).
+				ls = &operatorv1.LogStorage{}
+				Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+
 				Expect(ls.Spec.StorageClassName).To(Equal(initializer.DefaultElasticsearchStorageClass))
 
 				result, err = r.Reconcile(ctx, reconcile.Request{})

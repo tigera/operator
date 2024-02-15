@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
@@ -33,7 +34,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -43,7 +43,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const ResourceName = "applicationlayer"
@@ -65,7 +64,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
-	c, err := controller.New("applicationlayer-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := ctrlruntime.NewController("applicationlayer-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return err
 	}
@@ -97,11 +96,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 }
 
 // add adds watches for resources that are available at startup.
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	var err error
 
 	// Watch for changes to primary resource applicationlayer.
-	err = c.Watch(&source.Kind{Type: &operatorv1.ApplicationLayer{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.ApplicationLayer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -136,7 +135,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("applicationlayer-controller failed to watch FelixConfiguration resource: %w", err)
 	}
@@ -419,19 +418,14 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 }
 
 func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
-	data, err := embed.AsMap()
+	ruleset, err := embed.AsConfigMap(
+		applicationlayer.ModSecurityRulesetConfigMapName,
+		common.OperatorNamespace(),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	ruleset := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: data,
-	}
 	return ruleset, nil
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1813,6 +1813,21 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", "calico-apiserver")))
+	})
+
+	It("should render host networked with TKG provider", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderTKG
+		cfg.Installation.CNI = &operatorv1.CNISpec{
+			Type: operatorv1.PluginCalico,
+		}
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Spec.HostNetwork).To(BeTrue())
 	})
 
 	Context("With APIServer Deployment overrides", func() {

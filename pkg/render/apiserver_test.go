@@ -1845,6 +1845,21 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		_, _ = component.Objects()
 	})
 
+	It("should render host networked with TKG provider", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderTKG
+		cfg.Installation.CNI = &operatorv1.CNISpec{
+			Type: operatorv1.PluginCalico,
+		}
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Spec.HostNetwork).To(BeTrue())
+	})
+
 	Context("With APIServer Deployment overrides", func() {
 		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{

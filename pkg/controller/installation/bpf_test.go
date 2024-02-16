@@ -28,7 +28,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/apis/apps"
 )
 
 var _ = Describe("BPF functional tests", func() {
@@ -47,7 +46,8 @@ var _ = Describe("BPF functional tests", func() {
 		BeforeEach(func() {
 			fc = &crdv1.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
+					Name:        "default",
+					Annotations: map[string]string{"foo": "bar"},
 				},
 				Spec: crdv1.FelixConfigurationSpec{},
 			}
@@ -60,6 +60,7 @@ var _ = Describe("BPF functional tests", func() {
 		})
 
 		It("should return error if the annotation is nil and the spec field is not", func() {
+			fc.Annotations = nil
 			fc.Spec.BPFEnabled = &enabled
 			err := bpfValidateAnnotations(fc)
 			Expect(err).Should(HaveOccurred())
@@ -86,7 +87,7 @@ var _ = Describe("BPF functional tests", func() {
 		})
 
 		It("should return valid if both annotation and the spec field are nil", func() {
-			fc.Annotations[render.BPFOperatorAnnotation] = "NotBoolean"
+			fc.Annotations = nil
 			err := bpfValidateAnnotations(fc)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -110,11 +111,11 @@ var _ = Describe("BPF functional tests", func() {
 		var ds *appsv1.DaemonSet
 		var bpfVolume corev1.Volume
 		BeforeEach(func() {
-			ds = &apps.DaemonSet{
+			ds = &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
-				Spec: apps.DaemonSetSpec{
+				Spec: appsv1.DaemonSetSpec{
 					Template: corev1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{Labels: labels},
+						ObjectMeta: metav1.ObjectMeta{},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{{Name: render.CalicoNodeObjectName, Image: render.CalicoNodeObjectName}},
 							Volumes: []corev1.Volume{
@@ -168,11 +169,11 @@ var _ = Describe("BPF functional tests", func() {
 		var ds *appsv1.DaemonSet
 
 		BeforeEach(func() {
-			ds = &apps.DaemonSet{
+			ds = &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
-				Spec: apps.DaemonSetSpec{
+				Spec: appsv1.DaemonSetSpec{
 					Template: corev1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{Labels: labels},
+						ObjectMeta: metav1.ObjectMeta{},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{{Name: render.CalicoNodeObjectName, Image: render.CalicoNodeObjectName}},
 							Volumes: []corev1.Volume{
@@ -264,6 +265,7 @@ var _ = Describe("BPF functional tests", func() {
 		})
 
 		It("should return error if annotation validation failed", func() {
+			fc.Annotations = make(map[string]string)
 			fc.Annotations[render.BPFOperatorAnnotation] = "NotBoolean"
 			err := bpfValidateAnnotations(fc)
 			Expect(err).Should(HaveOccurred())

@@ -73,6 +73,16 @@ var _ = Describe("provider discovery", func() {
 		Expect(p).To(Equal(operatorv1.ProviderGKE))
 	})
 
+	It("should detect TKG based on API resource networking.gke.io existence", func() {
+		c := fake.NewSimpleClientset()
+		c.Resources = []*metav1.APIResourceList{{
+			GroupVersion: "core.tanzu.vmware.com/v1alpha2",
+		}}
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderTKG))
+	})
+
 	It("should detect EKS based on eks-certificates-controller ConfigMap", func() {
 		c := fake.NewSimpleClientset(&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{

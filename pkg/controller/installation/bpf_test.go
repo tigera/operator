@@ -163,4 +163,91 @@ var _ = Describe("BPF functional tests", func() {
 			Expect(completed).To(BeTrue())
 		})
 	})
+
+	Context("BPFEnabled on daemonset variable tests", func() {
+		var ds *appsv1.DaemonSet
+
+		BeforeEach(func() {
+			ds = &apps.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+				Spec: apps.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: labels},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: render.CalicoNodeObjectName, Image: render.CalicoNodeObjectName}},
+							Volumes: []corev1.Volume{
+								{Name: "other-volume", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/other/volume"}}},
+							},
+						},
+					},
+				},
+			}
+		})
+
+		It("should return false if BPFEnabled ENV is nil", func() {
+			result, err := bpfEnabledOnDaemonsetWithEnvVar(ds)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).To(BeFalse())
+		})
+
+		It("should return true if BPFEnabled ENV is set to true", func() {
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+				{Name: "FELIX_BPFENABLED", Value: "true", ValueFrom: nil},
+			}
+			result, err := bpfEnabledOnDaemonsetWithEnvVar(ds)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).To(BeTrue())
+		})
+
+		It("should return false if BPFEnabled ENV is set to false", func() {
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+				{Name: "FELIX_BPFENABLED", Value: "false", ValueFrom: nil},
+			}
+			result, err := bpfEnabledOnDaemonsetWithEnvVar(ds)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).To(BeFalse())
+		})
+
+		It("should return error if BPFEnabled ENV is set to an invalid string", func() {
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+				{Name: "FELIX_BPFENABLED", Value: "invalid", ValueFrom: nil},
+			}
+			_, err := bpfEnabledOnDaemonsetWithEnvVar(ds)
+			Expect(err).Should(HaveOccurred())
+		})
+	})
+
+	Context("BPFEnabled on FelixConfiguration tests", func() {
+		var fc *crdv1.FelixConfiguration
+		var enabled, notEnabled bool
+
+		enabled = true
+		notEnabled = false
+
+		BeforeEach(func() {
+			fc = &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: crdv1.FelixConfigurationSpec{},
+			}
+		})
+
+		It("should return false if BPFEnabled field is nil", func() {
+			result := bpfEnabledOnFelixConfig(fc)
+			Expect(result).To(BeFalse())
+		})
+
+		It("should return false if BPFEnabled field is false", func() {
+			fc.Spec.BPFEnabled = &notEnabled
+			result := bpfEnabledOnFelixConfig(fc)
+			Expect(result).To(BeFalse())
+		})
+
+		It("should return false if BPFEnabled field is true", func() {
+			fc.Spec.BPFEnabled = &enabled
+			result := bpfEnabledOnFelixConfig(fc)
+			Expect(result).To(BeTrue())
+		})
+	})
 })

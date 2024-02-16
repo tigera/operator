@@ -250,4 +250,41 @@ var _ = Describe("BPF functional tests", func() {
 			Expect(result).To(BeTrue())
 		})
 	})
+
+	Context("setBPFEnabledOnFelixConfiguration tests", func() {
+		var fc *crdv1.FelixConfiguration
+
+		BeforeEach(func() {
+			fc = &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: crdv1.FelixConfigurationSpec{},
+			}
+		})
+
+		It("should return error if annotation validation failed", func() {
+			fc.Annotations[render.BPFOperatorAnnotation] = "NotBoolean"
+			err := bpfValidateAnnotations(fc)
+			Expect(err).Should(HaveOccurred())
+			err = setBPFEnabledOnFelixConfiguration(fc, true)
+			Expect(err).Should(HaveOccurred())
+		})
+
+		It("should set correct annotation", func() {
+			err := setBPFEnabledOnFelixConfiguration(fc, true)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			annotations := fc.Annotations[render.BPFOperatorAnnotation]
+			Expect(annotations).To(Equal("true"))
+			Expect(*fc.Spec.BPFEnabled).To(Equal(true))
+
+			err = setBPFEnabledOnFelixConfiguration(fc, false)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			annotations = fc.Annotations[render.BPFOperatorAnnotation]
+			Expect(annotations).To(Equal("false"))
+			Expect(*fc.Spec.BPFEnabled).To(Equal(false))
+		})
+	})
 })

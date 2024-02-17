@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -1022,10 +1023,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 func (c *apiServerComponent) hostNetwork() bool {
 	hostNetwork := c.cfg.ForceHostNetwork
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS &&
+	if (c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS || c.cfg.Installation.KubernetesProvider == operatorv1.ProviderTKG) &&
+		c.cfg.Installation.CNI != nil &&
 		c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
-		// when in this networking mode on EKS, because the control plane nodes don't run
+		// when in this networking mode on EKS or TKG, because the control plane nodes don't run
 		// Calico.
 		hostNetwork = true
 	}

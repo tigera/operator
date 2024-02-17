@@ -73,7 +73,7 @@ var _ = Describe("provider discovery", func() {
 		Expect(p).To(Equal(operatorv1.ProviderGKE))
 	})
 
-	It("should detect TKG based on API resource networking.gke.io existence", func() {
+	It("should detect TKG based on API resource core.tanzu.vmware.com existence", func() {
 		c := fake.NewSimpleClientset()
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "core.tanzu.vmware.com/v1alpha2",

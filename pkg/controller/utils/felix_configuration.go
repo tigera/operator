@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(fc *crdv1.FelixConfiguration) bool) (*crdv1.FelixConfiguration, error) {
+func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(fc *crdv1.FelixConfiguration) (bool, error)) (*crdv1.FelixConfiguration, error) {
 	// Fetch any existing default FelixConfiguration object.
 	fc := &crdv1.FelixConfiguration{}
 	err := c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
@@ -36,7 +36,11 @@ func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
 	// Apply desired changes to the FelixConfiguration.
-	if patchFn(fc) {
+	updated, err := patchFn(fc)
+	if err != nil {
+		return nil, err
+	}
+	if updated {
 		// Apply the patch.
 		if fc.ResourceVersion == "" {
 			fc.ObjectMeta.Name = "default"
@@ -47,6 +51,7 @@ func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(
 			if err := c.Patch(ctx, fc, patchFrom); err != nil {
 				return nil, err
 			}
+			log.Info("Song: Patch done")
 		}
 	}
 

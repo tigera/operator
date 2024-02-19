@@ -1646,7 +1646,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("kubernetes"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(BeNil())
 
-		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
 
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
@@ -1668,7 +1668,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(1))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
 
 		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 		Expect(clusterRole).To(BeNil())
@@ -1726,7 +1726,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		dep := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
 		rtest.ExpectResourceTypeAndObjectMetadata(dep, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
 		d := dep.(*appsv1.Deployment)
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(1))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {

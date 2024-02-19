@@ -1050,6 +1050,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
 		)
+	} else {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{Name: "cache-volume", MountPath: "/tmp"},
+		)
 	}
 
 	env := []corev1.EnvVar{
@@ -1211,6 +1215,14 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 		if c.cfg.TrustedBundle != nil {
 			volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 		}
+	} else {
+		emptyDir := corev1.EmptyDirVolumeSource{}
+		volumes = append(volumes, corev1.Volume{
+			Name: "cache-volume",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &emptyDir,
+			},
+		})
 	}
 
 	return volumes

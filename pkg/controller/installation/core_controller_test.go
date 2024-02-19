@@ -81,6 +81,16 @@ func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context) error {
 }
 
 var _ = Describe("Testing core-controller installation", func() {
+
+	var c client.Client
+	var cs *kfake.Clientset
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var r ReconcileInstallation
+	var cr *operator.Installation
+	var scheme *runtime.Scheme
+	var mockStatus *status.MockStatus
+
 	table.DescribeTable("checking rendering configuration",
 		func(detectedProvider, configuredProvider operator.Provider, expectedErr error) {
 			configuredInstallation := &operator.Installation{}
@@ -316,13 +326,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready.MarkAsReady()
 
 	Context("image reconciliation tests", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -419,6 +422,20 @@ var _ = Describe("Testing core-controller installation", func() {
 							Registry: "my-reg",
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
 						},
 					},
 				})).NotTo(HaveOccurred())
@@ -693,15 +710,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	)
 
 	Context("management cluster exists", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var cr *operator.Installation
-
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
 
 		var expectedDNSNames []string
 		var certificateManager certificatemanager.CertificateManager
@@ -815,6 +823,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -884,15 +906,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	})
 
 	Context("Reconcile tests", func() {
-		var c client.Client
-		var cs *kfake.Clientset
-		var ctx context.Context
-		var cancel context.CancelFunc
-		var r ReconcileInstallation
-		var scheme *runtime.Scheme
-		var mockStatus *status.MockStatus
-
-		var cr *operator.Installation
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -998,6 +1011,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(
+				ctx,
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+					Spec: appsv1.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: render.CalicoNodeObjectName}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -1017,6 +1044,96 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// This is only set on EKS / GKE.
 			Expect(fc.Spec.RouteTableRange).To(BeNil())
+
+			// Should set correct annoation and BPFEnabled field.
+			Expect(fc.Annotations).NotTo(BeNil())
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
+		})
+
+		It("should set BPFEnabled to ture on FelixConfiguration if BPF is enabled on installation", func() {
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Should set correct annoation and BPFEnabled field.
+			Expect(fc.Annotations).NotTo(BeNil())
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+		})
+
+		It("should set BPFEnabled to false on FelixConfiguration if BPF is disabled on installation", func() {
+			// Enabled BPF first.
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Should set correct annoation and BPFEnabled field.
+			Expect(fc.Annotations).NotTo(BeNil())
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+
+			// Set dataplane to IPTables.
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
+			Expect(err).ShouldNot(HaveOccurred())
+			network = operator.LinuxDataplaneIptables
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Update(ctx, cr)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc = &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Should set correct annoation and BPFEnabled field.
+			Expect(fc.Annotations).NotTo(BeNil())
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
+		})
+
+		It("should set BPFEnabled on FelixConfiguration if FELIX_BPFENABLED Env var is set by old version of operator", func() {
+			ds := &appsv1.DaemonSet{}
+			err := c.Get(ctx,
+				types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace},
+				ds)
+			Expect(err).NotTo(HaveOccurred())
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+				{Name: "FELIX_BPFENABLED", Value: "true", ValueFrom: nil},
+			}
+			Expect(c.Update(ctx, ds)).NotTo(HaveOccurred())
+
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Should set correct annoation and BPFEnabled field.
+			Expect(fc.Annotations).NotTo(BeNil())
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})
 
 		It("generates FelixConfiguration with correct DNS service for Rancher", func() {

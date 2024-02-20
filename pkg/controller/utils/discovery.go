@@ -110,7 +110,7 @@ func MultiTenant(ctx context.Context, c kubernetes.Interface) (bool, error) {
 func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (operatorv1.Provider, error) {
 	// First, try to determine the platform based on the present API groups.
 	if platform, err := autodetectFromGroup(clientset); err != nil {
-		return operatorv1.ProviderNone, fmt.Errorf("Failed to check provider based on API groups: %s", err)
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check provider based on API groups: %s", err)
 	} else if platform != operatorv1.ProviderNone {
 		// We detected a platform. Use it.
 		return platform, nil
@@ -118,21 +118,21 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 
 	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
 	if dockeree, err := isDockerEE(ctx, clientset); err != nil {
-		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if Docker EE is the provider: %s", err)
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check if Docker EE is the provider: %s", err)
 	} else if dockeree {
 		return operatorv1.ProviderDockerEE, nil
 	}
 
 	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
 	if eks, err := isEKS(ctx, clientset); err != nil {
-		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if EKS is the provider: %s", err)
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check if EKS is the provider: %s", err)
 	} else if eks {
 		return operatorv1.ProviderEKS, nil
 	}
 
 	// Attempt to detect RKE Version 2, which also cannot be done via API groups.
 	if rke2, err := isRKE2(ctx, clientset); err != nil {
-		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if RKE2 is the provider: %s", err)
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check if RKE2 is the provider: %s", err)
 	} else if rke2 {
 		return operatorv1.ProviderRKE2, nil
 	}
@@ -156,6 +156,10 @@ func autodetectFromGroup(c kubernetes.Interface) (operatorv1.Provider, error) {
 		if g.Name == "networking.gke.io" {
 			// Running on GKE.
 			return operatorv1.ProviderGKE, nil
+		}
+
+		if g.Name == "core.tanzu.vmware.com" {
+			return operatorv1.ProviderTKG, nil
 		}
 	}
 	return operatorv1.ProviderNone, nil

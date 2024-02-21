@@ -260,7 +260,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			return reconcile.Result{}, err
 		}
 		if err = validateModSecurityRuleSet(modSecurityRuleSet); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall ModSecurity rule set", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall rule set", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -431,13 +431,12 @@ func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 
 func validateModSecurityRuleSet(cm *corev1.ConfigMap) error {
 	requiredFiles := []string{
-		"modsecdefault.conf",
-		"crs-setup.conf",
+		"tigera.conf",
 	}
 
 	for _, f := range requiredFiles {
 		if _, ok := cm.Data[f]; !ok {
-			return fmt.Errorf("file must be found in Web Application Firewall rule set: %s", f)
+			return fmt.Errorf("file must be present with ruleset files: %s", f)
 		}
 	}
 

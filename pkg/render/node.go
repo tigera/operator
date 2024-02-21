@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -639,7 +640,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 			"type": "k8s",
 		},
 		"policy_programming_timeout_seconds": c.cfg.Installation.CalicoNetwork.PolicyProgrammingTimeoutSeconds,
-		"endpoint_status_dir":                c.varRunCalicoVolume().VolumeSource.HostPath.Path + "policy",
+		"endpoint_status_dir":                filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "status"),
 	}
 
 	// Determine logging configuration
@@ -1724,6 +1725,13 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "CALICO_EARLY_NETWORKING",
 			Value: BGPLayoutPath,
+		})
+	}
+
+	if *c.cfg.Installation.CalicoNetwork.PolicyProgrammingTimeoutSeconds > 0 {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_ENDPOINTsTATUSPATHPREFIX",
+			Value: c.varRunCalicoVolume().VolumeSource.HostPath.Path,
 		})
 	}
 

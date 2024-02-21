@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -628,6 +629,10 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
 
+	LinuxPolicySetupTimeoutSeconds := int32(0)
+	if c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds != nil {
+		LinuxPolicySetupTimeoutSeconds = *c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds
+	}
 	// calico plugin
 	calicoPluginConfig := map[string]interface{}{
 		"type":                   "calico",
@@ -642,6 +647,8 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		"policy": map[string]interface{}{
 			"type": "k8s",
 		},
+		"policy_setup_timeout_seconds": LinuxPolicySetupTimeoutSeconds,
+		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
 	}
 
 	// Determine logging configuration
@@ -1044,7 +1051,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	} else {
 		volumes = append(volumes,
-			corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			c.varRunCalicoVolume(),
 			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		)
 	}
@@ -1127,6 +1134,10 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	return volumes
+}
+
+func (c *nodeComponent) varRunCalicoVolume() corev1.Volume {
+	return corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}}
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {
@@ -1713,6 +1724,15 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "CALICO_EARLY_NETWORKING",
 			Value: BGPLayoutPath,
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork != nil &&
+		c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds > 0 {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_ENDPOINTSTATUSPATHPREFIX",
+			Value: c.varRunCalicoVolume().VolumeSource.HostPath.Path,
 		})
 	}
 

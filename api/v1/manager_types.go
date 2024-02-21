@@ -249,6 +249,10 @@ func (c *ManagerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 
+func (c *ManagerDeployment) GetPriorityClassName() string {
+	return ""
+}
+
 func init() {
 	SchemeBuilder.Register(&Manager{}, &ManagerList{})
 }

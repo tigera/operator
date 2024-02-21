@@ -131,6 +131,10 @@ type EgressGatewayDeploymentPodSpec struct {
 	// If omitted, the EGW Deployment will use its default value for tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// PriorityClassName allows to specify a PriorityClass resource to be used.
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
 
 // EgressGatewayDeploymentPodTemplateSpec is the EGW Deployment's PodTemplateSpec
@@ -396,6 +400,16 @@ func (c *EgressGateway) GetTolerations() []v1.Toleration {
 	}
 
 	return nil
+}
+
+func (c *EgressGateway) GetPriorityClassName() string {
+	if c.Spec.Template != nil {
+		if c.Spec.Template.Spec != nil {
+			return c.Spec.Template.Spec.PriorityClassName
+		}
+	}
+
+	return ""
 }
 
 func (c *EgressGateway) GetPodTemplateMetadata() *Metadata {

@@ -17,6 +17,7 @@ package secrets
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 
@@ -506,7 +507,15 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		certs[render.TigeraKibanaCertSecret] = common.OperatorNamespace()
 	}
 
-	for certName, certNamespace := range certs {
+	// Sort the keys then add them to the upstreamCerts in that order so the keys are always in the same order
+	keys := make([]string, len(certs))
+	for k := range certs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, certName := range keys {
+		certNamespace := certs[certName]
 		cert, err := cm.GetCertificate(r.client, certName, certNamespace)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)

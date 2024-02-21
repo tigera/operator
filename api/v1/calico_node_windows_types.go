@@ -234,3 +234,7 @@ func (c *CalicoNodeWindowsDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
 func (c *CalicoNodeWindowsDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
+
+func (c *CalicoNodeWindowsDaemonSet) GetPriorityClassName() string {
+	return ""
+}

@@ -91,6 +91,10 @@ func (in *DashboardsJob) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 
+func (in *DashboardsJob) GetPriorityClassName() string {
+	return ""
+}
+
 // DashboardsJobSpec defines configuration for the Dashboards job.
 type DashboardsJobSpec struct {
 

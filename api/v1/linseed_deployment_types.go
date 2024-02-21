@@ -165,3 +165,7 @@ func (c *LinseedDeployment) GetTerminationGracePeriodSeconds() *int64 {
 func (c *LinseedDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
+
+func (c *LinseedDeployment) GetPriorityClassName() string {
+	return ""
+}

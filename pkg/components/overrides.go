@@ -54,4 +54,7 @@ type ReplicatedPodResourceOverrides interface {
 	GetTerminationGracePeriodSeconds() *int64
 
 	GetDeploymentStrategy() *appsv1.DeploymentStrategy
+
+	// GetPriorityClassName() returns the value used to override a DaemonSet/Deployment's priorityClassName.
+	GetPriorityClassName() string
 }

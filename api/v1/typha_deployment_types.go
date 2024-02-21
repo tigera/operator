@@ -285,3 +285,7 @@ func (c *TyphaDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	}
 	return nil
 }
+
+func (c *TyphaDeployment) GetPriorityClassName() string {
+	return ""
+}

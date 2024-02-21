@@ -300,3 +300,7 @@ func (c *APIServerDeployment) GetTerminationGracePeriodSeconds() *int64 {
 func (c *APIServerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
+
+func (c *APIServerDeployment) GetPriorityClassName() string {
+	return ""
+}

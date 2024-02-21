@@ -638,6 +638,8 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		"policy": map[string]interface{}{
 			"type": "k8s",
 		},
+		"policy_programming_timeout_seconds": c.cfg.Installation.CalicoNetwork.PolicyProgrammingTimeoutSeconds,
+		"endpoint_status_dir":                c.varRunCalicoVolume().VolumeSource.HostPath.Path + "policy",
 	}
 
 	// Determine logging configuration
@@ -1040,7 +1042,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	} else {
 		volumes = append(volumes,
-			corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			c.varRunCalicoVolume(),
 			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		)
 	}
@@ -1123,6 +1125,10 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	return volumes
+}
+
+func (c *nodeComponent) varRunCalicoVolume() corev1.Volume {
+	return corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}}
 }
 
 func (c *nodeComponent) bpfDataplaneEnabled() bool {

@@ -201,3 +201,7 @@ func (c *CalicoKubeControllersDeployment) GetTerminationGracePeriodSeconds() *in
 func (c *CalicoKubeControllersDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
+
+func (c *CalicoKubeControllersDeployment) GetPriorityClassName() string {
+	return ""
+}

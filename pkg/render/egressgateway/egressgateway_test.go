@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,6 +59,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 
 	affinity := &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{weightedPodAffinity}}}
 
+	priorityClassName := "priority-x"
+
 	BeforeEach(func() {
 		// Initialize a default installation spec.
 		installation = &operatorv1.InstallationSpec{
@@ -81,6 +83,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 						TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
 							topoConstraint,
 						},
+						PriorityClassName: priorityClassName,
 					},
 				},
 				EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
@@ -246,6 +249,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 
 		Expect(dep.Spec.Template.Spec.TopologySpreadConstraints).To(ContainElement(topoConstraint))
 		Expect(dep.Spec.Template.Spec.Affinity).To(Equal(affinity))
+		Expect(dep.Spec.Template.Spec.PriorityClassName).To(Equal(priorityClassName))
 	})
 
 	It("should have proper annotations and resources if aws is set", func() {

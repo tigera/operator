@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,4 +54,7 @@ type ReplicatedPodResourceOverrides interface {
 	GetTerminationGracePeriodSeconds() *int64
 
 	GetDeploymentStrategy() *appsv1.DeploymentStrategy
+
+	// GetPriorityClassName() returns the value used to override a DaemonSet/Deployment's priorityClassName.
+	GetPriorityClassName() string
 }

@@ -351,7 +351,8 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	logc.V(3).Info("rendering components")
 	var policyRecommendationKeyPair certificatemanagement.KeyPairInterface
-	var trustedBundle certificatemanagement.TrustedBundleRO
+	var trustedBundleRO certificatemanagement.TrustedBundleRO
+	var trustedBundleRW certificatemanagement.TrustedBundle
 	var components []render.Component
 
 	if !isManagedCluster {
@@ -386,7 +387,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		}
 
 		// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
-		policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, helper.TruthNamespace(), []string{render.PolicyRecommendationTLSSecretName})
+		policyRecommendationKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, helper.TruthNamespace(), []string{render.PolicyRecommendationTLSSecretName})
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, logc)
 			return reconcile.Result{}, err
@@ -395,37 +396,34 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
 		if !r.multiTenant {
-			trustedBundleRW := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
-			components = append(components,
-				rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-					Namespace:       helper.InstallNamespace(),
-					TruthNamespace:  helper.TruthNamespace(),
-					ServiceAccounts: []string{render.PolicyRecommendationName},
-					KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-						rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
-					},
-					TrustedBundle: trustedBundleRW,
-				}),
-			)
-			trustedBundle = trustedBundleRW.(certificatemanagement.TrustedBundleRO)
+			// Zero-tenant and single tenant setups install resources inside tigera-policy-recommendation namespace. Thus,
+			// we need to create a tigera-ca-bundle inside this namespace in order to allow communication with Linseed
+			trustedBundleRW = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+			trustedBundleRO = trustedBundleRW.(certificatemanagement.TrustedBundleRO)
 		} else {
-			trustedBundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+			// Multi-tenant setups need to load the bundle the created by pkg/controller/secrets/tenant_controller.go
+			trustedBundleRO, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, logc)
 				return reconcile.Result{}, err
 			}
-			components = append(components,
-				rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-					Namespace:       helper.InstallNamespace(),
-					TruthNamespace:  helper.TruthNamespace(),
-					ServiceAccounts: []string{render.PolicyRecommendationName},
-					KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-						rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
-					},
-					TrustedBundle: nil,
-				}),
-			)
 		}
+
+		components = append(components,
+			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+				Namespace:       helper.InstallNamespace(),
+				TruthNamespace:  helper.TruthNamespace(),
+				ServiceAccounts: []string{render.PolicyRecommendationName},
+				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+					rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
+				},
+				// Zero and single tenant setups need to create tigera-ca-bundle configmap because we install resources
+				// in namespace tigera-policy-recommendation
+				// Multi-tenant setups need to use the config map that was created by pkg/controller/secrets/tenant_controller.go
+				// in the tenant namespace. This parameter needs to be nil in this case
+				TrustedBundle: trustedBundleRW,
+			}),
+		)
 	}
 
 	if hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature); hasNoLicense {
@@ -445,7 +443,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		Tenant:                         tenant,
 		BindingNamespaces:              bindNamespaces,
 		ExternalElastic:                r.externalElastic,
-		TrustedBundle:                  trustedBundle,
+		TrustedBundle:                  trustedBundleRO,
 		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
 	}
 

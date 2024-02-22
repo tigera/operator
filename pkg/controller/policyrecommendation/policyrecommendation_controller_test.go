@@ -414,8 +414,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 
-			It("It should not create the trusted bundle config map as it will be created by the tenant controller", func() {
-				// Create the Tenant resources for tenant-a and tenant-b.
+			It("should not create the trusted bundle config map as it will be created by the tenant controller", func() {
+				// Create the Tenant resources for tenant-a
 				tenantA := &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "default",
@@ -443,7 +443,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
-				// Now reconcile only tenant A's namespace and do not expect an error
+				// Now reconcile tenant A's namespace and do not expect an error
 				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
 				Expect(err).ShouldNot(HaveOccurred())
 			})

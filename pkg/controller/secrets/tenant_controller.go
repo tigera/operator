@@ -91,8 +91,7 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	// In multi-tenant mode, we need to watch all namespaces for secrets. In single-tenant mode,
-	// we only need to watch the elasticsearch namespace. Both need tigera-operator.
+	// In multi-tenant mode, we need to watch all namespaces for secrets.
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, "", "")
 	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch ConfigMap resource: %w", err)

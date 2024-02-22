@@ -124,6 +124,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			certificatemanagement.CASecretName,
 			render.ManagerInternalTLSSecretName,
 			render.TigeraLinseedSecret,
+			render.PolicyRecommendationTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("policy-recommendation-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -349,31 +350,9 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	logc.V(3).Info("rendering components")
-	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:        r.clusterDomain,
-		Installation:         installation,
-		ManagedCluster:       isManagedCluster,
-		PullSecrets:          pullSecrets,
-		Openshift:            r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:               r.usePSP,
-		Namespace:            helper.InstallNamespace(),
-		Tenant:               tenant,
-		BindingNamespaces:    bindNamespaces,
-		PolicyRecommendation: policyRecommendation,
-		ExternalElastic:      r.externalElastic,
-	}
-
-	// Render the desired objects from the CRD and create or update them.
-	component := render.PolicyRecommendation(policyRecommendationCfg)
-
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
-		return reconcile.Result{}, err
-	}
-
-	components := []render.Component{
-		component,
-	}
+	var policyRecommendationKeyPair certificatemanagement.KeyPairInterface
+	var trustedBundle certificatemanagement.TrustedBundleRO
+	var components []render.Component
 
 	if !isManagedCluster {
 		opts := []certificatemanager.Option{
@@ -406,8 +385,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, nil
 		}
 
-		trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
-
 		// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
 		policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, helper.TruthNamespace(), []string{render.PolicyRecommendationTLSSecretName})
 		if err != nil {
@@ -417,20 +394,38 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 		certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
-		policyRecommendationCfg.TrustedBundle = trustedBundle
-		policyRecommendationCfg.PolicyRecommendationCertSecret = policyRecommendationKeyPair
-
-		components = append(components,
-			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-				Namespace:       helper.InstallNamespace(),
-				TruthNamespace:  helper.TruthNamespace(),
-				ServiceAccounts: []string{render.PolicyRecommendationName},
-				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-					rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
-				},
-				TrustedBundle: trustedBundle,
-			}),
-		)
+		if !r.multiTenant {
+			trustedBundleRW := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+			components = append(components,
+				rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+					Namespace:       helper.InstallNamespace(),
+					TruthNamespace:  helper.TruthNamespace(),
+					ServiceAccounts: []string{render.PolicyRecommendationName},
+					KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+						rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
+					},
+					TrustedBundle: trustedBundleRW,
+				}),
+			)
+			trustedBundle = trustedBundleRW.(certificatemanagement.TrustedBundleRO)
+		} else {
+			trustedBundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, logc)
+				return reconcile.Result{}, err
+			}
+			components = append(components,
+				rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+					Namespace:       helper.InstallNamespace(),
+					TruthNamespace:  helper.TruthNamespace(),
+					ServiceAccounts: []string{render.PolicyRecommendationName},
+					KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+						rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
+					},
+					TrustedBundle: nil,
+				}),
+			)
+		}
 	}
 
 	if hasNoLicense := !utils.IsFeatureActive(license, common.PolicyRecommendationFeature); hasNoLicense {
@@ -439,6 +434,30 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, nil
 	}
 
+	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
+		ClusterDomain:                  r.clusterDomain,
+		Installation:                   installation,
+		ManagedCluster:                 isManagedCluster,
+		PullSecrets:                    pullSecrets,
+		Openshift:                      r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:                         r.usePSP,
+		Namespace:                      helper.InstallNamespace(),
+		Tenant:                         tenant,
+		BindingNamespaces:              bindNamespaces,
+		ExternalElastic:                r.externalElastic,
+		TrustedBundle:                  trustedBundle,
+		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
+	}
+
+	// Render the desired objects from the CRD and create or update them.
+	component := render.PolicyRecommendation(policyRecommendationCfg)
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	components = append(components, component)
 	for _, cmp := range components {
 		if err := handler.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)

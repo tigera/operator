@@ -86,6 +86,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -410,6 +411,40 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				err = test.GetResource(c, &tenantBServiceAccount)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+
+			It("should not create the trusted bundle config map as it will be created by the tenant controller", func() {
+				// Create the Tenant resources for tenant-a
+				tenantA := &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{ID: "tenant-a"},
+				}
+				Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
+
+				Expect(c.Create(ctx, &operatorv1.PolicyRecommendation{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: tenantANamespace,
+					},
+				})).NotTo(HaveOccurred())
+
+				// Now reconcile only tenant A's namespace and expect an error
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+				Expect(err).Should(HaveOccurred())
+				Expect(err.Error()).Should(ContainSubstring("CA secret"))
+
+				// Create a CA secret for the test, and create its KeyPair.
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+
+				// Now reconcile tenant A's namespace and do not expect an error
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})

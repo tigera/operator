@@ -440,7 +440,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				// Create a CA secret for the test, and create its KeyPair.
 				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace))).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
 				// Now reconcile tenant A's namespace and do not expect an error

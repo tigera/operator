@@ -90,13 +90,10 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("tenant-controller failed to watch tenant CA Secret %s in all namespace: %w", certificatemanagement.TenantCASecretName, err)
 	}
 
-	// Make a helper for determining which namespaces to use based on tenancy mode.
-	// In multi-tenant mode, we need to watch all namespaces for secrets.
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, "", "")
-	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, "", &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch ConfigMap resource: %w", err)
 	}
-	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, "", &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch ConfigMap resource: %w", err)
 	}
 

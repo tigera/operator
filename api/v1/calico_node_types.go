@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -233,4 +233,8 @@ func (c *CalicoNodeDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
 
 func (c *CalicoNodeDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetPriorityClassName() string {
+	return ""
 }

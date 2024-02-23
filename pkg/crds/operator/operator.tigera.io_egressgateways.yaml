@@ -1221,6 +1221,10 @@ spec:
                         description: NodeSelector gives more control over the nodes
                           where the Egress Gateway pods will run on.
                         type: object
+                      priorityClassName:
+                        description: PriorityClassName allows to specify a PriorityClass
+                          resource to be used.
+                        type: string
                       terminationGracePeriodSeconds:
                         description: TerminationGracePeriodSeconds defines the termination
                           grace period of the Egress Gateway pods in seconds.

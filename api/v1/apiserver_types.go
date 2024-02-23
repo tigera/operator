@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 /*
 
 
@@ -299,4 +299,8 @@ func (c *APIServerDeployment) GetTerminationGracePeriodSeconds() *int64 {
 
 func (c *APIServerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
+}
+
+func (c *APIServerDeployment) GetPriorityClassName() string {
+	return ""
 }

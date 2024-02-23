@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -412,6 +413,120 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				err = test.GetResource(c, &tenantBServiceAccount)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
+		})
+	})
+})
+
+var _ = Describe("PolicyRecommendation controller tests", func() {
+	var (
+		c          client.Client
+		scheme     *runtime.Scheme
+		mockStatus *status.MockStatus
+	)
+
+	Context("createDefaultPolicyRecommendationScope", func() {
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+			// Create a client that will have a crud interface of k8s objects.
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("RemoveDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+		})
+
+		It("should create default PolicyRecommendationScope", func() {
+			// Create a new ReconcilePolicyRecommendation instance with a fake client and scheme.
+			r := &ReconcilePolicyRecommendation{
+				client:                   c,
+				scheme:                   scheme,
+				provider:                 operatorv1.ProviderNone,
+				status:                   mockStatus,
+				licenseAPIReady:          &utils.ReadyFlag{},
+				tierWatchReady:           &utils.ReadyFlag{},
+				policyRecScopeWatchReady: &utils.ReadyFlag{},
+			}
+
+			// Create a new context.
+			ctx := context.Background()
+
+			// Call the createDefaultPolicyRecommendationScope function.
+			err := r.createDefaultPolicyRecommendationScope(ctx, nil, logf.Log.WithName("test"))
+
+			// Verify that there are no errors.
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Retrieve the created PolicyRecommendationScope object.
+			prs := &v3.PolicyRecommendationScope{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, prs)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify that the PolicyRecommendationScope object is created successfully.
+			Expect(prs.ObjectMeta.Name).To(Equal("default"))
+
+			// Verify the values of the created PolicyRecommendationScope object.
+			Expect(prs.Spec.NamespaceSpec.RecStatus).To(Equal(v3.PolicyRecommendationScopeDisabled))
+			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')"))
+		})
+
+		It("should create default PolicyRecommendationScope for openshift", func() {
+			// Create a new ReconcilePolicyRecommendation instance with a fake client and scheme.
+			r := &ReconcilePolicyRecommendation{
+				client:                   c,
+				scheme:                   scheme,
+				status:                   mockStatus,
+				licenseAPIReady:          &utils.ReadyFlag{},
+				tierWatchReady:           &utils.ReadyFlag{},
+				policyRecScopeWatchReady: &utils.ReadyFlag{},
+
+				// Set the provider to OpenShift.
+				provider: operatorv1.ProviderOpenShift,
+			}
+
+			// Create a new context.
+			ctx := context.Background()
+
+			// Call the createDefaultPolicyRecommendationScope function.
+			err := r.createDefaultPolicyRecommendationScope(ctx, nil, logf.Log.WithName("test"))
+
+			// Verify that there are no errors.
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Retrieve the created PolicyRecommendationScope object.
+			prs := &v3.PolicyRecommendationScope{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, prs)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify that the PolicyRecommendationScope object is created successfully.
+			Expect(prs.ObjectMeta.Name).To(Equal("default"))
+
+			// Verify the values of the created PolicyRecommendationScope object.
+			Expect(prs.Spec.NamespaceSpec.RecStatus).To(Equal(v3.PolicyRecommendationScopeDisabled))
+			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-') && !(projectcalico.org/name starts with 'openshift-')"))
 		})
 	})
 })

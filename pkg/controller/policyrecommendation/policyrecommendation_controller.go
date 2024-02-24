@@ -482,6 +482,9 @@ func (r *ReconcilePolicyRecommendation) createDefaultPolicyRecommendationScope(c
 	prs.ObjectMeta.Name = "default"
 	prs.Spec.NamespaceSpec.RecStatus = "Disabled"
 	prs.Spec.NamespaceSpec.Selector = "!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')"
+	if r.provider == operatorv1.ProviderOpenShift {
+		prs.Spec.NamespaceSpec.Selector += " && !(projectcalico.org/name starts with 'openshift-')"
+	}
 
 	if err := r.client.Create(ctx, prs); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to Create default PolicyRecommendationScope", err, log)

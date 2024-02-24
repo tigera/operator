@@ -91,10 +91,10 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, "", &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-secrets-controller failed to watch ConfigMap resource: %w", err)
+		return fmt.Errorf("tenant-controller failed to watch ConfigMap resource: %w", err)
 	}
-	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, "", &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-secrets-controller failed to watch ConfigMap resource: %w", err)
+	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapNamePublic, "", &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("tenant-controller failed to watch ConfigMap resource: %w", err)
 	}
 
 	return nil

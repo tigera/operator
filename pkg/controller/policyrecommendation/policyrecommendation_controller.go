@@ -455,7 +455,8 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	components = append(components, component)
+	// Prepend PolicyRecommendation before certificate creation
+	components = append([]render.Component{component}, components...)
 	for _, cmp := range components {
 		if err := handler.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)

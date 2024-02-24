@@ -68,7 +68,7 @@ type PolicyRecommendationConfiguration struct {
 	ManagedCluster                 bool
 	Openshift                      bool
 	PullSecrets                    []*corev1.Secret
-	TrustedBundle                  certificatemanagement.TrustedBundle
+	TrustedBundle                  certificatemanagement.TrustedBundleRO
 	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
 	// Whether the cluster supports pod security policies.

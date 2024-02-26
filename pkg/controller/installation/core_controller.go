@@ -657,6 +657,11 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	if instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds == nil {
+		var delay int32 = 0
+		instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds = &delay
+	}
+
 	if v6pool != nil {
 		if v6pool.Encapsulation == "" {
 			v6pool.Encapsulation = operator.EncapsulationNone

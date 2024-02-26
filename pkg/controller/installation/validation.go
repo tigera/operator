@@ -350,10 +350,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 		}
 
-		if instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds != nil {
+		if instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds != nil {
 			// Pod readiness delays.
-			if *instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds < 0 {
-				return fmt.Errorf("Installation CNI spec.PolicyProgrammingTimeoutSeconds negative value is not valid")
+			if *instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds < 0 {
+				return fmt.Errorf("Installation CNI spec.PolicySetupTimeoutSeconds negative value is not valid")
 			}
 		}
 	}

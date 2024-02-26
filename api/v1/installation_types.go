@@ -475,7 +475,7 @@ type CalicoNetworkSpec struct {
 	// +optional
 	Sysctl []Sysctl `json:"sysctl,omitempty"`
 
-	// PolicyProgrammingTimeoutSeconds delays new pods from going ready
+	// PolicySetupTimeoutSeconds delays new pods from going ready
 	// until their policy has been programmed in the dataplane.
 	// The specified delay defines the maximum amount of time
 	// that the Calico CNI will wait for policy to be programmed.
@@ -484,7 +484,7 @@ type CalicoNetworkSpec struct {
 	//
 	// Default: 0
 	// +optional
-	PolicyProgrammingTimeoutSeconds *int32 `json:"policyProgrammingTimeoutSeconds,omitempty"`
+	PolicySetupTimeoutSeconds *int32 `json:"policySetupTimeoutSeconds,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

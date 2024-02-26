@@ -477,11 +477,6 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	if instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds == nil {
-		var delay int32 = 0
-		instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds = &delay
-	}
-
 	if instance.Spec.TyphaAffinity == nil {
 		switch instance.Spec.KubernetesProvider {
 		// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.
@@ -660,6 +655,11 @@ func fillDefaults(instance *operator.Installation) error {
 				FirstFound: &t,
 			}
 		}
+	}
+
+	if instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds == nil {
+		var delay int32 = 0
+		instance.Spec.CalicoNetwork.PolicyProgrammingTimeoutSeconds = &delay
 	}
 
 	if v6pool != nil {

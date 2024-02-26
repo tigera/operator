@@ -349,6 +349,13 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 		}
+
+		if instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds != nil {
+			// Pod readiness delays.
+			if *instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds < 0 {
+				return fmt.Errorf("Installation CNI spec.PolicySetupTimeoutSeconds negative value is not valid")
+			}
+		}
 	}
 
 	// Verify that the flexvolume path is valid - either "None" (to disable) or a valid absolute path.

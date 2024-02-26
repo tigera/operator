@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -638,6 +639,8 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		"policy": map[string]interface{}{
 			"type": "k8s",
 		},
+		"policy_programming_timeout_seconds": c.cfg.Installation.CalicoNetwork.PolicySetupTimeoutSeconds,
+		"endpoint_status_dir":                filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "status"),
 	}
 
 	// Determine logging configuration
@@ -1040,7 +1043,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	} else {
 		volumes = append(volumes,
-			corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			c.varRunCalicoVolume(),
 			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		)
 	}
@@ -1123,6 +1126,10 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	return volumes
+}
+
+func (c *nodeComponent) varRunCalicoVolume() corev1.Volume {
+	return corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}}
 }
 
 func (c *nodeComponent) bpfDataplaneEnabled() bool {
@@ -1718,6 +1725,13 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "CALICO_EARLY_NETWORKING",
 			Value: BGPLayoutPath,
+		})
+	}
+
+	if *c.cfg.Installation.CalicoNetwork.PolicySetupTimeoutSeconds > 0 {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_ENDPOINTsTATUSPATHPREFIX",
+			Value: c.varRunCalicoVolume().VolumeSource.HostPath.Path,
 		})
 	}
 

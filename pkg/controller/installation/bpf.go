@@ -53,6 +53,8 @@ func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 	return nil
 }
 
+// isRolloutCompleteWithBPFVolumes checks if the calico-node DaemonSet
+// rollout process is completed with BPF volume mount been created.
 // If the Installation resource has been patched to dataplane: BPF then the
 // calico-node daemonset will be re-created with BPF infrastructure such as
 // the "bpffs" volumne mount etc. which will cause the DS to do a rolling update.

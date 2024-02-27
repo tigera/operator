@@ -1489,8 +1489,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
 
-	// BPF Upgrade without disruption:
-	// Delegate logic implementation here using the state of the installation and dependent resources.
+	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
 	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
 	})

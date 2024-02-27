@@ -86,7 +86,7 @@ func CreateCSRInitContainer(
 			}},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		Resources:       components.GetResourceConfig(components.ResourceCSRInitContainer),
+		Resources:       components.GetContainerResources(components.ResourceCSRInitContainer),
 	}
 }
 

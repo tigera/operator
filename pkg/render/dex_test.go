@@ -17,6 +17,9 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -352,6 +355,48 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(ok).To(BeTrue())
 			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-dex", "tigera-dex")))
+		})
+
+		It("should render all resources for a configuration that includes Resource requests and limits", func() {
+			dexResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			cfg.Authentication = &operatorv1.Authentication{
+				Spec: operatorv1.AuthenticationSpec{
+					AuthenticationDeployment: &operatorv1.AuthenticationDeployment{
+						Spec: &operatorv1.AuthenticationDeploymentSpec{
+							Template: &operatorv1.AuthenticationDeploymentPodTemplateSpec{
+								Spec: &operatorv1.AuthenticationDeploymentPodSpec{
+									Containers: []operatorv1.AuthenticationDeploymentContainer{{
+										Name:      "tigera-dex",
+										Resources: &dexResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := render.Dex(cfg)
+			resources, _ := component.Objects()
+			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			// Should set requests/limits for tigera-dex container
+			container := test.GetContainer(deploy.Spec.Template.Spec.Containers, "tigera-dex")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(dexResources))
 		})
 
 		Context("allow-tigera rendering", func() {

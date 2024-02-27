@@ -653,7 +653,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		namespaces = append(namespaces, render.ManagerNamespace)
 	}
 
+	routeConfig, err := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.InternalServerError, "Failed to create Voltron Route Configuration", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
+		VoltronRouteConfig:      routeConfig,
 		KeyValidatorConfig:      keyValidatorConfig,
 		ESSecrets:               esSecrets,
 		TrustedCertBundle:       trustedBundle,
@@ -742,4 +749,62 @@ func fillDefaults(mc *operatorv1.ManagementCluster) {
 	if mc.Spec.TLS.SecretName == "" {
 		mc.Spec.TLS.SecretName = render.VoltronTunnelSecretName
 	}
+}
+
+func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamespace string) (*render.VoltronRouteConfig, error) {
+	terminatedRouteList := &operatorv1.TLSTerminatedRouteList{}
+	if err := cli.List(ctx, terminatedRouteList); err != nil {
+		return nil, err
+	}
+
+	passThroughRouteList := &operatorv1.TLSPassThroughRouteList{}
+	if err := cli.List(ctx, passThroughRouteList); err != nil {
+		return nil, err
+	}
+
+	if len(terminatedRouteList.Items) == 0 && len(passThroughRouteList.Items) == 0 {
+		return nil, nil
+	}
+
+	builder := render.NewVoltronRouteConfigBuilder()
+	for _, route := range terminatedRouteList.Items {
+		if route.Spec.CABundle != nil {
+			cm := &corev1.ConfigMap{}
+			// Verify that the ConfigMap exists in the manager namespace.
+			if err := cli.Get(ctx, client.ObjectKey{Name: route.Spec.CABundle.Name, Namespace: managerNamespace}, cm); err != nil {
+				return nil, fmt.Errorf("failed to retrieve the ConfigMap containing the CA for TLS terminated route %s: %w", route.Name, err)
+			}
+
+			// Add the config map to the builder to rerender the annotations if it changes.
+			builder.AddConfigMap(cm)
+		}
+
+		if route.Spec.MTLSCert != nil {
+			certSecret := &corev1.Secret{}
+			// Verify that the MTLS cert secret exist in the manager namespace.
+			if err := cli.Get(ctx, client.ObjectKey{Name: route.Spec.MTLSCert.Name, Namespace: managerNamespace}, certSecret); err != nil {
+				return nil, fmt.Errorf("failed to retrieve the Secret containing the MTLS certificate for TLS terminated route %s: %w", route.Name, err)
+			}
+
+			builder.AddSecret(certSecret)
+		}
+
+		if route.Spec.MTLSKey != nil {
+			keySecret := &corev1.Secret{}
+			// Verify that the MTLS secrets exist in the manager namespace.
+			if err := cli.Get(ctx, client.ObjectKey{Name: route.Spec.MTLSKey.Name, Namespace: managerNamespace}, keySecret); err != nil {
+				return nil, fmt.Errorf("failed to retrieve the Secret containing the MTLS key for TLS terminated route %s: %w", route.Name, err)
+			}
+
+			builder.AddSecret(keySecret)
+		}
+
+		builder.AddTLSTerminatedRoute(route)
+	}
+
+	for _, route := range passThroughRouteList.Items {
+		builder.AddTLSPassThroughRoute(route)
+	}
+
+	return builder.Build()
 }

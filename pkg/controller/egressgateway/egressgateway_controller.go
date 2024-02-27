@@ -308,12 +308,12 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// patch and get the felix configuration
-	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		if fc.Spec.PolicySyncPathPrefix != "" {
-			return false // don't proceed with the patch
+			return false, nil // don't proceed with the patch
 		}
 		fc.Spec.PolicySyncPathPrefix = "/var/run/nodeagent"
-		return true // proceed with this patch
+		return true, nil // proceed with this patch
 	})
 	if err != nil {
 		reqLogger.Error(err, "Error patching felix configuration")

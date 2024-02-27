@@ -199,6 +199,8 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -480,6 +482,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
         "type": "k8s"
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "kubernetes": {
         "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -707,6 +711,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -1047,6 +1053,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -1461,6 +1469,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -2633,6 +2643,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -2732,6 +2744,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
         "type": "k8s"
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "type": "calico"
     },
     {
@@ -2794,6 +2808,8 @@ var _ = Describe("Node rendering tests", func() {
       "container_settings": {
           "allow_ip_forwarding": true
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "policy": {
           "type": "k8s"
       },
@@ -2861,6 +2877,8 @@ var _ = Describe("Node rendering tests", func() {
           "type": "host-local",
           %s
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "container_settings": { "allow_ip_forwarding": false },
       "policy": { "type": "k8s" },
       "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
@@ -2914,6 +2932,8 @@ var _ = Describe("Node rendering tests", func() {
           "type": "host-local",
 	  "ranges": [[{"subnet": "usePodCidr"}], [{"subnet": "usePodCidrIPv6"}]]
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "container_settings": { "allow_ip_forwarding": false },
       "policy": { "type": "k8s" },
       "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
@@ -2961,6 +2981,8 @@ var _ = Describe("Node rendering tests", func() {
           "type": "host-local",
           "subnet" : "usePodCidrIPv6"
       },
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "container_settings": { "allow_ip_forwarding": false },
       "policy": { "type": "k8s" },
       "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
@@ -2990,6 +3012,8 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -3157,6 +3181,8 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+	  "policy_setup_timeout_seconds": 0,
+	  "endpoint_status_dir": "/var/run/calico/status",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,

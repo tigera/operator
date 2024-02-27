@@ -591,7 +591,7 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginAzureVNET {
 		kubeNetwork = "azure.*"
 	}
-	
+
 	windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "KUBE_NETWORK", Value: kubeNetwork})
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall

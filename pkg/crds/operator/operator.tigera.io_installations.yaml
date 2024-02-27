@@ -1484,6 +1484,14 @@ spec:
                           on interfaces that do not match the given regex.
                         type: string
                     type: object
+                  policySetupTimeoutSeconds:
+                    description: "PolicySetupTimeoutSeconds delays new pods from going
+                      ready until their policy has been programmed in the dataplane.
+                      The specified delay defines the maximum amount of time that
+                      the Calico CNI will wait for policy to be programmed. \n * A
+                      value of 0 disables pod startup delays. \n Default: 0"
+                    format: int32
+                    type: integer
                   sysctl:
                     description: Sysctl configures sysctl parameters for tuning plugin
                     items:
@@ -10618,6 +10626,15 @@ spec:
                               on interfaces that do not match the given regex.
                             type: string
                         type: object
+                      policySetupTimeoutSeconds:
+                        description: "PolicySetupTimeoutSeconds delays new pods from
+                          going ready until their policy has been programmed in the
+                          dataplane. The specified delay defines the maximum amount
+                          of time that the Calico CNI will wait for policy to be programmed.
+                          \n * A value of 0 disables pod startup delays. \n Default:
+                          0"
+                        format: int32
+                        type: integer
                       sysctl:
                         description: Sysctl configures sysctl parameters for tuning
                           plugin

@@ -615,7 +615,18 @@ type IPPool struct {
 	// +optional
 	// +kubebuilder:default:=false
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
+
+	// AllowedUse controls what the IP pool will be used for.  If not specified or empty, defaults to
+	// ["Tunnel", "Workload"] for back-compatibility
+	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
 }
+
+type IPPoolAllowedUse string
+
+const (
+	IPPoolAllowedUseWorkload IPPoolAllowedUse = "Workload"
+	IPPoolAllowedUseTunnel   IPPoolAllowedUse = "Tunnel"
+)
 
 // cidrToName returns a valid Kubernetes resource name given a CIDR. Kubernetes names must be valid DNS
 // names. We do the following:
@@ -691,6 +702,10 @@ func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
 	// Set BGP export.
 	if p.DisableBGPExport != nil {
 		pool.Spec.DisableBGPExport = *p.DisableBGPExport
+	}
+
+	for _, use := range p.AllowedUses {
+		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, pcv1.IPPoolAllowedUse(use))
 	}
 
 	return &pool, nil

@@ -418,6 +418,12 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 	// Default any fields on each IP pool declared in the Installation object.
 	for i := 0; i < len(instance.Spec.CalicoNetwork.IPPools); i++ {
 		pool := &instance.Spec.CalicoNetwork.IPPools[i]
+
+		if len(pool.AllowedUses) == 0 {
+			pool.AllowedUses = []operator.IPPoolAllowedUse{operator.IPPoolAllowedUseWorkload, operator.IPPoolAllowedUseTunnel}
+		}
+
+		// Do per-IP-family defaulting.
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil && addr.To4() != nil {
 			// This is an IPv4 pool.
@@ -653,12 +659,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 func CRDPoolsToOperator(crds []crdv1.IPPool) []v1.IPPool {
 	pools := []v1.IPPool{}
 	for _, p := range crds {
-		pools = append(pools, crdPoolToOperator(p))
+		pools = append(pools, CRDPoolToOperator(p))
 	}
 	return pools
 }
 
-func crdPoolToOperator(crd crdv1.IPPool) v1.IPPool {
+func CRDPoolToOperator(crd crdv1.IPPool) v1.IPPool {
 	pool := v1.IPPool{CIDR: crd.Spec.CIDR}
 
 	// Set encap.
@@ -691,6 +697,10 @@ func crdPoolToOperator(crd crdv1.IPPool) v1.IPPool {
 	if crd.Spec.DisableBGPExport {
 		t := true
 		pool.DisableBGPExport = &t
+	}
+
+	for _, use := range crd.Spec.AllowedUses {
+		pool.AllowedUses = append(pool.AllowedUses, operator.IPPoolAllowedUse(use))
 	}
 
 	return pool

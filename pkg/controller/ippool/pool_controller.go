@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
@@ -49,7 +50,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const tigeraStatusName string = "ippools"
@@ -67,19 +67,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	r.status.Run(opts.ShutdownContext)
 
-	c, err := controller.New("tigera-ippool-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("tigera-ippool-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("Failed to create tigera-ippool-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Installation
-	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operator.Installation{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to APIServer
-	err = c.Watch(&source.Kind{Type: &operator.APIServer{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operator.APIServer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create APIServer watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
@@ -91,7 +91,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.Watch(&source.Kind{Type: &crdv1.IPPool{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch IPPool resource: %w", err)
 	}
@@ -99,7 +99,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if r.autoDetectedProvider == operator.ProviderOpenShift {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
-		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&configv1.Network{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %w", err)

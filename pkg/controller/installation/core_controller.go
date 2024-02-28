@@ -318,7 +318,7 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.Watch(&source.Kind{Type: &crdv1.IPPool{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch IPPool resource: %w", err)
 	}
@@ -1829,7 +1829,7 @@ func updateInstallationForAWSNode(i *operator.Installation, ds *appsv1.DaemonSet
 	return nil
 }
 
-func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
+func addCRDWatches(c ctrlruntime.Controller, v operator.ProductVariant) error {
 	pred := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Create occurs because we've created it, so we can safely ignore it.

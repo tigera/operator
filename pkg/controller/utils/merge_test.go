@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package utils_test
 
 import (
 	"fmt"
@@ -22,13 +22,14 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
-	diff "github.com/r3labs/diff/v2"
+	"github.com/r3labs/diff/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	opv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/test"
 )
 
@@ -44,7 +45,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.Variant = *second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		if expectVariant == nil {
 			var x opv1.ProductVariant
 			Expect(inst.Variant).To(Equal(x))
@@ -68,7 +69,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != "" {
 			s.Registry = second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		Expect(inst.Registry).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -87,7 +88,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != "" {
 			s.ImagePath = second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		Expect(inst.ImagePath).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -106,7 +107,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.ImagePullSecrets = second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		Expect(inst.ImagePullSecrets).To(ConsistOf(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -125,7 +126,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.KubernetesProvider = *second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		if expect == nil {
 			var x opv1.Provider
 			Expect(inst.KubernetesProvider).To(Equal(x))
@@ -149,7 +150,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.CNI = second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		if expect == nil {
 			Expect(inst.CNI).To(BeNil())
 		} else {
@@ -185,7 +186,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{BGP: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -208,7 +209,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{IPPools: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -231,7 +232,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = second
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -275,7 +276,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV4: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -308,7 +309,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV6: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -343,7 +344,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{HostPorts: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -368,7 +369,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{MultiInterfaceMode: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -393,7 +394,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{ContainerIPForwarding: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -416,7 +417,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.ControlPlaneNodeSelector = second
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.ControlPlaneNodeSelector).To(BeNil())
 			} else {
@@ -440,7 +441,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = second
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -502,7 +503,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{Sysctl: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -527,7 +528,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.NodeMetricsPort = second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		if expect == nil {
 			Expect(inst.NodeMetricsPort).To(BeNil())
 		} else {
@@ -550,7 +551,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != "" {
 			s.FlexVolumePath = second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		Expect(inst.FlexVolumePath).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -579,7 +580,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.NodeUpdateStrategy = *second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		if expect == nil {
 			var x appsv1.DaemonSetUpdateStrategy
 			Expect(inst.NodeUpdateStrategy).To(Equal(x))
@@ -615,7 +616,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.ComponentResources = second
 		}
-		inst := OverrideInstallationSpec(m, s)
+		inst := utils.OverrideInstallationSpec(m, s)
 		if expect == nil {
 			Expect(inst.ComponentResources).To(HaveLen(0))
 		} else {
@@ -705,7 +706,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Metadata: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
 			} else {
@@ -716,7 +717,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
 			m.CalicoNodeDaemonSet.Spec.MinReadySeconds = main
 			s.CalicoNodeDaemonSet.Spec.MinReadySeconds = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet.Spec.MinReadySeconds).To(BeNil())
 			} else {
@@ -732,7 +733,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
 			m.CalicoNodeDaemonSet.Spec.Template.Metadata = main
 			s.CalicoNodeDaemonSet.Spec.Template.Metadata = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Metadata).To(BeNil())
 			} else {
@@ -755,7 +756,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge initContainers", func(main, second, expect []opv1.CalicoNodeDaemonSetInitContainer) {
 			m.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = main
 			s.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(BeNil())
 			} else {
@@ -778,7 +779,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge containers", func(main, second, expect []opv1.CalicoNodeDaemonSetContainer) {
 			m.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = main
 			s.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(BeNil())
 			} else {
@@ -823,7 +824,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
 			m.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = main
 			s.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(BeNil())
 			} else {
@@ -841,7 +842,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
 			m.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = main
 			s.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
 			} else {
@@ -870,7 +871,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
 			m.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations = main
 			s.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations).To(BeNil())
 			} else {
@@ -895,7 +896,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNodeDaemonSet = second
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
 			} else {
@@ -999,7 +1000,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNodeWindowsDaemonSet = &opv1.CalicoNodeWindowsDaemonSet{Metadata: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet).To(BeNil())
 			} else {
@@ -1010,7 +1011,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
 			m.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds = main
 			s.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds).To(BeNil())
 			} else {
@@ -1026,7 +1027,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
 			m.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata = main
 			s.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata).To(BeNil())
 			} else {
@@ -1049,7 +1050,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge initContainers", func(main, second, expect []opv1.CalicoNodeWindowsDaemonSetInitContainer) {
 			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.InitContainers = main
 			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.InitContainers = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.InitContainers).To(BeNil())
 			} else {
@@ -1072,7 +1073,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge containers", func(main, second, expect []opv1.CalicoNodeWindowsDaemonSetContainer) {
 			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Containers = main
 			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Containers = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Containers).To(BeNil())
 			} else {
@@ -1117,7 +1118,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
 			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Affinity = main
 			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Affinity = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Affinity).To(BeNil())
 			} else {
@@ -1135,7 +1136,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
 			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.NodeSelector = main
 			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.NodeSelector = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
 			} else {
@@ -1164,7 +1165,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
 			m.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Tolerations = main
 			s.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Tolerations = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet.Spec.Template.Spec.Tolerations).To(BeNil())
 			} else {
@@ -1189,7 +1190,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNodeWindowsDaemonSet = second
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNodeWindowsDaemonSet).To(BeNil())
 			} else {
@@ -1293,7 +1294,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CSINodeDriverDaemonSet = &opv1.CSINodeDriverDaemonSet{Metadata: second}
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CSINodeDriverDaemonSet).To(BeNil())
 			} else {
@@ -1304,7 +1305,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
 			m.CSINodeDriverDaemonSet.Spec.Template.Metadata = main
 			s.CSINodeDriverDaemonSet.Spec.Template.Metadata = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Metadata).To(BeNil())
 			} else {
@@ -1318,7 +1319,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge containers", func(main, second, expect []opv1.CSINodeDriverDaemonSetContainer) {
 			m.CSINodeDriverDaemonSet.Spec.Template.Spec.Containers = main
 			s.CSINodeDriverDaemonSet.Spec.Template.Spec.Containers = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Containers).To(BeNil())
 			} else {
@@ -1363,7 +1364,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
 			m.CSINodeDriverDaemonSet.Spec.Template.Spec.Affinity = main
 			s.CSINodeDriverDaemonSet.Spec.Template.Spec.Affinity = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Affinity).To(BeNil())
 			} else {
@@ -1381,7 +1382,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
 			m.CSINodeDriverDaemonSet.Spec.Template.Spec.NodeSelector = main
 			s.CSINodeDriverDaemonSet.Spec.Template.Spec.NodeSelector = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
 			} else {
@@ -1410,7 +1411,7 @@ var _ = Describe("Installation merge tests", func() {
 		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
 			m.CSINodeDriverDaemonSet.Spec.Template.Spec.Tolerations = main
 			s.CSINodeDriverDaemonSet.Spec.Template.Spec.Tolerations = second
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CSINodeDriverDaemonSet.Spec.Template.Spec.Tolerations).To(BeNil())
 			} else {
@@ -1435,7 +1436,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CSINodeDriverDaemonSet = second
 			}
-			inst := OverrideInstallationSpec(m, s)
+			inst := utils.OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CSINodeDriverDaemonSet).To(BeNil())
 			} else {
@@ -1520,7 +1521,7 @@ var _ = Describe("Installation merge tests", func() {
 		})
 
 		It("when set in cfg", func() {
-			inst := OverrideInstallationSpec(
+			inst := utils.OverrideInstallationSpec(
 				defaulted,
 				opv1.InstallationSpec{},
 			)
@@ -1533,7 +1534,7 @@ var _ = Describe("Installation merge tests", func() {
 				fmt.Sprintf("Differences: %+v", changeLog))
 		})
 		It("when set in override", func() {
-			inst := OverrideInstallationSpec(
+			inst := utils.OverrideInstallationSpec(
 				opv1.InstallationSpec{CalicoNetwork: &opv1.CalicoNetworkSpec{}},
 				defaulted,
 			)
@@ -1545,7 +1546,7 @@ var _ = Describe("Installation merge tests", func() {
 				fmt.Sprintf("Differences: %+v", changeLog))
 		})
 		DescribeTable("merge defaulted", func(cfg, override, expect *opv1.InstallationSpec) {
-			inst := OverrideInstallationSpec(*cfg, *override)
+			inst := utils.OverrideInstallationSpec(*cfg, *override)
 
 			changeLog, err := diff.Diff(inst, *expect)
 			Expect(err).NotTo(HaveOccurred())

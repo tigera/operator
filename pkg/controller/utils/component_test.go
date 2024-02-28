@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package utils_test
 
 import (
 	"context"
@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -65,7 +66,7 @@ var _ = Describe("Component handler tests", func() {
 		ctx      context.Context
 		scheme   *runtime.Scheme
 		sm       status.StatusManager
-		handler  ComponentHandler
+		handler  utils.ComponentHandler
 	)
 
 	BeforeEach(func() {
@@ -90,7 +91,7 @@ var _ = Describe("Component handler tests", func() {
 			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}
-		handler = NewComponentHandler(log, c, scheme, instance)
+		handler = utils.NewComponentHandler(log, c, scheme, instance)
 	})
 
 	It("adds Owner references when Custom Resource is provided", func() {
@@ -529,7 +530,7 @@ var _ = Describe("Component handler tests", func() {
 	})
 
 	DescribeTable("ensuring ImagePullPolicy is set", func(obj client.Object) {
-		modifyPodSpec(obj, setImagePullPolicy)
+		utils.ModifyPodSpec(obj, utils.SetImagePullPolicy)
 
 		switch o := obj.(type) {
 		case *apps.Deployment:
@@ -1677,7 +1678,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		c       client.Client
 		mc      mockClient
 		ctx     context.Context
-		handler ComponentHandler
+		handler utils.ComponentHandler
 	)
 
 	BeforeEach(func() {
@@ -1687,7 +1688,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		c = &mc
 		ctx = context.Background()
 
-		handler = NewComponentHandler(log, c, runtime.NewScheme(), nil)
+		handler = utils.NewComponentHandler(log, c, runtime.NewScheme(), nil)
 	})
 
 	Context("Resource conflicts", func() {

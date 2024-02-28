@@ -65,7 +65,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+func (c componentHandler) CreateOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
 	om, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return fmt.Errorf("object is not ObjectMetaAccessor")
@@ -98,7 +98,7 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 	ensureOSSchedulingRestrictions(obj, osType)
 
 	// Make sure any objects with images also have an image pull policy.
-	modifyPodSpec(obj, setImagePullPolicy)
+	ModifyPodSpec(obj, SetImagePullPolicy)
 
 	// Modify Liveness and Readiness probe default values if they are not set for this object.
 	setProbeTimeouts(obj)
@@ -275,11 +275,11 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 
 		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
 		// if we need to retry the function
-		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
+		err := c.CreateOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
 		if err != nil && errors.IsConflict(err) {
 			// If the error is a resource Conflict, try the update again
 			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
-			err = c.createOrUpdateObject(ctx, obj, osType)
+			err = c.CreateOrUpdateObject(ctx, obj, osType)
 			if err != nil {
 				return err
 			}
@@ -555,7 +555,7 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 }
 
 // modifyPodSpec is a helper for pulling out pod specifications from an arbitrary object.
-func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
+func ModifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 	switch x := obj.(type) {
 	case *v1.PodTemplate:
 		f(&x.Template.Spec)
@@ -581,7 +581,7 @@ func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 }
 
 // setImagePullPolicy ensures that an image pull policy is set if not set already.
-func setImagePullPolicy(podSpec *v1.PodSpec) {
+func SetImagePullPolicy(podSpec *v1.PodSpec) {
 	for i := range podSpec.Containers {
 		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
 			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
@@ -626,7 +626,7 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		}
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
-	modifyPodSpec(obj, f)
+	ModifyPodSpec(obj, f)
 }
 
 // setProbeTimeouts modifies liveness and readiness probe default values if they are not set in the object.

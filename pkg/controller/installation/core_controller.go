@@ -54,7 +54,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
@@ -319,7 +318,7 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.Watch(&source.Kind{Type: &crdv1.IPPool{}}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch IPPool resource: %w", err)
 	}
@@ -1830,31 +1829,7 @@ func updateInstallationForAWSNode(i *operator.Installation, ds *appsv1.DaemonSet
 	return nil
 }
 
-// cidrWithinCidr checks that all IPs in the pool passed in are within the
-// passed in CIDR
-func cidrWithinCidr(cidr, pool string) bool {
-	_, cNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return false
-	}
-	_, pNet, err := net.ParseCIDR(pool)
-	if err != nil {
-		return false
-	}
-	ipMin := pNet.IP
-	pOnes, _ := pNet.Mask.Size()
-	cOnes, _ := cNet.Mask.Size()
-
-	// If the cidr contains the network (1st) address of the pool and the
-	// prefix on the pool is larger than or equal to the cidr prefix (the pool size is
-	// smaller than the cidr) then the pool network is within the cidr network.
-	if cNet.Contains(ipMin) && pOnes >= cOnes {
-		return true
-	}
-	return false
-}
-
-func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
+func addCRDWatches(c ctrlruntime.Controller, v operator.ProductVariant) error {
 	pred := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Create occurs because we've created it, so we can safely ignore it.

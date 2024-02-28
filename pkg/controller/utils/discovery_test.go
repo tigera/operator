@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package utils_test
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 var _ = Describe("provider discovery", func() {
@@ -33,7 +34,7 @@ var _ = Describe("provider discovery", func() {
 
 	It("should not detect a provider if with no info", func() {
 		c := fake.NewSimpleClientset()
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderNone))
 	})
@@ -48,7 +49,7 @@ var _ = Describe("provider discovery", func() {
 				},
 			},
 		})
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderDockerEE))
 	})
@@ -58,7 +59,7 @@ var _ = Describe("provider discovery", func() {
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "config.openshift.io/v1",
 		}}
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderOpenShift))
 	})
@@ -68,7 +69,7 @@ var _ = Describe("provider discovery", func() {
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "networking.gke.io/v1",
 		}}
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderGKE))
 	})
@@ -78,7 +79,7 @@ var _ = Describe("provider discovery", func() {
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "core.tanzu.vmware.com/v1alpha2",
 		}}
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderTKG))
 	})
@@ -90,7 +91,7 @@ var _ = Describe("provider discovery", func() {
 				Namespace: "kube-system",
 			},
 		})
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
 	})
@@ -101,7 +102,7 @@ var _ = Describe("provider discovery", func() {
 				Namespace: "kube-system",
 			},
 		})
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
 	})
@@ -115,7 +116,7 @@ var _ = Describe("provider discovery", func() {
 				},
 			},
 		})
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
 	})
@@ -127,7 +128,7 @@ var _ = Describe("provider discovery", func() {
 				Namespace: "kube-system",
 			},
 		})
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderRKE2))
 	})
@@ -139,7 +140,7 @@ var _ = Describe("provider discovery", func() {
 				Namespace: "kube-system",
 			},
 		})
-		p, e := AutoDiscoverProvider(context.Background(), c)
+		p, e := utils.AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderRKE2))
 	})

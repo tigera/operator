@@ -43,6 +43,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Monitor controller tests", func() {
@@ -191,7 +192,7 @@ var _ = Describe("Monitor controller tests", func() {
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 			r.status = mockStatus
 
-			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+			test.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())

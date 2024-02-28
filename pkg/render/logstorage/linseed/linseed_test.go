@@ -50,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 type resourceTestObj struct {
@@ -269,6 +270,51 @@ var _ = Describe("Linseed rendering tests", func() {
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+		})
+
+		It("should render deployment with resource request and limits", func() {
+
+			linseedResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			cfg.LogStorage = &operatorv1.LogStorage{
+				Spec: operatorv1.LogStorageSpec{
+					LinseedDeployment: &operatorv1.LinseedDeployment{
+						Spec: &operatorv1.LinseedDeploymentSpec{
+							Template: &operatorv1.LinseedDeploymentPodTemplateSpec{
+								Spec: &operatorv1.LinseedDeploymentPodSpec{
+									Containers: []operatorv1.LinseedDeploymentContainer{{
+										Name:      "tigera-linseed",
+										Resources: &linseedResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := Linseed(cfg)
+
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue(), "Deployment not found")
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-linseed")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(linseedResources))
+
 		})
 
 		Context("allow-tigera rendering", func() {

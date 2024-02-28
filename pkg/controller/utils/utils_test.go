@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package utils_test
 
 import (
 	"context"
@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 )
@@ -78,13 +79,13 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 			Data:       map[string]string{"eck_license_level": "enterprise"},
 		})).ShouldNot(HaveOccurred())
-		license, err := GetElasticLicenseType(ctx, c, log)
+		license, err := utils.GetElasticLicenseType(ctx, c, log)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(license).Should(Equal(render.ElasticsearchLicenseTypeEnterprise))
 	})
 
 	It("Return error if elastic-licensing not found", func() {
-		license, err := GetElasticLicenseType(ctx, c, log)
+		license, err := utils.GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())
 		Expect(license).Should(Equal(render.ElasticsearchLicenseTypeUnknown))
 	})
@@ -93,7 +94,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 		})).ShouldNot(HaveOccurred())
-		_, err := GetElasticLicenseType(ctx, c, log)
+		_, err := utils.GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())
 	})
 
@@ -114,7 +115,7 @@ var _ = Describe("Tigera License polling test", func() {
 				Kind: "LicenseKey",
 			}},
 		})
-		Expect(isCalicoResourceReady(client, v3.KindLicenseKey)).To(BeTrue())
+		Expect(utils.IsCalicoResourceReady(client, v3.KindLicenseKey)).To(BeTrue())
 		discovery.AssertExpectations(GinkgoT())
 	})
 
@@ -124,7 +125,7 @@ var _ = Describe("Tigera License polling test", func() {
 				Kind: "Deployment",
 			}},
 		})
-		Expect(isCalicoResourceReady(client, v3.KindLicenseKey)).To(BeFalse())
+		Expect(utils.IsCalicoResourceReady(client, v3.KindLicenseKey)).To(BeFalse())
 		discovery.AssertExpectations(GinkgoT())
 	})
 })
@@ -158,7 +159,7 @@ var _ = Describe("Utils APIServer type tests", func() {
 		}
 		Expect(c.Create(ctx, inst)).ShouldNot(HaveOccurred())
 
-		get, msg, err := GetAPIServer(ctx, c)
+		get, msg, err := utils.GetAPIServer(ctx, c)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(msg).Should(BeEmpty())
 		Expect(get).ShouldNot(BeNil())
@@ -174,7 +175,7 @@ var _ = Describe("Utils APIServer type tests", func() {
 		}
 		Expect(c.Create(ctx, inst)).ShouldNot(HaveOccurred())
 
-		Expect(IsAPIServerReady(c, log)).Should(BeTrue())
+		Expect(utils.IsAPIServerReady(c, log)).Should(BeTrue())
 	},
 		Entry("with tigera-secure name", "tigera-secure"),
 		Entry("wth default name", "default"),
@@ -186,7 +187,7 @@ var _ = Describe("ValidateResourceNameIsQualified", func() {
 	It("returns nil for a compliant kubernetes name.", func() {
 		qualifiedName := "proper-resource-name"
 
-		err := ValidateResourceNameIsQualified(qualifiedName)
+		err := utils.ValidateResourceNameIsQualified(qualifiedName)
 
 		Expect(err).To(BeNil())
 	})
@@ -194,7 +195,7 @@ var _ = Describe("ValidateResourceNameIsQualified", func() {
 	It("returns nil for an invalid resource name", func() {
 		invalidName := "improper_resource_name"
 
-		err := ValidateResourceNameIsQualified(invalidName)
+		err := utils.ValidateResourceNameIsQualified(invalidName)
 
 		Expect(err).ToNot(BeNil())
 	})
@@ -207,7 +208,7 @@ var _ = Describe("AddPeriodicReconcile", func() {
 		period := 10 * time.Millisecond
 		numPeriods := 10
 		timer := time.NewTimer(time.Duration(numPeriods) * period)
-		periodicReconcileChannel := createPeriodicReconcileChannel(period)
+		periodicReconcileChannel := utils.CreatePeriodicReconcileChannel(period)
 
 	OuterLoop:
 		for {
@@ -257,7 +258,7 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 
 		Expect(c.Create(ctx, cm)).ShouldNot(HaveOccurred())
 
-		err := PopulateK8sServiceEndPoint(c)
+		err := utils.PopulateK8sServiceEndPoint(c)
 
 		Expect(err).To(BeNil())
 
@@ -266,7 +267,7 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 	})
 
 	It("does not return error if ConfigMap is not found.", func() {
-		err := PopulateK8sServiceEndPoint(c)
+		err := utils.PopulateK8sServiceEndPoint(c)
 
 		Expect(err).To(BeNil())
 	})
@@ -280,26 +281,26 @@ var _ = Describe("Utils ElasticSearch test", func() {
 		tenantID   = "tenantID"
 	)
 	It("should generate usernames in expected format", func() {
-		generatedESUsername := formatName(userPrefix, clusterID, tenantID)
+		generatedESUsername := utils.FormatName(userPrefix, clusterID, tenantID)
 		expectedESUsername := fmt.Sprintf("%s_%s_%s", userPrefix, clusterID, tenantID)
 		Expect(generatedESUsername).To(Equal(expectedESUsername))
 	})
 
 	It("should generate Linseed ElasticUser with expected username and roles", func() {
-		linseedUser := LinseedUser(clusterID, tenantID)
-		expectedLinseedESName := fmt.Sprintf("%s_%s_%s", ElasticsearchUserNameLinseed, clusterID, tenantID)
+		linseedUser := utils.LinseedUser(clusterID, tenantID)
+		expectedLinseedESName := fmt.Sprintf("%s_%s_%s", utils.ElasticsearchUserNameLinseed, clusterID, tenantID)
 
 		Expect(linseedUser.Username).To(Equal(expectedLinseedESName))
 		Expect(len(linseedUser.Roles)).To(Equal(1))
 		linseedRole := linseedUser.Roles[0]
 		Expect(linseedRole.Name).To(Equal(expectedLinseedESName))
 
-		expectedLinseedRoleDef := RoleDefinition{
+		expectedLinseedRoleDef := utils.RoleDefinition{
 			Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
-			Indices: []RoleIndex{
+			Indices: []utils.RoleIndex{
 				{
 					// Include both single-index and multi-index name formats.
-					Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenantID), "calico_*"},
+					Names:      []string{utils.IndexPattern("tigera_secure_ee_*", "*", ".*", tenantID), "calico_*"},
 					Privileges: []string{"create_index", "write", "manage", "read"},
 				},
 			},
@@ -342,7 +343,7 @@ var _ = Describe("CreatePredicateForObject", func() {
 		})
 
 		It("should match everything", func() {
-			p := createPredicateForObject(objMeta)
+			p := utils.CreatePredicateForObject(objMeta)
 			Expect(p.Create(event.CreateEvent{})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 0}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 0}}})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 1}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 2}}})).To(BeTrue())
@@ -359,7 +360,7 @@ var _ = Describe("CreatePredicateForObject", func() {
 		})
 
 		It("should match if the object name matches", func() {
-			p := createPredicateForObject(objMeta)
+			p := utils.CreatePredicateForObject(objMeta)
 			Expect(p.Create(event.CreateEvent{Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: ""}}})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 0}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 0}}})).To(BeTrue()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 2}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 3}}})).To(BeTrue())
@@ -367,7 +368,7 @@ var _ = Describe("CreatePredicateForObject", func() {
 		})
 
 		It("should not match if the object name does not match, or the generation hasn't changed", func() {
-			p := createPredicateForObject(objMeta)
+			p := utils.CreatePredicateForObject(objMeta)
 			Expect(p.Create(event.CreateEvent{Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: ""}}})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 0}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 0}}})).To(BeFalse()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 2}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 3}}})).To(BeFalse())
@@ -385,7 +386,7 @@ var _ = Describe("CreatePredicateForObject", func() {
 		})
 
 		It("should match if the object namespace matches", func() {
-			p := createPredicateForObject(objMeta)
+			p := utils.CreatePredicateForObject(objMeta)
 			Expect(p.Create(event.CreateEvent{Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace"}}})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 0}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 0}}})).To(BeTrue()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 2}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 3}}})).To(BeTrue())
@@ -393,7 +394,7 @@ var _ = Describe("CreatePredicateForObject", func() {
 		})
 
 		It("should not match if the object namespace does not match", func() {
-			p := createPredicateForObject(objMeta)
+			p := utils.CreatePredicateForObject(objMeta)
 			Expect(p.Create(event.CreateEvent{Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace"}}})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 0}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 0}}})).To(BeFalse()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 2}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 3}}})).To(BeFalse())
@@ -411,7 +412,7 @@ var _ = Describe("CreatePredicateForObject", func() {
 		})
 
 		It("should match if the object name and namespace match", func() {
-			p := createPredicateForObject(objMeta)
+			p := utils.CreatePredicateForObject(objMeta)
 			Expect(p.Create(event.CreateEvent{Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace"}}})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 0}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 0}}})).To(BeTrue()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 2}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 3}}})).To(BeTrue())
@@ -419,7 +420,7 @@ var _ = Describe("CreatePredicateForObject", func() {
 		})
 
 		It("should not match if the object name or namespace do not match", func() {
-			p := createPredicateForObject(objMeta)
+			p := utils.CreatePredicateForObject(objMeta)
 			Expect(p.Create(event.CreateEvent{Object: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace"}}})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 0}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 0}}})).To(BeFalse()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{ObjectOld: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 2}}, ObjectNew: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 3}}})).To(BeFalse())

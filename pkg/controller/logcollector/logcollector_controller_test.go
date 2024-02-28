@@ -744,12 +744,12 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 
 		It("should wait if allow-tigera tier is unavailable", func() {
-			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+			test.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
 		})
 
 		It("should wait if tier watch is not ready", func() {
 			r.tierWatchReady = &utils.ReadyFlag{}
-			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+			test.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 		})
 	})
 

@@ -61,7 +61,7 @@ type Policy struct {
 	}
 }
 
-type policyDetail struct {
+type PolicyDetail struct {
 	rolloverAge  string
 	rolloverSize string
 	deleteAge    string
@@ -107,6 +107,8 @@ type ElasticsearchClientCreator func(client client.Client, ctx context.Context, 
 
 type ElasticClient interface {
 	SetILMPolicies(context.Context, *operatorv1.LogStorage) error
+	CreateOrUpdatePolicies(ctx context.Context, listPolicy map[string]PolicyDetail) error
+
 	CreateUser(context.Context, *User) error
 	DeleteUser(context.Context, *User) error
 	GetUsers(ctx context.Context) ([]User, error)
@@ -114,6 +116,10 @@ type ElasticClient interface {
 
 type esClient struct {
 	client *elastic.Client
+}
+
+func NewSimpleESClient(client *elastic.Client) ElasticClient {
+	return &esClient{client: client}
 }
 
 func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (ElasticClient, error) {
@@ -163,11 +169,11 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 	return &esClient{client: esCli}, err
 }
 
-func formatName(name, clusterID, tenantID string) string {
+func FormatName(name, clusterID, tenantID string) string {
 	return fmt.Sprintf("%s_%s_%s", name, clusterID, tenantID)
 }
 
-func indexPattern(prefix, cluster, suffix, tenant string) string {
+func IndexPattern(prefix, cluster, suffix, tenant string) string {
 	if tenant != "" {
 		return fmt.Sprintf("%s.%s.%s%s", prefix, tenant, cluster, suffix)
 	}
@@ -181,7 +187,7 @@ var (
 )
 
 func LinseedUser(clusterID, tenant string) *User {
-	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant)
+	username := FormatName(ElasticsearchUserNameLinseed, clusterID, tenant)
 	return &User{
 		Username: username,
 		Roles: []Role{
@@ -192,7 +198,7 @@ func LinseedUser(clusterID, tenant string) *User {
 					Indices: []RoleIndex{
 						{
 							// Include both single-index and multi-index name formats.
-							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant), "calico_*"},
+							Names:      []string{IndexPattern("tigera_secure_ee_*", "*", ".*", tenant), "calico_*"},
 							Privileges: []string{"create_index", "write", "manage", "read"},
 						},
 					},
@@ -203,7 +209,7 @@ func LinseedUser(clusterID, tenant string) *User {
 }
 
 func DashboardUser(clusterID, tenant string) *User {
-	username := formatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant)
+	username := FormatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant)
 	return &User{
 		Username: username,
 		Roles: []Role{
@@ -385,7 +391,7 @@ func (es *esClient) GetUsers(ctx context.Context) ([]User, error) {
 // SetILMPolicies creates ILM policies for each timeseries based index using the retention period and storage size in LogStorage
 func (es *esClient) SetILMPolicies(ctx context.Context, ls *operatorv1.LogStorage) error {
 	policyList := es.listILMPolicies(ls)
-	return es.createOrUpdatePolicies(ctx, policyList)
+	return es.CreateOrUpdatePolicies(ctx, policyList)
 }
 
 // listILMPolicies generates ILM policies based on disk space and retention in LogStorage
@@ -393,7 +399,7 @@ func (es *esClient) SetILMPolicies(ctx context.Context, ls *operatorv1.LogStorag
 // Allocate 90% of the 70% ES disk space to flow logs, 5% of the 70% ES disk space to each dns and bgp logs.
 // Allocate 10% of ES disk space to logs that are NOT flows, dns or bgp [minorPctOfTotalDisk]
 // Equally distribute 10% of the ES disk space among these other log types
-func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]policyDetail {
+func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]PolicyDetail {
 	totalEsStorage := getTotalEsDisk(ls)
 	majorPctOfTotalDisk := 0.7
 
@@ -404,22 +410,22 @@ func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]policy
 	pctOfDisk := minorPctOfTotalDisk / float64(numOfIndicesWithMinorSpace)
 
 	// Retention is not set in LogStorage for l7, benchmark and events logs
-	return map[string]policyDetail{
-		"tigera_secure_ee_flows": buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.85, int(*ls.Spec.Retention.Flows)),
-		"tigera_secure_ee_dns":   buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.DNSLogs)),
-		"tigera_secure_ee_bgp":   buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.BGPLogs)),
-		"tigera_secure_ee_l7":    buildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, 1),
+	return map[string]PolicyDetail{
+		"tigera_secure_ee_flows": BuildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.85, int(*ls.Spec.Retention.Flows)),
+		"tigera_secure_ee_dns":   BuildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.DNSLogs)),
+		"tigera_secure_ee_bgp":   BuildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, int(*ls.Spec.Retention.BGPLogs)),
+		"tigera_secure_ee_l7":    BuildILMPolicy(totalEsStorage, majorPctOfTotalDisk, 0.05, 1),
 
-		"tigera_secure_ee_audit_ee":           buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.AuditReports)),
-		"tigera_secure_ee_audit_kube":         buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.AuditReports)),
-		"tigera_secure_ee_snapshots":          buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.Snapshots)),
-		"tigera_secure_ee_compliance_reports": buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.ComplianceReports)),
-		"tigera_secure_ee_benchmark_results":  buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, 91),
-		"tigera_secure_ee_events":             buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, 91),
+		"tigera_secure_ee_audit_ee":           BuildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.AuditReports)),
+		"tigera_secure_ee_audit_kube":         BuildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.AuditReports)),
+		"tigera_secure_ee_snapshots":          BuildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.Snapshots)),
+		"tigera_secure_ee_compliance_reports": BuildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.ComplianceReports)),
+		"tigera_secure_ee_benchmark_results":  BuildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, 91),
+		"tigera_secure_ee_events":             BuildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, 91),
 	}
 }
 
-func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[string]policyDetail) error {
+func (es *esClient) CreateOrUpdatePolicies(ctx context.Context, listPolicy map[string]PolicyDetail) error {
 	for indexName, pd := range listPolicy {
 		policyName := indexName + "_policy"
 
@@ -446,10 +452,10 @@ func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[s
 	return nil
 }
 
-func buildILMPolicy(totalEsStorage int64, totalDiskPercentage float64, percentOfDiskForLogType float64, retention int) policyDetail {
-	pd := policyDetail{}
-	pd.rolloverSize = calculateRolloverSize(totalEsStorage, totalDiskPercentage, percentOfDiskForLogType)
-	pd.rolloverAge = calculateRolloverAge(retention)
+func BuildILMPolicy(totalEsStorage int64, totalDiskPercentage float64, percentOfDiskForLogType float64, retention int) PolicyDetail {
+	pd := PolicyDetail{}
+	pd.rolloverSize = CalculateRolloverSize(totalEsStorage, totalDiskPercentage, percentOfDiskForLogType)
+	pd.rolloverAge = CalculateRolloverAge(retention)
 	pd.deleteAge = fmt.Sprintf("%dd", retention)
 
 	pd.policy = map[string]interface{}{
@@ -496,10 +502,10 @@ func applyILMPolicy(ctx context.Context, esClient *elastic.Client, indexName str
 	return nil
 }
 
-// calculateRolloverSize returns max_size to rollover
+// CalculateRolloverSize returns max_size to rollover
 // max_size is based on the disk space allocated for the log type divided by ElasticsearchRetentionFactor
 // If calculated max_size is greater than ES recommended shard size (DefaultMaxIndexSizeGi), set it to DefaultMaxIndexSizeGi
-func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
+func CalculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskForLogType float64) string {
 	rolloverSize := int64((float64(totalEsStorage) * diskPercentage * diskForLogType) / ElasticsearchRetentionFactor)
 	rolloverMax := resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
 	maxRolloverSize := rolloverMax.Value()
@@ -511,11 +517,11 @@ func calculateRolloverSize(totalEsStorage int64, diskPercentage float64, diskFor
 	return fmt.Sprintf("%db", rolloverSize)
 }
 
-// calculateRolloverAge returns max_age to rollover
+// CalculateRolloverAge returns max_age to rollover
 // max_age to rollover an index is retention period set in LogStorage divided by ElasticsearchRetentionFactor
 // If retention is < ElasticsearchRetentionFactor, set rollover age to 1 day
 // if retention is 0 days, rollover every 1 hr - we dont want to rollover index every few ms/s set it to 1hr
-func calculateRolloverAge(retention int) string {
+func CalculateRolloverAge(retention int) string {
 	var age string
 	if retention <= 0 {
 		age = "1h"

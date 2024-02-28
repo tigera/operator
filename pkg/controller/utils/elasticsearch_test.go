@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package utils_test
 
 import (
 	"bytes"
@@ -26,7 +26,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	elastic "github.com/olivere/elastic/v7"
+	"github.com/olivere/elastic/v7"
+
+	"github.com/tigera/operator/pkg/controller/utils"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -40,9 +42,9 @@ var newPolicies bool
 var _ = Describe("Elasticsearch tests", func() {
 	Context("ILM", func() {
 		var (
-			eClient     *esClient
+			eClient     utils.ElasticClient
 			ctx         context.Context
-			rolloverMax = resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
+			rolloverMax = resource.MustParse(fmt.Sprintf("%dGi", utils.DefaultMaxIndexSizeGi))
 		)
 		BeforeEach(func() {
 			client := &http.Client{
@@ -62,22 +64,22 @@ var _ = Describe("Elasticsearch tests", func() {
 			diskPercentage := 0.7
 			diskForLogType := 0.9
 
-			rolloverSize := calculateRolloverSize(totalEsStorage, diskPercentage, diskForLogType)
+			rolloverSize := utils.CalculateRolloverSize(totalEsStorage, diskPercentage, diskForLogType)
 			Expect(rolloverSize).To(Equal(fmt.Sprintf("%db", expectedRolloverSize)))
 		})
 		It("rollover age", func() {
 			By("for retention period lesser than retention factor")
-			Expect("1d").To(Equal(calculateRolloverAge(2)))
+			Expect("1d").To(Equal(utils.CalculateRolloverAge(2)))
 
 			By("for retention period 0")
-			Expect("1h").To(Equal(calculateRolloverAge(0)))
+			Expect("1h").To(Equal(utils.CalculateRolloverAge(0)))
 		})
 		It("apply new lifecycle policy", func() {
 			newPolicies = true
 			totalDiskSize := resource.MustParse("100Gi")
-			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 10)
+			pd := utils.BuildILMPolicy(totalDiskSize.Value(), 0.7, .9, 10)
 
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+			err := eClient.CreateOrUpdatePolicies(ctx, map[string]utils.PolicyDetail{
 				indexName: pd,
 			})
 			Expect(err).To(BeNil())
@@ -85,8 +87,8 @@ var _ = Describe("Elasticsearch tests", func() {
 		It("update existing lifecycle policy", func() {
 			newPolicies = false
 			totalDiskSize := resource.MustParse("100Gi")
-			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5)
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+			pd := utils.BuildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5)
+			err := eClient.CreateOrUpdatePolicies(ctx, map[string]utils.PolicyDetail{
 				indexName: pd,
 			})
 			Expect(err).To(BeNil())
@@ -190,7 +192,7 @@ func mustOpen(name string) io.ReadCloser {
 	return f
 }
 
-func mockElasticClient(h *http.Client, url string) *esClient {
+func mockElasticClient(h *http.Client, url string) utils.ElasticClient {
 	options := []elastic.ClientOptionFunc{
 		elastic.SetHttpClient(h),
 		elastic.SetURL(url),
@@ -199,7 +201,5 @@ func mockElasticClient(h *http.Client, url string) *esClient {
 	client, err := elastic.NewClient(options...)
 	Expect(err).To(BeNil())
 
-	ecl := esClient{}
-	ecl.client = client
-	return &ecl
+	return utils.NewSimpleESClient(client)
 }

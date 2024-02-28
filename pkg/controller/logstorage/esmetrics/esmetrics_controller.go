@@ -244,6 +244,7 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 		ServerTLS:            serverKeyPair,
 		TrustedBundle:        trustedBundle,
 		UsePSP:               r.usePSP,
+		LogStorage:           logStorage,
 	}
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {

@@ -61,6 +61,12 @@ type LogStorageSpec struct {
 	// Kibana configures the Kibana Spec.
 	// +optional
 	Kibana *Kibana `json:"kibana,omitempty"`
+
+	// LinseedDeployment configures the linseed Deployment.
+	LinseedDeployment *LinseedDeployment `json:"linseedDeployment,omitempty"`
+
+	// ElasticsearchMetricsDeployment configures the tigera-elasticsearch-metric Deployment.
+	ElasticsearchMetricsDeployment *ElasticsearchMetricsDeployment `json:"elasticsearchMetricsDeployment,omitempty"`
 }
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.

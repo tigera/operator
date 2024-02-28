@@ -114,6 +114,192 @@ spec:
                   the indicated key-value pairs as labels as well as access to the
                   specified StorageClassName.
                 type: object
+              esMetricsDeployment:
+                description: ESMetricsDeployment configures the tigera-elasticsearch-metric
+                  Deployment.
+                properties:
+                  spec:
+                    description: Spec is the specification of the esMetrics Deployment.
+                    properties:
+                      template:
+                        description: Template describes the esMetrics Deployment pod
+                          that will be created.
+                        properties:
+                          spec:
+                            description: Spec is the esMetrics Deployment's PodSpec.
+                            properties:
+                              containers:
+                                description: Containers is a list of tigera-elasticsearch-metric
+                                  containers. If specified, this overrides the specified
+                                  tigera-elasticsearch-metric Deployment containers.
+                                  If omitted, the esMetrics Deployment will use its
+                                  default values for its containers.
+                                items:
+                                  description: ESMetricsDeploymentContainer is a tigera-elasticsearch-metric
+                                    Deployment container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the tigera-elasticsearch-metric Deployment
+                                        container by name.
+                                      enum:
+                                      - tigera-elasticsearch-metrics
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named tigera-elasticsearch-metric
+                                        Deployment container's resources. If omitted,
+                                        the esMetrics Deployment will use its default
+                                        value for this container's resources.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                              initContainers:
+                                description: InitContainers is a list of tigera-elasticsearch-metric
+                                  init containers. If specified, this overrides the
+                                  specified tigera-elasticsearch-metric Deployment
+                                  init containers. If omitted, the esMetrics Deployment
+                                  will use its default values for its init containers.
+                                items:
+                                  description: ESMetricsDeploymentInitContainer is
+                                    a tigera-elasticsearch-metric Deployment init
+                                    container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the tigera-elasticsearch-metric Deployment
+                                        init container by name.
+                                      enum:
+                                      - tigera-ee-elasticsearch-metrics-key-cert-provisioner
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named tigera-elasticsearch-metric
+                                        Deployment init container's resources. If
+                                        omitted, the esMetrics Deployment will use
+                                        its default value for this init container's
+                                        resources.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                            type: object
+                        type: object
+                    type: object
+                type: object
               indices:
                 description: Index defines the configuration for the indices in the
                   Elasticsearch cluster.
@@ -123,6 +309,187 @@ spec:
                       have. See https://www.elastic.co/guide/en/elasticsearch/reference/current/scalability.html
                     format: int32
                     type: integer
+                type: object
+              linseedDeployment:
+                description: LinseedDeployment configures the linseed Deployment.
+                properties:
+                  spec:
+                    description: Spec is the specification of the linseed Deployment.
+                    properties:
+                      template:
+                        description: Template describes the linseed Deployment pod
+                          that will be created.
+                        properties:
+                          spec:
+                            description: Spec is the linseed Deployment's PodSpec.
+                            properties:
+                              containers:
+                                description: Containers is a list of linseed containers.
+                                  If specified, this overrides the specified linseed
+                                  Deployment containers. If omitted, the linseed Deployment
+                                  will use its default values for its containers.
+                                items:
+                                  description: LinseedDeploymentContainer is a linseed
+                                    Deployment container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the linseed Deployment container by name.
+                                      enum:
+                                      - tigera-linseed
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named linseed Deployment container's
+                                        resources. If omitted, the linseed Deployment
+                                        will use its default value for this container's
+                                        resources.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                              initContainers:
+                                description: InitContainers is a list of linseed init
+                                  containers. If specified, this overrides the specified
+                                  linseed Deployment init containers. If omitted,
+                                  the linseed Deployment will use its default values
+                                  for its init containers.
+                                items:
+                                  description: LinseedDeploymentInitContainer is a
+                                    linseed Deployment init container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the linseed Deployment init container by name.
+                                      enum:
+                                      - tigera-secure-linseed-token-tls-key-cert-provisioner
+                                      - tigera-secure-linseed-cert-key-cert-provisioner
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named linseed Deployment init
+                                        container's resources. If omitted, the linseed
+                                        Deployment will use its default value for
+                                        this init container's resources.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                            type: object
+                        type: object
+                    type: object
                 type: object
               nodes:
                 description: Nodes defines the configuration for a set of identical

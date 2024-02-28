@@ -1052,6 +1052,9 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+		defaultInstance.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginCalico, IPAM: &operatorv1.IPAMSpec{
+			Type: operatorv1.IPAMPluginAmazonVPC,
+		}}
 		defaultInstance.CalicoNetwork.BGP = &bgpDisabled
 		defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationVXLAN
 		component := render.Windows(&cfg)
@@ -1198,7 +1201,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 			{Name: "VXLAN_VNI", Value: "4096"},
 			{Name: "VXLAN_ADAPTER", Value: ""},
-			{Name: "KUBE_NETWORK", Value: "vpc.*"},
+			{Name: "KUBE_NETWORK", Value: "Calico.*"},
 			{Name: "KUBERNETES_SERVICE_HOST", Value: "1.2.3.4"},
 			{Name: "KUBERNETES_SERVICE_PORT", Value: "6443"},
 		}

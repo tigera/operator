@@ -18,6 +18,8 @@ package v1
 
 import (
 	"fmt"
+	"net"
+	"net/netip"
 	"strings"
 
 	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -617,6 +619,45 @@ type IPPool struct {
 	// +optional
 	// +kubebuilder:default:=false
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
+
+	// AllowedUse controls what the IP pool will be used for.  If not specified or empty, defaults to
+	// ["Tunnel", "Workload"] for back-compatibility
+	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
+}
+
+type IPPoolAllowedUse string
+
+const (
+	IPPoolAllowedUseWorkload IPPoolAllowedUse = "Workload"
+	IPPoolAllowedUseTunnel   IPPoolAllowedUse = "Tunnel"
+)
+
+// cidrToName returns a valid Kubernetes resource name given a CIDR. Kubernetes names must be valid DNS
+// names. We do the following:
+// - Expand the CIDR so that we get consistent results and remove IPv6 shorthand "::".
+// - Replace any slashes with dashes.
+// - Replace any : with dots.
+func cidrToName(cidr string) (string, error) {
+	// First, canonicalize the CIDR. e.g., 192.168.0.1/24 -> 192.168.0.0/24.
+	_, nw, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", err
+	}
+
+	// Parse the CIDR and expand it to its full form.
+	// e.g., fe80::/64 -> fe80:0000:0000:0000:0000:0000:0000:0000/64
+	pre, err := netip.ParsePrefix(nw.String())
+	if err != nil {
+		return "", err
+	}
+	name := pre.Addr().StringExpanded()
+
+	// Replace invalid characters.
+	// e.g., fe80:0000:0000:0000:0000:0000:0000:0000/64 -> fe80.0000.0000.0000.0000.0000.0000.0000-64
+	name = strings.ReplaceAll(name, ":", ".")
+	name += fmt.Sprintf("-%d", pre.Bits())
+
+	return name, nil
 }
 
 // ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
@@ -660,6 +701,10 @@ func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
 	// Set BGP export.
 	if p.DisableBGPExport != nil {
 		pool.Spec.DisableBGPExport = *p.DisableBGPExport
+	}
+
+	for _, use := range p.AllowedUses {
+		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, pcv1.IPPoolAllowedUse(use))
 	}
 
 	return &pool, nil

@@ -527,7 +527,6 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 // - Query desired IP pools (from Installation)
 // - Query existing IP pools owned by this controller
 // - Reconcile the differences
-// - Populate Installation status with ALL IP pools in the cluster.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling IP pools")
@@ -548,10 +547,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	defer r.status.SetMetaData(&installation.ObjectMeta)
 
 	// This controller relies on the core Installation controller to perform initial defaulting before it can continue.
-	// Finalizers are set by the core controller as part of the defaulting process. Wait for them to be set as an indicator
-	// that defaulting has occurred.
-	if installation.Finalizers == nil || len(installation.Finalizers) == 0 {
-		// TODO: Should check for exact finalizer name here instead.
+	// The core installation controller adds a specific finalizer as part of performing defaulting,
+	// so wait for that before we continue.
+	finalizerExists := false
+	for _, finalizer := range installation.GetFinalizers() {
+		if finalizer == render.CalicoFinalizer {
+			finalizerExists = true
+			break
+		}
+	}
+	if !finalizerExists {
 		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}

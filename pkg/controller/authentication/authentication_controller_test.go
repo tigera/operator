@@ -488,13 +488,13 @@ var _ = Describe("authentication controller tests", func() {
 
 		It("should wait if allow-tigera tier is unavailable", func() {
 			mockStatus.On("SetMetaData", mock.Anything).Return()
-			utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
+			test.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
 		})
 
 		It("should wait if tier watch is not ready", func() {
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 			r.tierWatchReady = &utils.ReadyFlag{}
-			utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
+			test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 		})
 	})
 	tls, err := secret.CreateTLSSecret(nil, "a", "a", corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, nil, "a")

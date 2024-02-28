@@ -30,6 +30,10 @@ type MockESClient struct {
 	mock.Mock
 }
 
+func (m *MockESClient) CreateOrUpdatePolicies(ctx context.Context, listPolicy map[string]utils.PolicyDetail) error {
+	return nil
+}
+
 func MockESCLICreator(_ client.Client, ctx context.Context, _ string) (utils.ElasticClient, error) {
 	if esCli := ctx.Value(MockESClientKey("mockESClient")); esCli != nil {
 		return esCli.(*MockESClient), nil

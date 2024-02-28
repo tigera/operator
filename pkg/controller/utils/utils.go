@@ -163,7 +163,7 @@ func AddDeploymentWatch(c ctrlruntime.Controller, name, namespace string) error 
 }
 
 func AddPeriodicReconcile(c ctrlruntime.Controller, period time.Duration, handler handler.EventHandler) error {
-	return c.Watch(&source.Channel{Source: createPeriodicReconcileChannel(period)}, handler)
+	return c.Watch(&source.Channel{Source: CreatePeriodicReconcileChannel(period)}, handler)
 }
 
 // AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.
@@ -206,7 +206,7 @@ func AddCSRWatchWithRelevancyFn(c ctrlruntime.Controller, isRelevantFn func(*cer
 	})
 }
 
-func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEvent {
+func CreatePeriodicReconcileChannel(period time.Duration) chan event.GenericEvent {
 	periodicReconcileEvents := make(chan event.GenericEvent)
 	eventObject := &unstructured.Unstructured{}
 	eventObject.SetName(fmt.Sprintf("periodic-%s-reconcile-event", period.String()))
@@ -257,7 +257,7 @@ func WaitToAddTierWatch(tierName string, controller ctrlruntime.Controller, c ku
 // will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
 func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-	pred := createPredicateForObject(objMeta)
+	pred := CreatePredicateForObject(objMeta)
 	return c.WatchObject(obj, h, pred)
 }
 
@@ -598,7 +598,7 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
 	for _, obj := range objs {
 		resourcesToWatch[obj] = resourceWatchContext{
-			predicate: createPredicateForObject(obj),
+			predicate: CreatePredicateForObject(obj),
 			logger:    ContextLoggerForResource(log, obj),
 		}
 	}
@@ -617,7 +617,7 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 		for obj := range resourcesToWatch {
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
-			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+			if ok, err := IsCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
 				msg := "Failed to check if resource is ready - will retry"
 				if errors.IsNotFound(err) {
 					objLog.WithValues("Error", err).V(2).Info(msg)
@@ -643,9 +643,9 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 	}
 }
 
-// isCalicoResourceReady checks if the specified resourceKind is available.
+// IsCalicoResourceReady checks if the specified resourceKind is available.
 // the resourceKind must be of the calico resource group.
-func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
+func IsCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
 	// Only get the resources for the groupVersion we care about so that we are resilient to other
 	// apiservices being down.
 	res, err := client.Discovery().ServerResourcesForGroupVersion(v3.GroupVersionCurrent)
@@ -662,7 +662,7 @@ func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bo
 
 // Creates a predicate for CRUD operations that matches the object's namespace, and name if provided.
 // If neither name nor namespace is provided, all objects will be matched.
-func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
+func CreatePredicateForObject(objMeta metav1.Object) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
@@ -780,7 +780,7 @@ func AddNodeLocalDNSWatch(c ctrlruntime.Controller) error {
 			Name:      "node-local-dns",
 		},
 	}
-	return c.WatchObject(&appsv1.DaemonSet{}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
+	return c.WatchObject(&appsv1.DaemonSet{}, &handler.EnqueueRequestForObject{}, CreatePredicateForObject(ds))
 }
 
 func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operatorv1.Provider) ([]string, error) {

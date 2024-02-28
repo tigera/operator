@@ -1019,13 +1019,13 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("should wait if allow-tigera tier is unavailable", func() {
-					utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
+					test.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
 				})
 
 				It("should wait if tier watch is not ready", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, &utils.ReadyFlag{})
 					Expect(err).ShouldNot(HaveOccurred())
-					utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
+					test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 				})
 			})
 		})

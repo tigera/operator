@@ -349,6 +349,19 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 
 		}
+
+		if instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds != nil {
+			// Pod readiness delays.
+			if *instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds < 0 {
+				return fmt.Errorf("Installation CNI spec.PolicySetupTimeoutSeconds negative value is not valid")
+			}
+			if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
+				return fmt.Errorf("spec.calicoNetwork.policySetupTimeoutSeconds requires the Iptables Linux dataplane to be set")
+			}
+			if *instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneIptables {
+				return fmt.Errorf("spec.calicoNetwork.policySetupTimeoutSeconds is supported only for the Iptables Linux dataplane")
+			}
+		}
 	}
 
 	// Verify that the flexvolume path is valid - either "None" (to disable) or a valid absolute path.

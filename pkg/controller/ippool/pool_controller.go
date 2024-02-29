@@ -630,14 +630,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// we require the v3 API to be running. This is so that we properly leverage the v3 API's validation.
 	toCreateOrUpdate := []client.Object{}
 	for _, p := range installation.Spec.CalicoNetwork.IPPools {
-		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool, p) {
-			// The pool either doesn't exist, or it does exist but needs to be updated.
-			v1res, err := p.ToProjectCalicoV1()
-			if err != nil {
-				r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
-				return reconcile.Result{}, err
-			}
+		// We need to check if updates are required, but the installation uses the operator API format and the queried
+		// pools are in crd.projectcalico.org/v1 format. Compare the pools using the crd.projectcalico.org/v1 format.
+		v1res, err := p.ToProjectCalicoV1()
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 
+		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool.Spec, v1res.Spec) {
+			// The pool either doesn't exist, or it does exist but needs to be updated.
 			if apiAvailable {
 				// The v3 API is available, so use it to create / update the pool.
 				v3res, err := v1ToV3(v1res)
@@ -655,6 +657,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			} else {
 				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
 				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.
+				reqLogger.Info("Comparing pools", "actual", pool, "desired", p)
 				r.status.SetDegraded(operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, reqLogger)
 				return reconcile.Result{}, nil
 			}

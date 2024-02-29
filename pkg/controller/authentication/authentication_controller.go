@@ -328,15 +328,16 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
 
 	dexComponentCfg := &render.DexComponentConfiguration{
-		PullSecrets:   pullSecrets,
-		Openshift:     r.provider == oprv1.ProviderOpenShift,
-		Installation:  install,
-		DexConfig:     dexCfg,
-		ClusterDomain: r.clusterDomain,
-		DeleteDex:     disableDex,
-		TLSKeyPair:    tlsKeyPair,
-		TrustedBundle: trustedBundle,
-		UsePSP:        r.usePSP,
+		PullSecrets:    pullSecrets,
+		Openshift:      r.provider == oprv1.ProviderOpenShift,
+		Installation:   install,
+		DexConfig:      dexCfg,
+		ClusterDomain:  r.clusterDomain,
+		DeleteDex:      disableDex,
+		TLSKeyPair:     tlsKeyPair,
+		TrustedBundle:  trustedBundle,
+		UsePSP:         r.usePSP,
+		Authentication: authentication,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

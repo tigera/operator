@@ -435,6 +435,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		ElasticHost:         elasticHost,
 		ElasticPort:         elasticPort,
 		ElasticClientSecret: esClientSecret,
+		LogStorage:          logStorage,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 

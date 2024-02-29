@@ -619,11 +619,14 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			// Configure a tenant.
 			tenantA = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: tenantANamespace},
-				Spec:       operatorv1.TenantSpec{},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a",
+				},
 			}
 			cfg.Namespace = tenantANamespace
 			cfg.BindNamespaces = []string{tenantANamespace, tenantBNamespace}
 			cfg.Tenant = tenantA
+			cfg.ExternalElastic = true
 		})
 
 		It("should render multi-tenant resources", func() {
@@ -686,6 +689,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				},
 			}
 			Expect(netpol.Spec.Egress).To(ConsistOf(expectedEgressRules))
+		})
+
+		It("should render multi-tenant environment variables", func() {
+			component := render.IntrusionDetection(cfg)
+			toCreate, _ := component.Objects()
+
+			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](toCreate, render.IntrusionDetectionName, tenantANamespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			envs := deployment.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc", tenantANamespace)}))
+
 		})
 	})
 })

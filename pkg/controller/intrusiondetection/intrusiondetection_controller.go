@@ -466,6 +466,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		Namespace:                    helper.InstallNamespace(),
 		BindNamespaces:               namespaces,
 		Tenant:                       tenant,
+		ExternalElastic:              r.elasticExternal,
 	}
 	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 

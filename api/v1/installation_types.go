@@ -475,7 +475,7 @@ type CalicoNetworkSpec struct {
 	// +optional
 	Sysctl []Sysctl `json:"sysctl,omitempty"`
 
-	// PolicySetupTimeoutSeconds delays new pods from running
+	// PolicySetupTimeoutSeconds delays new pods from running containers
 	// until their policy has been programmed in the dataplane.
 	// The specified delay defines the maximum amount of time
 	// that the Calico CNI plugin will wait for policy to be programmed.

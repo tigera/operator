@@ -355,6 +355,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if *instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds < 0 {
 				return fmt.Errorf("Installation CNI spec.PolicySetupTimeoutSeconds negative value is not valid")
 			}
+			if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneIptables {
+				return fmt.Errorf("spec.calicoNetwork.policySetupTimeoutSeconds is supported only for the Iptables Linux dataplane")
+			}
 		}
 	}
 

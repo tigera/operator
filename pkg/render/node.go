@@ -648,7 +648,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 			"type": "k8s",
 		},
 		"policy_setup_timeout_seconds": policySetupTimeoutSeconds,
-		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "status"),
+		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
 	}
 
 	// Determine logging configuration
@@ -1731,7 +1731,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		c.cfg.Installation.CalicoNetwork.PolicySetupTimeoutSeconds != nil &&
 		*c.cfg.Installation.CalicoNetwork.PolicySetupTimeoutSeconds > 0 {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
-			Name:  "FELIX_ENDPOINTsTATUSPATHPREFIX",
+			Name:  "FELIX_ENDPOINTSTATUSPATHPREFIX",
 			Value: c.varRunCalicoVolume().VolumeSource.HostPath.Path,
 		})
 	}

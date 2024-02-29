@@ -657,7 +657,6 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	// Only fill default policy setup timeout if CalicoCNI is used.
 	if instance.Spec.CNI.Type == operator.PluginCalico &&
 		*instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneIptables &&
 		instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds == nil {

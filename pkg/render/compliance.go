@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -119,7 +121,8 @@ type ComplianceConfiguration struct {
 	Namespace string
 
 	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
-	Tenant *operatorv1.Tenant
+	Tenant     *operatorv1.Tenant
+	Compliance *operatorv1.Compliance
 }
 
 type complianceComponent struct {
@@ -478,7 +481,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		},
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
@@ -495,6 +498,13 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ControllerDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -890,7 +900,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		},
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
@@ -904,6 +914,13 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceServerDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -1068,7 +1085,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		},
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
@@ -1082,6 +1099,13 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.SnapshotterDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -1267,7 +1291,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		},
 	}
 
-	return &appsv1.DaemonSet{
+	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
@@ -1278,6 +1302,13 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.BenchmarkDaemonSet; overrides != nil {
+			rcomponents.ApplyDaemonSetOverrides(ds, overrides)
+		}
+	}
+	return ds
 }
 
 func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() *ocsv1.SecurityContextConstraints {

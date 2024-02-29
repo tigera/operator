@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -58,6 +60,10 @@ type AuthenticationSpec struct {
 	// LDAP contains the configuration needed to setup LDAP authentication.
 	// +optional
 	LDAP *AuthenticationLDAP `json:"ldap,omitempty"`
+
+	// AuthenticationDeployment configures the Authentication Deployment.
+	// +optional
+	AuthenticationDeployment *AuthenticationDeployment `json:"authenticationDeployment,omitempty"`
 }
 
 // AuthenticationStatus defines the observed state of Authentication
@@ -245,6 +251,159 @@ type AuthenticationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Authentication `json:"items"`
+}
+
+// AuthenticationDeployment is the configuration for the Authentication Deployment.
+type AuthenticationDeployment struct {
+
+	// Spec is the specification of the Authentication Deployment.
+	// +optional
+	Spec *AuthenticationDeploymentSpec `json:"spec,omitempty"`
+}
+
+// AuthenticationDeploymentSpec defines configuration for the Authentication Deployment.
+type AuthenticationDeploymentSpec struct {
+
+	// Template describes the Authentication Deployment pod that will be created.
+	// +optional
+	Template *AuthenticationDeploymentPodTemplateSpec `json:"template,omitempty"`
+}
+
+// AuthenticationDeploymentPodTemplateSpec is the Authentication Deployment's PodTemplateSpec
+type AuthenticationDeploymentPodTemplateSpec struct {
+
+	// Spec is the Authentication Deployment's PodSpec.
+	// +optional
+	Spec *AuthenticationDeploymentPodSpec `json:"spec,omitempty"`
+}
+
+// AuthenticationDeploymentPodSpec is the Authentication Deployment's PodSpec.
+type AuthenticationDeploymentPodSpec struct {
+	// InitContainers is a list of Authentication init containers.
+	// If specified, this overrides the specified Authentication Deployment init containers.
+	// If omitted, the Authentication Deployment will use its default values for its init containers.
+	// +optional
+	InitContainers []AuthenticationDeploymentInitContainer `json:"initContainers,omitempty"`
+
+	// Containers is a list of Authentication containers.
+	// If specified, this overrides the specified Authentication Deployment containers.
+	// If omitted, the Authentication Deployment will use its default values for its containers.
+	// +optional
+	Containers []AuthenticationDeploymentContainer `json:"containers,omitempty"`
+}
+
+// AuthenticationDeploymentContainer is a Authentication Deployment container.
+type AuthenticationDeploymentContainer struct {
+	// Name is an enum which identifies the Authentication Deployment container by name.
+	// +kubebuilder:validation:Enum=tigera-dex
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named Authentication Deployment container's resources.
+	// If omitted, the Authentication Deployment will use its default value for this container's resources.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// AuthenticationDeploymentInitContainer is a Authentication Deployment init container.
+type AuthenticationDeploymentInitContainer struct {
+	// Name is an enum which identifies the Authentication Deployment init container by name.
+	// +kubebuilder:validation:Enum=tigera-dex-tls-key-cert-provisioner
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named Authentication Deployment init container's resources.
+	// If omitted, the Authentication Deployment will use its default value for this init container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+func (c *AuthenticationDeployment) GetMetadata() *Metadata {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetMinReadySeconds() *int32 {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetPodTemplateMetadata() *Metadata {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetInitContainers() []v1.Container {
+	if c != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.InitContainers != nil {
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
+					for i, v := range c.Spec.Template.Spec.InitContainers {
+						// Only copy and return the init container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetContainers() []v1.Container {
+	if c != nil {
+		if c.Spec != nil {
+			if c.Spec.Template != nil {
+				if c.Spec.Template.Spec != nil {
+					if c.Spec.Template.Spec.Containers != nil {
+						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
+						for i, v := range c.Spec.Template.Spec.Containers {
+							// Only copy and return the init container if it has resources set.
+							if v.Resources == nil {
+								continue
+							}
+							c := v1.Container{Name: v.Name, Resources: *v.Resources}
+							cs[i] = c
+						}
+						return cs
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetAffinity() *v1.Affinity {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetNodeSelector() map[string]string {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetTolerations() []v1.Toleration {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+	return nil
+}
+
+func (c *AuthenticationDeployment) GetPriorityClassName() string {
+	return ""
 }
 
 func init() {

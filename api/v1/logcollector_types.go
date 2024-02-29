@@ -41,6 +41,9 @@ type LogCollectorSpec struct {
 	// the management cluster's tenant services are running.
 	// +optional
 	MultiTenantManagementClusterNamespace string `json:"multiTenantManagementClusterNamespace,omitempty"`
+
+	// FluentdDaemonSet configures the Fluentd DaemonSet.
+	FluentdDaemonSet *FluentdDaemonSet `json:"fluentdDaemonSet,omitempty"`
 }
 
 type CollectProcessPathOption string
@@ -174,6 +177,10 @@ type EksCloudwatchLogsSpec struct {
 	// Default: 60
 	// +optional
 	FetchInterval int32 `json:"fetchInterval,omitempty"`
+
+	// EksCloudwatchLogsDeployment configures the EksCloudwatchLogs Deployment.
+	// +optional
+	EksCloudwatchLogsDeployment *EksCloudwatchLogsDeployment `json:"eksCloudwatchLogsDeployment,omitempty"`
 }
 
 // LogCollectorStatus defines the observed state of Tigera flow and DNS log collection

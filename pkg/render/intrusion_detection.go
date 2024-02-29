@@ -108,9 +108,10 @@ type IntrusionDetectionConfiguration struct {
 	TrustedCertBundle            certificatemanagement.TrustedBundleRO
 	IntrusionDetectionCertSecret certificatemanagement.KeyPairInterface
 
-	Namespace      string
-	BindNamespaces []string
-	Tenant         *operatorv1.Tenant
+	Namespace       string
+	BindNamespaces  []string
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
 }
 
 type intrusionDetectionComponent struct {
@@ -605,7 +606,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant)),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -625,6 +626,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 	}
 
+	if c.cfg.Tenant != nil {
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			envs = append(envs, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
+
+		if c.cfg.Tenant.MultiTenant() {
+			envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
+			envs = append(envs, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: ManagerService(c.cfg.Tenant)})
+		}
+	}
 	sc := securitycontext.NewNonRootContext()
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to

@@ -33,6 +33,193 @@ spec:
           spec:
             description: AuthenticationSpec defines the desired state of Authentication
             properties:
+              authenticationDeployment:
+                description: AuthenticationDeployment configures the Authentication
+                  Deployment.
+                properties:
+                  spec:
+                    description: Spec is the specification of the Authentication Deployment.
+                    properties:
+                      template:
+                        description: Template describes the Authentication Deployment
+                          pod that will be created.
+                        properties:
+                          spec:
+                            description: Spec is the Authentication Deployment's PodSpec.
+                            properties:
+                              containers:
+                                description: Containers is a list of Authentication
+                                  containers. If specified, this overrides the specified
+                                  Authentication Deployment containers. If omitted,
+                                  the Authentication Deployment will use its default
+                                  values for its containers.
+                                items:
+                                  description: AuthenticationDeploymentContainer is
+                                    a Authentication Deployment container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the Authentication Deployment container by
+                                        name.
+                                      enum:
+                                      - tigera-dex
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named Authentication Deployment
+                                        container's resources. If omitted, the Authentication
+                                        Deployment will use its default value for
+                                        this container's resources.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                              initContainers:
+                                description: InitContainers is a list of Authentication
+                                  init containers. If specified, this overrides the
+                                  specified Authentication Deployment init containers.
+                                  If omitted, the Authentication Deployment will use
+                                  its default values for its init containers.
+                                items:
+                                  description: AuthenticationDeploymentInitContainer
+                                    is a Authentication Deployment init container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the Authentication Deployment init container
+                                        by name.
+                                      enum:
+                                      - tigera-dex-tls-key-cert-provisioner
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named Authentication Deployment
+                                        init container's resources. If omitted, the
+                                        Authentication Deployment will use its default
+                                        value for this init container's resources.
+                                        If used in conjunction with the deprecated
+                                        ComponentResources, then this value takes
+                                        precedence.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                            type: object
+                        type: object
+                    type: object
+                type: object
               groupsPrefix:
                 description: If specified, GroupsPrefix is prepended to each group
                   obtained from the identity provider. Note that Kibana does not support

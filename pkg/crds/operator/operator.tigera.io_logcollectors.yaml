@@ -178,9 +178,7 @@ spec:
                                                 container's resources. If omitted,
                                                 the EksCloudwatchLogs Deployment will
                                                 use its default value for this init
-                                                container's resources. If used in
-                                                conjunction with the deprecated ComponentResources,
-                                                then this value takes precedence.
+                                                container's resources.
                                               properties:
                                                 claims:
                                                   description: "Claims lists the names
@@ -472,9 +470,7 @@ spec:
                                         overrides the named Fluentd DaemonSet init
                                         container's resources. If omitted, the Fluentd
                                         DaemonSet will use its default value for this
-                                        init container's resources. If used in conjunction
-                                        with the deprecated ComponentResources, then
-                                        this value takes precedence.
+                                        init container's resources.
                                       properties:
                                         claims:
                                           description: "Claims lists the names of

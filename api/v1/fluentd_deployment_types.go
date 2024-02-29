@@ -82,7 +82,6 @@ type FluentdDaemonSetInitContainer struct {
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named Fluentd DaemonSet init container's resources.
 	// If omitted, the Fluentd DaemonSet will use its default value for this init container's resources.
-	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }

@@ -52,6 +52,12 @@ type LogStorageSpec struct {
 	// Only ECKOperator is supported for this spec.
 	// +optional
 	ComponentResources []LogStorageComponentResource `json:"componentResources,omitempty"`
+
+	// LinseedDeployment configures the linseed Deployment.
+	LinseedDeployment *LinseedDeployment `json:"linseedDeployment,omitempty"`
+
+	// ESMetricsDeployment configures the tigera-elasticsearch-metric Deployment.
+	ESMetricsDeployment *ESMetricsDeployment `json:"esMetricsDeployment,omitempty"`
 }
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.

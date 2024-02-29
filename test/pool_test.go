@@ -188,4 +188,58 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(ipPools.Items[0].OwnerReferences).To(HaveLen(1))
 	})
+
+	It("should assume ownership of legacy IP pools", func() {
+		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
+		// the operator supporting direct IP pool management.
+		ipPool := crdv1.IPPool{
+			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
+			Spec: crdv1.IPPoolSpec{
+				CIDR:         "192.168.0.0/16",
+				IPIPMode:     crdv1.IPIPModeAlways,
+				VXLANMode:    crdv1.VXLANModeNever,
+				BlockSize:    26,
+				NATOutgoing:  true,
+				NodeSelector: "all()",
+			},
+		}
+		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())
+
+		// Create an Installation referencing the IP pool by CIDR, mimicing the upgrade case. We expect
+		// the operator to assume ownership of the IP pool, filling in any missing fields and updating the
+		// IP pool in the cluster to match the given configuration.
+		spec := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/24",
+						Encapsulation: operator.EncapsulationNone,
+					},
+				},
+			},
+		}
+		operatorDone = installResourceCRD(c, mgr, shutdownContext, &spec)
+		verifyCalicoHasDeployed(c)
+
+		// Get IP pools installed in the cluster.
+		ipPools := &crdv1.IPPoolList{}
+		Eventually(func() error {
+			return c.List(context.Background(), ipPools)
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+
+		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
+
+		// Verify that a default IPv4 pool was created.
+		Expect(ipPools.Items[0].Name).To(Equal("default-ipv4-ippool"))
+		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/24"))
+		Expect(ipPools.Items[0].Spec.NATOutgoing).To(Equal(true))
+		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
+		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
+		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
+		Expect(ipPools.Items[0].Spec.IPIPMode).To(Equal(crdv1.IPIPModeNever))
+		Expect(ipPools.Items[0].Spec.VXLANMode).To(Equal(crdv1.VXLANModeNever))
+
+		// This proves that the operator has assumed ownership of the legacy IP pool.
+		Expect(ipPools.Items[0].OwnerReferences).To(HaveLen(1))
+	})
 })

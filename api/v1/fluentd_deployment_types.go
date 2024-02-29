@@ -21,7 +21,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// FluentdDaemonSet is the configuration for the EksCloudwatchLogs Deployment.
+// FluentdDaemonSet is the configuration for the Fluentd DaemonSet.
 type FluentdDaemonSet struct {
 
 	// Spec is the specification of the Fluentd DaemonSet.
@@ -29,7 +29,7 @@ type FluentdDaemonSet struct {
 	Spec *FluentdDaemonSetSpec `json:"spec,omitempty"`
 }
 
-// FluentdDaemonSetSpec defines configuration for the EksCloudwatchLogs Deployment.
+// FluentdDaemonSetSpec defines configuration for the Fluentd DaemonSet.
 type FluentdDaemonSetSpec struct {
 
 	// Template describes the Fluentd DaemonSet pod that will be created.
@@ -37,7 +37,7 @@ type FluentdDaemonSetSpec struct {
 	Template *FluentdDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-// FluentdDaemonSetPodTemplateSpec is the EksCloudwatchLogs Deployment's PodTemplateSpec
+// FluentdDaemonSetPodTemplateSpec is the Fluentd DaemonSet's PodTemplateSpec
 type FluentdDaemonSetPodTemplateSpec struct {
 
 	// Spec is the Fluentd DaemonSet's PodSpec.
@@ -48,8 +48,8 @@ type FluentdDaemonSetPodTemplateSpec struct {
 // FluentdDaemonSetPodSpec is the Fluentd DaemonSet's PodSpec.
 type FluentdDaemonSetPodSpec struct {
 	// InitContainers is a list of Fluentd DaemonSet init containers.
-	// If specified, this overrides the specified EksCloudwatchLogs Deployment init containers.
-	// If omitted, the EksCloudwatchLogs Deployment will use its default values for its init containers.
+	// If specified, this overrides the specified Fluentd DaemonSet init containers.
+	// If omitted, the Fluentd DaemonSet will use its default values for its init containers.
 	// +optional
 	InitContainers []FluentdDaemonSetInitContainer `json:"initContainers,omitempty"`
 
@@ -60,7 +60,7 @@ type FluentdDaemonSetPodSpec struct {
 	Containers []FluentdDaemonSetContainer `json:"containers,omitempty"`
 }
 
-// FluentdDaemonSetContainer is a EksCloudwatchLogs Deployment container.
+// FluentdDaemonSetContainer is a Fluentd DaemonSet container.
 type FluentdDaemonSetContainer struct {
 	// Name is an enum which identifies the Fluentd DaemonSet container by name.
 	// +kubebuilder:validation:Enum=fluentd

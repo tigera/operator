@@ -372,8 +372,8 @@ spec:
                                   Fluentd DaemonSet containers. If omitted, the Fluentd
                                   DaemonSet will use its default values for its containers.
                                 items:
-                                  description: FluentdDaemonSetContainer is a EksCloudwatchLogs
-                                    Deployment container.
+                                  description: FluentdDaemonSetContainer is a Fluentd
+                                    DaemonSet container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
@@ -450,9 +450,9 @@ spec:
                               initContainers:
                                 description: InitContainers is a list of Fluentd DaemonSet
                                   init containers. If specified, this overrides the
-                                  specified EksCloudwatchLogs Deployment init containers.
-                                  If omitted, the EksCloudwatchLogs Deployment will
-                                  use its default values for its init containers.
+                                  specified Fluentd DaemonSet init containers. If
+                                  omitted, the Fluentd DaemonSet will use its default
+                                  values for its init containers.
                                 items:
                                   description: FluentdDaemonSetInitContainer is a
                                     Fluentd DaemonSet init container.

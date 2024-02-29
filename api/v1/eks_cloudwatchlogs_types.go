@@ -76,7 +76,7 @@ type EksCloudwatchLogsDeploymentContainer struct {
 // EksCloudwatchLogsDeploymentInitContainer is a EksCloudwatchLogs Deployment init container.
 type EksCloudwatchLogsDeploymentInitContainer struct {
 	// Name is an enum which identifies the EksCloudwatchLogs Deployment init container by name.
-	// +kubebuilder:validation:Enum=EKSLogForwarderName-startup
+	// +kubebuilder:validation:Enum=eks-log-forwarder-startup
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

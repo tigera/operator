@@ -167,7 +167,7 @@ spec:
                                                 the EksCloudwatchLogs Deployment init
                                                 container by name.
                                               enum:
-                                              - EKSLogForwarderName-startup
+                                              - eks-log-forwarder-startup
                                               type: string
                                             resources:
                                               description: Resources allows customization

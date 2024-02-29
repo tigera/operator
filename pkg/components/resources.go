@@ -19,15 +19,27 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-type ResourceConfig struct {
-	CPURequest    string
-	CPULimit      string
+// ContainerResources represents the resource requirements and limits for a container.
+type ContainerResources struct {
+	// CPURequest specifies the amount of CPU requested for the container.
+	// Specify CPU units using the milliCPU when using less than 1 CPU unit. For example: 1 CPU unit = 1000 millicore or 1000m
+	CPURequest string
+
+	// CPULimit specifies the maximum amount of CPU allowed for the container.
+	// Specify CPU units using the milliCPU when using less than 1 CPU unit. For example: 1 CPU unit = 1000 millicore or 1000m
+	CPULimit string
+
+	// MemoryRequest specifies the amount of memory requested for the container.
+	// Use the power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. For example: 1 Mi = 1000 kibibyte
 	MemoryRequest string
-	MemoryLimit   string
+
+	// MemoryLimit specifies the maximum amount of memory allowed for the container.
+	// Use the power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. For example: 1 Mi = 1000 kibibyte
+	MemoryLimit string
 }
 
 var (
-	ResourceCSRInitContainer = ResourceConfig{
+	ResourceCSRInitContainer = ContainerResources{
 		CPURequest:    "10m",
 		CPULimit:      "10m",
 		MemoryRequest: "50Mi",
@@ -35,7 +47,7 @@ var (
 	}
 )
 
-func GetResourceConfig(r ResourceConfig) corev1.ResourceRequirements {
+func GetContainerResources(r ContainerResources) corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			"cpu":    resource.MustParse(r.CPURequest),

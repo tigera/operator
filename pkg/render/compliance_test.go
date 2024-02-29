@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -43,6 +44,7 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("compliance rendering tests", func() {
@@ -119,6 +121,184 @@ var _ = Describe("compliance rendering tests", func() {
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
+	})
+
+	It("should render the deployments with resource requests and limits for compliance components", func() {
+		complianceResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		cfg.Compliance = &operatorv1.Compliance{
+			Spec: operatorv1.ComplianceSpec{
+				ComplianceServerDeployment: &operatorv1.ComplianceServerDeployment{
+					Spec: &operatorv1.ComplianceServerDeploymentSpec{
+						Template: &operatorv1.ComplianceServerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ComplianceServerDeploymentPodSpec{
+								Containers: []operatorv1.ComplianceServerDeploymentContainer{{
+									Name:      "compliance-server",
+									Resources: &complianceResources,
+								}},
+							},
+						},
+					},
+				},
+				ControllerDeployment: &operatorv1.ControllerDeployment{
+					Spec: &operatorv1.ControllerDeploymentSpec{
+						Template: &operatorv1.ControllerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ControllerDeploymentPodSpec{
+								Containers: []operatorv1.ControllerDeploymentContainer{{
+									Name:      "compliance-controller",
+									Resources: &complianceResources,
+								}},
+							},
+						},
+					},
+				},
+				SnapshotterDeployment: &operatorv1.SnapshotterDeployment{
+					Spec: &operatorv1.SnapshotterDeploymentSpec{
+						Template: &operatorv1.SnapshotterDeploymentPodTemplateSpec{
+							Spec: &operatorv1.SnapshotterDeploymentPodSpec{
+								Containers: []operatorv1.SnapshotterDeploymentContainer{{
+									Name:      "compliance-snapshotter",
+									Resources: &complianceResources,
+								}},
+							},
+						},
+					},
+				},
+
+				BenchmarkerDaemonSet: &operatorv1.BenchmarkerDaemonSet{
+					Spec: &operatorv1.BenchmarkerDaemonSetSpec{
+						Template: &operatorv1.BenchmarkerDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.BenchmarkerDaemonSetPodSpec{
+								Containers: []operatorv1.BenchmarkerDaemonSetContainer{{
+									Name:      "compliance-benchmarker",
+									Resources: &complianceResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		resources, _ := component.Objects()
+		d, ok := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container := test.GetContainer(d.Spec.Template.Spec.Containers, "compliance-server")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(complianceResources))
+
+		d, ok = rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container = test.GetContainer(d.Spec.Template.Spec.Containers, "compliance-controller")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(complianceResources))
+
+		d, ok = rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container = test.GetContainer(d.Spec.Template.Spec.Containers, "compliance-snapshotter")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(complianceResources))
+
+		ds, ok := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ok).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(complianceResources))
+	})
+
+	It("should render the deployments without resource requests and limits for compliance resources when not set", func() {
+		complianceResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		cfg.Compliance = &operatorv1.Compliance{
+			Spec: operatorv1.ComplianceSpec{
+				SnapshotterDeployment: &operatorv1.SnapshotterDeployment{
+					Spec: &operatorv1.SnapshotterDeploymentSpec{
+						Template: &operatorv1.SnapshotterDeploymentPodTemplateSpec{
+							Spec: &operatorv1.SnapshotterDeploymentPodSpec{
+								Containers: []operatorv1.SnapshotterDeploymentContainer{{
+									Name:      "compliance-snapshotter",
+									Resources: &complianceResources,
+								}},
+							},
+						},
+					},
+				},
+				BenchmarkerDaemonSet: &operatorv1.BenchmarkerDaemonSet{
+					Spec: &operatorv1.BenchmarkerDaemonSetSpec{
+						Template: &operatorv1.BenchmarkerDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.BenchmarkerDaemonSetPodSpec{
+								Containers: []operatorv1.BenchmarkerDaemonSetContainer{{
+									Name:      "compliance-benchmarker",
+									Resources: &complianceResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// Compliance-server should NOT have resource values when not set
+		d, ok := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container := test.GetContainer(d.Spec.Template.Spec.Containers, "compliance-server")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(corev1.ResourceRequirements{}))
+
+		// Compliance-server should NOT have resource values when not set
+		d, ok = rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container = test.GetContainer(d.Spec.Template.Spec.Containers, "compliance-controller")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(corev1.ResourceRequirements{}))
+
+		// Compliance-server should have resource values set
+		d, ok = rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container = test.GetContainer(d.Spec.Template.Spec.Containers, "compliance-snapshotter")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(complianceResources))
+
+		ds, ok := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ok).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(complianceResources))
+
 	})
 
 	Context("Standalone cluster", func() {

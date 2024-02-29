@@ -19,6 +19,8 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -233,6 +235,51 @@ var _ = Describe("Elasticsearch metrics", func() {
 				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
+		})
+
+		It("should renders the Elasticsearch metrics with resource requests and limits", func() {
+			esMetricsResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			logStorageCfg := operatorv1.LogStorage{
+				Spec: operatorv1.LogStorageSpec{
+					ESMetricsDeployment: &operatorv1.ESMetricsDeployment{
+						Spec: &operatorv1.ESMetricsDeploymentSpec{
+							Template: &operatorv1.ESMetricsDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ESMetricsDeploymentPodSpec{
+									Containers: []operatorv1.ESMetricsDeploymentContainer{{
+										Name:      "tigera-elasticsearch-metrics",
+										Resources: &esMetricsResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			cfg.LogStorage = &logStorageCfg
+			component := ElasticsearchMetrics(cfg)
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "tigera-elasticsearch-metrics", render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-elasticsearch-metrics")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(esMetricsResources))
+
 		})
 
 		It("should render properly when PSP is not supported by the cluster", func() {

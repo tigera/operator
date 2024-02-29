@@ -19,31 +19,15 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-type ResourceConfig struct {
-	CPURequest    string
-	CPULimit      string
-	MemoryRequest string
-	MemoryLimit   string
-}
-
-var (
-	ResourceCSRInitContainer = ResourceConfig{
-		CPURequest:    "10m",
-		CPULimit:      "10m",
-		MemoryRequest: "50Mi",
-		MemoryLimit:   "50Mi",
-	}
-)
-
-func GetResourceConfig(r ResourceConfig) corev1.ResourceRequirements {
+func GetCSRContainerDefaultResources() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			"cpu":    resource.MustParse(r.CPURequest),
-			"memory": resource.MustParse(r.MemoryRequest),
+			"cpu":    resource.MustParse("10m"),
+			"memory": resource.MustParse("10m"),
 		},
 		Limits: corev1.ResourceList{
-			"cpu":    resource.MustParse(r.CPULimit),
-			"memory": resource.MustParse(r.MemoryLimit),
+			"cpu":    resource.MustParse("50Mi"),
+			"memory": resource.MustParse("50Mi"),
 		},
 	}
 }

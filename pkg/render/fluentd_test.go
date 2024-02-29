@@ -18,6 +18,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -235,6 +237,49 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// The metrics service should have the correct configuration.
 		ms := rtest.GetResource(resources, render.FluentdMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
+	})
+
+	It("should render fluentd Daemonset with resources values", func() {
+		fluentdResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		logCollectorcfg := operatorv1.LogCollector{
+			Spec: operatorv1.LogCollectorSpec{
+				FluentdDaemonSet: &operatorv1.FluentdDaemonSet{
+					Spec: &operatorv1.FluentdDaemonSetSpec{
+						Template: &operatorv1.FluentdDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.FluentdDaemonSetPodSpec{
+								Containers: []operatorv1.FluentdDaemonSetContainer{{
+									Name:      "fluentd",
+									Resources: &fluentdResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg.LogCollector = &logCollectorcfg
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+		container := test.GetContainer(ds.Spec.Template.Spec.Containers, "fluentd")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(fluentdResources))
 	})
 
 	It("should render with a configuration for a managed cluster", func() {
@@ -1032,6 +1077,62 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		Expect(envs).To(Equal(expectedEnvVars))
+	})
+
+	It("should render with EKS Cloudwatch Log with resources", func() {
+		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
+		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderEKS,
+		}
+
+		eksResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		logCollectorcfg := operatorv1.LogCollector{
+			Spec: operatorv1.LogCollectorSpec{
+				AdditionalSources: &operatorv1.AdditionalLogSourceSpec{
+					EksCloudwatchLog: &operatorv1.EksCloudwatchLogsSpec{
+						EksCloudwatchLogsDeployment: &operatorv1.EksCloudwatchLogsDeployment{
+							Spec: &operatorv1.EksCloudwatchLogsDeploymentSpec{
+								Template: &operatorv1.EksCloudwatchLogsDeploymentPodTemplateSpec{
+									Spec: &operatorv1.EksCloudwatchLogsDeploymentPodSpec{
+										Containers: []operatorv1.EksCloudwatchLogsDeploymentContainer{{
+											Name:      "eks-log-forwarder",
+											Resources: &eksResources,
+										}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg.LogCollector = &logCollectorcfg
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container := test.GetContainer(deploy.Spec.Template.Spec.Containers, "eks-log-forwarder")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(eksResources))
+
+		initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "eks-log-forwarder-startup")
+		Expect(initContainer).NotTo(BeNil())
+		Expect(initContainer.Resources).To(Equal(corev1.ResourceRequirements{}))
 	})
 
 	It("should render with EKS Cloudwatch Log with multi tenant envvars", func() {

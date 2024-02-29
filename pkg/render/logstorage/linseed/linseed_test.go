@@ -272,7 +272,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 		})
 
-		It("should render deployment with resource request and limits", func() {
+		It("should render deployment with resource requests and limits", func() {
 
 			linseedResources := corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{

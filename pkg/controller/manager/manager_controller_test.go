@@ -44,7 +44,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
@@ -193,6 +192,10 @@ var _ = Describe("Manager controller tests", func() {
 			internalKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), expectedDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, internalKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+			kbKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, kbKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -460,6 +463,10 @@ var _ = Describe("Manager controller tests", func() {
 			internalCertKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, internalCertKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+			kbKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, kbKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 

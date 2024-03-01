@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -360,6 +361,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 		render.TigeraLinseedSecret,
 	}
+
+	if !operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
+		trustedSecretNames = append(trustedSecretNames, render.TigeraKibanaCertSecret)
+	}
+
 	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
 		if complianceCR.Status.State != operatorv1.TigeraStatusReady {

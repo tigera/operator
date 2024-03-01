@@ -491,6 +491,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

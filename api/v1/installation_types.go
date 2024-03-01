@@ -486,7 +486,7 @@ type CalicoNetworkSpec struct {
 	//
 	// Default: 0
 	// +optional
-	LinuxPolicySetupTimeoutSeconds *int32 `json:"linuxpolicySetupTimeoutSeconds,omitempty"`
+	LinuxPolicySetupTimeoutSeconds *int32 `json:"linuxPolicySetupTimeoutSeconds,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

@@ -362,9 +362,13 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 				"secretEnv":    dexSecretEnv,
 			},
 		},
+		"expiry": map[string]string{
+			// Default duration is 24h. This is too high for most organizations. Setting it to 15m.
+			"idTokens": "15m",
+		},
 	})
 	if err != nil {
-		// Panic since this this would be a developer error, as the marshaled struct is one created by our code.
+		// Panic since this would be a developer error, as the marshaled struct is one created by our code.
 		panic(err)
 	}
 	return &corev1.ConfigMap{

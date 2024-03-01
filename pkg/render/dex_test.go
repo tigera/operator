@@ -239,6 +239,9 @@ var _ = Describe("dex rendering tests", func() {
 			}
 			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(BeEquivalentTo(expectedVolumeMounts))
 			Expect(d.Spec.Template.Spec.Volumes).To(BeEquivalentTo(expectedVolumes))
+			cm, ok := rtest.GetResource(resources, "tigera-dex", "tigera-dex", "", "v1", "ConfigMap").(*corev1.ConfigMap)
+			Expect(ok).To(BeTrue())
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("idTokens: 15m"))
 		})
 
 		DescribeTable("should render the cluster name properly in the validator", func(clusterDomain string) {

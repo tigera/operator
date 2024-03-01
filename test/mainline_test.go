@@ -548,7 +548,7 @@ func waitForProductTeardown(c client.Client) {
 }
 
 func cleanupResources(c client.Client) {
-	removeInstallation(c, "default", context.Background())
 	removeAPIServer(c, context.Background())
+	removeInstallation(c, "default", context.Background())
 	waitForProductTeardown(c)
 }

@@ -257,7 +257,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		}
 		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
 			Expect(poolsByCIDR).To(HaveKey(pool.CIDR))
-			Expect(poolsByCIDR[pool.CIDR].OwnerReferences).To(HaveLen(1))
+			Expect(poolsByCIDR[pool.CIDR].Labels).To(Equal(map[string]string{"app.kubernetes.io/managed-by": "tigera-operator"}))
 		}
 	})
 

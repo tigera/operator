@@ -126,30 +126,21 @@ type Reconciler struct {
 	status               status.StatusManager
 }
 
+const (
+	// This label is used to track which IP pools are managed by this controller. Any IP pool
+	// with this label key/value pair is assumed to be solely managed and reconcile by this controller.
+	managedByLabel = "app.kubernetes.io/managed-by"
+	managedByValue = "tigera-operator"
+)
+
 // hasOwner returns true if the given IP pool is owned by the given Installation object, and
 // false otherwise.
 func hasOwner(pool *crdv1.IPPool, installation *operator.Installation) bool {
-	// Check the v1 object metadata.
-	for _, o := range pool.OwnerReferences {
-		if o.Name == installation.Name && o.UID == installation.UID {
-			return true
-		}
-	}
-
-	// Check the metadata annotation. This annotation includes the v3 object metadata.
-	if pool.Annotations != nil {
-		raw := pool.Annotations["projectcalico.org/metadata"]
-		meta := metav1.ObjectMeta{}
-		if err := json.Unmarshal([]byte(raw), &meta); err != nil {
-			log.Error(err, "Failed to parse IPPool metadata annotation")
-			return false
-		}
-
-		for _, o := range meta.OwnerReferences {
-			if o.Name == installation.Name && o.UID == installation.UID {
-				return true
-			}
-		}
+	// Check for the managed-by label. Once OwnerReferences are supported on projectcalico.org/v3
+	// resources, we can remove this shortcut. Ideally, we would be comparing the OwnerReference to the UID
+	// on the Installation here instead.
+	if val, ok := pool.Labels[managedByLabel]; ok && val == managedByValue {
+		return true
 	}
 	return false
 }
@@ -567,7 +558,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
-		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for CNI type to be defaulted", nil, reqLogger)
+		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
@@ -637,13 +628,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+		v1res.Labels[managedByLabel] = managedByValue
 
 		// If the Calico API server is available, always send the update.
 		// Otherwise, only include an the pool in the update if the pool doesn't exist.
 		if pool, ok := ourPools[p.CIDR]; apiAvailable || !ok || !reflect.DeepEqual(pool.Spec, v1res.Spec) {
 			// The pool either doesn't exist, or it does exist but needs to be updated.
-			reqLogger.V(1).Info("Pool requires create/update", "pool", v1res.Name, "cidr", v1res.Spec.CIDR)
-			if apiAvailable {
+			if len(currentPools.Items) == 0 {
+				// There are no pools in the cluster. Create them using the v1 API, as they are needed for bootstrapping.
+				// Once the v3 API is available, we'll use that instead. Note that this is an imperfect solution - it still bypasses apiserver validation for
+				// the initial creation of IP pools (although we expect them to be valid due to operator validation). If the bootstrap pools
+				// are invalid and do not enable the Calico apiserver to launch successfully, then manual intervention will be required.
+				toCreateOrUpdate = append(toCreateOrUpdate, v1res)
+			} else if apiAvailable {
 				// The v3 API is available, so use it to create / update the pool.
 				v3res, err := v1ToV3(v1res)
 				if err != nil {
@@ -651,12 +648,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 					return reconcile.Result{}, err
 				}
 				toCreateOrUpdate = append(toCreateOrUpdate, v3res)
-			} else if len(currentPools.Items) == 0 {
-				// The v3 API is not available, but there are no pools in the cluster. Create them using the v1 API, as they are needed for bootstrapping.
-				// Once the v3 API is available, we'll use that instead. Note that this is an imperfect solution - it still bypasses apiserver validation for
-				// the initial creation of IP pools (although we expect them to be valid due to operator validation). If the bootstrap pools
-				// are invalid and do not enable the Calico apiserver to launch successfully, then manual intervention will be required.
-				toCreateOrUpdate = append(toCreateOrUpdate, v1res)
+
 			} else {
 				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
 				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.
@@ -700,13 +692,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
-	// This is an awkward workaround for the fact that we don't want both the v1 and v3 representation of the
-	// IP pool to have an owner reference, as it causes GC problems. Instead, we only apply the owner reference
-	// to the v3 version of the resource.
+	// OwnerReferences are not working with Calico v3 resources per this issue: https://github.com/projectcalico/calico/issues/5715
+	// For now, we leave the IP pools without an owner reference and instead use a label to indicate that these pools are owned by
+	// the operator. Once the linked issue is fixed, we can switch to using an OwnerReference instead.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	if apiAvailable {
-		handler = utils.NewComponentHandler(log, r.client, r.scheme, installation)
-	}
 
 	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {

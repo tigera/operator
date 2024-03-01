@@ -49,7 +49,7 @@ type LogStorageSpec struct {
 	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
 
 	// ComponentResources can be used to customize the resource requirements for each component.
-	// Only ECKOperator is supported for this spec.
+	// This spec is only supported for ECKOperator and Kibana..
 	// +optional
 	ComponentResources []LogStorageComponentResource `json:"componentResources,omitempty"`
 }
@@ -164,12 +164,13 @@ type LogStorageComponentName string
 
 const (
 	ComponentNameECKOperator LogStorageComponentName = "ECKOperator"
+	ComponentNameKibana      LogStorageComponentName = "Kibana"
 )
 
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type LogStorageComponentResource struct {
 	// ComponentName is an enum which identifies the component
-	// +kubebuilder:validation:Enum=ECKOperator
+	// +kubebuilder:validation:Enum=ECKOperator;Kibana
 	ComponentName LogStorageComponentName `json:"componentName"`
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements"`

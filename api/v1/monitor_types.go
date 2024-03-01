@@ -28,6 +28,29 @@ type MonitorSpec struct {
 	// specified, the operator will render resources in the defined namespace. This option can be useful for configuring
 	// scraping from git-ops tools without the need of post-installation steps.
 	ExternalPrometheus *ExternalPrometheus `json:"externalPrometheus,omitempty"`
+
+	// ComponentResources can be used to customize the resource requirements for each component.
+	// This spec is only supported for prometheus and alert manager
+	// +optional
+	ComponentResources []MonitorComponentResource `json:"componentResources,omitempty"`
+}
+
+// LogStorageComponentName CRD enum
+type MonitorComponentName string
+
+const (
+	ComponentNamePrometheus          MonitorComponentName = "Prometheus"
+	ComponentNamePrometheusAuthProxy MonitorComponentName = "PrometheusAuthProxy"
+	ComponentNameAlertManager        MonitorComponentName = "AlertManager"
+)
+
+// The ComponentResource struct associates a ResourceRequirements with a component by name
+type MonitorComponentResource struct {
+	// ComponentName is an enum which identifies the component
+	// +kubebuilder:validation:Enum=PrometheusAuthProxy;Prometheus;AlertManager
+	ComponentName MonitorComponentName `json:"componentName"`
+	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
+	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements"`
 }
 
 type ExternalPrometheus struct {

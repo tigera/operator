@@ -796,14 +796,14 @@ var _ = Describe("Installation validation tests", func() {
 			negative := int32(-1)
 			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &negative
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError("Installation CNI spec.LinuxPolicySetupTimeoutSeconds negative value is not valid"))
+			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds negative value is not valid"))
 		})
 
 		It("should return an error when LinuxPolicySetupTimeoutSeconds is set but no dataplane is specified", func() {
 			tos := int32(10)
 			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError("spec.calicoNetwork.LinuxpolicySetupTimeoutSeconds requires the Iptables Linux dataplane to be set"))
+			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds requires the Iptables Linux dataplane to be set"))
 		})
 
 		It("should return an error when LinuxPolicySetupTimeoutSeconds is set for an unsupported dataplane", func() {
@@ -815,7 +815,7 @@ var _ = Describe("Installation validation tests", func() {
 			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
 			instance.Spec.CalicoNetwork.BGP = &bgp
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError("spec.calicoNetwork.LinuxpolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes"))
+			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes"))
 		})
 
 		It("should not error if LinuxPolicySetupTimeoutSeconds is set as a positive int32, with the Calico CNI plugin and Iptables dataplane", func() {

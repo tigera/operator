@@ -358,8 +358,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
 				return fmt.Errorf("spec.calicoNetwork.policySetupTimeoutSeconds requires the Iptables Linux dataplane to be set")
 			}
-			if *instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneIptables {
-				return fmt.Errorf("spec.calicoNetwork.policySetupTimeoutSeconds is supported only for the Iptables Linux dataplane")
+			if *instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneIptables &&
+				*instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneBPF {
+				return fmt.Errorf("spec.calicoNetwork.policySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes")
 			}
 		}
 	}

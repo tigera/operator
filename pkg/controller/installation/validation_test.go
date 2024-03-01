@@ -806,13 +806,16 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).To(MatchError("spec.calicoNetwork.policySetupTimeoutSeconds requires the Iptables Linux dataplane to be set"))
 		})
 
-		It("should return an error when PolicySetupTimeoutSeconds is set for a non-IPTables dataplane", func() {
-			dp := operator.LinuxDataplaneBPF
+		It("should return an error when PolicySetupTimeoutSeconds is set for an unsupported dataplane", func() {
+			dp := operator.LinuxDataplaneVPP
+			// Enable BGP to pass VPP validation.
+			bgp := operator.BGPEnabled
 			tos := int32(10)
 			instance.Spec.CalicoNetwork.LinuxDataplane = &dp
 			instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds = &tos
+			instance.Spec.CalicoNetwork.BGP = &bgp
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError("spec.calicoNetwork.policySetupTimeoutSeconds is supported only for the Iptables Linux dataplane"))
+			Expect(err).To(MatchError("spec.calicoNetwork.policySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes"))
 		})
 
 		It("should not error if PolicySetupTimeoutSeconds is set as a positive int32, with the Calico CNI plugin and Iptables dataplane", func() {

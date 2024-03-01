@@ -60,7 +60,7 @@ const (
 	BGPLayoutPath                     = "/etc/calico/early-networking.yaml"
 	K8sSvcEndpointConfigMapName       = "kubernetes-services-endpoint"
 	nodeTerminationGracePeriodSeconds = 5
-	NodeFinalizer                     = "tigera.io/cni-protector"
+	CNIFinalizer                      = "tigera.io/cni-protector"
 
 	CalicoNodeMetricsService      = "calico-node-metrics"
 	NodePrometheusTLSServerSecret = "calico-node-prometheus-server-tls"
@@ -194,7 +194,8 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		c.cniPluginRoleBinding(),
 	}
 
-	// These are objects to keep even when we're terminating
+	// These are objects to keep even when we're terminating. They will be deleted by the Kubernetes
+	// garbage collector when the Installation is finally deleted.
 	objsToKeep := []client.Object{}
 
 	if c.cfg.Terminating {
@@ -254,7 +255,7 @@ func (c *nodeComponent) Ready() bool {
 func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+		finalizer = []string{CNIFinalizer}
 	}
 
 	return &corev1.ServiceAccount{
@@ -271,7 +272,7 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+		finalizer = []string{CNIFinalizer}
 	}
 
 	return &corev1.ServiceAccount{
@@ -288,7 +289,7 @@ func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+		finalizer = []string{CNIFinalizer}
 	}
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -320,7 +321,7 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+		finalizer = []string{CNIFinalizer}
 	}
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -348,7 +349,7 @@ func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+		finalizer = []string{CNIFinalizer}
 	}
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -560,7 +561,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 	finalizer := []string{}
 	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+		finalizer = []string{CNIFinalizer}
 	}
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},

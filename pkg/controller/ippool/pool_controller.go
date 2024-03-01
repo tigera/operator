@@ -618,7 +618,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if hasOwner(&p, installation) {
 			// This pool is owned by the Installation object, so consider it ours.
 			ourPools[p.Spec.CIDR] = p
-		} else if p.Name == "default-ipv4-ippool" {
+		} else if p.Name == "default-ipv4-ippool" || p.Name == "default-ipv6-ippool" {
 			// For legacy installs, this is the IP pool that was created. Consider it ours.
 			ourPools[p.Spec.CIDR] = p
 		}
@@ -638,8 +638,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, err
 		}
 
-		if pool, ok := ourPools[p.CIDR]; !ok || !reflect.DeepEqual(pool.Spec, v1res.Spec) {
+		// If the Calico API server is available, always send the update.
+		// Otherwise, only include an the pool in the update if the pool doesn't exist.
+		if pool, ok := ourPools[p.CIDR]; apiAvailable || !ok || !reflect.DeepEqual(pool.Spec, v1res.Spec) {
 			// The pool either doesn't exist, or it does exist but needs to be updated.
+			reqLogger.V(1).Info("Pool requires create/update", "pool", v1res.Name, "cidr", v1res.Spec.CIDR)
 			if apiAvailable {
 				// The v3 API is available, so use it to create / update the pool.
 				v3res, err := v1ToV3(v1res)
@@ -657,7 +660,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			} else {
 				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
 				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.
-				reqLogger.Info("Comparing pools", "actual", pool, "desired", p)
 				r.status.SetDegraded(operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, reqLogger)
 				return reconcile.Result{}, nil
 			}
@@ -698,7 +700,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, installation)
+	// This is an awkward workaround for the fact that we don't want both the v1 and v3 representation of the
+	// IP pool to have an owner reference, as it causes GC problems. Instead, we only apply the owner reference
+	// to the v3 version of the resource.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	if apiAvailable {
+		handler = utils.NewComponentHandler(log, r.client, r.scheme, installation)
+	}
 
 	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {

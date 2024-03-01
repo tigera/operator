@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
@@ -78,6 +79,7 @@ var _ = Describe("IPPool FV tests", func() {
 
 	AfterEach(func() {
 		defer func() {
+			By("shutting down the operator")
 			cancel()
 			Eventually(func() error {
 				select {
@@ -93,6 +95,7 @@ var _ = Describe("IPPool FV tests", func() {
 		cleanupResources(c)
 
 		// Clean up Calico data that might be left behind.
+		By("Cleaning up any remaining cruft")
 		Eventually(func() error {
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 			nodes, err := cs.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
@@ -120,7 +123,7 @@ var _ = Describe("IPPool FV tests", func() {
 	})
 
 	It("Should install default IP pools", func() {
-		operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
+		operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
@@ -168,7 +171,7 @@ var _ = Describe("IPPool FV tests", func() {
 				},
 			},
 		}
-		operatorDone = installResourceCRD(c, mgr, shutdownContext, &spec)
+		operatorDone = createInstallation(c, mgr, shutdownContext, &spec)
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
@@ -195,7 +198,7 @@ var _ = Describe("IPPool FV tests", func() {
 		ipPool := crdv1.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
 			Spec: crdv1.IPPoolSpec{
-				CIDR:         "192.168.0.0/16",
+				CIDR:         "192.168.0.0/24",
 				IPIPMode:     crdv1.IPIPModeAlways,
 				VXLANMode:    crdv1.VXLANModeNever,
 				BlockSize:    26,
@@ -218,8 +221,11 @@ var _ = Describe("IPPool FV tests", func() {
 				},
 			},
 		}
-		operatorDone = installResourceCRD(c, mgr, shutdownContext, &spec)
+		operatorDone = createInstallation(c, mgr, shutdownContext, &spec)
 		verifyCalicoHasDeployed(c)
+
+		// In order to modify IP pools, the operator needs the API server. We can assert the IP pool has not yet
+		// been controlled by the operator at this point.
 
 		// Get IP pools installed in the cluster.
 		ipPools := &crdv1.IPPoolList{}
@@ -229,17 +235,31 @@ var _ = Describe("IPPool FV tests", func() {
 
 		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
-		// Verify that a default IPv4 pool was created.
-		Expect(ipPools.Items[0].Name).To(Equal("default-ipv4-ippool"))
-		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/24"))
-		Expect(ipPools.Items[0].Spec.NATOutgoing).To(Equal(true))
-		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
-		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
-		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[0].Spec.IPIPMode).To(Equal(crdv1.IPIPModeNever))
-		Expect(ipPools.Items[0].Spec.VXLANMode).To(Equal(crdv1.VXLANModeNever))
+		// This proves the operator has not assumed control.
+		Expect(ipPools.Items[0].OwnerReferences).To(HaveLen(0))
+
+		// Now, install the API server.
+		createAPIServer(c, mgr, shutdownContext, nil)
+		verifyAPIServerHasDeployed(c)
+
+		// We can now query using the v3 API!
+		v3Pools := &v3.IPPoolList{}
+		Eventually(func() error {
+			return c.List(context.Background(), v3Pools)
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+		Expect(len(v3Pools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
+
+		// Verify that the default IPv4 pool has been subsumed by the operator.
+		Expect(v3Pools.Items[0].Name).To(Equal("default-ipv4-ippool"))
+		Expect(v3Pools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/24"))
+		Expect(v3Pools.Items[0].Spec.NATOutgoing).To(Equal(true))
+		Expect(v3Pools.Items[0].Spec.Disabled).To(Equal(false))
+		Expect(v3Pools.Items[0].Spec.BlockSize).To(Equal(26))
+		Expect(v3Pools.Items[0].Spec.NodeSelector).To(Equal("all()"))
+		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPModeNever))
+		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANModeNever))
 
 		// This proves that the operator has assumed ownership of the legacy IP pool.
-		Expect(ipPools.Items[0].OwnerReferences).To(HaveLen(1))
+		Expect(v3Pools.Items[0].OwnerReferences).To(HaveLen(1))
 	})
 })

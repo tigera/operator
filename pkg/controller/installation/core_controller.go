@@ -94,13 +94,16 @@ const (
 const InstallationName string = "calico"
 
 //// Node and Installation finalizer
-// There is a problem with tearing down the calico resources where removing the calico-node ClusterRoleBinding
-// will block the kube-controller pod from teminating because the CNI plugin no longer has permissions.
+//
+// There is a problem with tearing down the Calico resources where removing the calico-node ClusterRoleBinding
+// prevents pod-networked pods (e.g., kube-controllers) from teminating because the CNI plugin no longer has permissions.
+//
 // To ensure this problem does not happen we add a finalizer to the Installation resource and to the
 // calico-node ClusterRoleBinding, ClusterRole, and ServiceAccount.
-// The finalizer on the Installation resource is so that the controller knows that it is time to tear down
+//
+// - The finalizer on the Installation resource is so that the controller knows that it is time to tear down
 // and cleanup. This also allows the Installation resource to remain while the controller cleans up.
-// The finalizer on the calico-node resources is to ensure those resources remain when the Installation
+// - The finalizer on the calico-node resources ensures those resources remain when the Installation
 // is deleted (has the DeletionTimestamp added) because kubernetes will start cleaning up the resources.
 //
 // When the Installation resource is not being deleted the core controller will add a finalizer to
@@ -109,13 +112,14 @@ const InstallationName string = "calico"
 //
 // When the Installation resource is being deleted (has a DeletionTimestamp) the following sequence is
 // expected:
-//   1. The kubernetes system will begin cleaning up the installation resources.
-//   2. Core reconciliation will pass terminating to the kube-controller render, this will ensure
-//      the kube-controller resources are returned to be deleted.
+//
+//   1. The kubernetes system will begin cleaning up resources owned by the Installation.
+//   2. Core reconciliation will pass 'terminating' to the kube-controller render code, ensuring
+//      the kube-controller resources are returned to be explicitly deleted.
 //   3. Once the kube-controller pod is terminated we will re-render the calico-node ClusterRoleBinding,
 //      ClusterRole, and ServiceAccount resources to remove the finalizers on them.
 //   4. Once the calico-node ClusterRoleBinding finalizer is removed we have cleaned up everything
-//      necessary so we can remove the Installation finalizer and we're done.
+//      necessary so we can remove the Installation finalizer to allow it to be deleted.
 
 var (
 	log                    = logf.Log.WithName("controller_installation")
@@ -841,7 +845,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 		for _, x := range crb.Finalizers {
-			if x == render.NodeFinalizer {
+			if x == render.CNIFinalizer {
 				doneTerminating = false
 			}
 		}
@@ -1285,7 +1289,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if apierrors.IsNotFound(err) {
-			reqLogger.Info("calico-kube-controllers has been deleted, calico-node RBAC resources can now be removed")
+			reqLogger.Info("calico-kube-controllers has been deleted, CNI RBAC resources can now be removed")
 			nodeTerminating = true
 		} else {
 			reqLogger.Info("calico-kube-controller is still present, waiting for termination")

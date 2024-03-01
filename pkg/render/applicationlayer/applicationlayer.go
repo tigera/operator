@@ -23,6 +23,8 @@ import (
 	"strings"
 	"text/template"
 
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -109,6 +111,8 @@ type Config struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	ApplicationLayer *operatorv1.ApplicationLayer
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -227,7 +231,7 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 		},
 	}
 
-	return &appsv1.DaemonSet{
+	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ApplicationLayerDaemonsetName,
@@ -242,6 +246,13 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 			},
 		},
 	}
+
+	if c.config.ApplicationLayer != nil {
+		if overrides := c.config.ApplicationLayer.Spec.L7LogCollectorDaemonSet; overrides != nil {
+			rcomponents.ApplyDaemonSetOverrides(ds, overrides)
+		}
+	}
+	return ds
 }
 
 func (c *component) containers() []corev1.Container {

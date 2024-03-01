@@ -791,6 +791,43 @@ var _ = Describe("Installation validation tests", func() {
 		})
 	})
 
+	Describe("validate CalicoNetwork LinuxPolicySetupTimeoutSeconds", func() {
+		It("should return an error when LinuxPolicySetupTimeoutSeconds is negative", func() {
+			negative := int32(-1)
+			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &negative
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError("Installation CNI spec.LinuxPolicySetupTimeoutSeconds negative value is not valid"))
+		})
+
+		It("should return an error when LinuxPolicySetupTimeoutSeconds is set but no dataplane is specified", func() {
+			tos := int32(10)
+			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError("spec.calicoNetwork.LinuxpolicySetupTimeoutSeconds requires the Iptables Linux dataplane to be set"))
+		})
+
+		It("should return an error when LinuxPolicySetupTimeoutSeconds is set for an unsupported dataplane", func() {
+			dp := operator.LinuxDataplaneVPP
+			// Enable BGP to pass VPP validation.
+			bgp := operator.BGPEnabled
+			tos := int32(10)
+			instance.Spec.CalicoNetwork.LinuxDataplane = &dp
+			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
+			instance.Spec.CalicoNetwork.BGP = &bgp
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError("spec.calicoNetwork.LinuxpolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes"))
+		})
+
+		It("should not error if LinuxPolicySetupTimeoutSeconds is set as a positive int32, with the Calico CNI plugin and Iptables dataplane", func() {
+			tos := int32(10)
+			cniType := operator.PluginCalico
+			dp := operator.LinuxDataplaneIptables
+			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
+			instance.Spec.CNI.Type = cniType
+			instance.Spec.CalicoNetwork.LinuxDataplane = &dp
+		})
+	})
+
 	It("validate custom installation", func() {
 		disabled := operator.BGPDisabled
 		ipfw := operator.ContainerIPForwardingEnabled

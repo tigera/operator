@@ -676,9 +676,12 @@ func cidrToName(cidr string) (string, error) {
 // ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
 func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
 	pool := pcv1.IPPool{
-		TypeMeta:   metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: p.Name},
-		Spec:       pcv1.IPPoolSpec{CIDR: p.CIDR},
+		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   p.Name,
+			Labels: map[string]string{},
+		},
+		Spec: pcv1.IPPoolSpec{CIDR: p.CIDR},
 	}
 
 	// Set encap.

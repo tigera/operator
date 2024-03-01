@@ -153,7 +153,7 @@ var _ = Describe("IPPool FV tests", func() {
 
 		// Expect the default pools to be marked as managed by the operator.
 		for _, p := range ipPools.Items {
-			Expect(p.OwnerReferences).To(HaveLen(1))
+			Expect(p.Labels).To(HaveKey("app.kubernetes.io/managed-by"))
 		}
 	})
 
@@ -189,7 +189,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[0].OwnerReferences).To(HaveLen(1))
+		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
 	})
 
 	It("should assume ownership of legacy IP pools", func() {
@@ -236,7 +236,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
 		// This proves the operator has not assumed control.
-		Expect(ipPools.Items[0].OwnerReferences).To(HaveLen(0))
+		Expect(ipPools.Items[0].Labels).To(HaveLen(0))
 
 		// Now, install the API server.
 		createAPIServer(c, mgr, shutdownContext, nil)
@@ -260,6 +260,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANModeNever))
 
 		// This proves that the operator has assumed ownership of the legacy IP pool.
-		Expect(v3Pools.Items[0].OwnerReferences).To(HaveLen(1))
+		Expect(v3Pools.Items[0].Labels).To(HaveLen(1))
+		Expect(v3Pools.Items[0].Labels).To(HaveKey("app.kubernetes.io/managed-by"))
 	})
 })

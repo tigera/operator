@@ -17,6 +17,9 @@ package applicationlayer_test
 import (
 	"path/filepath"
 
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -203,6 +206,77 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		for _, expected := range expectedCollectorVolMounts {
 			Expect(collectorVolMounts).To(ContainElement(expected))
 		}
+	})
+
+	It("should render with l7 collector configuration with resource requests and limits", func() {
+
+		// Should render the correct resources.
+		cm, err := embed.AsConfigMap(
+			applicationlayer.ModSecurityRulesetConfigMapName,
+			common.OperatorNamespace(),
+		)
+		Expect(err).To(BeNil())
+
+		l7LogCollectorResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		cfg.ApplicationLayer = &operatorv1.ApplicationLayer{
+			Spec: operatorv1.ApplicationLayerSpec{
+				L7LogCollectorDaemonSet: &operatorv1.L7LogCollectorDaemonSet{
+					Spec: &operatorv1.L7LogCollectorDaemonSetSpec{
+						Template: &operatorv1.L7LogCollectorDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.L7LogCollectorDaemonSetPodSpec{
+								Containers: []operatorv1.L7LogCollectorDaemonSetContainer{{
+									Name:      "l7-collector",
+									Resources: &l7LogCollectorResources,
+								}, {
+									Name:      "envoy-proxy",
+									Resources: &l7LogCollectorResources,
+								}, {
+									Name:      "dikastes",
+									Resources: &l7LogCollectorResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg.WAFEnabled = true
+		cfg.ModSecurityConfigMap = cm
+
+		component := applicationlayer.ApplicationLayer(cfg)
+
+		resources, _ := component.Objects()
+
+		ds, ok := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ok).To(BeTrue())
+
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(3))
+
+		container := test.GetContainer(ds.Spec.Template.Spec.Containers, "l7-collector")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(l7LogCollectorResources))
+
+		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "envoy-proxy")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(l7LogCollectorResources))
+
+		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "dikastes")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(l7LogCollectorResources))
+
 	})
 
 	It("should render properly when PSP is not supported by the cluster", func() {

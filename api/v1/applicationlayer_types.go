@@ -32,6 +32,10 @@ type ApplicationLayerSpec struct {
 	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 	// User-configurable settings for the Envoy proxy.
 	EnvoySettings *EnvoySettings `json:"envoy,omitempty"`
+
+	// L7LogCollectorDaemonSet configures the L7LogCollector DaemonSet.
+	// +optional
+	L7LogCollectorDaemonSet *L7LogCollectorDaemonSet `json:"l7LogCollectorDaemonSet,omitempty"`
 }
 
 type LogCollectionStatusType string

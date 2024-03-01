@@ -1200,8 +1200,8 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = make([]Sysctl, len(*in))
 		copy(*out, *in)
 	}
-	if in.PolicySetupTimeoutSeconds != nil {
-		in, out := &in.PolicySetupTimeoutSeconds, &out.PolicySetupTimeoutSeconds
+	if in.LinuxPolicySetupTimeoutSeconds != nil {
+		in, out := &in.LinuxPolicySetupTimeoutSeconds, &out.LinuxPolicySetupTimeoutSeconds
 		*out = new(int32)
 		**out = **in
 	}

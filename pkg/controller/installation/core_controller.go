@@ -659,9 +659,9 @@ func fillDefaults(instance *operator.Installation) error {
 
 	if instance.Spec.CNI.Type == operator.PluginCalico &&
 		*instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneIptables &&
-		instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds == nil {
+		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds == nil {
 		var delay int32 = 0
-		instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds = &delay
+		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
 	}
 
 	if v6pool != nil {

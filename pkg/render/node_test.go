@@ -2580,9 +2580,9 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable).To(Equal(&two))
 			})
 
-			It("should render PolicySetupTimeoutSeconds if a custom value was set", func() {
+			It("should render LinuxPolicySetupTimeoutSeconds if a custom value was set", func() {
 				two := int32(2)
-				defaultInstance.CalicoNetwork.PolicySetupTimeoutSeconds = &two
+				defaultInstance.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &two
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
@@ -2796,7 +2796,7 @@ var _ = Describe("Node rendering tests", func() {
 
 			It("should render a proper 'policy_setup_timeout_seconds' setting in the cni config", func() {
 				one := int32(1)
-				defaultInstance.CalicoNetwork.PolicySetupTimeoutSeconds = &one
+				defaultInstance.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &one
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()

@@ -475,16 +475,18 @@ type CalicoNetworkSpec struct {
 	// +optional
 	Sysctl []Sysctl `json:"sysctl,omitempty"`
 
-	// PolicySetupTimeoutSeconds delays new pods from running containers
+	// LinuxPolicySetupTimeoutSeconds delays new pods from running containers
 	// until their policy has been programmed in the dataplane.
 	// The specified delay defines the maximum amount of time
 	// that the Calico CNI plugin will wait for policy to be programmed.
+	//
+	// Only applies to pods created on Linux nodes.
 	//
 	// * A value of 0 disables pod startup delays.
 	//
 	// Default: 0
 	// +optional
-	PolicySetupTimeoutSeconds *int32 `json:"policySetupTimeoutSeconds,omitempty"`
+	LinuxPolicySetupTimeoutSeconds *int32 `json:"linuxpolicySetupTimeoutSeconds,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

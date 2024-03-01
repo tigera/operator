@@ -268,9 +268,9 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 		out.MTU = override.MTU
 	}
 
-	switch compareFields(out.PolicySetupTimeoutSeconds, override.PolicySetupTimeoutSeconds) {
+	switch compareFields(out.LinuxPolicySetupTimeoutSeconds, override.LinuxPolicySetupTimeoutSeconds) {
 	case BOnlySet, Different:
-		out.PolicySetupTimeoutSeconds = override.PolicySetupTimeoutSeconds
+		out.LinuxPolicySetupTimeoutSeconds = override.LinuxPolicySetupTimeoutSeconds
 	}
 
 	switch compareFields(out.LinuxDataplane, override.LinuxDataplane) {

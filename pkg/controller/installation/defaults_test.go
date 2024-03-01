@@ -53,7 +53,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
-		Expect(*instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds).To(BeZero())
+		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
@@ -86,7 +86,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
-		Expect(*instance.Spec.CalicoNetwork.PolicySetupTimeoutSeconds).To(BeZero())
+		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
@@ -106,7 +106,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var logFileMaxAgeDays uint32 = 10
 		var logFileMaxSize = resource.MustParse("50Mi")
 		var logSeverity = operator.LogLevelError
-		var policySetupTimeoutSeconds int32 = 1
+		var LinuxpolicySetupTimeoutSeconds int32 = 1
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -158,9 +158,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
-					HostPorts:                 &hpEnabled,
-					MultiInterfaceMode:        &miMode,
-					PolicySetupTimeoutSeconds: &policySetupTimeoutSeconds,
+					HostPorts:                      &hpEnabled,
+					MultiInterfaceMode:             &miMode,
+					LinuxPolicySetupTimeoutSeconds: &LinuxpolicySetupTimeoutSeconds,
 				},
 				ControlPlaneReplicas: &replicas,
 				NodeMetricsPort:      &nodeMetricsPort,

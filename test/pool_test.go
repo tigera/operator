@@ -95,7 +95,7 @@ var _ = Describe("IPPool FV tests", func() {
 		cleanupResources(c)
 
 		// Clean up Calico data that might be left behind.
-		By("Cleaning up any remaining cruft")
+		By("Cleaning up Node annotations after test")
 		Eventually(func() error {
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 			nodes, err := cs.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})

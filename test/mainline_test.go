@@ -44,6 +44,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
@@ -285,6 +286,7 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
+
 	// Create a manager to use in the tests.
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -360,6 +362,12 @@ func removeAPIServer(c client.Client, ctx context.Context) {
 	By("Deleting the APIServer CRD")
 	err = c.Delete(ctx, instance)
 	Expect(err).NotTo(HaveOccurred())
+
+	// Deleting the APIServer doesn't delete the Namespace - likely a GC bug related to
+	// this API server bug: https://github.com/projectcalico/calico/issues/5715#issuecomment-1482093803
+	// Do it explicitly to work around this.
+	By("Deleting the calico-apiserver Namespace")
+	Expect(c.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver"}})).NotTo(HaveOccurred())
 }
 
 func createInstallation(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.InstallationSpec) (doneChan chan struct{}) {
@@ -400,7 +408,7 @@ func removeInstallation(c client.Client, name string, ctx context.Context) {
 	// which will in turn terminate the operator. Race conditions can occur otherwise that will leave the
 	// Installation resource intact while the operator is no longer running which will result in test failures
 	// that try to create an Installation resource of their own
-	By("Waiting for the Installation CRD to be removed")
+	By("Waiting for the Installation CR to be removed")
 	Eventually(func() error {
 		err := c.Get(ctx, client.ObjectKey{Name: name}, instance)
 		if kerror.IsNotFound(err) {
@@ -410,9 +418,6 @@ func removeInstallation(c client.Client, name string, ctx context.Context) {
 		}
 		return fmt.Errorf("Installation still exists")
 	}, 120*time.Second).ShouldNot(HaveOccurred())
-
-	By("Waiting for the Installation CRD to be removed (again, old style)")
-	ExpectResourceDestroyed(c, instance, 20*time.Second)
 }
 
 func verifyAPIServerHasDeployed(c client.Client) {
@@ -547,8 +552,29 @@ func waitForProductTeardown(c client.Client) {
 	}, 240*time.Second).ShouldNot(HaveOccurred())
 }
 
+func cleanupIPPools(c client.Client) {
+	By("Cleaning up IP pools")
+	Eventually(func() error {
+		ipPools := &crdv1.IPPoolList{}
+		err := c.List(context.Background(), ipPools)
+		if err != nil {
+			return err
+		}
+
+		for _, p := range ipPools.Items {
+			By(fmt.Sprintf("Deleting IP pool %s with CIDR %s (%s)", p.Name, p.Spec.CIDR, p.UID))
+			err = c.Delete(context.Background(), &p)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}, 30*time.Second).ShouldNot(HaveOccurred())
+}
+
 func cleanupResources(c client.Client) {
 	removeAPIServer(c, context.Background())
 	removeInstallation(c, "default", context.Background())
+	cleanupIPPools(c)
 	waitForProductTeardown(c)
 }

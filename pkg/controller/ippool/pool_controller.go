@@ -590,6 +590,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operator.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	reqLogger.V(1).Info("Reconciling IP pools for installation", "installation", installation.Spec)
 
 	// Get the APIServer. If healthy, we'll use the projectcalico.org/v3 API for managing pools.
 	// Otherwise, we'll use the internal v1 API for bootstrapping the cluster until the API server is available.
@@ -674,7 +675,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// This pool needs to be deleted. We only ever send deletes via the API server,
 			// since deletion requires rather complex logic. If the API server isn't available,
 			// we'll instead just mark the pool as disabled temporarily.
-			reqLogger.WithValues("cidr", cidr).Info("Pool needs to be deleted")
+			reqLogger.WithValues("cidr", cidr, "valid", installation.Spec.CalicoNetwork.IPPools).Info("Pool needs to be deleted")
 			if apiAvailable {
 				// v3 API is available - send a delete request.
 				v3res, err := v1ToV3(&v1res)

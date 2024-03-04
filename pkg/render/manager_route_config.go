@@ -49,11 +49,9 @@ type tlsTerminatedRoute struct {
 	// destination (if non-empty)
 	CABundlePath string `json:"caBundlePath,omitempty"`
 	// PathRegexp, if not nil, checks if Regexp matches the path
-	PathRegexp string `json:"pathRegexp,omitempty"`
+	PathRegexp *string `json:"pathRegexp,omitempty"`
 	// PathReplace if not nil will be used to replace PathRegexp matches
-	PathReplace string `json:"pathReplace,omitempty"`
-	// AllowInsecureTLS allows https with insecure tls settings
-	AllowInsecureTLS bool `json:"allowInsecureTLS,omitempty"`
+	PathReplace *string `json:"pathReplace,omitempty"`
 
 	// ClientCertPath and ClientKeyPath can be set for mTLS on the connection
 	// from Voltron to the destination.
@@ -135,16 +133,15 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	var tunnelTLSPassThroughRoutes []*tlsPassThroughRoute
 
 	for _, route := range builder.tlsTerminatedRoutes {
-		if route.Spec.CABundle == nil && !route.Spec.AllowInsecureTLS {
-			return nil, fmt.Errorf("CABundle must be set if AllowInsecureTLS is false")
+		if route.Spec.CABundle == nil {
+			return nil, fmt.Errorf("CABundle is required")
 		}
 
 		r := &tlsTerminatedRoute{
-			Destination:      route.Spec.Destination,
-			Path:             route.Spec.PathMatch.Path,
-			PathRegexp:       route.Spec.PathMatch.PathRegexp,
-			PathReplace:      route.Spec.PathMatch.PathReplace,
-			AllowInsecureTLS: route.Spec.AllowInsecureTLS,
+			Destination: route.Spec.Destination,
+			Path:        route.Spec.PathMatch.Path,
+			PathRegexp:  route.Spec.PathMatch.PathRegexp,
+			PathReplace: route.Spec.PathMatch.PathReplace,
 		}
 
 		if route.Spec.Target == operatorv1.TargetTypeUI {
@@ -200,7 +197,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	routesData := map[string]string{}
 
 	if len(uiTLSTerminatedRoutes) > 0 {
-		jsonBytes, err := json.Marshal(uiTLSTerminatedRoutes)
+		jsonBytes, err := json.MarshalIndent(uiTLSTerminatedRoutes, "", "\t")
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +206,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	}
 
 	if len(tunnelTLSTerminatedRoutes) > 0 {
-		jsonBytes, err := json.Marshal(tunnelTLSTerminatedRoutes)
+		jsonBytes, err := json.MarshalIndent(tunnelTLSTerminatedRoutes, "", "\t")
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +215,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	}
 
 	if len(tunnelTLSPassThroughRoutes) > 0 {
-		jsonBytes, err := json.Marshal(tunnelTLSPassThroughRoutes)
+		jsonBytes, err := json.MarshalIndent(tunnelTLSPassThroughRoutes, "", "\t")
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +248,7 @@ func (builder *voltronRouteConfigBuilder) mountConfigMapReference(name, key stri
 
 	configMap := builder.configMaps[name]
 	if configMap == nil {
-		return "", fmt.Errorf("the contents for ConfigMap '%s' wasn't provide, and is needed to generate annotations", name)
+		return "", fmt.Errorf("the contents for ConfigMap '%s' wasn't provided, and is needed to generate annotations", name)
 	}
 
 	if _, ok := builder.mountedConfigMaps[name]; !ok {
@@ -290,7 +287,7 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 	secret := builder.secrets[name]
 
 	if secret == nil {
-		return "", fmt.Errorf("the contents for Secret '%s' wasn't provide, and is needed to generate annotations", name)
+		return "", fmt.Errorf("the contents for Secret '%s' wasn't provided, and is needed to generate annotations", name)
 	}
 
 	if _, ok := builder.mountedSecrets[name]; !ok {
@@ -323,7 +320,7 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 	return fmt.Sprintf("%s/%s/%s", configMapFolder, name, key), nil
 }
 
-// mapToSortedArray returns an array with the contents of the map, ordered lexographically by the map keys.
+// mapToSortedArray returns an array with the contents of the map, ordered lexicographically by the map keys.
 // This provides a consistent ordering to the contents of the map.
 func mapToSortedArray[E any](m map[string]E) []E {
 	keys := make([]string, len(m))

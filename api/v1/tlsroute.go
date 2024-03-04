@@ -60,6 +60,8 @@ type TLSPassThroughRouteSpec struct {
 	// +required
 	Target TargetType `json:"target"`
 
+	// SNIMatch is used to match requests based on the server name for the intended destination server. Matching requests
+	// will be proxied to the Destination.
 	// +required
 	SNIMatch *SNIMatch `json:"sniMatch"`
 
@@ -85,24 +87,21 @@ type TLSTerminatedRouteSpec struct {
 	// +required
 	PathMatch *PathMatch `json:"pathMatch"`
 
-	// Dest is the destination URL
+	// Destination is the destination URL where matching traffic is routed to.
 	// +required
 	Destination string `json:"destination"`
 
 	// CABundle is where we read the CA bundle from to authenticate the
 	// destination (if non-empty)
-	// +optional
+	// +required
 	CABundle *v1.ConfigMapKeySelector `json:"caBundle,omitempty"`
 
 	// MTLS settings, and if both are specified MTLs is used.
 	// +optional
 	MTLSCert *v1.SecretKeySelector `json:"mtlsCert,omitempty"`
+
 	// +optional
 	MTLSKey *v1.SecretKeySelector `json:"mtlsKey,omitempty"`
-
-	// AllowInsecureTLS allows https with insecure tls settings
-	// +optional
-	AllowInsecureTLS bool `json:"allowInsecureTLS,omitempty"`
 
 	// Unauthenticated says whether the request should go through authentication. This is only applicable if the Target
 	// is UI.
@@ -111,26 +110,22 @@ type TLSTerminatedRouteSpec struct {
 }
 
 type PathMatch struct {
-	// Path is the path portion of the URL based on which we proxy
+	// Path is the path portion of the URL based on which we proxy.
 	// +required
 	Path string `json:"path"`
 
-	// PathRegexp, if not nil, checks if Regexp matches the path
+	// PathRegexp, if not nil, checks if Regexp matches the path.
 	// +optional
-	PathRegexp string `json:"pathRegexp,omitempty"`
-	// PathReplace if not nil will be used to replace PathRegexp matches
+	PathRegexp *string `json:"pathRegexp,omitempty"`
+
+	// PathReplace if not nil will be used to replace PathRegexp matches.
 	// +optional
-	PathReplace string `json:"pathReplace,omitempty"`
+	PathReplace *string `json:"pathReplace,omitempty"`
 }
 
 type SNIMatch struct {
+	// ServerName is used to match the server name for the request.
 	ServerName string `json:"serverName"`
-}
-
-type ConfigMapReference struct {
-	Name      string `json:"name,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
-	Key       string `json:"key,omitempty"`
 }
 
 func init() {

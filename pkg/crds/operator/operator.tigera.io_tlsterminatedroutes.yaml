@@ -31,9 +31,6 @@ spec:
             type: object
           spec:
             properties:
-              allowInsecureTLS:
-                description: AllowInsecureTLS allows https with insecure tls settings
-                type: boolean
               caBundle:
                 description: CABundle is where we read the CA bundle from to authenticate
                   the destination (if non-empty)
@@ -54,7 +51,8 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               destination:
-                description: Dest is the destination URL
+                description: Destination is the destination URL where matching traffic
+                  is routed to.
                 type: string
               mtlsCert:
                 description: MTLS settings, and if both are specified MTLs is used.
@@ -99,15 +97,15 @@ spec:
                 properties:
                   path:
                     description: Path is the path portion of the URL based on which
-                      we proxy
+                      we proxy.
                     type: string
                   pathRegexp:
                     description: PathRegexp, if not nil, checks if Regexp matches
-                      the path
+                      the path.
                     type: string
                   pathReplace:
                     description: PathReplace if not nil will be used to replace PathRegexp
-                      matches
+                      matches.
                     type: string
                 required:
                 - path

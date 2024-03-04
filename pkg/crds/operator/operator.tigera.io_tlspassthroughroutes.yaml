@@ -37,8 +37,13 @@ spec:
                   to.
                 type: string
               sniMatch:
+                description: SNIMatch is used to match requests based on the server
+                  name for the intended destination server. Matching requests will
+                  be proxied to the Destination.
                 properties:
                   serverName:
+                    description: ServerName is used to match the server name for the
+                      request.
                     type: string
                 required:
                 - serverName

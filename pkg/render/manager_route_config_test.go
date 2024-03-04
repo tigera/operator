@@ -15,6 +15,9 @@
 package render_test
 
 import (
+	"bytes"
+	"encoding/json"
+
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -59,8 +62,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 			Spec: operatorv1.TLSTerminatedRouteSpec{
 				PathMatch: &operatorv1.PathMatch{
 					Path:        "/foobar",
-					PathRegexp:  "^/foobar$",
-					PathReplace: "/",
+					PathRegexp:  ptr.ToPtr("^/foobar$"),
+					PathReplace: ptr.ToPtr("/"),
 				},
 			},
 		}
@@ -149,11 +152,43 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 	})
 
 	Context("TLSTerminatedRoutes", func() {
-		When("TLSTerminatedRoute with allow insecure set and no CAs or MTLS config", func() {
-			DescribeTable("builds the route configuration without mounting any CA bundles or cert key pairs", func(target operatorv1.TargetType, fileName string) {
-				route.Spec.Target = target
-				route.Spec.AllowInsecureTLS = true
+		When("the CABundle is not set", func() {
+			It("returns an error", func() {
 				builder.AddTLSTerminatedRoute(route)
+
+				_, err := builder.Build()
+				Expect(err).Should(HaveOccurred())
+			})
+		})
+
+		When("the CABundle is set but the config map was not added to the builder", func() {
+			It("returns an error", func() {
+				route.Spec.CABundle = &corev1.ConfigMapKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "ca-bundle",
+					},
+					Key: "ca.bundle",
+				}
+				builder.AddTLSTerminatedRoute(route)
+
+				_, err := builder.Build()
+				Expect(err).Should(HaveOccurred())
+			})
+		})
+
+		When("the CABundle is set and the config map was added to the builder", func() {
+			DescribeTable("successfully builds the config", func(target operatorv1.TargetType, fileName string) {
+				route.Spec.Target = target
+				route.Spec.CABundle = &corev1.ConfigMapKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "ca-bundle",
+					},
+					Key: "ca.bundle",
+				}
+
+				builder.AddTLSTerminatedRoute(route)
+
+				builder.AddConfigMap(caBundle)
 
 				config, err := builder.Build()
 				Expect(err).ShouldNot(HaveOccurred())
@@ -161,138 +196,93 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				key, value := config.Annotation()
 				Expect(key).Should(Equal("hash.operator.tigera.io/route-configuration"))
 				Expect(value).ShouldNot(BeEmpty())
-				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{routesConfigMapVolumeMount}))
-				Expect(config.Volumes()).Should(Equal([]corev1.Volume{routesConfigMapVolume}))
+				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, routesConfigMapVolumeMount}))
 
-				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","pathRegexp":"^/foobar$","pathReplace":"/","allowInsecureTLS":true}]`
-				Expect(config.RoutesConfigMap("tigera-manager")).Should(Equal(routesConfigMap))
+				Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, routesConfigMapVolume}))
+
+				cm := config.RoutesConfigMap("tigera-manager")
+				cm.Data[fileName] = compactJsonString(cm.Data[fileName])
+
+				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/"}]`
+				Expect(cm).Should(Equal(routesConfigMap))
 			},
 				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
 				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
 			)
 		})
 
-		Context("AllowInsecure is set to false", func() {
-			When("the CABundle is not set", func() {
-				It("returns an error", func() {
-					builder.AddTLSTerminatedRoute(route)
-
-					_, err := builder.Build()
-					Expect(err).Should(HaveOccurred())
-				})
+		When("the MTLS cert is specified", func() {
+			BeforeEach(func() {
+				route.Spec.CABundle = &corev1.ConfigMapKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "ca-bundle",
+					},
+					Key: "ca.bundle",
+				}
 			})
 
-			When("the CABundle is set but the config map was not added to the builder", func() {
-				It("returns an error", func() {
-					route.Spec.CABundle = &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "ca-bundle",
-						},
-						Key: "ca.bundle",
-					}
-					builder.AddTLSTerminatedRoute(route)
+			It("returns an error if the MTLS key is not specified", func() {
+				route.Spec.Target = operatorv1.TargetTypeUI
+				route.Spec.MTLSCert = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mtlsCert.Name,
+					},
+					Key: "cert.pem",
+				}
 
-					_, err := builder.Build()
-					Expect(err).Should(HaveOccurred())
-				})
+				builder.AddTLSTerminatedRoute(route)
+				builder.AddConfigMap(caBundle)
+				builder.AddSecret(mtlsCert)
+
+				_, err := builder.Build()
+				Expect(err).Should(HaveOccurred())
 			})
 
-			When("the CABundle is set and the config map was added to the builder", func() {
-				DescribeTable("successfully builds the config", func(target operatorv1.TargetType, fileName string) {
-					route.Spec.Target = target
-					route.Spec.CABundle = &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "ca-bundle",
-						},
-						Key: "ca.bundle",
-					}
+			DescribeTable("succeeds if the MTLS key is specified", func(target operatorv1.TargetType, fileName string) {
+				route.Spec.Target = target
+				route.Spec.MTLSCert = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mtlsCert.Name,
+					},
+					Key: "cert.pem",
+				}
+				route.Spec.MTLSKey = &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mtlsKey.Name,
+					},
+					Key: "key.pem",
+				}
 
-					builder.AddTLSTerminatedRoute(route)
+				builder.AddTLSTerminatedRoute(route)
+				builder.AddConfigMap(caBundle)
+				builder.AddSecret(mtlsCert)
+				builder.AddSecret(mtlsKey)
 
-					builder.AddConfigMap(caBundle)
+				config, err := builder.Build()
+				Expect(err).ShouldNot(HaveOccurred())
 
-					config, err := builder.Build()
-					Expect(err).ShouldNot(HaveOccurred())
+				key, value := config.Annotation()
+				Expect(key).Should(Equal("hash.operator.tigera.io/route-configuration"))
+				Expect(value).ShouldNot(BeEmpty())
+				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, mtlsCertVolumeMount, mtlsKeyVolumeMount, routesConfigMapVolumeMount}))
 
-					key, value := config.Annotation()
-					Expect(key).Should(Equal("hash.operator.tigera.io/route-configuration"))
-					Expect(value).ShouldNot(BeEmpty())
-					Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, routesConfigMapVolumeMount}))
+				Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}), cmp.Diff(config.Volumes(), []corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}))
 
-					Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, routesConfigMapVolume}))
+				cm := config.RoutesConfigMap("tigera-manager")
+				cm.Data[fileName] = compactJsonString(cm.Data[fileName])
 
-					routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/"}]`
-					Expect(config.RoutesConfigMap("tigera-manager")).Should(Equal(routesConfigMap))
-				},
-					Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
-					Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
-				)
-			})
-
-			When("the MTLS cert is specified", func() {
-				BeforeEach(func() {
-					route.Spec.CABundle = &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "ca-bundle",
-						},
-						Key: "ca.bundle",
-					}
-				})
-
-				It("returns an error if the MTLS key is not specified", func() {
-					route.Spec.Target = operatorv1.TargetTypeUI
-					route.Spec.MTLSCert = &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: mtlsCert.Name,
-						},
-						Key: "cert.pem",
-					}
-
-					builder.AddTLSTerminatedRoute(route)
-					builder.AddConfigMap(caBundle)
-					builder.AddSecret(mtlsCert)
-
-					_, err := builder.Build()
-					Expect(err).Should(HaveOccurred())
-				})
-
-				DescribeTable("succeeds if the MTLS key is specified", func(target operatorv1.TargetType, fileName string) {
-					route.Spec.Target = target
-					route.Spec.MTLSCert = &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: mtlsCert.Name,
-						},
-						Key: "cert.pem",
-					}
-					route.Spec.MTLSKey = &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: mtlsKey.Name,
-						},
-						Key: "key.pem",
-					}
-
-					builder.AddTLSTerminatedRoute(route)
-					builder.AddConfigMap(caBundle)
-					builder.AddSecret(mtlsCert)
-					builder.AddSecret(mtlsKey)
-
-					config, err := builder.Build()
-					Expect(err).ShouldNot(HaveOccurred())
-
-					key, value := config.Annotation()
-					Expect(key).Should(Equal("hash.operator.tigera.io/route-configuration"))
-					Expect(value).ShouldNot(BeEmpty())
-					Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, mtlsCertVolumeMount, mtlsKeyVolumeMount, routesConfigMapVolumeMount}))
-
-					Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}), cmp.Diff(config.Volumes(), []corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}))
-
-					routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/","clientCertPath":"/config_maps/mtls-cert/cert.pem","clientKeyPath":"/config_maps/mtls-key/key.pem"}]`
-					Expect(config.RoutesConfigMap("tigera-manager")).Should(Equal(routesConfigMap))
-				},
-					Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
-					Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
-				)
-			})
+				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/","clientCertPath":"/config_maps/mtls-cert/cert.pem","clientKeyPath":"/config_maps/mtls-key/key.pem"}]`
+				Expect(cm).Should(Equal(routesConfigMap))
+			},
+				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
+				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
+			)
 		})
 	})
 })
+
+func compactJsonString(jsonStr string) string {
+	buffer := new(bytes.Buffer)
+	Expect(json.Compact(buffer, []byte(jsonStr))).ShouldNot(HaveOccurred())
+	return buffer.String()
+}

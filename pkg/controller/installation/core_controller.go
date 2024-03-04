@@ -835,6 +835,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// This ensures we don't delete the CNI plugin and calico-node too early, as they are a pre-requisite for tearing
 		// down networking for other pods deployed by this operator.
 		doneTerminating := true
+		reqLogger.V(1).Info("Checking if we can remove Installation finalizer")
 
 		// Wait until the calico-node cluster role binding has been cleaned up.
 		crb := rbacv1.ClusterRoleBinding{}
@@ -846,6 +847,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		for _, x := range crb.Finalizers {
 			if x == render.CNIFinalizer {
+				reqLogger.V(1).Info("Installation still finalizing: ClusterRoleBinding calico-node still active")
 				doneTerminating = false
 			}
 		}
@@ -856,6 +858,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		err = r.client.Get(ctx, key, &ns)
 		if !apierrors.IsNotFound(err) {
 			// We're not ready to terminate if the apiserer namespace hasn't been deleted.
+			reqLogger.V(1).Info("Installation still finalizing: Namespace calico-apiserver still present")
 			doneTerminating = false
 		}
 

@@ -57,12 +57,12 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -925,7 +925,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operator.ResourceNotFound, "waiting for enabled IP pools to be created", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	// TODO: Should we remove any disabled IP pools from the list so they aren't included in logic?
 
 	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 	// the run the reset the degraded status and requeue the request.
@@ -1308,7 +1307,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
 		Installation:            &instance.Spec,
-		IPPools:                 ippool.CRDPoolsToOperator(currentPools.Items),
+		IPPools:                 crdPoolsToOperator(currentPools.Items),
 		AmazonCloudIntegration:  aci,
 		LogCollector:            logCollector,
 		BirdTemplates:           birdTemplates,
@@ -1878,4 +1877,14 @@ func removeInstallationFinalizer(i *operator.Installation) {
 	if stringsutil.StringInSlice(render.CalicoFinalizer, i.GetFinalizers()) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(render.CalicoFinalizer, i.GetFinalizers()))
 	}
+}
+
+func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
+	pools := []v1.IPPool{}
+	for _, p := range crds {
+		op := v1.IPPool{}
+		op.FromProjectCalicoV1(p)
+		pools = append(pools, op)
+	}
+	return pools
 }

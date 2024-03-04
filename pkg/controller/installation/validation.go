@@ -144,6 +144,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			return fmt.Errorf("BPF dataplane does not support dual stack")
 		}
 
+		// Perform validation on non-IPPool fields that rely on IP pool configuration. Validation of the IP pools themselves
+		// happens in the IP pool controller.
 		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
 			// Perform validation based on IP address family.
 			isIPv4 := !strings.Contains(pool.CIDR, ":")

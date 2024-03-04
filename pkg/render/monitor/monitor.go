@@ -404,11 +404,11 @@ func (mc *monitorComponent) prometheusOperatorPodSecurityPolicy() *policyv1beta1
 }
 
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
-	authProxyResources := corev1.ResourceRequirements{}
+	alertManagerResources := corev1.ResourceRequirements{}
 	// Override the resource values when configured
 	for _, c := range mc.cfg.Monitor.ComponentResources {
 		if c.ComponentName == operatorv1.ComponentNameAlertManager {
-			authProxyResources = corev1.ResourceRequirements{
+			alertManagerResources = corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					"cpu":    c.ResourceRequirements.Requests[corev1.ResourceCPU],
 					"memory": c.ResourceRequirements.Requests[corev1.ResourceMemory],
@@ -436,7 +436,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        mc.cfg.Installation.ControlPlaneTolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
-			Resources:          authProxyResources,
+			Resources:          alertManagerResources,
 		},
 	}
 }

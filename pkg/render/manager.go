@@ -293,7 +293,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	managerPodContainers := []corev1.Container{c.managerEsProxyContainer(), c.voltronContainer()}
-	if !c.cfg.Tenant.SingleTenant() && !c.cfg.Tenant.MultiTenant() {
+	if c.cfg.Tenant != nil {
 		managerPodContainers = append(managerPodContainers, c.managerContainer())
 	}
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

@@ -131,6 +131,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Installation.TyphaMetricsPort != nil {
 		objs = append(objs, c.typhaPrometheusService())
 	}
+
 	return objs, nil
 }
 

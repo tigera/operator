@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/tigera/operator/test"
-
 	batchv1 "k8s.io/api/batch/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -54,6 +52,7 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 type resourceTestObj struct {
@@ -1631,25 +1630,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		It("should render the kibana pod template with resource requests and limits when set", func() {
 
-			limits := corev1.ResourceList{}
-			requests := corev1.ResourceList{}
-			limits[corev1.ResourceMemory] = resource.MustParse("500Mi")
-			requests[corev1.ResourceMemory] = resource.MustParse("500Mi")
-			limits[corev1.ResourceCPU] = resource.MustParse("1")
-			requests[corev1.ResourceCPU] = resource.MustParse("101m")
-			cfg.LogStorage.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
-				{
-					ComponentName: operatorv1.ComponentNameKibana,
-					ResourceRequirements: &corev1.ResourceRequirements{
-						Limits:   limits,
-						Requests: requests,
-					},
+			expectedResourcesRequirements := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("1"),
+					"memory": resource.MustParse("500Mi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("101m"),
+					"memory": resource.MustParse("100Mi"),
 				},
 			}
 
-			expectedResourcesRequirements := corev1.ResourceRequirements{
-				Limits:   limits,
-				Requests: requests,
+			cfg.LogStorage.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
+				{
+					ComponentName:        operatorv1.ComponentNameKibana,
+					ResourceRequirements: &expectedResourcesRequirements,
+				},
 			}
 
 			component := render.LogStorage(cfg)

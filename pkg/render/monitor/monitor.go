@@ -404,6 +404,22 @@ func (mc *monitorComponent) prometheusOperatorPodSecurityPolicy() *policyv1beta1
 }
 
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
+	alertManagerResources := corev1.ResourceRequirements{}
+	// Override the resource values when configured
+	for _, c := range mc.cfg.Monitor.ComponentResources {
+		if c.ComponentName == operatorv1.ComponentNameAlertManager {
+			alertManagerResources = corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Requests[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Requests[corev1.ResourceMemory],
+				},
+				Limits: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Limits[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Limits[corev1.ResourceMemory],
+				},
+			}
+		}
+	}
 	return &monitoringv1.Alertmanager{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -420,6 +436,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        mc.cfg.Installation.ControlPlaneTolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
+			Resources:          alertManagerResources,
 		},
 	}
 }
@@ -508,6 +525,36 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
+	prometheusResources := corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}}
+	authProxyResources := corev1.ResourceRequirements{}
+	// Override the resource values when configured
+	for _, c := range mc.cfg.Monitor.ComponentResources {
+		if c.ComponentName == operatorv1.ComponentNamePrometheus {
+			prometheusResources = corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Requests[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Requests[corev1.ResourceMemory],
+				},
+				Limits: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Limits[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Limits[corev1.ResourceMemory],
+				},
+			}
+		}
+		if c.ComponentName == operatorv1.ComponentNamePrometheusAuthProxy {
+			authProxyResources = corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Requests[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Requests[corev1.ResourceMemory],
+				},
+				Limits: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Limits[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Limits[corev1.ResourceMemory],
+				},
+			}
+		}
+	}
+
 	return &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -551,6 +598,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								},
 							},
 						},
+						Resources:       authProxyResources,
 						SecurityContext: securitycontext.NewNonRootContext(),
 					},
 				},
@@ -563,7 +611,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				ListenLocal:            true,
 				NodeSelector:           mc.cfg.Installation.ControlPlaneNodeSelector,
 				PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
-				Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
+				Resources:              prometheusResources,
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
 				ServiceAccountName:     PrometheusServiceAccountName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},

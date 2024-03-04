@@ -38,8 +38,8 @@ spec:
             properties:
               componentResources:
                 description: ComponentResources can be used to customize the resource
-                  requirements for each component. Only ECKOperator is supported for
-                  this spec.
+                  requirements for each component. This spec is only supported for
+                  ECKOperator and Kibana..
                 items:
                   description: The ComponentResource struct associates a ResourceRequirements
                     with a component by name
@@ -48,6 +48,7 @@ spec:
                       description: ComponentName is an enum which identifies the component
                       enum:
                       - ECKOperator
+                      - Kibana
                       type: string
                     resourceRequirements:
                       description: ResourceRequirements allows customization of limits

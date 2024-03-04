@@ -1267,6 +1267,22 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"telemetry.optIn": false,
 	}
 
+	kibanaResource := corev1.ResourceRequirements{}
+	for _, c := range es.cfg.LogStorage.Spec.ComponentResources {
+		if c.ComponentName == operatorv1.ComponentNameKibana {
+			kibanaResource = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Limits[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Limits[corev1.ResourceMemory],
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    c.ResourceRequirements.Requests[corev1.ResourceCPU],
+					"memory": c.ResourceRequirements.Requests[corev1.ResourceMemory],
+				},
+			}
+		}
+	}
+
 	var initContainers []corev1.Container
 	var volumes []corev1.Volume
 	var automountToken bool
@@ -1369,6 +1385,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 								},
 							},
 						},
+						Resources:       kibanaResource,
 						SecurityContext: securitycontext.NewNonRootContext(),
 						VolumeMounts:    volumeMounts,
 					}},

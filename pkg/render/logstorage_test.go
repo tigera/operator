@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/tigera/operator/test"
+
 	batchv1 "k8s.io/api/batch/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -1626,6 +1628,38 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(kibana.Spec.PodTemplate.Spec.Affinity).NotTo(BeNil())
 			Expect(kibana.Spec.PodTemplate.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-secure", "tigera-kibana")))
 		})
+
+		It("should render the kibana pod template with resource requests and limits when set", func() {
+
+			expectedResourcesRequirements := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("1"),
+					"memory": resource.MustParse("500Mi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("101m"),
+					"memory": resource.MustParse("100Mi"),
+				},
+			}
+
+			cfg.LogStorage.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
+				{
+					ComponentName:        operatorv1.ComponentNameKibana,
+					ResourceRequirements: &expectedResourcesRequirements,
+				},
+			}
+
+			component := render.LogStorage(cfg)
+			resources, _ := component.Objects()
+
+			kibana, ok := rtest.GetResource(resources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
+			Expect(ok).To(BeTrue())
+			Expect(kibana.Spec.Count).To(Equal(int32(1)))
+			container := test.GetContainer(kibana.Spec.PodTemplate.Spec.Containers, "kibana")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(expectedResourcesRequirements))
+		})
+
 	})
 })
 

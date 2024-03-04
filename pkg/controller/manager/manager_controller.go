@@ -146,7 +146,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret,
+			// We need to watch for es-gateway certificate because es-proxy still creates a
+			// client to talk to elastic via es-gateway
+			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret, relasticsearch.PublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
@@ -398,6 +400,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
 		}
+		// This is necessary because prior to v3.13 secrets were not signed by a single CA, so we need to include each individually
+		// in the trusted bundle
+		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, logc)
+			return reconcile.Result{}, err
+		}
+		if esgwCertificate != nil {
+			trustedSecretNames = append(trustedSecretNames, relasticsearch.PublicCertSecret)
+		}
+
 		// If external prometheus is enabled, the secret will be signed by the Calico CA and no secret will be created. We can skip
 		// adding it to the bundle, as trusting the CA will suffice.
 		monitorCR := &operatorv1.Monitor{}
@@ -434,6 +447,21 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
+	var clusterConfig *relasticsearch.ClusterConfig
+	// We only require Elastic cluster configuration when Kibana is enabled.
+	if render.KibanaEnabled(tenant, installation) {
+		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
+			return reconcile.Result{}, err
+		}
+		trustedSecretNames = append(trustedSecretNames, render.TigeraKibanaCertSecret)
+	}
+
 	bundleMaker := certificateManager.CreateTrustedBundle()
 	for _, secret := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secret, helper.TruthNamespace())
@@ -467,20 +495,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, logc)
 		return reconcile.Result{}, err
-	}
-
-	var clusterConfig *relasticsearch.ClusterConfig
-	// We only require Elastic cluster configuration when Kibana is enabled.
-	if render.KibanaEnabled(tenant, installation) {
-		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
-			return reconcile.Result{}, err
-		}
 	}
 
 	var esSecrets []*corev1.Secret

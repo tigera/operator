@@ -1397,6 +1397,15 @@ spec:
                     - BPF
                     - VPP
                     type: string
+                  linuxPolicySetupTimeoutSeconds:
+                    description: "LinuxPolicySetupTimeoutSeconds delays new pods from
+                      running containers until their policy has been programmed in
+                      the dataplane. The specified delay defines the maximum amount
+                      of time that the Calico CNI plugin will wait for policy to be
+                      programmed. \n Only applies to pods created on Linux nodes.
+                      \n * A value of 0 disables pod startup delays. \n Default: 0"
+                    format: int32
+                    type: integer
                   mtu:
                     description: MTU specifies the maximum transmission unit to use
                       on the pod network. If not specified, Calico will perform MTU
@@ -7048,6 +7057,7 @@ spec:
                 - OpenShift
                 - DockerEnterprise
                 - RKE2
+                - TKG
                 type: string
               logging:
                 description: Logging Configuration for Components
@@ -10528,6 +10538,16 @@ spec:
                         - BPF
                         - VPP
                         type: string
+                      linuxPolicySetupTimeoutSeconds:
+                        description: "LinuxPolicySetupTimeoutSeconds delays new pods
+                          from running containers until their policy has been programmed
+                          in the dataplane. The specified delay defines the maximum
+                          amount of time that the Calico CNI plugin will wait for
+                          policy to be programmed. \n Only applies to pods created
+                          on Linux nodes. \n * A value of 0 disables pod startup delays.
+                          \n Default: 0"
+                        format: int32
+                        type: integer
                       mtu:
                         description: MTU specifies the maximum transmission unit to
                           use on the pod network. If not specified, Calico will perform
@@ -16588,6 +16608,7 @@ spec:
                     - OpenShift
                     - DockerEnterprise
                     - RKE2
+                    - TKG
                     type: string
                   logging:
                     description: Logging Configuration for Components

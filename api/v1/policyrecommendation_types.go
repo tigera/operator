@@ -207,6 +207,10 @@ func (c *PolicyRecommendationDeployment) GetDeploymentStrategy() *appsv1.Deploym
 	return nil
 }
 
+func (c *PolicyRecommendationDeployment) GetPriorityClassName() string {
+	return ""
+}
+
 func init() {
 	SchemeBuilder.Register(&PolicyRecommendation{}, &PolicyRecommendationList{})
 }

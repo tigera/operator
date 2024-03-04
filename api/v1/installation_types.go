@@ -82,7 +82,7 @@ type InstallationSpec struct {
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but
 	// will additionally compare the auto-detected value to the specified value to confirm they match.
 	// +optional
-	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;RKE2;
+	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;RKE2;TKG;
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CNI specifies the CNI that will be used by this installation.
@@ -287,7 +287,7 @@ type ComponentResource struct {
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options
-// are: EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise.
+// are: EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise, TKG.
 type Provider string
 
 var (
@@ -298,6 +298,7 @@ var (
 	ProviderRKE2      Provider = "RKE2"
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
+	ProviderTKG       Provider = "TKG"
 )
 
 // ProductVariant represents the variant of the product.
@@ -473,6 +474,19 @@ type CalicoNetworkSpec struct {
 	// Sysctl configures sysctl parameters for tuning plugin
 	// +optional
 	Sysctl []Sysctl `json:"sysctl,omitempty"`
+
+	// LinuxPolicySetupTimeoutSeconds delays new pods from running containers
+	// until their policy has been programmed in the dataplane.
+	// The specified delay defines the maximum amount of time
+	// that the Calico CNI plugin will wait for policy to be programmed.
+	//
+	// Only applies to pods created on Linux nodes.
+	//
+	// * A value of 0 disables pod startup delays.
+	//
+	// Default: 0
+	// +optional
+	LinuxPolicySetupTimeoutSeconds *int32 `json:"linuxPolicySetupTimeoutSeconds,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option
@@ -755,6 +769,14 @@ type Installation struct {
 	Spec InstallationSpec `json:"spec,omitempty"`
 	// Most recently observed state for the Calico or Calico Enterprise installation.
 	Status InstallationStatus `json:"status,omitempty"`
+}
+
+// BPFEnabled is an extension method that returns true if the Installation resource
+// has Calico Network Linux Dataplane set and equal to value "BPF" otherwise false.
+func (installation *InstallationSpec) BPFEnabled() bool {
+	return installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.LinuxDataplane != nil &&
+		*installation.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
 }
 
 // +kubebuilder:object:root=true

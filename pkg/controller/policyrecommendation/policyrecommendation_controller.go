@@ -124,6 +124,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			certificatemanagement.CASecretName,
 			render.ManagerInternalTLSSecretName,
 			render.TigeraLinseedSecret,
+			render.PolicyRecommendationTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("policy-recommendation-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -349,31 +350,10 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	logc.V(3).Info("rendering components")
-	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
-		ClusterDomain:        r.clusterDomain,
-		Installation:         installation,
-		ManagedCluster:       isManagedCluster,
-		PullSecrets:          pullSecrets,
-		Openshift:            r.provider == operatorv1.ProviderOpenShift,
-		UsePSP:               r.usePSP,
-		Namespace:            helper.InstallNamespace(),
-		Tenant:               tenant,
-		BindingNamespaces:    bindNamespaces,
-		PolicyRecommendation: policyRecommendation,
-		ExternalElastic:      r.externalElastic,
-	}
-
-	// Render the desired objects from the CRD and create or update them.
-	component := render.PolicyRecommendation(policyRecommendationCfg)
-
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
-		return reconcile.Result{}, err
-	}
-
-	components := []render.Component{
-		component,
-	}
+	var policyRecommendationKeyPair certificatemanagement.KeyPairInterface
+	var trustedBundleRO certificatemanagement.TrustedBundleRO
+	var trustedBundleRW certificatemanagement.TrustedBundle
+	var components []render.Component
 
 	if !isManagedCluster {
 		opts := []certificatemanager.Option{
@@ -406,10 +386,8 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, nil
 		}
 
-		trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
-
 		// policyRecommendationKeyPair is the key pair policy recommendation presents to identify itself
-		policyRecommendationKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, helper.TruthNamespace(), []string{render.PolicyRecommendationTLSSecretName})
+		policyRecommendationKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.PolicyRecommendationTLSSecretName, helper.TruthNamespace(), []string{render.PolicyRecommendationTLSSecretName})
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, logc)
 			return reconcile.Result{}, err
@@ -417,8 +395,19 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 		certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
-		policyRecommendationCfg.TrustedBundle = trustedBundle
-		policyRecommendationCfg.PolicyRecommendationCertSecret = policyRecommendationKeyPair
+		if !r.multiTenant {
+			// Zero-tenant and single tenant setups install resources inside tigera-policy-recommendation namespace. Thus,
+			// we need to create a tigera-ca-bundle inside this namespace in order to allow communication with Linseed
+			trustedBundleRW = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+			trustedBundleRO = trustedBundleRW.(certificatemanagement.TrustedBundleRO)
+		} else {
+			// Multi-tenant setups need to load the bundle the created by pkg/controller/secrets/tenant_controller.go
+			trustedBundleRO, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, logc)
+				return reconcile.Result{}, err
+			}
+		}
 
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -428,7 +417,11 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 					rcertificatemanagement.NewKeyPairOption(policyRecommendationKeyPair, true, true),
 				},
-				TrustedBundle: trustedBundle,
+				// Zero and single tenant setups need to create tigera-ca-bundle configmap because we install resources
+				// in namespace tigera-policy-recommendation
+				// Multi-tenant setups need to use the config map that was created by pkg/controller/secrets/tenant_controller.go
+				// in the tenant namespace. This parameter needs to be nil in this case
+				TrustedBundle: trustedBundleRW,
 			}),
 		)
 	}
@@ -439,6 +432,31 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, nil
 	}
 
+	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
+		ClusterDomain:                  r.clusterDomain,
+		Installation:                   installation,
+		ManagedCluster:                 isManagedCluster,
+		PullSecrets:                    pullSecrets,
+		Openshift:                      r.provider == operatorv1.ProviderOpenShift,
+		UsePSP:                         r.usePSP,
+		Namespace:                      helper.InstallNamespace(),
+		Tenant:                         tenant,
+		BindingNamespaces:              bindNamespaces,
+		ExternalElastic:                r.externalElastic,
+		TrustedBundle:                  trustedBundleRO,
+		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
+	}
+
+	// Render the desired objects from the CRD and create or update them.
+	component := render.PolicyRecommendation(policyRecommendationCfg)
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	// Prepend PolicyRecommendation before certificate creation
+	components = append([]render.Component{component}, components...)
 	for _, cmp := range components {
 		if err := handler.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
@@ -488,6 +506,9 @@ func (r *ReconcilePolicyRecommendation) createDefaultPolicyRecommendationScope(c
 	prs.ObjectMeta.Name = "default"
 	prs.Spec.NamespaceSpec.RecStatus = "Disabled"
 	prs.Spec.NamespaceSpec.Selector = "!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')"
+	if r.provider == operatorv1.ProviderOpenShift {
+		prs.Spec.NamespaceSpec.Selector += " && !(projectcalico.org/name starts with 'openshift-')"
+	}
 
 	if err := r.client.Create(ctx, prs); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to Create default PolicyRecommendationScope", err, log)

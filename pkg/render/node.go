@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,11 +46,14 @@ import (
 )
 
 const (
-	BirdTemplatesConfigMapName        = "bird-templates"
-	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
-	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
-	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
-	bgpBindModeHashAnnotation         = "hash.operator.tigera.io/bgp-bind-mode"
+	BirdTemplatesConfigMapName = "bird-templates"
+	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
+	BPFOperatorAnnotation      = "operator.tigera.io/bpfEnabled"
+
+	nodeCniConfigAnnotation   = "hash.operator.tigera.io/cni-config"
+	bgpLayoutHashAnnotation   = "hash.operator.tigera.io/bgp-layout"
+	bgpBindModeHashAnnotation = "hash.operator.tigera.io/bgp-bind-mode"
+
 	BGPLayoutConfigMapName            = "bgp-layout"
 	BGPLayoutConfigMapKey             = "earlyNetworkConfiguration"
 	BGPLayoutVolumeName               = "bgp-layout"
@@ -62,6 +66,7 @@ const (
 	NodePrometheusTLSServerSecret = "calico-node-prometheus-server-tls"
 	CalicoNodeObjectName          = "calico-node"
 	CalicoCNIPluginObjectName     = "calico-cni-plugin"
+	BPFVolumeName                 = "bpffs"
 )
 
 var (
@@ -624,6 +629,10 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
 
+	linuxPolicySetupTimeoutSeconds := int32(0)
+	if c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds != nil {
+		linuxPolicySetupTimeoutSeconds = *c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds
+	}
 	// calico plugin
 	calicoPluginConfig := map[string]interface{}{
 		"type":                   "calico",
@@ -638,6 +647,8 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		"policy": map[string]interface{}{
 			"type": "k8s",
 		},
+		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
+		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
 	}
 
 	// Determine logging configuration
@@ -906,7 +917,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	if c.bpfDataplaneEnabled() {
+	if c.cfg.Installation.BPFEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
@@ -1040,12 +1051,12 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	} else {
 		volumes = append(volumes,
-			corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			c.varRunCalicoVolume(),
 			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		)
 	}
 
-	if c.bpfDataplaneEnabled() {
+	if c.cfg.Installation.BPFEnabled() {
 		volumes = append(volumes,
 			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
@@ -1125,10 +1136,8 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	return volumes
 }
 
-func (c *nodeComponent) bpfDataplaneEnabled() bool {
-	return c.cfg.Installation.CalicoNetwork != nil &&
-		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
-		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+func (c *nodeComponent) varRunCalicoVolume() corev1.Volume {
+	return corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}}
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {
@@ -1313,8 +1322,8 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		)
 	}
-	if c.bpfDataplaneEnabled() {
-		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
+	if c.cfg.Installation.BPFEnabled() {
+		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	}
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
@@ -1511,9 +1520,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		}
 	}
 
-	if c.bpfDataplaneEnabled() {
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
-	}
 	if c.vppDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "FELIX_USEINTERNALDATAPLANEDRIVER",
@@ -1718,6 +1724,15 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "CALICO_EARLY_NETWORKING",
 			Value: BGPLayoutPath,
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork != nil &&
+		c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds > 0 {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_ENDPOINTSTATUSPATHPREFIX",
+			Value: c.varRunCalicoVolume().VolumeSource.HostPath.Path,
 		})
 	}
 

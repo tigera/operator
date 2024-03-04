@@ -199,6 +199,8 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -480,6 +482,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
         "type": "k8s"
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "kubernetes": {
         "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -556,7 +560,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "CALICO_MANAGE_CNI", Value: "true"},
 					{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 					{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
-					{Name: "FELIX_BPFENABLED", Value: "true"},
 					{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 					{Name: "FELIX_HEALTHENABLED", Value: "true"},
 					{Name: "FELIX_HEALTHPORT", Value: "9099"},
@@ -707,6 +710,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -1047,6 +1052,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -1461,6 +1468,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -2571,6 +2580,27 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable).To(Equal(&two))
 			})
 
+			It("should render LinuxPolicySetupTimeoutSeconds if a custom value was set", func() {
+				two := int32(2)
+				defaultInstance.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &two
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+				Expect(dsResource).ToNot(BeNil())
+				ds := dsResource.(*appsv1.DaemonSet)
+				Expect(ds).ToNot(BeNil())
+
+				for _, c := range ds.Spec.Template.Spec.Containers {
+					Expect(c.Env).To(ContainElement(corev1.EnvVar{
+						Name:  "FELIX_ENDPOINTSTATUSPATHPREFIX",
+						Value: "/var/run/calico",
+					}))
+				}
+			})
+
 			It("should render cni config without portmap when HostPorts disabled", func() {
 				expectedResources := []struct {
 					name    string
@@ -2633,6 +2663,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
           "type": "k8s"
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "kubernetes": {
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
       }
@@ -2732,6 +2764,8 @@ var _ = Describe("Node rendering tests", func() {
       "policy": {
         "type": "k8s"
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "type": "calico"
     },
     {
@@ -2758,6 +2792,58 @@ var _ = Describe("Node rendering tests", func() {
 	}
   ]
   }`, enableIPv4, enableIPv6)))
+			})
+
+			It("should render a proper 'policy_setup_timeout_seconds' setting in the cni config", func() {
+				one := int32(1)
+				defaultInstance.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &one
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+				// Should render the correct resources.
+				cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+				Expect(cniCmResource).ToNot(BeNil())
+				cniCm := cniCmResource.(*corev1.ConfigMap)
+				Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Debug",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
+      "ipam": {
+          "type": "calico-ipam",
+          "assign_ipv4" : "%t",
+          "assign_ipv6" : "%t"
+      },
+      "container_settings": {
+          "allow_ip_forwarding": false
+      },
+      "policy_setup_timeout_seconds": 1,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
+      "policy": {
+          "type": "k8s"
+      },
+      "kubernetes": {
+          "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {
+      "type": "bandwidth",
+      "capabilities": {"bandwidth": true}
+    },
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`, enableIPv4, enableIPv6)))
 			})
 
 			It("should render a proper 'allow_ip_forwarding' container setting in the cni config", func() {
@@ -2794,6 +2880,8 @@ var _ = Describe("Node rendering tests", func() {
       "container_settings": {
           "allow_ip_forwarding": true
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "policy": {
           "type": "k8s"
       },
@@ -2861,6 +2949,8 @@ var _ = Describe("Node rendering tests", func() {
           "type": "host-local",
           %s
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "container_settings": { "allow_ip_forwarding": false },
       "policy": { "type": "k8s" },
       "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
@@ -2912,8 +3002,10 @@ var _ = Describe("Node rendering tests", func() {
       "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
-	  "ranges": [[{"subnet": "usePodCidr"}], [{"subnet": "usePodCidrIPv6"}]]
+          "ranges": [[{"subnet": "usePodCidr"}], [{"subnet": "usePodCidrIPv6"}]]
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "container_settings": { "allow_ip_forwarding": false },
       "policy": { "type": "k8s" },
       "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
@@ -2961,6 +3053,8 @@ var _ = Describe("Node rendering tests", func() {
           "type": "host-local",
           "subnet" : "usePodCidrIPv6"
       },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "container_settings": { "allow_ip_forwarding": false },
       "policy": { "type": "k8s" },
       "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
@@ -2990,6 +3084,8 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -3157,6 +3253,8 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -3167,7 +3265,7 @@ var _ = Describe("Node rendering tests", func() {
       "log_file_max_count": 5,
       "ipam": {
           "type": "host-local",
-		  "subnet": "usePodCidr"
+          "subnet": "usePodCidr"
       },
       "container_settings": {
           "allow_ip_forwarding": false

@@ -253,6 +253,8 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	d.status.OnCRFound()
+
 	// Determine where to access Kibana.
 	kibanaHost := "tigera-secure-kb-http.tigera-kibana.svc"
 	kibanaPort := "5601"

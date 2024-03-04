@@ -53,6 +53,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
@@ -62,7 +63,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
-
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -85,6 +85,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
@@ -95,15 +96,16 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		var false_ = false
+		false_ := false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10
-		var logFileMaxSize = resource.MustParse("50Mi")
-		var logSeverity = operator.LogLevelError
+		logFileMaxSize := resource.MustParse("50Mi")
+		logSeverity := operator.LogLevelError
+		var linuxPolicySetupTimeoutSeconds int32 = 1
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -155,8 +157,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
 						FirstFound: &false_,
 					},
-					HostPorts:          &hpEnabled,
-					MultiInterfaceMode: &miMode,
+					HostPorts:                      &hpEnabled,
+					MultiInterfaceMode:             &miMode,
+					LinuxPolicySetupTimeoutSeconds: &linuxPolicySetupTimeoutSeconds,
 				},
 				ControlPlaneReplicas: &replicas,
 				NodeMetricsPort:      &nodeMetricsPort,
@@ -188,14 +191,14 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration (BPF)", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		var false_ = false
+		false_ := false
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10
-		var logFileMaxSize = resource.MustParse("50Mi")
-		var logSeverity = operator.LogLevelError
+		logFileMaxSize := resource.MustParse("50Mi")
+		logSeverity := operator.LogLevelError
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone

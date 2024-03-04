@@ -260,7 +260,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			return reconcile.Result{}, err
 		}
 		if err = validateModSecurityRuleSet(modSecurityRuleSet); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall ModSecurity rule set", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall rule set", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -431,13 +431,12 @@ func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 
 func validateModSecurityRuleSet(cm *corev1.ConfigMap) error {
 	requiredFiles := []string{
-		"modsecdefault.conf",
-		"crs-setup.conf",
+		"tigera.conf",
 	}
 
 	for _, f := range requiredFiles {
 		if _, ok := cm.Data[f]; !ok {
-			return fmt.Errorf("file must be found in Web Application Firewall rule set: %s", f)
+			return fmt.Errorf("file must be present with ruleset files: %s", f)
 		}
 	}
 
@@ -510,7 +509,7 @@ func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLaye
 // patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
 func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) bool {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		var tproxyMode crdv1.TPROXYModeOption
 		if ok, v := r.getTProxyMode(al); ok {
 			tproxyMode = v
@@ -523,7 +522,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 				//
 				// The felix bug was fixed in v3.16, v3.15.1 and v3.14.4; it should be safe to set new config fields
 				// once we know we're only upgrading from those versions and above.
-				return false
+				return false, nil
 			}
 
 			// If the mode is already set, fall through to the normal logic, it's safe to force-set the field now.
@@ -538,7 +537,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 
 		// If tproxy mode is already set to desired state return false to indicate patch not needed.
 		if policySyncPrefixSetDesired && tproxyModeSetDesired {
-			return false
+			return false, nil
 		}
 
 		fc.Spec.TPROXYMode = &tproxyMode
@@ -549,7 +548,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
 			"tproxyMode", string(tproxyMode),
 		)
-		return true
+		return true, nil
 	})
 
 	return err

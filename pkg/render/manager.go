@@ -292,6 +292,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, c.cfg.VoltronLinseedKeyPair.InitContainer(ManagerNamespace))
 	}
 
+	managerPodContainers := []corev1.Container{c.managerEsProxyContainer(), c.voltronContainer()}
+	if c.cfg.Tenant == nil {
+		managerPodContainers = append(managerPodContainers, c.managerContainer())
+	}
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ManagerDeploymentName,
@@ -304,7 +308,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Tolerations:        c.managerTolerations(),
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
-			Containers:         []corev1.Container{c.managerContainer(), c.managerEsProxyContainer(), c.voltronContainer()},
+			Containers:         managerPodContainers,
 			Volumes:            c.managerVolumes(),
 		},
 	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)

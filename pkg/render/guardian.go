@@ -19,6 +19,8 @@ package render
 import (
 	"net"
 
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -90,7 +92,8 @@ type GuardianConfiguration struct {
 	TunnelCAType      operatorv1.CAType
 
 	// Whether the cluster supports pod security policies.
-	UsePSP bool
+	UsePSP                      bool
+	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
 type GuardianComponent struct {
@@ -256,7 +259,7 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 func (c *GuardianComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GuardianDeploymentName,
@@ -284,6 +287,13 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 			},
 		},
 	}
+
+	if c.cfg.ManagementClusterConnection != nil {
+		if overrides := c.cfg.ManagementClusterConnection.Spec.GuardianDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *GuardianComponent) volumes() []corev1.Volume {

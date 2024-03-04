@@ -355,14 +355,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
-		TunnelCAType:      managementClusterConnection.Spec.TLS.CA,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
-		Installation:      instl,
-		TunnelSecret:      tunnelSecret,
-		TrustedCertBundle: trustedCertBundle,
-		UsePSP:            r.usePSP,
+		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
+		TunnelCAType:                managementClusterConnection.Spec.TLS.CA,
+		PullSecrets:                 pullSecrets,
+		Openshift:                   r.Provider == operatorv1.ProviderOpenShift,
+		Installation:                instl,
+		TunnelSecret:                tunnelSecret,
+		TrustedCertBundle:           trustedCertBundle,
+		UsePSP:                      r.usePSP,
+		ManagementClusterConnection: managementClusterConnection,
 	}
 
 	components := []render.Component{render.Guardian(guardianCfg)}

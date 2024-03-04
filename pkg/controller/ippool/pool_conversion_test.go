@@ -29,7 +29,8 @@ var _ = table.DescribeTable("IPPool operator.tigera.io <-> crd.projectcalico.org
 		Expect(err).NotTo(HaveOccurred())
 
 		// Convert back to operator.tigera.io, expect it to be equal to the input.
-		operPool := CRDPoolToOperator(*crdPool)
+		operPool := operator.IPPool{}
+		operPool.FromProjectCalicoV1(*crdPool)
 		Expect(operPool).To(Equal(input))
 	},
 

@@ -696,6 +696,49 @@ func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
 	return &pool, nil
 }
 
+// FromProjectCalicoV1 populates the IP pool with the data from the given
+// crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
+// and should be updated with every new field added to the IP pool structure.
+func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
+	p.CIDR = crd.Spec.CIDR
+
+	// Set encap.
+	switch crd.Spec.IPIPMode {
+	case pcv1.IPIPModeAlways:
+		p.Encapsulation = EncapsulationIPIP
+	case pcv1.IPIPModeCrossSubnet:
+		p.Encapsulation = EncapsulationIPIPCrossSubnet
+	}
+	switch crd.Spec.VXLANMode {
+	case pcv1.VXLANModeAlways:
+		p.Encapsulation = EncapsulationVXLAN
+	case pcv1.VXLANModeCrossSubnet:
+		p.Encapsulation = EncapsulationVXLANCrossSubnet
+	}
+
+	// Set NAT
+	if crd.Spec.NATOutgoing {
+		p.NATOutgoing = NATOutgoingEnabled
+	}
+
+	// Set BlockSize
+	blockSize := int32(crd.Spec.BlockSize)
+	p.BlockSize = &blockSize
+
+	// Set selector.
+	p.NodeSelector = crd.Spec.NodeSelector
+
+	// Set BGP export.
+	if crd.Spec.DisableBGPExport {
+		t := true
+		p.DisableBGPExport = &t
+	}
+
+	for _, use := range crd.Spec.AllowedUses {
+		p.AllowedUses = append(p.AllowedUses, IPPoolAllowedUse(use))
+	}
+}
+
 // CNIPluginType describes the type of CNI plugin used.
 //
 // One of: Calico, GKE, AmazonVPC, AzureVNET

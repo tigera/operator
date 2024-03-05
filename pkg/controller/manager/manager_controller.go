@@ -401,6 +401,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// This bundle contains the root CA used to sign all operator-generated certificates, as well as the explicitly named
 	// certificates, in case the user has provided their own cert in lieu of the default certificate.
 
+	var clusterConfig *relasticsearch.ClusterConfig
 	var trustedSecretNames []string
 	if !r.multiTenant {
 		// For multi-tenant systems, we don't support user-provided certs for all components. So, we don't need to include these,
@@ -450,6 +451,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			}
 			trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 		}
+
+		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
+			return reconcile.Result{}, err
+		}
+		trustedSecretNames = append(trustedSecretNames, render.TigeraKibanaCertSecret)
 	}
 
 	var authenticationCR *operatorv1.Authentication

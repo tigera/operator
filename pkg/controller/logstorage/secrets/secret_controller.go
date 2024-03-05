@@ -261,9 +261,6 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// Provision secrets and the trusted bundle into the cluster.
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 
-	// Determine if Kibana should be enabled for this cluster.
-	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
-
 	// Internal ES modes:
 	// - Zero-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
 	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
@@ -277,7 +274,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		// needs to include the public certificates from other Tigera components.
 
 		// Generate Elasticsearch / Kibana secrets for the tigera-elasticsearch and tigera-kibana namespaces.
-		elasticKeys, err := r.generateInternalElasticSecrets(reqLogger, kibanaEnabled, operatorSigner)
+		elasticKeys, err := r.generateInternalElasticSecrets(reqLogger, !r.multiTenant, operatorSigner)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -288,7 +285,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
-		if kibanaEnabled {
+		if !r.multiTenant {
 			// Render the key pair and trusted bundle into the Kibana namespace.
 			if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.internalKibanaComponent(elasticKeys.trustedBundle(operatorSigner)), r.status); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

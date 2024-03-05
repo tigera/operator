@@ -110,13 +110,7 @@ const (
 )
 
 const (
-	// ElasticsearchKeystoreSecret Currently only used when FIPS mode is enabled, we need to initialize the keystore with a password.
-	ElasticsearchKeystoreSecret         = "tigera-secure-elasticsearch-keystore"
-	ElasticsearchKeystoreEnvName        = "KEYSTORE_PASSWORD"
-	ElasticsearchKeystoreHashAnnotation = "hash.operator.tigera.io/keystore-password"
-
-	keystoreInitContainerName = "elastic-internal-init-keystore"
-	csrRootCAConfigMapName    = "elasticsearch-config"
+	csrRootCAConfigMapName = "elasticsearch-config"
 )
 
 // Certificate management constants.
@@ -175,8 +169,6 @@ type ElasticsearchConfiguration struct {
 	ElasticLicenseType      ElasticsearchLicenseType
 	TrustedBundle           certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret         *corev1.Secret
-	ApplyTrial              bool
-	KeyStoreSecret          *corev1.Secret
 }
 
 type elasticsearchComponent struct {
@@ -189,12 +181,10 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := es.cfg.Installation.Registry
 	path := es.cfg.Installation.ImagePath
 	prefix := es.cfg.Installation.ImagePrefix
+
 	var err error
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		es.esImage, err = components.GetReference(components.ComponentElasticsearchFIPS, reg, path, prefix, is)
-	} else {
-		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
-	}
+	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
+
 	errMsgs := make([]string, 0)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -254,15 +244,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	if es.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		toCreate = append(toCreate, es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
-	}
-
-	if es.cfg.KeyStoreSecret != nil {
-		if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-			es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
-		}
-
-		toCreate = append(toCreate, es.cfg.KeyStoreSecret)
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
 	}
 
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
@@ -361,13 +342,6 @@ func (es elasticsearchComponent) javaOpts() string {
 	} else {
 		javaOpts = "-Xms2G -Xmx2G"
 	}
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		javaOpts = fmt.Sprintf("%s --module-path /usr/share/bc-fips/ "+
-			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks "+
-			"-Djavax.net.ssl.trustStoreType=BCFKS "+
-			"-Djavax.net.ssl.trustStorePassword=%s "+
-			"-Dorg.bouncycastle.fips.approved_only=true", javaOpts, es.cfg.KeyStoreSecret.Data[ElasticsearchKeystoreEnvName])
-	}
 	return javaOpts
 }
 
@@ -377,34 +351,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
-	var env []corev1.EnvVar
-
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		// We mount it from a secret, as it contains sensitive information.
-		env = append(env,
-			corev1.EnvVar{
-				Name: ElasticsearchKeystoreEnvName,
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-						Key:                  ElasticsearchKeystoreEnvName,
-					},
-				},
-			},
-			corev1.EnvVar{
-				Name: "ES_JAVA_OPTS",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-						Key:                  "ES_JAVA_OPTS",
-					},
-				},
-			})
-	} else {
-		env = append(env, corev1.EnvVar{
+	env := []corev1.EnvVar{
+		{
 			Name:  "ES_JAVA_OPTS",
 			Value: es.javaOpts(),
-		})
+		},
 	}
 
 	sc := securitycontext.NewRootContext(false)
@@ -455,41 +406,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	annotations := es.cfg.TrustedBundle.HashAnnotations()
 	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
 	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
-
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		sc := securitycontext.NewRootContext(false)
-		// keystore init container converts jdk jks to bcfks and chown the new file to
-		// elasticsearch user and group for the main container to consume.
-		sc.Capabilities.Add = []corev1.Capability{"CHOWN"}
-
-		initKeystore := corev1.Container{
-			Name:            keystoreInitContainerName,
-			Image:           es.esImage,
-			ImagePullPolicy: ImagePullPolicy(),
-			Env: []corev1.EnvVar{
-				{
-					Name: ElasticsearchKeystoreEnvName,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-							Key:                  ElasticsearchKeystoreEnvName,
-						},
-					},
-				},
-				{
-					Name:  "ES_JAVA_OPTS",
-					Value: "--module-path /usr/share/bc-fips/",
-				},
-			},
-			// This is a script made by Tigera in our docker image to initialize the JVM keystore and the ES keystore
-			// using the password from env var KEYSTORE_PASSWORD.
-			Command:         []string{"/bin/sh"},
-			Args:            []string{"-c", "/usr/bin/initialize_keystore.sh"},
-			SecurityContext: sc,
-		}
-		initContainers = append(initContainers, initKeystore)
-		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)
-	}
 
 	var volumes []corev1.Volume
 
@@ -806,10 +722,6 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
-	}
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		config["xpack.security.fips_mode.enabled"] = "true"
-		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_stretch"
 	}
 
 	return esv1.NodeSet{

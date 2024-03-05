@@ -253,7 +253,6 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/deep-packet-inspection-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/deep-packet-inspection-tls/tls.key"},
-			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 		))
 		Expect(len(ds.Spec.Template.Spec.Containers)).Should(Equal(1))
@@ -299,7 +298,6 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/deep-packet-inspection-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/deep-packet-inspection-tls/tls.key"},
-			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 		))
 		Expect(len(ds.Spec.Template.Spec.Containers)).Should(Equal(1))
@@ -344,7 +342,6 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/deep-packet-inspection-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/deep-packet-inspection-tls/tls.key"},
-			corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: render.LinseedTokenPath},
 		))
 		Expect(len(ds.Spec.Template.Spec.Containers)).Should(Equal(1))

@@ -21,46 +21,46 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// LinseedDeployment is the configuration for the linseed Deployment.
+// GuardianDeployment is the configuration for the guardian Deployment.
 type GuardianDeployment struct {
 
-	// Spec is the specification of the linseed Deployment.
+	// Spec is the specification of the guardian Deployment.
 	// +optional
 	Spec *GuardianDeploymentSpec `json:"spec,omitempty"`
 }
 
-// GuardianDeploymentSpec defines configuration for the linseed Deployment.
+// GuardianDeploymentSpec defines configuration for the guardian Deployment.
 type GuardianDeploymentSpec struct {
 
-	// Template describes the linseed Deployment pod that will be created.
+	// Template describes the guardian Deployment pod that will be created.
 	// +optional
 	Template *GuardianDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-// GuardianDeploymentPodTemplateSpec is the linseed Deployment's PodTemplateSpec
+// GuardianDeploymentPodTemplateSpec is the guardian Deployment's PodTemplateSpec
 type GuardianDeploymentPodTemplateSpec struct {
 
-	// Spec is the linseed Deployment's PodSpec.
+	// Spec is the guardian Deployment's PodSpec.
 	// +optional
 	Spec *GuardianDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-// GuardianDeploymentPodSpec is the linseed Deployment's PodSpec.
+// GuardianDeploymentPodSpec is the guardian Deployment's PodSpec.
 type GuardianDeploymentPodSpec struct {
-	// InitContainers is a list of linseed init containers.
-	// If specified, this overrides the specified linseed Deployment init containers.
-	// If omitted, the linseed Deployment will use its default values for its init containers.
+	// InitContainers is a list of guardian init containers.
+	// If specified, this overrides the specified guardian Deployment init containers.
+	// If omitted, the guardian Deployment will use its default values for its init containers.
 	// +optional
 	InitContainers []GuardianDeploymentInitContainer `json:"initContainers,omitempty"`
 
-	// Containers is a list of linseed containers.
-	// If specified, this overrides the specified linseed Deployment containers.
-	// If omitted, the linseed Deployment will use its default values for its containers.
+	// Containers is a list of guardian containers.
+	// If specified, this overrides the specified guardian Deployment containers.
+	// If omitted, the guardian Deployment will use its default values for its containers.
 	// +optional
 	Containers []GuardianDeploymentContainer `json:"containers,omitempty"`
 }
 
-// GuardianDeploymentContainer is a linseed Deployment container.
+// GuardianDeploymentContainer is a guardian Deployment container.
 type GuardianDeploymentContainer struct {
 	// Name is an enum which identifies the guardian Deployment container by name.
 	// +kubebuilder:validation:Enum=tigera-guardian
@@ -68,19 +68,19 @@ type GuardianDeploymentContainer struct {
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named guardian Deployment container's resources.
-	// If omitted, the linseed Deployment will use its default value for this container's resources.
+	// If omitted, the guardian Deployment will use its default value for this container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// GuardianDeploymentInitContainer is a linseed Deployment init container.
+// GuardianDeploymentInitContainer is a guardian Deployment init container.
 type GuardianDeploymentInitContainer struct {
 	// Name is an enum which identifies the guardian Deployment init container by name.
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	// If specified, this overrides the named linseed Deployment init container's resources.
-	// If omitted, the linseed Deployment will use its default value for this init container's resources.
+	// If specified, this overrides the named guardian Deployment init container's resources.
+	// If omitted, the guardian Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }

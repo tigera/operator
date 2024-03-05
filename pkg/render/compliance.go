@@ -631,7 +631,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
-	return &corev1.PodTemplate{
+	podtemplate := &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera.io.report",
@@ -680,6 +680,14 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			},
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceReportPodTemplate; overrides != nil {
+			rcomponents.ApplyPodTemplateOverrides(podtemplate, overrides)
+		}
+	}
+
+	return podtemplate
 }
 
 func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {

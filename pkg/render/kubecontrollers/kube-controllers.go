@@ -523,7 +523,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.kubeControllerConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
-		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
 	}
 

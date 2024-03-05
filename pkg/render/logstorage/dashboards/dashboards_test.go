@@ -669,10 +669,6 @@ func expectedContainers() []corev1.Container {
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
 				},
 				{
-					Name:  "FIPS_MODE_ENABLED",
-					Value: "false",
-				},
-				{
 					Name:  "ELASTIC_USER",
 					Value: "",
 					ValueFrom: &corev1.EnvVarSource{

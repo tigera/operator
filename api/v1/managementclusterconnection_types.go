@@ -1,4 +1,4 @@
-// Copyright (c) 2012,2015-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,9 @@ type ManagementClusterConnectionSpec struct {
 	// TLS provides options for configuring how Managed Clusters can establish an mTLS connection with the Management Cluster.
 	// +optional
 	TLS *ManagementClusterTLS `json:"tls,omitempty"`
+
+	// GuardianDeployment configures the guardian Deployment.
+	GuardianDeployment *GuardianDeployment `json:"guardianDeployment,omitempty"`
 }
 
 type ManagementClusterTLS struct {

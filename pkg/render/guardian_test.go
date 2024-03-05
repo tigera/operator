@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -289,6 +290,50 @@ var _ = Describe("guardian", func() {
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			container := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, "tigera-guardian")
 			rtest.ExpectEnv(container.Env, "GUARDIAN_VOLTRON_CA_TYPE", "Public")
+		})
+		It("should render guardian with resource requests and limits when configured", func() {
+
+			guardianResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+
+			cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					GuardianDeployment: &operatorv1.GuardianDeployment{
+						Spec: &operatorv1.GuardianDeploymentSpec{
+							Template: &operatorv1.GuardianDeploymentPodTemplateSpec{
+								Spec: &operatorv1.GuardianDeploymentPodSpec{
+									Containers: []operatorv1.GuardianDeploymentContainer{{
+										Name:      "tigera-guardian",
+										Resources: &guardianResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			g := render.Guardian(cfg)
+			resources, _ := g.Objects()
+			Expect(resources).ToNot(BeNil())
+
+			deployment, ok := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			container := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, "tigera-guardian")
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(guardianResources))
 		})
 	})
 })

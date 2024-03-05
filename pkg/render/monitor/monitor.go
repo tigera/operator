@@ -496,10 +496,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			Name:  "TLS_CA_BUNDLE_HASH_ANNOTATION",
 			Value: rmeta.AnnotationHash(mc.cfg.TrustedCertBundle.HashAnnotations()),
 		},
-		{
-			Name:  "FIPS_MODE_ENABLED",
-			Value: operatorv1.IsFIPSModeEnabledString(mc.cfg.Installation.FIPSMode),
-		},
 	}
 
 	volumes := []corev1.Volume{

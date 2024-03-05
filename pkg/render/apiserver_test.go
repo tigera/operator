@@ -276,8 +276,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Name).To(Equal("TLS_KEY"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Value).To(Equal("/tigera-apiserver-certs/tls.key"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].ValueFrom).To(BeNil())
-		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Name).To(Equal("FIPS_MODE_ENABLED"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Value).To(Equal("false"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[6].Name).To(Equal("TRUSTED_BUNDLE_PATH"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[6].Value).To(Equal("/etc/pki/tls/certs/tigera-ca-bundle.crt"))
 
@@ -365,17 +363,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"privileged"},
 		}))
-	})
-
-	It("should render the env variable for queryserver when FIPS is enabled", func() {
-		fipsEnabled := operatorv1.FIPSModeEnabled
-		cfg.Installation.FIPSMode = &fipsEnabled
-		component, err := render.APIServer(cfg)
-		Expect(err).NotTo(HaveOccurred())
-		resources, _ := component.Objects()
-		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
 	It("should render an API server with custom configuration", func() {

@@ -536,7 +536,6 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
 		{Name: "TYPHA_SERVERKEYFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountKeyFilePath()},
-		{Name: "TYPHA_FIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: shutdownTimeoutEnvVar, Value: fmt.Sprint(defaultTyphaTerminationGracePeriod)}, // May get overridden later.
 	}
 	// We need at least the CN or URISAN set, we depend on the validation

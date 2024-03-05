@@ -287,7 +287,6 @@ func (l *linseed) multiTenantManagedClustersAccess() []client.Object {
 func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
-		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
 
 		// Configure Linseed server certificate.
 		{Name: "LINSEED_HTTPS_CERT", Value: l.cfg.KeyPair.VolumeMountCertificateFilePath()},

@@ -32,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -60,6 +59,19 @@ var _ = Describe("compliance rendering tests", func() {
 	expectedCompliancePolicyForManagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_managed_ocp.json")
 	expectedComplianceServerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance-server.json")
 	expectedComplianceServerPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance-server_ocp.json")
+
+	complianceResources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			"cpu":     resource.MustParse("2"),
+			"memory":  resource.MustParse("300Mi"),
+			"storage": resource.MustParse("20Gi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":     resource.MustParse("1"),
+			"memory":  resource.MustParse("150Mi"),
+			"storage": resource.MustParse("10Gi"),
+		},
+	}
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -123,19 +135,7 @@ var _ = Describe("compliance rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
-	It("should render the deployments with resource requests and limits for compliance components", func() {
-		complianceResources := corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				"cpu":     resource.MustParse("2"),
-				"memory":  resource.MustParse("300Mi"),
-				"storage": resource.MustParse("20Gi"),
-			},
-			Requests: corev1.ResourceList{
-				"cpu":     resource.MustParse("1"),
-				"memory":  resource.MustParse("150Mi"),
-				"storage": resource.MustParse("10Gi"),
-			},
-		}
+	It("should render resource requests and limits for compliance components", func() {
 		cfg.Compliance = &operatorv1.Compliance{
 			Spec: operatorv1.ComplianceSpec{
 				ComplianceServerDeployment: &operatorv1.ComplianceServerDeployment{
@@ -222,19 +222,7 @@ var _ = Describe("compliance rendering tests", func() {
 		Expect(container.Resources).To(Equal(complianceResources))
 	})
 
-	It("should render the deployments without resource requests and limits for compliance resources when not set", func() {
-		complianceResources := corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				"cpu":     resource.MustParse("2"),
-				"memory":  resource.MustParse("300Mi"),
-				"storage": resource.MustParse("20Gi"),
-			},
-			Requests: corev1.ResourceList{
-				"cpu":     resource.MustParse("1"),
-				"memory":  resource.MustParse("150Mi"),
-				"storage": resource.MustParse("10Gi"),
-			},
-		}
+	It("should render without resource requests and limits for compliance resources when not set", func() {
 		cfg.Compliance = &operatorv1.Compliance{
 			Spec: operatorv1.ComplianceSpec{
 				SnapshotterDeployment: &operatorv1.SnapshotterDeployment{
@@ -276,7 +264,7 @@ var _ = Describe("compliance rendering tests", func() {
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(corev1.ResourceRequirements{}))
 
-		// Compliance-server should NOT have resource values when not set
+		// Compliance-controller should NOT have resource values when not set
 		d, ok = rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -284,7 +272,7 @@ var _ = Describe("compliance rendering tests", func() {
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(corev1.ResourceRequirements{}))
 
-		// Compliance-server should have resource values set
+		// Compliance-snapshotter should have resource values set
 		d, ok = rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -292,11 +280,40 @@ var _ = Describe("compliance rendering tests", func() {
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(complianceResources))
 
+		// Compliance-benchmark should have resource values set
 		ds, ok := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ok).To(BeTrue())
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
 		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(complianceResources))
+
+	})
+
+	It("should render resource requests and limits for compliance report", func() {
+		cfg.Compliance = &operatorv1.Compliance{
+			Spec: operatorv1.ComplianceSpec{
+				ComplianceReportPodTemplate: &operatorv1.ComplianceReportPodTemplate{
+					Template: &operatorv1.ComplianceReportPodTemplateSpec{
+						Spec: &operatorv1.ComplianceReportPodSpec{
+							Containers: []operatorv1.ComplianceReportPodTemplateContainer{{
+								Name:      "reporter",
+								Resources: &complianceResources,
+							}},
+						},
+					},
+				},
+			},
+		}
+
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		resources, _ := component.Objects()
+
+		reporter, ok := rtest.GetResource(resources, "tigera.io.report", ns, "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		Expect(ok).To(BeTrue())
+		Expect(reporter.Template.Spec.Containers).To(HaveLen(1))
+		container := test.GetContainer(reporter.Template.Spec.Containers, "reporter")
 		Expect(container.Resources).To(Equal(complianceResources))
 
 	})
@@ -693,6 +710,7 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Context("Certificate management enabled", func() {
+
 		It("should render init containers and volume changes", func() {
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
@@ -724,7 +742,6 @@ var _ = Describe("compliance rendering tests", func() {
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
-
 			expectedResources := []struct {
 				name    string
 				ns      string
@@ -798,6 +815,135 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(reporter.Template.Spec.InitContainers).To(HaveLen(1))
 			csrInitContainer = reporter.Template.Spec.InitContainers[0]
 			Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ComplianceReporterSecret)))
+		})
+		It("should render init containers with resource requests and limits", func() {
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			complianceTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ServerKeyPair = complianceTLS
+
+			controllerKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceControllerSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ControllerKeyPair = controllerKeyPair
+
+			benchmarkerKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceBenchmarkerSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.BenchmarkerKeyPair = benchmarkerKeyPair
+
+			snapshotterKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceSnapshotterSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.SnapshotterKeyPair = snapshotterKeyPair
+
+			reporterKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceReporterSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ReporterKeyPair = reporterKeyPair
+			cfg.Compliance = &operatorv1.Compliance{
+				Spec: operatorv1.ComplianceSpec{
+					ComplianceServerDeployment: &operatorv1.ComplianceServerDeployment{
+						Spec: &operatorv1.ComplianceServerDeploymentSpec{
+							Template: &operatorv1.ComplianceServerDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ComplianceServerDeploymentPodSpec{
+									InitContainers: []operatorv1.ComplianceServerDeploymentInitContainer{{
+										Name:      "tigera-compliance-server-tls-key-cert-provisioner",
+										Resources: &complianceResources,
+									}},
+								},
+							},
+						},
+					},
+					ControllerDeployment: &operatorv1.ControllerDeployment{
+						Spec: &operatorv1.ControllerDeploymentSpec{
+							Template: &operatorv1.ControllerDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ControllerDeploymentPodSpec{
+									InitContainers: []operatorv1.ControllerDeploymentInitContainer{{
+										Name:      "tigera-compliance-controller-tls-key-cert-provisioner",
+										Resources: &complianceResources,
+									}},
+								},
+							},
+						},
+					},
+					SnapshotterDeployment: &operatorv1.SnapshotterDeployment{
+						Spec: &operatorv1.SnapshotterDeploymentSpec{
+							Template: &operatorv1.SnapshotterDeploymentPodTemplateSpec{
+								Spec: &operatorv1.SnapshotterDeploymentPodSpec{
+									InitContainers: []operatorv1.SnapshotterDeploymentInitContainer{{
+										Name:      "tigera-compliance-snapshotter-tls-key-cert-provisioner",
+										Resources: &complianceResources,
+									}},
+								},
+							},
+						},
+					},
+
+					BenchmarkerDaemonSet: &operatorv1.BenchmarkerDaemonSet{
+						Spec: &operatorv1.BenchmarkerDaemonSetSpec{
+							Template: &operatorv1.BenchmarkerDaemonSetPodTemplateSpec{
+								Spec: &operatorv1.BenchmarkerDaemonSetPodSpec{
+									InitContainers: []operatorv1.BenchmarkerDaemonSetInitContainer{{
+										Name:      "tigera-compliance-benchmarker-tls-key-cert-provisioner",
+										Resources: &complianceResources,
+									}},
+								},
+							},
+						},
+					},
+					ComplianceReportPodTemplate: &operatorv1.ComplianceReportPodTemplate{
+						Template: &operatorv1.ComplianceReportPodTemplateSpec{
+							Spec: &operatorv1.ComplianceReportPodSpec{
+								InitContainers: []operatorv1.ComplianceReportPodTemplateInitContainer{{
+									Name:      "tigera-compliance-reporter-tls-key-cert-provisioner",
+									Resources: &complianceResources,
+								}},
+							},
+						},
+					},
+				},
+			}
+			component, err := render.Compliance(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			server, ok := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(server.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer := test.GetContainer(server.Spec.Template.Spec.InitContainers, "tigera-compliance-server-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(complianceResources))
+
+			controller := rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(controller.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer = test.GetContainer(controller.Spec.Template.Spec.InitContainers, "tigera-compliance-controller-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(complianceResources))
+
+			benchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(ok).To(BeTrue())
+			Expect(benchmarker.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer = test.GetContainer(benchmarker.Spec.Template.Spec.InitContainers, "tigera-compliance-benchmarker-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(complianceResources))
+
+			snapshotter := rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(snapshotter.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer = test.GetContainer(snapshotter.Spec.Template.Spec.InitContainers, "tigera-compliance-snapshotter-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(complianceResources))
+
+			reporter := rtest.GetResource(resources, "tigera.io.report", ns, "", "v1", "PodTemplate").(*corev1.PodTemplate)
+			Expect(ok).To(BeTrue())
+			Expect(reporter.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer = test.GetContainer(reporter.Template.Spec.InitContainers, "tigera-compliance-reporter-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(complianceResources))
 		})
 	})
 

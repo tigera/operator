@@ -22,6 +22,26 @@ import (
 
 // ComplianceSpec defines the desired state of Tigera compliance reporting capabilities.
 type ComplianceSpec struct {
+
+	// ControllerDeployment configures the Compliance Controller Deployment.
+	// +optional
+	ControllerDeployment *ControllerDeployment `json:"controllerDeployment,omitempty"`
+
+	// SnapshotterDeployment configures the Compliance Snapshotter Deployment.
+	// +optional
+	SnapshotterDeployment *SnapshotterDeployment `json:"snapshotterDeployment,omitempty"`
+
+	// BenchmarkerDeployment configures the Compliance Benchmarker DaemonSet.
+	// +optional
+	BenchmarkerDaemonSet *BenchmarkerDaemonSet `json:"benchmarkerDaemonSet,omitempty"`
+
+	// ComplianceServerDeployment configures the Compliance Server Deployment.
+	// +optional
+	ComplianceServerDeployment *ComplianceServerDeployment `json:"complianceServerDeployment,omitempty"`
+
+	// ComplianceReportPodTemplate configures the Compliance Report PodTemplate.
+	// +optional
+	ComplianceReportPodTemplate *ComplianceReportPodTemplate `json:"complianceReportPodTemplate,omitempty"`
 }
 
 // ComplianceStatus defines the observed state of Tigera compliance reporting capabilities.

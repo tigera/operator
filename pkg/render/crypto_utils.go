@@ -15,10 +15,11 @@
 package render
 
 import (
-	"github.com/tigera/operator/pkg/common"
-	calicrypto "github.com/tigera/operator/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/tigera/operator/pkg/common"
+	calicrypto "github.com/tigera/operator/pkg/crypto"
 )
 
 func CreateDexClientSecret() *corev1.Secret {
@@ -30,20 +31,6 @@ func CreateDexClientSecret() *corev1.Secret {
 		},
 		Data: map[string][]byte{
 			ClientSecretSecretField: []byte(calicrypto.GeneratePassword(24)),
-		},
-	}
-}
-
-// CreateElasticsearchKeystoreSecret creates a secret to be used for initializing the keystore on Elasticsearch.
-func CreateElasticsearchKeystoreSecret() *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ElasticsearchKeystoreSecret,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			ElasticsearchKeystoreEnvName: []byte(calicrypto.GeneratePassword(24)),
 		},
 	}
 }

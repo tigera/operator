@@ -221,10 +221,6 @@ func (d *dashboards) Job() *batchv1.Job {
 			Name:  "KB_CA_CERT",
 			Value: d.cfg.TrustedBundle.MountPath(),
 		},
-		{
-			Name:  "FIPS_MODE_ENABLED",
-			Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode),
-		},
 		relasticsearch.ElasticUserEnvVar(ElasticCredentialsSecret),
 		relasticsearch.ElasticPasswordEnvVar(ElasticCredentialsSecret),
 	}

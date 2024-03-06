@@ -76,7 +76,7 @@ type ESMetricsDeploymentContainer struct {
 // ESMetricsDeploymentInitContainer is a ESMetricsDeployment init container.
 type ESMetricsDeploymentInitContainer struct {
 	// Name is an enum which identifies the ESMetricsDeployment init container by name.
-	// +kubebuilder:validation:Enum=tigera-ee-elasticsearch-metrics-key-cert-provisioner
+	// +kubebuilder:validation:Enum=tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

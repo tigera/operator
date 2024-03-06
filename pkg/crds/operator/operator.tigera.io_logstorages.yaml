@@ -225,7 +225,7 @@ spec:
                                         the ESMetricsDeployment init container by
                                         name.
                                       enum:
-                                      - tigera-ee-elasticsearch-metrics-key-cert-provisioner
+                                      - tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner
                                       type: string
                                     resources:
                                       description: Resources allows customization

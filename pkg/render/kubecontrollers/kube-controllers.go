@@ -105,7 +105,8 @@ type KubeControllersConfiguration struct {
 	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
 	BindingNamespaces []string
 
-	// Whether or not to run the rendered components in multi-tenant mode.
+	// Tenant object provides tenant configuration for both single and multi-tenant modes.
+	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
 }
 

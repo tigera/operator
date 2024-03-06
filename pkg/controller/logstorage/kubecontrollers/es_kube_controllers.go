@@ -324,6 +324,9 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	// ESGateway is required in order for kube-controllers to operate successfully, since es-kube-controllers talks to ES
+	// via this gateway. However, in multi-tenant mode, es-kube-controllers doesn't talk to elasticsearch,
+	// so this is only needed in single-tenant clusters and zero tenants clusters
 	if !r.multiTenant {
 		gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
 		// Query the trusted bundle from the namespace.
@@ -332,10 +335,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting trusted bundle in %s", gwNSHelper.InstallNamespace()), err, reqLogger)
 			return reconcile.Result{}, err
 		}
-
-		// ESGateway is required in order for kube-controllers to operate successfully, since es-kube-controllers talks to ES
-		// via this gateway. However, in multi-tenant mode, es-kube-controllers doesn't talk to elasticsearch,
-		// so this is only needed in single-tenant clusters.
 		if err := r.createESGateway(
 			ctx,
 			gwNSHelper,

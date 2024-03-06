@@ -15,7 +15,16 @@
 package render
 
 const (
-	// CalicoFinalizer is applied by the core controller as part of Installation defaulting to ensure it can
-	// clean up resources if the Installation is ever deleted.
-	CalicoFinalizer = "tigera.io/operator-cleanup"
+	// OperatorCompleteFinalizer is applied by the core controller as part of Installation defaulting to ensure it can
+	// clean up resources if the Installation is ever deleted. This Finalizer is only removed after all operator
+	// finalization logic has completed.
+	OperatorCompleteFinalizer = "tigera.io/operator-cleanup"
+
+	// APIServerFinalizer is added to the Installation by the API server controller when installing the API server so that
+	// Calico CNI resources are not removed until the API server controller has had time to properly tear down pods.
+	APIServerFinalizer = "operator.tigera.io/apiserver-controller"
+
+	// InstallationControllerFinalizer is added to the Installation by the core Installation controller when installing Calico
+	// so that Calico CNI resources are not removed until calico-kube-controllers has had time to properly be torn down.
+	InstallationControllerFinalizer = "operator.tigera.io/installation-controller"
 )

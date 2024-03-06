@@ -28,7 +28,6 @@ import (
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
-	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -75,7 +74,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -93,33 +91,31 @@ const (
 
 const InstallationName string = "calico"
 
-//// Node and Installation finalizer
+//// Use of Finalizers for graceful termination
 //
-// There is a problem with tearing down the Calico resources where removing the calico-node ClusterRoleBinding
-// prevents pod-networked pods (e.g., kube-controllers) from teminating because the CNI plugin no longer has permissions.
+// There is a problem with tearing down the Calico resources where removing the calico-cni RBAC resources
+// prevents pod-networked pods (e.g., kube-controllers) from teminating because the CNI plugin no longer has the necessary permissions.
 //
-// To ensure this problem does not happen we add a finalizer to the Installation resource and to the
-// calico-node ClusterRoleBinding, ClusterRole, and ServiceAccount.
+// To ensure this problem does not happen we make liberal use of finalizers to ensure a staged teardown of resources created by this operator.
 //
-// - The finalizer on the Installation resource is so that the controller knows that it is time to tear down
-// and cleanup. This also allows the Installation resource to remain while the controller cleans up.
-// - The finalizer on the calico-node resources ensures those resources remain when the Installation
-// is deleted (has the DeletionTimestamp added) because kubernetes will start cleaning up the resources.
+// - Each controller (including this one) that requires the CNI plugin for teardown can add its own finalizer to the Installation CR, and is responsible
+//   for removing this finalizer when its finalization logic is complete.
+// - This controller adds a finalizer to the Calico CNI resources to ensure they remain even when the Installation
+//   is deleted. This finalizer is only removed once all per-controller finalizers on the Installation are removed.
+// - This controller adds a finalizer to the Installation that is only removed after the CNI resources have had their finalizers removed.
+//   This allows the Installation resource to remain while the operator as a whole cleans up.
 //
-// When the Installation resource is not being deleted the core controller will add a finalizer to
-// the Installation CR and a separate finalizer to the calico-node ClusterRoleBinding, ClusterRole,
-// and ServiceAccount.
+// When the Installation resource is being deleted (has a DeletionTimestamp) the following sequence occurs:
 //
-// When the Installation resource is being deleted (has a DeletionTimestamp) the following sequence is
-// expected:
-//
-//   1. The kubernetes system will begin cleaning up resources owned by the Installation.
-//   2. Core reconciliation will pass 'terminating' to the kube-controller render code, ensuring
-//      the kube-controller resources are returned to be explicitly deleted.
-//   3. Once the kube-controller pod is terminated we will re-render the calico-node ClusterRoleBinding,
+//   1. Kubernetes will begin cleaning up any resources owned by the Installation.
+//   2. This controller will pass Terminating=true to the kube-controllers render code, ensuring
+//      the kube-controllers resources are explicitly deleted.
+//   3. Once kube-controllers is terminated we will remove this controller's Finalizer from the Installation.
+//   4. Once there are no more per-controller finalizers on the Installation, this controller will re-render the calico-cni ClusterRoleBinding,
 //      ClusterRole, and ServiceAccount resources to remove the finalizers on them.
-//   4. Once the calico-node ClusterRoleBinding finalizer is removed we have cleaned up everything
-//      necessary so we can remove the Installation finalizer to allow it to be deleted.
+//   4. Once the calico-cni finalizers are emoved, this controller will remove the tigera.io/operator-cleanup finalizer
+//      from the Installation, allowing it to be deleted.
+//   5. Deletion of the Installation will trigger cleanup of the remaining calico-system resources left in the cluster.
 
 var (
 	log                    = logf.Log.WithName("controller_installation")
@@ -767,8 +763,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	terminating := (instance.DeletionTimestamp != nil)
-	if terminating {
+	installationDeleted := (instance.DeletionTimestamp != nil)
+	if installationDeleted {
 		reqLogger.Info("Installation object is terminating")
 	}
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
@@ -829,15 +825,30 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// See the section 'Node and Installation finalizer' at the top of this file for details.
-	if terminating {
-		// Keep a finalizer on the Installation object until all necessary dependencies have been cleaned up.
+	// See the section 'Use of Finalizers for graceful termination' at the top of this file for details.
+	if installationDeleted {
+		// This controller manages a finalizer to track whether its own pods have been properly torn down. Only remove it
+		// when all pod-networked Pods managed by this controller have been torn down. For now, this is just calico-kube-controllers.
+		l := &appsv1.Deployment{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}, l)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if apierrors.IsNotFound(err) {
+			reqLogger.Info("calico-kube-controllers has been deleted, removing finalizer", "finalizer", render.InstallationControllerFinalizer)
+			utils.RemoveInstallationFinalizer(instance, render.InstallationControllerFinalizer)
+		} else {
+			reqLogger.Info("calico-kube-controller is still present, waiting for termination")
+		}
+
+		// Keep an overarching finalizer on the Installation object until ALL necessary dependencies have been cleaned up.
 		// This ensures we don't delete the CNI plugin and calico-node too early, as they are a pre-requisite for tearing
 		// down networking for other pods deployed by this operator.
 		doneTerminating := true
-		reqLogger.V(1).Info("Checking if we can remove Installation finalizer")
+		reqLogger.V(1).Info("Checking if we can remove Installation finalizer", "finalizer", render.OperatorCompleteFinalizer)
 
-		// Wait until the calico-node cluster role binding has been cleaned up.
+		// Wait until the calico-node cluster role binding has been cleaned up. This ClusterRole will only be removed after all other
+		// controllers have completed their finalization logic and removed their finalizer from the Installation.
 		crb := rbacv1.ClusterRoleBinding{}
 		key := types.NamespacedName{Name: "calico-node"}
 		err := r.client.Get(ctx, key, &crb)
@@ -852,23 +863,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			}
 		}
 
-		// Wait until the apiserver namespace has been deleted.
-		ns := corev1.Namespace{}
-		key = types.NamespacedName{Name: rmeta.APIServerNamespace(instance.Spec.Variant)}
-		err = r.client.Get(ctx, key, &ns)
-		if !apierrors.IsNotFound(err) {
-			// We're not ready to terminate if the apiserer namespace hasn't been deleted.
-			reqLogger.V(1).Info("Installation still finalizing: Namespace calico-apiserver still present")
-			doneTerminating = false
-		}
-
-		// If all of the above checks passed, we can clear the finalizer.
+		// If all of the above checks passed, we can clear the finalizer responsible for tracking
+		// whether all operator cleanup has completed.
 		if doneTerminating {
-			reqLogger.Info("Removing installation finalizer")
-			removeInstallationFinalizer(instance)
+			reqLogger.Info("Removing Installation finalizer", "finalizer", render.OperatorCompleteFinalizer)
+			utils.RemoveInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 		}
 	} else {
-		setInstallationFinalizer(instance)
+		// Add a finalizer to track whether or not this controller's specific finalization logic has completed.
+		utils.SetInstallationFinalizer(instance, render.InstallationControllerFinalizer)
+
+		// Add a finalizer to ensure the Installation is not deleted until all Operator finalization
+		// logic has completed.
+		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
@@ -1218,7 +1225,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Render namespaces for Calico.
 	components = append(components, render.Namespaces(namespaceCfg))
 
-	if newActiveCM != nil && !terminating {
+	if newActiveCM != nil && !installationDeleted {
 		log.Info("adding active configmap")
 		components = append(components, render.NewPassthrough(newActiveCM))
 	}
@@ -1279,22 +1286,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
-	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
-	nodeTerminating := false
-	if terminating {
-		// Wait for the calico-kube-controllers deployment to be removed before cleaning up calico/node resources.
-		// The existence of the deployment is a signal that the pods have not been torn down, as Kubernetes waits for its children to be deleted
-		// before removing the deployment itself.
-		l := &appsv1.Deployment{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}, l)
-		if err != nil && !apierrors.IsNotFound(err) {
-			r.status.SetDegraded(operator.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
-			return reconcile.Result{}, err
-		} else if apierrors.IsNotFound(err) {
-			reqLogger.Info("calico-kube-controllers has been deleted, CNI RBAC resources can now be removed")
-			nodeTerminating = true
-		} else {
-			reqLogger.Info("calico-kube-controller is still present, waiting for termination")
+	// See the section 'Use of Finalizers for graceful termination' at the top of this file for terminating details.
+	canRemoveCNI := false
+	if installationDeleted {
+		// Wait for other controllers to complete their finalizer teardown before removing the CNI plugin.
+		canRemoveCNI = true
+		for _, f := range instance.Finalizers {
+			if f != render.OperatorCompleteFinalizer {
+				reqLogger.Info("Waiting for finalization to complete before removing CNI resources", "finalizer", f)
+				canRemoveCNI = false
+			}
 		}
 	}
 
@@ -1320,7 +1321,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BGPLayouts:              bgpLayout,
 		NodeAppArmorProfile:     nodeAppArmorProfile,
 		MigrateNamespaces:       needNsMigration,
-		Terminating:             nodeTerminating,
+		CanRemoveCNI:            canRemoveCNI,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
 		BindMode:                bgpConfiguration.Spec.BindMode,
@@ -1330,7 +1331,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
-		Terminating:  terminating,
+		Terminating:  installationDeleted,
 		UsePSP:       r.usePSP,
 		OpenShift:    instance.Spec.KubernetesProvider == operator.ProviderOpenShift,
 	}
@@ -1344,7 +1345,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagementClusterConnection: managementClusterConnection,
 		ClusterDomain:               r.clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
-		Terminating:                 terminating,
+		Terminating:                 installationDeleted,
 		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
@@ -1868,18 +1869,6 @@ func addCRDWatches(c ctrlruntime.Controller, v operator.ProductVariant) error {
 		}
 	}
 	return nil
-}
-
-func setInstallationFinalizer(i *operator.Installation) {
-	if !stringsutil.StringInSlice(render.CalicoFinalizer, i.GetFinalizers()) {
-		i.SetFinalizers(append(i.GetFinalizers(), render.CalicoFinalizer))
-	}
-}
-
-func removeInstallationFinalizer(i *operator.Installation) {
-	if stringsutil.StringInSlice(render.CalicoFinalizer, i.GetFinalizers()) {
-		i.SetFinalizers(stringsutil.RemoveStringInSlice(render.CalicoFinalizer, i.GetFinalizers()))
-	}
 }
 
 func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {

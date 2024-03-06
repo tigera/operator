@@ -58,6 +58,10 @@ type AuthenticationSpec struct {
 	// LDAP contains the configuration needed to setup LDAP authentication.
 	// +optional
 	LDAP *AuthenticationLDAP `json:"ldap,omitempty"`
+
+	// DexDeployment configures the Dex Deployment.
+	// +optional
+	DexDeployment *DexDeployment `json:"dexDeployment,omitempty"`
 }
 
 // AuthenticationStatus defines the observed state of Authentication

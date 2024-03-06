@@ -34,6 +34,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -75,6 +76,8 @@ type DexComponentConfiguration struct {
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
+
+	Authentication *operatorv1.Authentication
 }
 
 type dexComponent struct {
@@ -289,6 +292,12 @@ func (c *dexComponent) deployment() client.Object {
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
 		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(DexObjectName, DexNamespace)
+	}
+
+	if c.cfg.Authentication != nil {
+		if overrides := c.cfg.Authentication.Spec.DexDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
 	}
 
 	return d

@@ -17,9 +17,6 @@ package render_test
 import (
 	"fmt"
 
-	"github.com/tigera/operator/test"
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -28,6 +25,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -48,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 var (
@@ -343,53 +342,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			}))
 	})
 
-	It("should render configuration with Resource requests and limits", func() {
-		intrusionDetectionResources := corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				"cpu":     resource.MustParse("2"),
-				"memory":  resource.MustParse("300Mi"),
-				"storage": resource.MustParse("20Gi"),
-			},
-			Requests: corev1.ResourceList{
-				"cpu":     resource.MustParse("1"),
-				"memory":  resource.MustParse("150Mi"),
-				"storage": resource.MustParse("10Gi"),
-			},
-		}
-
-		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
-			Spec: operatorv1.IntrusionDetectionSpec{
-				IntrusionDetectionControllerDeployment: &operatorv1.IntrusionDetectionControllerDeployment{
-					Spec: &operatorv1.IntrusionDetectionControllerDeploymentSpec{
-						Template: &operatorv1.IntrusionDetectionControllerDeploymentPodTemplateSpec{
-							Spec: &operatorv1.IntrusionDetectionControllerDeploymentPodSpec{
-								Containers: []operatorv1.IntrusionDetectionControllerDeploymentContainer{{
-									Name:      "controller",
-									Resources: &intrusionDetectionResources,
-								}},
-							},
-						},
-					},
-				},
-			},
-		}
-		component := render.IntrusionDetection(cfg)
-		resources, _ := component.Objects()
-
-		d := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
-
-		// Should set requests/limits for controller container
-		container := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
-		Expect(container).NotTo(BeNil())
-		Expect(container.Resources).To(Equal(intrusionDetectionResources))
-
-		// Should not update for container webhooks-processor
-		container = test.GetContainer(d.Spec.Template.Spec.Containers, "webhooks-processor")
-		Expect(container).NotTo(BeNil())
-		Expect(container.Resources).To(Equal(corev1.ResourceRequirements{}))
-	})
-
 	It("should disable GlobalAlert controller when cluster is managed", func() {
 		cfg.Openshift = notOpenshift
 		cfg.ManagedCluster = managedCluster
@@ -658,6 +610,105 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		csrInitContainer := intrusionDetectionDeploy.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.IntrusionDetectionTLSSecretName)))
+	})
+
+	It("should render container and init container with resource requests/limits when configured", func() {
+
+		intrusionDetectionResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+
+		intrusionDetectionCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.IntrusionDetectionCertSecret = intrusionDetectionCertSecret
+		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				IntrusionDetectionControllerDeployment: &operatorv1.IntrusionDetectionControllerDeployment{
+					Spec: &operatorv1.IntrusionDetectionControllerDeploymentSpec{
+						Template: &operatorv1.IntrusionDetectionControllerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.IntrusionDetectionControllerDeploymentPodSpec{
+								Containers: []operatorv1.IntrusionDetectionControllerDeploymentContainer{{
+									Name:      "controller",
+									Resources: &intrusionDetectionResources,
+								}},
+								InitContainers: []operatorv1.IntrusionDetectionControllerDeploymentInitContainer{{
+									Name:      "tigera-dex-tls-key-cert-provisioner",
+									Resources: &intrusionDetectionResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		component := render.IntrusionDetection(cfg)
+		toCreate, _ := component.Objects()
+
+		intrusionDetectionDeploy := rtest.GetResource(toCreate, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		csrInitContainer := intrusionDetectionDeploy.Spec.Template.Spec.InitContainers[0]
+		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.IntrusionDetectionTLSSecretName)))
+
+		// Should set requests/limits for controller container
+		Expect(intrusionDetectionDeploy.Spec.Template.Spec.Containers).To(HaveLen(2))
+		container := test.GetContainer(intrusionDetectionDeploy.Spec.Template.Spec.Containers, "controller")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(intrusionDetectionResources))
+
+		// Should not update for container webhooks-processor
+		container = test.GetContainer(intrusionDetectionDeploy.Spec.Template.Spec.Containers, "webhooks-processor")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(corev1.ResourceRequirements{}))
+	})
+
+	It("should render configuration with default Init container resource requests and limits", func() {
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+
+		intrusionDetectionCertSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.IntrusionDetectionTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		cfg.IntrusionDetectionCertSecret = intrusionDetectionCertSecret
+
+		component := render.IntrusionDetection(cfg)
+		toCreate, _ := component.Objects()
+		intrusionDetectionDeploy, ok := rtest.GetResource(toCreate, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+
+		initContainer := test.GetContainer(intrusionDetectionDeploy.Spec.Template.Spec.InitContainers, "intrusion-detection-tls-key-cert-provisioner")
+		Expect(initContainer).NotTo(BeNil())
+		Expect(initContainer.Resources).To(Equal(corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("10m"),
+				"memory": resource.MustParse("50Mi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("10m"),
+				"memory": resource.MustParse("50Mi"),
+			},
+		}))
+
 	})
 
 	Context("multi-tenant rendering", func() {

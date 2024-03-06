@@ -447,61 +447,11 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			cfg.TLSKeyPair = dexTLS
 
-			//dexResources := corev1.ResourceRequirements{
-			//	Limits: corev1.ResourceList{
-			//		"cpu":     resource.MustParse("2"),
-			//		"memory":  resource.MustParse("300Mi"),
-			//		"storage": resource.MustParse("20Gi"),
-			//	},
-			//	Requests: corev1.ResourceList{
-			//		"cpu":     resource.MustParse("1"),
-			//		"memory":  resource.MustParse("150Mi"),
-			//		"storage": resource.MustParse("10Gi"),
-			//	},
-			//}
-			//
-			//dexInitContainerResources := corev1.ResourceRequirements{
-			//	Limits: corev1.ResourceList{
-			//		"cpu":    resource.MustParse("100m"),
-			//		"memory": resource.MustParse("100Mi"),
-			//	},
-			//	Requests: corev1.ResourceList{
-			//		"cpu":    resource.MustParse("10m"),
-			//		"memory": resource.MustParse("150Mi"),
-			//	},
-			//}
-			//
-			//cfg.Authentication = &operatorv1.Authentication{
-			//	Spec: operatorv1.AuthenticationSpec{
-			//		DexDeployment: &operatorv1.DexDeployment{
-			//			Spec: &operatorv1.DexDeploymentSpec{
-			//				Template: &operatorv1.DexDeploymentPodTemplateSpec{
-			//					Spec: &operatorv1.DexDeploymentPodSpec{
-			//						Containers: []operatorv1.DexDeploymentContainer{{
-			//							Name:      "tigera-dex",
-			//							Resources: &dexResources,
-			//						}},
-			//						InitContainers: []operatorv1.DexDeploymentInitContainer{{
-			//							Name:      "tigera-dex-tls-key-cert-provisioner",
-			//							Resources: &dexInitContainerResources,
-			//						}},
-			//					},
-			//				},
-			//			},
-			//		},
-			//	},
-			//}
-
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
-
-			// Should set requests/limits for tigera-dex container
-			//container := test.GetContainer(deploy.Spec.Template.Spec.Containers, "tigera-dex")
-			//Expect(container).NotTo(BeNil())
-			//Expect(container.Resources).To(Equal(dexResources))
 
 			initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "tigera-dex-tls-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())

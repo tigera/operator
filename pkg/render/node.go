@@ -104,10 +104,13 @@ type NodeConfiguration struct {
 	NodeAppArmorProfile     string
 	BirdTemplates           map[string]string
 	NodeReporterMetricsPort int
-	// Indicates node is being terminated, so remove most resources but
-	// leave RBAC and SA to allow any CNI plugin calls to continue to function
+
+	// We use a finalizer to keep the CNI plugin around during uninstall since the CNI plugin and
+	// associated RBAC resources are required for pod teardown to succeed. Once all other Calico pods have been
+	// removed, we will remove the CNI resources last.
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
-	Terminating         bool
+	CanRemoveCNI bool
+
 	PrometheusServerTLS certificatemanagement.KeyPairInterface
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace
@@ -198,7 +201,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	// garbage collector when the Installation is finally deleted.
 	objsToKeep := []client.Object{}
 
-	if c.cfg.Terminating {
+	if c.cfg.CanRemoveCNI {
 		objsToKeep = objs
 		objs = []client.Object{}
 	}
@@ -241,7 +244,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, migration.ClusterRoleBindingForKubeSystemNode())
 	}
 
-	if c.cfg.Terminating {
+	if c.cfg.CanRemoveCNI {
 		return objsToKeep, append(objs, objsToDelete...)
 	}
 	return objs, objsToDelete
@@ -254,7 +257,7 @@ func (c *nodeComponent) Ready() bool {
 // nodeServiceAccount creates the node's service account.
 func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
+	if !c.cfg.CanRemoveCNI {
 		finalizer = []string{CNIFinalizer}
 	}
 
@@ -271,7 +274,7 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 // cniPluginServiceAccount creates the Calico CNI plugin's service account.
 func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
+	if !c.cfg.CanRemoveCNI {
 		finalizer = []string{CNIFinalizer}
 	}
 
@@ -288,7 +291,7 @@ func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 // nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
 func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
+	if !c.cfg.CanRemoveCNI {
 		finalizer = []string{CNIFinalizer}
 	}
 	crb := &rbacv1.ClusterRoleBinding{
@@ -320,7 +323,7 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 // cniPluginRoleBinding creates a rolebinding giving the Calico CNI plugin service account the required permissions to operate.
 func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
+	if !c.cfg.CanRemoveCNI {
 		finalizer = []string{CNIFinalizer}
 	}
 	crb := &rbacv1.ClusterRoleBinding{
@@ -348,7 +351,7 @@ func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 // nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
 func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
+	if !c.cfg.CanRemoveCNI {
 		finalizer = []string{CNIFinalizer}
 	}
 	role := &rbacv1.ClusterRole{
@@ -560,7 +563,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 // cniPluginRole creates the role containing policy rules that allow the Calico CNI plugin to operate normally.
 func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
+	if !c.cfg.CanRemoveCNI {
 		finalizer = []string{CNIFinalizer}
 	}
 	role := &rbacv1.ClusterRole{

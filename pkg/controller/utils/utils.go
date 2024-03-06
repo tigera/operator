@@ -23,6 +23,7 @@ import (
 	"time"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -905,4 +906,16 @@ func getContainer(spec corev1.PodSpec, name string) *corev1.Container {
 		}
 	}
 	return nil
+}
+
+func SetInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
+	if !stringsutil.StringInSlice(finalizer, i.GetFinalizers()) {
+		i.SetFinalizers(append(i.GetFinalizers(), finalizer))
+	}
+}
+
+func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
+	if stringsutil.StringInSlice(finalizer, i.GetFinalizers()) {
+		i.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, i.GetFinalizers()))
+	}
 }

@@ -169,7 +169,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// so wait for that before we continue.
 	finalizerExists := false
 	for _, finalizer := range installation.GetFinalizers() {
-		if finalizer == render.CalicoFinalizer {
+		if finalizer == render.OperatorCompleteFinalizer {
 			finalizerExists = true
 			break
 		}

@@ -359,11 +359,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
-				IntrusionDetectionDeployment: &operatorv1.IntrusionDetectionDeployment{
-					Spec: &operatorv1.IntrusionDetectionDeploymentSpec{
-						Template: &operatorv1.IntrusionDetectionDeploymentPodTemplateSpec{
-							Spec: &operatorv1.IntrusionDetectionDeploymentPodSpec{
-								Containers: []operatorv1.IntrusionDetectionDeploymentContainer{{
+				IntrusionDetectionControllerDeployment: &operatorv1.IntrusionDetectionControllerDeployment{
+					Spec: &operatorv1.IntrusionDetectionControllerDeploymentSpec{
+						Template: &operatorv1.IntrusionDetectionControllerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.IntrusionDetectionControllerDeploymentPodSpec{
+								Containers: []operatorv1.IntrusionDetectionControllerDeploymentContainer{{
 									Name:      "controller",
 									Resources: &intrusionDetectionResources,
 								}},

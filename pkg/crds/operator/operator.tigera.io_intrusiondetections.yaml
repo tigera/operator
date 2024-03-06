@@ -112,9 +112,9 @@ spec:
                   - resourceRequirements
                   type: object
                 type: array
-              intrusionDetectionDeployment:
-                description: IntrusionDetectionDeployment configures the IntrusionDetection
-                  Deployment.
+              intrusionDetectionControllerDeployment:
+                description: IntrusionDetectionControllerDeployment configures the
+                  IntrusionDetection Controller Deployment.
                 properties:
                   spec:
                     description: Spec is the specification of the IntrusionDetection
@@ -125,23 +125,23 @@ spec:
                           pod that will be created.
                         properties:
                           spec:
-                            description: Spec is the IntrusionDetection Deployment's
-                              PodSpec.
+                            description: Spec is the IntrusionDetectionController
+                              Deployment's PodSpec.
                             properties:
                               containers:
                                 description: Containers is a list of IntrusionDetection
                                   containers. If specified, this overrides the specified
-                                  IntrusionDetection Deployment containers. If omitted,
-                                  the IntrusionDetection Deployment will use its default
-                                  values for its containers.
+                                  IntrusionDetectionController Deployment containers.
+                                  If omitted, the IntrusionDetection Deployment will
+                                  use its default values for its containers.
                                 items:
-                                  description: IntrusionDetectionDeploymentContainer
-                                    is a IntrusionDetection Deployment container.
+                                  description: IntrusionDetectionControllerDeploymentContainer
+                                    is a IntrusionDetectionController Deployment container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the IntrusionDetection Deployment container
-                                        by name.
+                                        the IntrusionDetectionController Deployment
+                                        container by name.
                                       enum:
                                       - controller
                                       - webhooks-processor
@@ -150,10 +150,10 @@ spec:
                                       description: Resources allows customization
                                         of limits and requests for compute resources
                                         such as cpu and memory. If specified, this
-                                        overrides the named IntrusionDetection Deployment
-                                        container's resources. If omitted, the IntrusionDetection
-                                        Deployment will use its default value for
-                                        this container's resources.
+                                        overrides the named IntrusionDetectionController
+                                        Deployment container's resources. If omitted,
+                                        the IntrusionDetection Deployment will use
+                                        its default value for this container's resources.
                                       properties:
                                         claims:
                                           description: "Claims lists the names of
@@ -213,19 +213,20 @@ spec:
                                   type: object
                                 type: array
                               initContainers:
-                                description: InitContainers is a list of IntrusionDetection
+                                description: InitContainers is a list of IntrusionDetectionController
                                   init containers. If specified, this overrides the
-                                  specified IntrusionDetection Deployment init containers.
-                                  If omitted, the IntrusionDetection Deployment will
-                                  use its default values for its init containers.
+                                  specified IntrusionDetectionController Deployment
+                                  init containers. If omitted, the IntrusionDetectionController
+                                  Deployment will use its default values for its init
+                                  containers.
                                 items:
-                                  description: IntrusionDetectionDeploymentInitContainer
+                                  description: IntrusionDetectionControllerDeploymentInitContainer
                                     is a IntrusionDetection Deployment init container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the IntrusionDetection Deployment init container
-                                        by name.
+                                        the IntrusionDetectionController Deployment
+                                        init container by name.
                                       enum:
                                       - intrusion-detection-tls-key-cert-provisioner
                                       type: string
@@ -233,10 +234,11 @@ spec:
                                       description: Resources allows customization
                                         of limits and requests for compute resources
                                         such as cpu and memory. If specified, this
-                                        overrides the named IntrusionDetection Deployment
-                                        init container's resources. If omitted, the
-                                        IntrusionDetection Deployment will use its
-                                        default value for this init container's resources.
+                                        overrides the named IntrusionDetectionController
+                                        Deployment init container's resources. If
+                                        omitted, the IntrusionDetection Deployment
+                                        will use its default value for this init container's
+                                        resources.
                                       properties:
                                         claims:
                                           description: "Claims lists the names of

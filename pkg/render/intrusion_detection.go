@@ -475,7 +475,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 	}
 
 	if c.cfg.IntrusionDetection != nil {
-		if overrides := c.cfg.IntrusionDetection.Spec.IntrusionDetectionDeployment; overrides != nil {
+		if overrides := c.cfg.IntrusionDetection.Spec.IntrusionDetectionControllerDeployment; overrides != nil {
 			rcomponents.ApplyDeploymentOverrides(d, overrides)
 		}
 	}

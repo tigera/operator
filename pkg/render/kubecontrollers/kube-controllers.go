@@ -16,6 +16,7 @@ package kubecontrollers
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/tigera/operator/pkg/common"
@@ -199,7 +200,6 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	var enabledControllers []string
-
 	if !cfg.Tenant.MultiTenant() {
 		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 		if cfg.ManagementCluster != nil {
@@ -209,18 +209,13 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 		enabledControllers = append(enabledControllers, "managedclusterlicensing")
 	}
 
-	kubeControllerConfigName := "elasticsearch"
-	if cfg.Tenant.MultiTenant() {
-		kubeControllerConfigName = fmt.Sprintf("tenant-%s", cfg.Tenant.Spec.ID)
-	}
-
 	return &kubeControllersComponent{
 		cfg:                              cfg,
 		kubeControllerServiceAccountName: KubeControllerServiceAccount,
 		kubeControllerRoleName:           EsKubeControllerRole,
 		kubeControllerRoleBindingName:    EsKubeControllerRoleBinding,
 		kubeControllerName:               EsKubeController,
-		kubeControllerConfigName:         kubeControllerConfigName,
+		kubeControllerConfigName:         "elasticsearch",
 		kubeControllerMetricsName:        EsKubeControllerMetrics,
 		kubeControllersRules:             kubeControllerRolePolicyRules,
 		kubeControllerAllowTigeraPolicy:  kubeControllerAllowTigeraPolicy,
@@ -488,6 +483,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "DISABLE_RUN_CONFIG_CONTROLLER", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
 	}
 
 	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)

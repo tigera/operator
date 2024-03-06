@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/version"
 
@@ -403,6 +404,28 @@ func main() {
 	if err != nil {
 		log.Error(err, "Unable to resolve Kubernetes version, defaulting to v1.18")
 		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
+	}
+
+	// The operator MUST not run within one of the Namespaces that it itself manages. Perform an early check here
+	// to make sure that we're not doing so, and exit if we are.
+	badNamespaces := []string{
+		common.CalicoNamespace,
+		"calico-apiserver", "tigera-system",
+		render.ElasticsearchNamespace,
+		render.ComplianceNamespace,
+		render.IntrusionDetectionNamespace,
+		dpi.DeepPacketInspectionNamespace,
+		render.ECKOperatorNamespace,
+		render.LogCollectorNamespace,
+		render.CSIDaemonSetNamespace,
+		render.ManagerNamespace,
+	}
+	for _, ns := range badNamespaces {
+		if common.OperatorNamespace() == ns {
+			log.Error("Operator must not be run within a Namespace managed by the operator, please select a different namespace")
+			log.Error(fmt.Sprintf("The following namespaces cannot be used: %s", badNamespaces))
+			os.Exit(1)
+		}
 	}
 
 	// Laod the operator's bootstrap configmap, if it exists.

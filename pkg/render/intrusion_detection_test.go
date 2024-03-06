@@ -17,6 +17,9 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -340,6 +343,53 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			}))
 	})
 
+	It("should render configuration with Resource requests and limits", func() {
+		intrusionDetectionResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				IntrusionDetectionControllerDeployment: &operatorv1.IntrusionDetectionControllerDeployment{
+					Spec: &operatorv1.IntrusionDetectionControllerDeploymentSpec{
+						Template: &operatorv1.IntrusionDetectionControllerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.IntrusionDetectionControllerDeploymentPodSpec{
+								Containers: []operatorv1.IntrusionDetectionControllerDeploymentContainer{{
+									Name:      "controller",
+									Resources: &intrusionDetectionResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		d := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
+
+		// Should set requests/limits for controller container
+		container := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(intrusionDetectionResources))
+
+		// Should not update for container webhooks-processor
+		container = test.GetContainer(d.Spec.Template.Spec.Containers, "webhooks-processor")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(corev1.ResourceRequirements{}))
+	})
+
 	It("should disable GlobalAlert controller when cluster is managed", func() {
 		cfg.Openshift = notOpenshift
 		cfg.ManagedCluster = managedCluster
@@ -486,7 +536,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		testADStorageClassName := "test-storage-class-name"
 		cfg.Installation.FIPSMode = &fipsEnabled
-		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
 				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 					StorageClassName: testADStorageClassName,

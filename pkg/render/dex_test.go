@@ -17,6 +17,9 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -26,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -42,11 +46,13 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("dex rendering tests", func() {
 	const clusterName = "svc.cluster.local"
+	var cli client.Client
 
 	expectedDexPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/dex.json")
 	expectedDexOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/dex_ocp.json")
@@ -129,7 +135,7 @@ var _ = Describe("dex rendering tests", func() {
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
@@ -352,6 +358,164 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(ok).To(BeTrue())
 			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-dex", "tigera-dex")))
+		})
+
+		It("should render configuration with resource requests and limits", func() {
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, clusterDomain)
+			dexTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
+			Expect(err).NotTo(HaveOccurred())
+			cfg.TLSKeyPair = dexTLS
+
+			dexResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+
+			dexInitContainerResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("100m"),
+					"memory": resource.MustParse("100Mi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("10m"),
+					"memory": resource.MustParse("150Mi"),
+				},
+			}
+
+			cfg.Authentication = &operatorv1.Authentication{
+				Spec: operatorv1.AuthenticationSpec{
+					DexDeployment: &operatorv1.DexDeployment{
+						Spec: &operatorv1.DexDeploymentSpec{
+							Template: &operatorv1.DexDeploymentPodTemplateSpec{
+								Spec: &operatorv1.DexDeploymentPodSpec{
+									Containers: []operatorv1.DexDeploymentContainer{{
+										Name:      "tigera-dex",
+										Resources: &dexResources,
+									}},
+									InitContainers: []operatorv1.DexDeploymentInitContainer{{
+										Name:      "tigera-dex-tls-key-cert-provisioner",
+										Resources: &dexInitContainerResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := render.Dex(cfg)
+			resources, _ := component.Objects()
+			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			// Should set requests/limits for tigera-dex container
+			container := test.GetContainer(deploy.Spec.Template.Spec.Containers, "tigera-dex")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(dexResources))
+
+			initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "tigera-dex-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(dexInitContainerResources))
+
+		})
+		It("should render configuration with default Init container resource requests and limits", func() {
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, clusterDomain)
+			dexTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
+			Expect(err).NotTo(HaveOccurred())
+			cfg.TLSKeyPair = dexTLS
+
+			//dexResources := corev1.ResourceRequirements{
+			//	Limits: corev1.ResourceList{
+			//		"cpu":     resource.MustParse("2"),
+			//		"memory":  resource.MustParse("300Mi"),
+			//		"storage": resource.MustParse("20Gi"),
+			//	},
+			//	Requests: corev1.ResourceList{
+			//		"cpu":     resource.MustParse("1"),
+			//		"memory":  resource.MustParse("150Mi"),
+			//		"storage": resource.MustParse("10Gi"),
+			//	},
+			//}
+			//
+			//dexInitContainerResources := corev1.ResourceRequirements{
+			//	Limits: corev1.ResourceList{
+			//		"cpu":    resource.MustParse("100m"),
+			//		"memory": resource.MustParse("100Mi"),
+			//	},
+			//	Requests: corev1.ResourceList{
+			//		"cpu":    resource.MustParse("10m"),
+			//		"memory": resource.MustParse("150Mi"),
+			//	},
+			//}
+			//
+			//cfg.Authentication = &operatorv1.Authentication{
+			//	Spec: operatorv1.AuthenticationSpec{
+			//		DexDeployment: &operatorv1.DexDeployment{
+			//			Spec: &operatorv1.DexDeploymentSpec{
+			//				Template: &operatorv1.DexDeploymentPodTemplateSpec{
+			//					Spec: &operatorv1.DexDeploymentPodSpec{
+			//						Containers: []operatorv1.DexDeploymentContainer{{
+			//							Name:      "tigera-dex",
+			//							Resources: &dexResources,
+			//						}},
+			//						InitContainers: []operatorv1.DexDeploymentInitContainer{{
+			//							Name:      "tigera-dex-tls-key-cert-provisioner",
+			//							Resources: &dexInitContainerResources,
+			//						}},
+			//					},
+			//				},
+			//			},
+			//		},
+			//	},
+			//}
+
+			component := render.Dex(cfg)
+			resources, _ := component.Objects()
+			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			// Should set requests/limits for tigera-dex container
+			//container := test.GetContainer(deploy.Spec.Template.Spec.Containers, "tigera-dex")
+			//Expect(container).NotTo(BeNil())
+			//Expect(container.Resources).To(Equal(dexResources))
+
+			initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "tigera-dex-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("10m"),
+					"memory": resource.MustParse("50Mi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("10m"),
+					"memory": resource.MustParse("50Mi"),
+				},
+			}))
+
 		})
 
 		Context("allow-tigera rendering", func() {

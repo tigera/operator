@@ -178,9 +178,9 @@ type EksCloudwatchLogsSpec struct {
 	// +optional
 	FetchInterval int32 `json:"fetchInterval,omitempty"`
 
-	// EksCloudwatchLogsDeployment configures the EksCloudwatchLogs Deployment.
+	// EKSLogForwarderDeployment configures the EksCloudwatchLogs Deployment.
 	// +optional
-	EksCloudwatchLogsDeployment *EksCloudwatchLogsDeployment `json:"eksCloudwatchLogsDeployment,omitempty"`
+	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
 }
 
 // LogCollectorStatus defines the observed state of Tigera flow and DNS log collection

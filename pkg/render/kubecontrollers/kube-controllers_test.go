@@ -188,6 +188,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{Name: "ENABLED_CONTROLLERS", Value: "node"},
 			{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "default"},
 			{Name: "FIPS_MODE_ENABLED", Value: "false"},
+			{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: "false"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 
@@ -1208,7 +1209,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 				corev1.EnvVar{
 					Name:  "KUBE_CONTROLLERS_CONFIG_NAME",
-					Value: fmt.Sprintf("tenant-%s", tenant.Spec.ID),
+					Value: "elasticsearch",
+				},
+				corev1.EnvVar{
+					Name:  "DISABLE_KUBE_CONTROLLERS_CONFIG_API",
+					Value: "true",
 				},
 			),
 			)

@@ -130,6 +130,59 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(service.Labels["k8s-app"]).To(Equal("tigera-prometheus"))
 	})
 
+	It("Should render Prometheus resources with resources requests and limits", func() {
+
+		prometheusResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    k8sresource.MustParse("1"),
+				"memory": k8sresource.MustParse("500Mi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    k8sresource.MustParse("101m"),
+				"memory": k8sresource.MustParse("100Mi"),
+			},
+		}
+		alertManagerResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    k8sresource.MustParse("601m"),
+				"memory": k8sresource.MustParse("600Mi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    k8sresource.MustParse("201m"),
+				"memory": k8sresource.MustParse("200Mi"),
+			},
+		}
+		cfg.Monitor.ComponentResources = []operatorv1.MonitorComponentResource{
+			{
+				ComponentName:        operatorv1.ComponentNamePrometheusAuthProxy,
+				ResourceRequirements: &prometheusResources,
+			},
+			{
+				ComponentName:        operatorv1.ComponentNameAlertManager,
+				ResourceRequirements: &alertManagerResources,
+			},
+		}
+
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+		Expect(toDelete).To(HaveLen(3))
+
+		// Prometheus
+		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
+		Expect(ok).To(BeTrue())
+
+		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers).To(HaveLen(1))
+		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Name).To(Equal("authn-proxy"))
+		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Resources).To(Equal(prometheusResources))
+
+		// AlertManager
+		alertmanagerObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind).(*monitoringv1.Alertmanager)
+		Expect(ok).To(BeTrue())
+		Expect(alertmanagerObj.Spec.Resources).To(Equal(alertManagerResources))
+
+	})
+
 	It("Should render Prometheus resource Specs correctly", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())

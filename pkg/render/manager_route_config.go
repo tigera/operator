@@ -76,9 +76,23 @@ type tlsPassThroughRoute struct {
 // objects change (used to restart Voltron). The Build method should be used to create the final
 // VoltronRouteConfig object.
 type VoltronRouteConfigBuilder interface {
+	// AddTLSTerminatedRoute adds TLSTerminatedRoutes to the config builder. When Build is called, the route is parsed
+	// and validated and the route is added to the ConfigMap mounted to voltron to configure the tls terminated routes.
+	//
+	// If CAs or MTLS certs / keys are referenced in the spec the Config Maps and Secrets containing
+	// those values must be added through AddConfigMap or AddSecret. This is so we can track when these values change.
 	AddTLSTerminatedRoute(routes operatorv1.TLSTerminatedRoute)
+
+	// AddTLSPassThroughRoute adds TLSTerminatedRoutes to the config builder. When Build is called, the route is parsed
+	// and validated and the route is added to the ConfigMap mounted to voltron to configure the tls pass through routes.
 	AddTLSPassThroughRoute(routes operatorv1.TLSPassThroughRoute)
+
+	// AddConfigMap accepts a Config Map referenced by a TLS terminated route. This is used to detect changes to ConfigMaps
+	// that will be mounted by the VoltronRouteConfig so Voltron can be restarted if the value changes.
 	AddConfigMap(configMap *corev1.ConfigMap)
+
+	// AddSecret accepts a Secret referenced by a TLS terminated route. This is used to detect changes to Secrets
+	// that will be mounted by the VoltronRouteConfig so Voltron can be restarted if the value changes.
 	AddSecret(secret *corev1.Secret)
 	Build() (*VoltronRouteConfig, error)
 }
@@ -355,14 +369,22 @@ type VoltronRouteConfig struct {
 	annotation   string
 }
 
+// Volumes returns the volumes that Voltron needs to be configured with (references to ConfigMaps and Secrets in the
+// TLSTerminatedRoute CRs).
 func (cfg *VoltronRouteConfig) Volumes() []corev1.Volume {
 	return cfg.volumes
 }
 
+// VolumeMounts returns the volume mounts that Voltron needs to be configured with (references to ConfigMaps and Secrets in the
+// TLSTerminatedRoute CRs).
 func (cfg *VoltronRouteConfig) VolumeMounts() []corev1.VolumeMount {
 	return cfg.volumeMounts
 }
 
+// RoutesConfigMap returns the config map the contains the routes that voltron is to be configured with. This has been
+// parsed from the TLSTerminatedRoute and the TLSPassThroughRoute CRs.
+//
+// The namespace parameter is used to assign the namespace that the ConfigMap should be created in.
 func (cfg *VoltronRouteConfig) RoutesConfigMap(namespace string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -373,6 +395,7 @@ func (cfg *VoltronRouteConfig) RoutesConfigMap(namespace string) *corev1.ConfigM
 	}
 }
 
+// EnvVars returns a list of env vars that contain the paths to the route files that routes Config Map is mounted to.
 func (cfg *VoltronRouteConfig) EnvVars() []corev1.EnvVar {
 	var envVars []corev1.EnvVar
 	if _, ok := cfg.routesData[uiTLSTerminatedRoutesKey]; ok {

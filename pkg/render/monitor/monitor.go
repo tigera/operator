@@ -410,8 +410,8 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	resources := corev1.ResourceRequirements{}
 
 	if mc.cfg.Monitor.AlertManager != nil {
-		if mc.cfg.Monitor.AlertManager.AlertmanagerSpec != nil {
-			resources = mc.cfg.Monitor.AlertManager.AlertmanagerSpec.Resources
+		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
+			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
 		}
 	}
 

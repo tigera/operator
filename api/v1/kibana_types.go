@@ -41,7 +41,7 @@ type KibanaPodTemplateSpec struct {
 	Spec *KibanaPodSpec `json:"spec,omitempty"`
 }
 
-// KibanaPodSpec is the Manager Deployment's PodSpec.
+// KibanaPodSpec is the Kibana Deployment's PodSpec.
 type KibanaPodSpec struct {
 	// InitContainers is a list of Kibana init containers.
 	// If specified, this overrides the specified Kibana Deployment init containers.
@@ -69,9 +69,9 @@ type KibanaContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// ManagerDeploymentInitContainer is a Kibana init container.
+// KibanaInitContainer is a Kibana init container.
 type KibanaInitContainer struct {
-	// Name is an enum which identifies the Manager Deployment init container by name.
+	// Name is an enum which identifies the Kibana init container by name.
 	// +kubebuilder:validation:Enum=key-cert-provisioner
 	Name string `json:"name"`
 

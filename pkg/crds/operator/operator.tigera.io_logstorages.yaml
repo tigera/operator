@@ -116,8 +116,8 @@ spec:
                   specified StorageClassName.
                 type: object
               eckOperatorStatefulSet:
-                description: ECKOperatorStatefulSet configures the ECKOperator StatefulSet.If
-                  used in conjunction with the deprecated ComponentResources, then
+                description: ECKOperatorStatefulSet configures the ECKOperator StatefulSet.
+                  If used in conjunction with the deprecated ComponentResources, then
                   these overrides take precedence.
                 properties:
                   spec:
@@ -406,12 +406,12 @@ spec:
                                   Kibana Deployment will use its default values for
                                   its init containers.
                                 items:
-                                  description: ManagerDeploymentInitContainer is a
-                                    Kibana init container.
+                                  description: KibanaInitContainer is a Kibana init
+                                    container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the Manager Deployment init container by name.
+                                        the Kibana init container by name.
                                       enum:
                                       - key-cert-provisioner
                                       type: string

@@ -520,10 +520,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
-	// Default resource request memory for prometheus
-	prometheusResources := corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}}
-	authProxyResources := corev1.ResourceRequirements{}
-
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -567,7 +563,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								},
 							},
 						},
-						Resources:       authProxyResources,
 						SecurityContext: securitycontext.NewNonRootContext(),
 					},
 				},
@@ -580,7 +575,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				ListenLocal:            true,
 				NodeSelector:           mc.cfg.Installation.ControlPlaneNodeSelector,
 				PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
-				Resources:              prometheusResources,
+				Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
 				ServiceAccountName:     PrometheusServiceAccountName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},

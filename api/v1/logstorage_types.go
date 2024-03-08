@@ -53,7 +53,7 @@ type LogStorageSpec struct {
 	// +optional
 	ComponentResources []LogStorageComponentResource `json:"componentResources,omitempty"`
 
-	// ECKOperatorStatefulSet configures the ECKOperator StatefulSet.If used in conjunction with the deprecated
+	// ECKOperatorStatefulSet configures the ECKOperator StatefulSet. If used in conjunction with the deprecated
 	// ComponentResources, then these overrides take precedence.
 	// +optional
 	ECKOperatorStatefulSet *ECKOperatorStatefulSet `json:"eckOperatorStatefulSet,omitempty"`

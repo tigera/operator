@@ -29,11 +29,11 @@ type MonitorSpec struct {
 	// scraping from git-ops tools without the need of post-installation steps.
 	ExternalPrometheus *ExternalPrometheus `json:"externalPrometheus,omitempty"`
 
-	// Prometheus configures the Prometheus Spec.
+	// Prometheus is the configuration for the Prometheus.
 	// +optional
 	Prometheus *Prometheus `json:"prometheus,omitempty"`
 
-	// AlertManager configures the AlertManager Spec.
+	// AlertManager is the configuration for the AlertManager.
 	// +optional
 	AlertManager *AlertManager `json:"alertManager,omitempty"`
 }

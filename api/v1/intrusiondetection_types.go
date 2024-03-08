@@ -99,7 +99,7 @@ type IntrusionDetectionComponentResource struct {
 // IntrusionDetectionControllerDeployment is the configuration for the IntrusionDetectionController Deployment.
 type IntrusionDetectionControllerDeployment struct {
 
-	// Spec is the specification of the IntrusionDetection Deployment.
+	// Spec is the specification of the IntrusionDetectionController Deployment.
 	// +optional
 	Spec *IntrusionDetectionControllerDeploymentSpec `json:"spec,omitempty"`
 }
@@ -107,7 +107,7 @@ type IntrusionDetectionControllerDeployment struct {
 // IntrusionDetectionControllerDeploymentSpec defines configuration for the IntrusionDetectionController Deployment.
 type IntrusionDetectionControllerDeploymentSpec struct {
 
-	// Template describes the IntrusionDetection Deployment pod that will be created.
+	// Template describes the IntrusionDetectionController Deployment pod that will be created.
 	// +optional
 	Template *IntrusionDetectionControllerDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
@@ -128,9 +128,9 @@ type IntrusionDetectionControllerDeploymentPodSpec struct {
 	// +optional
 	InitContainers []IntrusionDetectionControllerDeploymentInitContainer `json:"initContainers,omitempty"`
 
-	// Containers is a list of IntrusionDetection containers.
+	// Containers is a list of IntrusionDetectionController containers.
 	// If specified, this overrides the specified IntrusionDetectionController Deployment containers.
-	// If omitted, the IntrusionDetection Deployment will use its default values for its containers.
+	// If omitted, the IntrusionDetectionController Deployment will use its default values for its containers.
 	// +optional
 	Containers []IntrusionDetectionControllerDeploymentContainer `json:"containers,omitempty"`
 }
@@ -148,7 +148,7 @@ type IntrusionDetectionControllerDeploymentContainer struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// IntrusionDetectionControllerDeploymentInitContainer is a IntrusionDetection Deployment init container.
+// IntrusionDetectionControllerDeploymentInitContainer is a IntrusionDetectionController Deployment init container.
 type IntrusionDetectionControllerDeploymentInitContainer struct {
 	// Name is an enum which identifies the IntrusionDetectionController Deployment init container by name.
 	// +kubebuilder:validation:Enum=intrusion-detection-tls-key-cert-provisioner
@@ -156,7 +156,7 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named IntrusionDetectionController Deployment init container's resources.
-	// If omitted, the IntrusionDetection Deployment will use its default value for this init container's resources.
+	// If omitted, the IntrusionDetectionController Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }

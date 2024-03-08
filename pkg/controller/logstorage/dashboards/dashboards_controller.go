@@ -72,12 +72,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	r := &DashboardsSubController{
-		client:         mgr.GetClient(),
-		scheme:         mgr.GetScheme(),
-		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageDashboards, opts.KubernetesVersion),
-		clusterDomain:  opts.ClusterDomain,
-		provider:       opts.DetectedProvider,
-		tierWatchReady: &utils.ReadyFlag{},
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageDashboards, opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
+		provider:        opts.DetectedProvider,
+		tierWatchReady:  &utils.ReadyFlag{},
+		multiTenant:     opts.MultiTenant,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 

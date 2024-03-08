@@ -16,7 +16,11 @@ package kubecontrollers
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/tigera/operator/pkg/common"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/url"
@@ -100,6 +104,10 @@ type KubeControllersConfiguration struct {
 
 	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
 	BindingNamespaces []string
+
+	// Tenant object provides tenant configuration for both single and multi-tenant modes.
+	// If this is nil, then we should run in zero-tenant mode.
+	Tenant *operatorv1.Tenant
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -147,6 +155,27 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Co
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, EsKubeController)
+	if cfg.Tenant.MultiTenant() {
+		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{KubeControllerServiceAccount},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, common.CalicoNamespace),
+				},
+			},
+		}...)
+	}
+
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
@@ -171,10 +200,14 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 		kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
 	}
 
-	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}
-
-	if cfg.ManagementCluster != nil {
-		enabledControllers = append(enabledControllers, "managedcluster")
+	var enabledControllers []string
+	if !cfg.Tenant.MultiTenant() {
+		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
+		if cfg.ManagementCluster != nil {
+			enabledControllers = append(enabledControllers, "managedcluster")
+		}
+	} else {
+		enabledControllers = append(enabledControllers, "managedclusterlicensing")
 	}
 
 	return &kubeControllersComponent{
@@ -451,11 +484,20 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
 	}
 
 	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if c.cfg.Tenant != nil {
+			env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+			if c.cfg.Tenant.MultiTenant() {
+				env = append(env, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
+				env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(c.cfg.Tenant)})
+			}
+		}
+
 		if c.kubeControllerName == EsKubeController {
 			// What started as a workaround is now the default behaviour. This feature uses our backend in order to
 			// log into Kibana for users from external identity providers, rather than configuring an authn realm
@@ -530,7 +572,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}
 
-	if c.kubeControllerName == EsKubeController {
+	if c.kubeControllerName == EsKubeController && !c.cfg.Tenant.MultiTenant() {
 		_, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.ElasticsearchNamespace))
 		container.Env = append(container.Env, []corev1.EnvVar{
 			relasticsearch.ElasticHostEnvVar(esHost),
@@ -578,7 +620,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 		},
 	}
-	render.SetClusterCriticalPod(&(d.Spec.Template))
+
+	if !c.cfg.Tenant.MultiTenant() {
+		render.SetClusterCriticalPod(&d.Spec.Template)
+	}
 
 	if overrides := c.cfg.Installation.CalicoKubeControllersDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
@@ -760,11 +805,19 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 				Ports: networkpolicy.Ports(443, 6443, 12388),
 			},
 		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		},
+	}...)
+
+	if !cfg.Tenant.MultiTenant() {
+		egressRules = append(egressRules, []v3.Rule{
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
+			},
+		}...)
+	}
+
+	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,

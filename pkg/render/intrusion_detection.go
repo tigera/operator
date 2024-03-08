@@ -94,7 +94,7 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	IntrusionDetection operatorv1.IntrusionDetection
+	IntrusionDetection *operatorv1.IntrusionDetection
 	LogCollector       *operatorv1.LogCollector
 	Installation       *operatorv1.InstallationSpec
 	PullSecrets        []*corev1.Secret
@@ -463,7 +463,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      IntrusionDetectionName,
@@ -474,6 +474,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
+
+	if c.cfg.IntrusionDetection != nil {
+		if overrides := c.cfg.IntrusionDetection.Spec.IntrusionDetectionControllerDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplateSpec {

@@ -28,6 +28,14 @@ type MonitorSpec struct {
 	// specified, the operator will render resources in the defined namespace. This option can be useful for configuring
 	// scraping from git-ops tools without the need of post-installation steps.
 	ExternalPrometheus *ExternalPrometheus `json:"externalPrometheus,omitempty"`
+
+	// Prometheus is the configuration for the Prometheus.
+	// +optional
+	Prometheus *Prometheus `json:"prometheus,omitempty"`
+
+	// AlertManager is the configuration for the AlertManager.
+	// +optional
+	AlertManager *AlertManager `json:"alertManager,omitempty"`
 }
 
 type ExternalPrometheus struct {
@@ -123,6 +131,81 @@ type MonitorList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Monitor `json:"items"`
+}
+
+type Prometheus struct {
+	// Spec is the specification of the Prometheus.
+	// +optional
+	PrometheusSpec *PrometheusSpec `json:"spec,omitempty"`
+}
+type PrometheusSpec struct {
+	// CommonPrometheusFields are the options available to both the Prometheus server and agent.
+	CommonPrometheusFields *CommonPrometheusFields `json:"commonPrometheusFields,omitempty"`
+}
+type CommonPrometheusFields struct {
+
+	// Containers is a list of Prometheus containers.
+	// If specified, this overrides the specified Prometheus Deployment containers.
+	// If omitted, the Prometheus Deployment will use its default values for its containers.
+	// +optional
+	Containers []PrometheusContainer `json:"containers,omitempty"`
+
+	// Define resources requests and limits for single Pods.
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// PrometheusContainer is a Prometheus container.
+type PrometheusContainer struct {
+	// Name is an enum which identifies the Prometheus Deployment container by name.
+	// +kubebuilder:validation:Enum=authn-proxy
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named Prometheus container's resources.
+	// If omitted, the Prometheus will use its default value for this container's resources.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+type AlertManager struct {
+	// Spec is the specification of the Alertmanager.
+	// +optional
+	AlertManagerSpec *AlertManagerSpec `json:"spec,omitempty"`
+}
+type AlertManagerSpec struct {
+	// Define resources requests and limits for single Pods.
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+func (c *Prometheus) GetContainers() []corev1.Container {
+
+	if c.PrometheusSpec != nil {
+		if c.PrometheusSpec.CommonPrometheusFields != nil {
+			if c.PrometheusSpec.CommonPrometheusFields.Containers != nil {
+				cs := make([]corev1.Container, len(c.PrometheusSpec.CommonPrometheusFields.Containers))
+				for i, v := range c.PrometheusSpec.CommonPrometheusFields.Containers {
+					// Only copy and return the init container if it has resources set.
+					if v.Resources == nil {
+						continue
+					}
+					c := corev1.Container{Name: v.Name, Resources: *v.Resources}
+					cs[i] = c
+				}
+				return cs
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Prometheus) GetPrometheusResource() *corev1.ResourceRequirements {
+	if c.PrometheusSpec != nil {
+		if c.PrometheusSpec.CommonPrometheusFields != nil {
+			return &c.PrometheusSpec.CommonPrometheusFields.Resources
+		}
+	}
+	return nil
 }
 
 func init() {

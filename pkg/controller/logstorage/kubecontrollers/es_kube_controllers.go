@@ -289,7 +289,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	// Get secrets needed for kube-controllers to talk to elastic. This is needed for zero-tenants and single-tenants
-	// that deploy eskube controllers and need to talk to es-gateway
+	// that deploy es-kube-controllers and need to talk to es-gateway
 	var kubeControllersUserSecret *core.Secret
 	if !r.multiTenant {
 		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())

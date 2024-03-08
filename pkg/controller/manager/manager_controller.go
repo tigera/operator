@@ -230,10 +230,7 @@ func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*op
 	if err != nil {
 		return nil, err
 	}
-	if instance.Spec.Auth != nil && instance.Spec.Auth.Type != operatorv1.AuthTypeToken {
-		return nil, fmt.Errorf("auth types other than 'Token' can no longer be configured using the Manager CR, " +
-			"please use the Authentication CR instead")
-	}
+
 	return instance, nil
 }
 

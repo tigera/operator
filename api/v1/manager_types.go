@@ -24,9 +24,6 @@ import (
 
 // ManagerSpec defines configuration for the Calico Enterprise manager GUI.
 type ManagerSpec struct {
-	// Deprecated. Please use the Authentication CR for configuring authentication.
-	// +optional
-	Auth *Auth `json:"auth,omitempty"`
 
 	// ManagerDeployment configures the Manager Deployment.
 	// +optional
@@ -101,9 +98,6 @@ type ManagerDeploymentInitContainer struct {
 
 // ManagerStatus defines the observed state of the Calico Enterprise manager GUI.
 type ManagerStatus struct {
-	// Deprecated. Please use the Authentication CR for configuring authentication.
-	// +optional
-	Auth *Auth `json:"auth,omitempty"`
 
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
@@ -113,33 +107,6 @@ type ManagerStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
-
-// Auth defines authentication configuration.
-type Auth struct {
-	// Type configures the type of authentication used by the manager.
-	// Default: Token
-	// +kubebuilder:validation:Enum=Token;Basic;OIDC;OAuth
-	Type AuthType `json:"type,omitempty"`
-
-	// Authority configures the OAuth2/OIDC authority/issuer when using OAuth2 or OIDC login.
-	// +optional
-	Authority string `json:"authority,omitempty"`
-
-	// ClientId configures the OAuth2/OIDC client ID to use for OAuth2 or OIDC login.
-	// +optional
-	ClientID string `json:"clientID,omitempty"`
-}
-
-// AuthType represents the type of authentication to use. Valid
-// options are: Token, Basic, OIDC, OAuth
-type AuthType string
-
-const (
-	AuthTypeToken = "Token"
-	AuthTypeBasic = "Basic"
-	AuthTypeOIDC  = "OIDC"
-	AuthTypeOAuth = "OAuth"
-)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

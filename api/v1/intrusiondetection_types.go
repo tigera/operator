@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,6 +32,10 @@ type IntrusionDetectionSpec struct {
 	// AnomalyDetection is now deprecated, and configuring it has no effect.
 	// +optional
 	AnomalyDetection AnomalyDetectionSpec `json:"anomalyDetection,omitempty"`
+
+	// IntrusionDetectionControllerDeployment configures the IntrusionDetection Controller Deployment.
+	// +optional
+	IntrusionDetectionControllerDeployment *IntrusionDetectionControllerDeployment `json:"intrusionDetectionControllerDeployment,omitempty"`
 }
 
 type AnomalyDetectionSpec struct {
@@ -89,6 +94,158 @@ type IntrusionDetectionComponentResource struct {
 	ComponentName IntrusionDetectionComponentName `json:"componentName"`
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements"`
+}
+
+// IntrusionDetectionControllerDeployment is the configuration for the IntrusionDetectionController Deployment.
+type IntrusionDetectionControllerDeployment struct {
+
+	// Spec is the specification of the IntrusionDetectionController Deployment.
+	// +optional
+	Spec *IntrusionDetectionControllerDeploymentSpec `json:"spec,omitempty"`
+}
+
+// IntrusionDetectionControllerDeploymentSpec defines configuration for the IntrusionDetectionController Deployment.
+type IntrusionDetectionControllerDeploymentSpec struct {
+
+	// Template describes the IntrusionDetectionController Deployment pod that will be created.
+	// +optional
+	Template *IntrusionDetectionControllerDeploymentPodTemplateSpec `json:"template,omitempty"`
+}
+
+// IntrusionDetectionControllerDeploymentPodTemplateSpec is the IntrusionDetectionController Deployment's PodTemplateSpec
+type IntrusionDetectionControllerDeploymentPodTemplateSpec struct {
+
+	// Spec is the IntrusionDetectionController Deployment's PodSpec.
+	// +optional
+	Spec *IntrusionDetectionControllerDeploymentPodSpec `json:"spec,omitempty"`
+}
+
+// IntrusionDetectionControllerDeploymentPodSpec is the IntrusionDetectionController Deployment's PodSpec.
+type IntrusionDetectionControllerDeploymentPodSpec struct {
+	// InitContainers is a list of IntrusionDetectionController init containers.
+	// If specified, this overrides the specified IntrusionDetectionController Deployment init containers.
+	// If omitted, the IntrusionDetectionController Deployment will use its default values for its init containers.
+	// +optional
+	InitContainers []IntrusionDetectionControllerDeploymentInitContainer `json:"initContainers,omitempty"`
+
+	// Containers is a list of IntrusionDetectionController containers.
+	// If specified, this overrides the specified IntrusionDetectionController Deployment containers.
+	// If omitted, the IntrusionDetectionController Deployment will use its default values for its containers.
+	// +optional
+	Containers []IntrusionDetectionControllerDeploymentContainer `json:"containers,omitempty"`
+}
+
+// IntrusionDetectionControllerDeploymentContainer is a IntrusionDetectionController Deployment container.
+type IntrusionDetectionControllerDeploymentContainer struct {
+	// Name is an enum which identifies the IntrusionDetectionController Deployment container by name.
+	// +kubebuilder:validation:Enum=controller;webhooks-processor
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named IntrusionDetectionController Deployment container's resources.
+	// If omitted, the IntrusionDetection Deployment will use its default value for this container's resources.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// IntrusionDetectionControllerDeploymentInitContainer is a IntrusionDetectionController Deployment init container.
+type IntrusionDetectionControllerDeploymentInitContainer struct {
+	// Name is an enum which identifies the IntrusionDetectionController Deployment init container by name.
+	// +kubebuilder:validation:Enum=intrusion-detection-tls-key-cert-provisioner
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named IntrusionDetectionController Deployment init container's resources.
+	// If omitted, the IntrusionDetectionController Deployment will use its default value for this init container's resources.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetMetadata() *Metadata {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetMinReadySeconds() *int32 {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetPodTemplateMetadata() *Metadata {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetInitContainers() []corev1.Container {
+	if c != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.InitContainers != nil {
+					cs := make([]corev1.Container, len(c.Spec.Template.Spec.InitContainers))
+					for i, v := range c.Spec.Template.Spec.InitContainers {
+						// Only copy and return the init container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := corev1.Container{Name: v.Name, Resources: *v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetContainers() []corev1.Container {
+	if c != nil {
+		if c.Spec != nil {
+			if c.Spec.Template != nil {
+				if c.Spec.Template.Spec != nil {
+					if c.Spec.Template.Spec.Containers != nil {
+						cs := make([]corev1.Container, len(c.Spec.Template.Spec.Containers))
+						for i, v := range c.Spec.Template.Spec.Containers {
+							// Only copy and return the init container if it has resources set.
+							if v.Resources == nil {
+								continue
+							}
+							c := corev1.Container{Name: v.Name, Resources: *v.Resources}
+							cs[i] = c
+						}
+						return cs
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetAffinity() *corev1.Affinity {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetTopologySpreadConstraints() []corev1.TopologySpreadConstraint {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetNodeSelector() map[string]string {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetTolerations() []corev1.Toleration {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+	return nil
+}
+
+func (c *IntrusionDetectionControllerDeployment) GetPriorityClassName() string {
+	return ""
 }
 
 func init() {

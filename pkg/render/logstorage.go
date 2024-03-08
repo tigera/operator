@@ -22,6 +22,8 @@ import (
 	"net/url"
 	"strings"
 
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -1144,7 +1146,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 			memoryRequest = c.ResourceRequirements.Requests[corev1.ResourceMemory]
 		}
 	}
-	return &appsv1.StatefulSet{
+	s := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ECKOperatorName,
@@ -1228,6 +1230,12 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 			},
 		},
 	}
+	if es.cfg.LogStorage != nil {
+		if overrides := es.cfg.LogStorage.Spec.ECKOperatorStatefulSet; overrides != nil {
+			rcomponents.ApplyStatefulSetOverrides(s, overrides)
+		}
+	}
+	return s
 }
 
 func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -1380,6 +1388,12 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 
 	if es.cfg.Installation.ControlPlaneReplicas != nil && *es.cfg.Installation.ControlPlaneReplicas > 1 {
 		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(KibanaName, KibanaNamespace)
+	}
+
+	if es.cfg.LogStorage != nil {
+		if overrides := es.cfg.LogStorage.Spec.Kibana; overrides != nil {
+			rcomponents.ApplyKibanaOverrides(kibana, overrides)
+		}
 	}
 
 	return kibana

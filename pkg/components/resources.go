@@ -23,10 +23,10 @@ func GetCSRContainerDefaultResources() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			"cpu":    resource.MustParse("10m"),
-			"memory": resource.MustParse("10m"),
+			"memory": resource.MustParse("50Mi"),
 		},
 		Limits: corev1.ResourceList{
-			"cpu":    resource.MustParse("50Mi"),
+			"cpu":    resource.MustParse("10m"),
 			"memory": resource.MustParse("50Mi"),
 		},
 	}

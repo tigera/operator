@@ -817,11 +817,12 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		}...)
 	}
 
+	networkpolicyHelper := networkpolicy.Helper(cfg.Tenant.MultiTenant(), cfg.Namespace)
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
+			Destination: networkpolicyHelper.ManagerEntityRule(),
 		},
 	}...)
 

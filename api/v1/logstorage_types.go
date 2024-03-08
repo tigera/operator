@@ -49,9 +49,18 @@ type LogStorageSpec struct {
 	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
 
 	// ComponentResources can be used to customize the resource requirements for each component.
-	// Only ECKOperator is supported for this spec.
+	// This spec is only supported for ECKOperator and Kibana..
 	// +optional
 	ComponentResources []LogStorageComponentResource `json:"componentResources,omitempty"`
+
+	// ECKOperatorStatefulSet configures the ECKOperator StatefulSet.If used in conjunction with the deprecated
+	// ComponentResources, then these overrides take precedence.
+	// +optional
+	ECKOperatorStatefulSet *ECKOperatorStatefulSet `json:"eckOperatorStatefulSet,omitempty"`
+
+	// Kibana configures the Kibana Spec.
+	// +optional
+	Kibana *Kibana `json:"kibana,omitempty"`
 }
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.
@@ -168,6 +177,7 @@ const (
 
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type LogStorageComponentResource struct {
+	// Deprecated. Please use ECKOperatorStatefulSet.
 	// ComponentName is an enum which identifies the component
 	// +kubebuilder:validation:Enum=ECKOperator
 	ComponentName LogStorageComponentName `json:"componentName"`

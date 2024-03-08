@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strings"
 
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -404,7 +406,16 @@ func (mc *monitorComponent) prometheusOperatorPodSecurityPolicy() *policyv1beta1
 }
 
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
-	return &monitoringv1.Alertmanager{
+
+	resources := corev1.ResourceRequirements{}
+
+	if mc.cfg.Monitor.AlertManager != nil {
+		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
+			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
+		}
+	}
+
+	am := &monitoringv1.Alertmanager{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CalicoNodeAlertmanager,
@@ -420,8 +431,10 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        mc.cfg.Installation.ControlPlaneTolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
+			Resources:          resources,
 		},
 	}
+	return am
 }
 
 func (mc *monitorComponent) alertmanagerService() *corev1.Service {
@@ -508,7 +521,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
-	return &monitoringv1.Prometheus{
+	// Default resource request memory for prometheus
+	prometheusResources := corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}}
+	authProxyResources := corev1.ResourceRequirements{}
+
+	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CalicoNodePrometheus,
@@ -551,6 +568,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								},
 							},
 						},
+						Resources:       authProxyResources,
 						SecurityContext: securitycontext.NewNonRootContext(),
 					},
 				},
@@ -563,7 +581,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				ListenLocal:            true,
 				NodeSelector:           mc.cfg.Installation.ControlPlaneNodeSelector,
 				PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
-				Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
+				Resources:              prometheusResources,
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
 				ServiceAccountName:     PrometheusServiceAccountName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
@@ -589,6 +607,12 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			}},
 		},
 	}
+
+	if overrides := mc.cfg.Monitor.Prometheus; overrides != nil {
+		rcomponents.ApplyPrometheusOverrides(prometheus, overrides)
+	}
+
+	return prometheus
 }
 
 func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {

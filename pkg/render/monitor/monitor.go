@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
-
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -410,8 +409,8 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	resources := corev1.ResourceRequirements{}
 
 	if mc.cfg.Monitor.AlertManager != nil {
-		if mc.cfg.Monitor.AlertManager.AlertmanagerSpec != nil {
-			resources = mc.cfg.Monitor.AlertManager.AlertmanagerSpec.Resources
+		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
+			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
 		}
 	}
 

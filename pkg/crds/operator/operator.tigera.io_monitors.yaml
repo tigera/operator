@@ -35,7 +35,7 @@ spec:
             description: MonitorSpec defines the desired state of Tigera monitor.
             properties:
               alertManager:
-                description: AlertManager configures the AlertManager Spec.
+                description: AlertManager is the configuration for the AlertManager.
                 properties:
                   spec:
                     description: Spec is the specification of the Alertmanager.
@@ -341,7 +341,7 @@ spec:
                 - namespace
                 type: object
               prometheus:
-                description: Prometheus configures the Prometheus Spec.
+                description: Prometheus is the configuration for the Prometheus.
                 properties:
                   spec:
                     description: Spec is the specification of the Prometheus.

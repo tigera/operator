@@ -1641,10 +1641,17 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 			}
 
-			cfg.LogStorage.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
-				{
-					ComponentName:        operatorv1.ComponentNameKibana,
-					ResourceRequirements: &expectedResourcesRequirements,
+			cfg.LogStorage.Spec.Kibana = &operatorv1.Kibana{
+				Spec: &operatorv1.KibanaSpec{
+					Template: &operatorv1.KibanaPodTemplateSpec{
+						Spec: &operatorv1.KibanaPodSpec{
+							Containers: []operatorv1.KibanaContainer{
+								{
+									Name:      "kibana",
+									Resources: &expectedResourcesRequirements},
+							},
+						},
+					},
 				},
 			}
 

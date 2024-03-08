@@ -152,14 +152,23 @@ var _ = Describe("monitor rendering tests", func() {
 				"memory": k8sresource.MustParse("200Mi"),
 			},
 		}
-		cfg.Monitor.ComponentResources = []operatorv1.MonitorComponentResource{
-			{
-				ComponentName:        operatorv1.ComponentNamePrometheusAuthProxy,
-				ResourceRequirements: &prometheusResources,
+
+		cfg.Monitor.Prometheus = &operatorv1.Prometheus{
+			PrometheusSpec: &operatorv1.PrometheusSpec{
+				CommonPrometheusFields: &operatorv1.CommonPrometheusFields{
+					Containers: []operatorv1.PrometheusContainer{{
+						Name:      "authn-proxy",
+						Resources: &prometheusResources,
+					},
+					},
+					Resources: prometheusResources,
+				},
 			},
-			{
-				ComponentName:        operatorv1.ComponentNameAlertManager,
-				ResourceRequirements: &alertManagerResources,
+		}
+
+		cfg.Monitor.AlertManager = &operatorv1.AlertManager{
+			AlertManagerSpec: &operatorv1.AlertManagerSpec{
+				Resources: alertManagerResources,
 			},
 		}
 
@@ -175,6 +184,8 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers).To(HaveLen(1))
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Name).To(Equal("authn-proxy"))
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Resources).To(Equal(prometheusResources))
+
+		Expect(prometheusObj.Spec.CommonPrometheusFields.Resources).To(Equal(prometheusResources))
 
 		// AlertManager
 		alertmanagerObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind).(*monitoringv1.Alertmanager)

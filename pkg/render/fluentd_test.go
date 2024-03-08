@@ -1128,11 +1128,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Spec: operatorv1.LogCollectorSpec{
 				AdditionalSources: &operatorv1.AdditionalLogSourceSpec{
 					EksCloudwatchLog: &operatorv1.EksCloudwatchLogsSpec{
-						EksCloudwatchLogsDeployment: &operatorv1.EksCloudwatchLogsDeployment{
-							Spec: &operatorv1.EksCloudwatchLogsDeploymentSpec{
-								Template: &operatorv1.EksCloudwatchLogsDeploymentPodTemplateSpec{
-									Spec: &operatorv1.EksCloudwatchLogsDeploymentPodSpec{
-										Containers: []operatorv1.EksCloudwatchLogsDeploymentContainer{{
+						EKSLogForwarderDeployment: &operatorv1.EKSLogForwarderDeployment{
+							Spec: &operatorv1.EKSLogForwarderDeploymentSpec{
+								Template: &operatorv1.EKSLogForwarderDeploymentPodTemplateSpec{
+									Spec: &operatorv1.EKSLogForwarderDeploymentPodSpec{
+										Containers: []operatorv1.EKSLogForwarderDeploymentContainer{{
 											Name:      "eks-log-forwarder",
 											Resources: &eksResources,
 										}},

@@ -1359,6 +1359,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Terminating:             nodeTerminating,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
+		NodeCgroupV2Path:        felixConfiguration.Spec.CgroupV2Path,
 		BindMode:                bgpConfiguration.Spec.BindMode,
 		UsePSP:                  r.usePSP,
 	}

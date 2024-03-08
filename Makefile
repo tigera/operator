@@ -78,15 +78,6 @@ unescapefs = $(subst ---,:,$(subst ___,/,$(1)))
 EXCLUDEARCH ?=
 VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
-# We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
-ifeq ($(ARCH), $(filter $(ARCH),amd64))
-CGO_ENABLED=1
-GOEXPERIMENT=boringcrypto
-TAGS=osusergo,netgo
-else
-CGO_ENABLED=0
-endif
-
 ###############################################################################
 
 PACKAGE_NAME?=github.com/tigera/operator
@@ -219,12 +210,9 @@ endif
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
+	$(CONTAINERIZED) -e CGO_ENABLED=0 -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./main.go'
-ifeq ($(ARCH), $(filter $(ARCH),amd64))
-	$(CONTAINERIZED) $(CALICO_BUILD) sh -c 'strings $(BINDIR)/operator-$(ARCH) | grep '_Cfunc__goboringcrypto_' 1> /dev/null'
-endif
 
 .PHONY: image
 image: build $(BUILD_IMAGE)

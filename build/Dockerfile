@@ -41,7 +41,4 @@ COPY --from=source / /
 
 USER 10001:10001
 
-# The exec form of ENTRYPOINT does not invoke a command shell.
-# This means that normal shell processing does not happen, so will not
-# do variable substitution. Using this form instead of passing $OPERATOR.
 ENTRYPOINT ["/usr/bin/operator"]

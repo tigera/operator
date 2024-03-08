@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
-
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -410,8 +409,8 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	resources := corev1.ResourceRequirements{}
 
 	if mc.cfg.Monitor.AlertManager != nil {
-		if mc.cfg.Monitor.AlertManager.AlertmanagerSpec != nil {
-			resources = mc.cfg.Monitor.AlertManager.AlertmanagerSpec.Resources
+		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
+			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
 		}
 	}
 
@@ -521,10 +520,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
-	// Default resource request memory for prometheus
-	prometheusResources := corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}}
-	authProxyResources := corev1.ResourceRequirements{}
-
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -568,7 +563,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								},
 							},
 						},
-						Resources:       authProxyResources,
 						SecurityContext: securitycontext.NewNonRootContext(),
 					},
 				},
@@ -581,7 +575,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				ListenLocal:            true,
 				NodeSelector:           mc.cfg.Installation.ControlPlaneNodeSelector,
 				PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
-				Resources:              prometheusResources,
+				Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
 				ServiceAccountName:     PrometheusServiceAccountName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},

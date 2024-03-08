@@ -1630,6 +1630,17 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		It("should render the kibana pod template with resource requests and limits when set", func() {
 
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{
+				CACert:             cfg.ElasticsearchKeyPair.GetCertificatePEM(),
+				SignerName:         "my signer name",
+				SignatureAlgorithm: "ECDSAWithSHA256",
+				KeyAlgorithm:       "ECDSAWithCurve521",
+			}
+
+			cfg.ElasticsearchKeyPair, cfg.KibanaKeyPair, cfg.TrustedBundle = getTLS(cfg.Installation)
+			cfg.UnusedTLSSecret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.UnusedCertSecret, Namespace: common.OperatorNamespace()},
+			}
 			expectedResourcesRequirements := corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					"cpu":    resource.MustParse("1"),
@@ -1641,10 +1652,23 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				},
 			}
 
-			cfg.LogStorage.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
-				{
-					ComponentName:        operatorv1.ComponentNameKibana,
-					ResourceRequirements: &expectedResourcesRequirements,
+			cfg.LogStorage.Spec.Kibana = &operatorv1.Kibana{
+				Spec: &operatorv1.KibanaSpec{
+					Template: &operatorv1.KibanaPodTemplateSpec{
+						Spec: &operatorv1.KibanaPodSpec{
+							Containers: []operatorv1.KibanaContainer{
+								{
+									Name:      "kibana",
+									Resources: &expectedResourcesRequirements},
+							},
+							InitContainers: []operatorv1.KibanaInitContainer{
+								{
+									Name:      "key-cert-provisioner",
+									Resources: &expectedResourcesRequirements,
+								},
+							},
+						},
+					},
 				},
 			}
 
@@ -1657,8 +1681,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			container := test.GetContainer(kibana.Spec.PodTemplate.Spec.Containers, "kibana")
 			Expect(container).NotTo(BeNil())
 			Expect(container.Resources).To(Equal(expectedResourcesRequirements))
-		})
 
+			initcontainer := test.GetContainer(kibana.Spec.PodTemplate.Spec.InitContainers, "key-cert-provisioner")
+			Expect(initcontainer).NotTo(BeNil())
+			Expect(initcontainer.Resources).To(Equal(expectedResourcesRequirements))
+
+		})
 	})
 })
 

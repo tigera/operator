@@ -49,11 +49,11 @@ type LogStorageSpec struct {
 	DataNodeSelector map[string]string `json:"dataNodeSelector,omitempty"`
 
 	// ComponentResources can be used to customize the resource requirements for each component.
-	// This spec is only supported for ECKOperator and Kibana..
+	// Only ECKOperator is supported for this spec.
 	// +optional
 	ComponentResources []LogStorageComponentResource `json:"componentResources,omitempty"`
 
-	// ECKOperatorStatefulSet configures the ECKOperator StatefulSet.If used in conjunction with the deprecated
+	// ECKOperatorStatefulSet configures the ECKOperator StatefulSet. If used in conjunction with the deprecated
 	// ComponentResources, then these overrides take precedence.
 	// +optional
 	ECKOperatorStatefulSet *ECKOperatorStatefulSet `json:"eckOperatorStatefulSet,omitempty"`

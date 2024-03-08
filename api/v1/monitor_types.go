@@ -170,9 +170,9 @@ type PrometheusContainer struct {
 type AlertManager struct {
 	// Spec is the specification of the Alertmanager.
 	// +optional
-	AlertmanagerSpec *AlertmanagerSpec `json:"spec,omitempty"`
+	AlertManagerSpec *AlertManagerSpec `json:"spec,omitempty"`
 }
-type AlertmanagerSpec struct {
+type AlertManagerSpec struct {
 	// Define resources requests and limits for single Pods.
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }

@@ -17,6 +17,9 @@ package components
 import (
 	"fmt"
 
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	batchv1 "k8s.io/api/batch/v1"
@@ -169,6 +172,74 @@ func ApplyJobOverrides(job *batchv1.Job, overrides components.ReplicatedPodResou
 	job.Labels = r.labels
 	job.Annotations = r.annotations
 	job.Spec.Template = *r.podTemplateSpec
+}
+
+// ApplyStatefulSetOverrides applies the overrides to the given DaemonSet.
+// Note: overrides must not be nil pointer.
+func ApplyStatefulSetOverrides(s *appsv1.StatefulSet, overrides components.ReplicatedPodResourceOverrides) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil {
+		return
+	}
+
+	// Pull out the data we'll override from the DaemonSet.
+	r := &replicatedPodResource{
+		labels:          s.Labels,
+		annotations:     s.Annotations,
+		minReadySeconds: &s.Spec.MinReadySeconds,
+		podTemplateSpec: &s.Spec.Template,
+	}
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Set the possibly new fields back onto the DaemonSet.
+	s.Labels = r.labels
+	s.Annotations = r.annotations
+	s.Spec.MinReadySeconds = *r.minReadySeconds
+	s.Spec.Template = *r.podTemplateSpec
+}
+
+// ApplyKibanaOverrides applies the overrides to the given Kibana.
+// Note: overrides must not be nil pointer.
+func ApplyKibanaOverrides(k *kbv1.Kibana, overrides components.ReplicatedPodResourceOverrides) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil {
+		return
+	}
+
+	// Pull out the data we'll override from the DaemonSet.
+	r := &replicatedPodResource{
+		podTemplateSpec: &k.Spec.PodTemplate,
+	}
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Set the possibly new fields back onto the kibana.
+	k.Spec.PodTemplate = *r.podTemplateSpec
+}
+
+// ApplyPrometheusOverrides applies the overrides to the given Prometheus.
+// Note: overrides must not be nil pointer.
+func ApplyPrometheusOverrides(prom *monitoringv1.Prometheus, overrides *operator.Prometheus) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil {
+		return
+	}
+
+	prometheusFields := &prom.Spec.CommonPrometheusFields
+
+	// Override additional or operator generated containers.
+	if containers := overrides.GetContainers(); containers != nil {
+		mergeContainers(prometheusFields.Containers, containers)
+	}
+
+	// Define resources requests and limits for prometheus Pods.
+	if resources := overrides.GetPrometheusResource(); resources != nil {
+		prometheusFields.Resources = *resources
+	}
+
+	prom.Spec.CommonPrometheusFields = *prometheusFields
+
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

@@ -150,11 +150,11 @@ var _ = Describe("compliance rendering tests", func() {
 						},
 					},
 				},
-				ControllerDeployment: &operatorv1.ControllerDeployment{
-					Spec: &operatorv1.ControllerDeploymentSpec{
-						Template: &operatorv1.ControllerDeploymentPodTemplateSpec{
-							Spec: &operatorv1.ControllerDeploymentPodSpec{
-								Containers: []operatorv1.ControllerDeploymentContainer{{
+				ComplianceControllerDeployment: &operatorv1.ComplianceControllerDeployment{
+					Spec: &operatorv1.ComplianceControllerDeploymentSpec{
+						Template: &operatorv1.ComplianceControllerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ComplianceControllerDeploymentPodSpec{
+								Containers: []operatorv1.ComplianceControllerDeploymentContainer{{
 									Name:      "compliance-controller",
 									Resources: &complianceResources,
 								}},
@@ -162,11 +162,11 @@ var _ = Describe("compliance rendering tests", func() {
 						},
 					},
 				},
-				SnapshotterDeployment: &operatorv1.SnapshotterDeployment{
-					Spec: &operatorv1.SnapshotterDeploymentSpec{
-						Template: &operatorv1.SnapshotterDeploymentPodTemplateSpec{
-							Spec: &operatorv1.SnapshotterDeploymentPodSpec{
-								Containers: []operatorv1.SnapshotterDeploymentContainer{{
+				ComplianceSnapshotterDeployment: &operatorv1.ComplianceSnapshotterDeployment{
+					Spec: &operatorv1.ComplianceSnapshotterDeploymentSpec{
+						Template: &operatorv1.ComplianceSnapshotterDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ComplianceSnapshotterDeploymentPodSpec{
+								Containers: []operatorv1.ComplianceSnapshotterDeploymentContainer{{
 									Name:      "compliance-snapshotter",
 									Resources: &complianceResources,
 								}},
@@ -175,11 +175,11 @@ var _ = Describe("compliance rendering tests", func() {
 					},
 				},
 
-				BenchmarkerDaemonSet: &operatorv1.BenchmarkerDaemonSet{
-					Spec: &operatorv1.BenchmarkerDaemonSetSpec{
-						Template: &operatorv1.BenchmarkerDaemonSetPodTemplateSpec{
-							Spec: &operatorv1.BenchmarkerDaemonSetPodSpec{
-								Containers: []operatorv1.BenchmarkerDaemonSetContainer{{
+				ComplianceBenchmarkerDaemonSet: &operatorv1.ComplianceBenchmarkerDaemonSet{
+					Spec: &operatorv1.ComplianceBenchmarkerDaemonSetSpec{
+						Template: &operatorv1.ComplianceBenchmarkerDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.ComplianceBenchmarkerDaemonSetPodSpec{
+								Containers: []operatorv1.ComplianceBenchmarkerDaemonSetContainer{{
 									Name:      "compliance-benchmarker",
 									Resources: &complianceResources,
 								}},
@@ -225,11 +225,11 @@ var _ = Describe("compliance rendering tests", func() {
 	It("should render without resource requests and limits for compliance resources when not set", func() {
 		cfg.Compliance = &operatorv1.Compliance{
 			Spec: operatorv1.ComplianceSpec{
-				SnapshotterDeployment: &operatorv1.SnapshotterDeployment{
-					Spec: &operatorv1.SnapshotterDeploymentSpec{
-						Template: &operatorv1.SnapshotterDeploymentPodTemplateSpec{
-							Spec: &operatorv1.SnapshotterDeploymentPodSpec{
-								Containers: []operatorv1.SnapshotterDeploymentContainer{{
+				ComplianceSnapshotterDeployment: &operatorv1.ComplianceSnapshotterDeployment{
+					Spec: &operatorv1.ComplianceSnapshotterDeploymentSpec{
+						Template: &operatorv1.ComplianceSnapshotterDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ComplianceSnapshotterDeploymentPodSpec{
+								Containers: []operatorv1.ComplianceSnapshotterDeploymentContainer{{
 									Name:      "compliance-snapshotter",
 									Resources: &complianceResources,
 								}},
@@ -237,11 +237,11 @@ var _ = Describe("compliance rendering tests", func() {
 						},
 					},
 				},
-				BenchmarkerDaemonSet: &operatorv1.BenchmarkerDaemonSet{
-					Spec: &operatorv1.BenchmarkerDaemonSetSpec{
-						Template: &operatorv1.BenchmarkerDaemonSetPodTemplateSpec{
-							Spec: &operatorv1.BenchmarkerDaemonSetPodSpec{
-								Containers: []operatorv1.BenchmarkerDaemonSetContainer{{
+				ComplianceBenchmarkerDaemonSet: &operatorv1.ComplianceBenchmarkerDaemonSet{
+					Spec: &operatorv1.ComplianceBenchmarkerDaemonSetSpec{
+						Template: &operatorv1.ComplianceBenchmarkerDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.ComplianceBenchmarkerDaemonSetPodSpec{
+								Containers: []operatorv1.ComplianceBenchmarkerDaemonSetContainer{{
 									Name:      "compliance-benchmarker",
 									Resources: &complianceResources,
 								}},
@@ -857,11 +857,11 @@ var _ = Describe("compliance rendering tests", func() {
 							},
 						},
 					},
-					ControllerDeployment: &operatorv1.ControllerDeployment{
-						Spec: &operatorv1.ControllerDeploymentSpec{
-							Template: &operatorv1.ControllerDeploymentPodTemplateSpec{
-								Spec: &operatorv1.ControllerDeploymentPodSpec{
-									InitContainers: []operatorv1.ControllerDeploymentInitContainer{{
+					ComplianceControllerDeployment: &operatorv1.ComplianceControllerDeployment{
+						Spec: &operatorv1.ComplianceControllerDeploymentSpec{
+							Template: &operatorv1.ComplianceControllerDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ComplianceControllerDeploymentPodSpec{
+									InitContainers: []operatorv1.ComplianceControllerDeploymentInitContainer{{
 										Name:      "tigera-compliance-controller-tls-key-cert-provisioner",
 										Resources: &complianceResources,
 									}},
@@ -869,11 +869,11 @@ var _ = Describe("compliance rendering tests", func() {
 							},
 						},
 					},
-					SnapshotterDeployment: &operatorv1.SnapshotterDeployment{
-						Spec: &operatorv1.SnapshotterDeploymentSpec{
-							Template: &operatorv1.SnapshotterDeploymentPodTemplateSpec{
-								Spec: &operatorv1.SnapshotterDeploymentPodSpec{
-									InitContainers: []operatorv1.SnapshotterDeploymentInitContainer{{
+					ComplianceSnapshotterDeployment: &operatorv1.ComplianceSnapshotterDeployment{
+						Spec: &operatorv1.ComplianceSnapshotterDeploymentSpec{
+							Template: &operatorv1.ComplianceSnapshotterDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ComplianceSnapshotterDeploymentPodSpec{
+									InitContainers: []operatorv1.ComplianceSnapshotterDeploymentInitContainer{{
 										Name:      "tigera-compliance-snapshotter-tls-key-cert-provisioner",
 										Resources: &complianceResources,
 									}},
@@ -882,11 +882,11 @@ var _ = Describe("compliance rendering tests", func() {
 						},
 					},
 
-					BenchmarkerDaemonSet: &operatorv1.BenchmarkerDaemonSet{
-						Spec: &operatorv1.BenchmarkerDaemonSetSpec{
-							Template: &operatorv1.BenchmarkerDaemonSetPodTemplateSpec{
-								Spec: &operatorv1.BenchmarkerDaemonSetPodSpec{
-									InitContainers: []operatorv1.BenchmarkerDaemonSetInitContainer{{
+					ComplianceBenchmarkerDaemonSet: &operatorv1.ComplianceBenchmarkerDaemonSet{
+						Spec: &operatorv1.ComplianceBenchmarkerDaemonSetSpec{
+							Template: &operatorv1.ComplianceBenchmarkerDaemonSetPodTemplateSpec{
+								Spec: &operatorv1.ComplianceBenchmarkerDaemonSetPodSpec{
+									InitContainers: []operatorv1.ComplianceBenchmarkerDaemonSetInitContainer{{
 										Name:      "tigera-compliance-benchmarker-tls-key-cert-provisioner",
 										Resources: &complianceResources,
 									}},

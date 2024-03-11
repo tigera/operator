@@ -21,84 +21,84 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// SnapshotterDeployment is the configuration for the compliance Snapshotter Deployment.
-type SnapshotterDeployment struct {
+// ComplianceSnapshotterDeployment is the configuration for the compliance snapshotter Deployment.
+type ComplianceSnapshotterDeployment struct {
 
-	// Spec is the specification of the compliance Snapshotter Deployment.
+	// Spec is the specification of the compliance snapshotter Deployment.
 	// +optional
-	Spec *SnapshotterDeploymentSpec `json:"spec,omitempty"`
+	Spec *ComplianceSnapshotterDeploymentSpec `json:"spec,omitempty"`
 }
 
-// SnapshotterDeploymentSpec defines configuration for the compliance Snapshotter Deployment.
-type SnapshotterDeploymentSpec struct {
+// ComplianceSnapshotterDeploymentSpec defines configuration for the compliance snapshotter Deployment.
+type ComplianceSnapshotterDeploymentSpec struct {
 
-	// Template describes the compliance Snapshotter Deployment pod that will be created.
+	// Template describes the compliance snapshotter Deployment pod that will be created.
 	// +optional
-	Template *SnapshotterDeploymentPodTemplateSpec `json:"template,omitempty"`
+	Template *ComplianceSnapshotterDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-// SnapshotterDeploymentPodTemplateSpec is the compliance Snapshotter Deployment's PodTemplateSpec
-type SnapshotterDeploymentPodTemplateSpec struct {
+// ComplianceSnapshotterDeploymentPodTemplateSpec is the compliance snapshotter Deployment's PodTemplateSpec
+type ComplianceSnapshotterDeploymentPodTemplateSpec struct {
 
-	// Spec is the compliance Snapshotter Deployment's PodSpec.
+	// Spec is the compliance snapshotter Deployment's PodSpec.
 	// +optional
-	Spec *SnapshotterDeploymentPodSpec `json:"spec,omitempty"`
+	Spec *ComplianceSnapshotterDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-// SnapshotterDeploymentPodSpec is the compliance Snapshotter Deployment's PodSpec.
-type SnapshotterDeploymentPodSpec struct {
-	// InitContainers is a list of compliance Snapshotter init containers.
-	// If specified, this overrides the specified compliance Snapshotter Deployment init containers.
-	// If omitted, the compliance Snapshotter Deployment will use its default values for its init containers.
+// ComplianceSnapshotterDeploymentPodSpec is the compliance snapshotter Deployment's PodSpec.
+type ComplianceSnapshotterDeploymentPodSpec struct {
+	// InitContainers is a list of compliance snapshotter init containers.
+	// If specified, this overrides the specified compliance snapshotter Deployment init containers.
+	// If omitted, the compliance snapshotter Deployment will use its default values for its init containers.
 	// +optional
-	InitContainers []SnapshotterDeploymentInitContainer `json:"initContainers,omitempty"`
+	InitContainers []ComplianceSnapshotterDeploymentInitContainer `json:"initContainers,omitempty"`
 
-	// Containers is a list of compliance Snapshotter containers.
-	// If specified, this overrides the specified compliance Snapshotter Deployment containers.
-	// If omitted, the compliance Snapshotter Deployment will use its default values for its containers.
+	// Containers is a list of compliance snapshotter containers.
+	// If specified, this overrides the specified compliance snapshotter Deployment containers.
+	// If omitted, the compliance snapshotter Deployment will use its default values for its containers.
 	// +optional
-	Containers []SnapshotterDeploymentContainer `json:"containers,omitempty"`
+	Containers []ComplianceSnapshotterDeploymentContainer `json:"containers,omitempty"`
 }
 
-// SnapshotterDeploymentContainer is a compliance Snapshotter Deployment container.
-type SnapshotterDeploymentContainer struct {
-	// Name is an enum which identifies the compliance Snapshotter Deployment container by name.
+// ComplianceSnapshotterDeploymentContainer is a compliance snapshotter Deployment container.
+type ComplianceSnapshotterDeploymentContainer struct {
+	// Name is an enum which identifies the compliance snapshotter Deployment container by name.
 	// +kubebuilder:validation:Enum=compliance-snapshotter
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	// If specified, this overrides the named compliance Snapshotter Deployment container's resources.
-	// If omitted, the compliance Snapshotter Deployment will use its default value for this container's resources.
+	// If specified, this overrides the named compliance snapshotter Deployment container's resources.
+	// If omitted, the compliance snapshotter Deployment will use its default value for this container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// SnapshotterDeploymentInitContainer is a compliance Snapshotter Deployment init container.
-type SnapshotterDeploymentInitContainer struct {
-	// Name is an enum which identifies the compliance Snapshotter Deployment init container by name.
+// ComplianceSnapshotterDeploymentInitContainer is a compliance snapshotter Deployment init container.
+type ComplianceSnapshotterDeploymentInitContainer struct {
+	// Name is an enum which identifies the compliance snapshotter Deployment init container by name.
 	// +kubebuilder:validation:Enum=tigera-compliance-snapshotter-tls-key-cert-provisioner
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	// If specified, this overrides the named compliance Snapshotter Deployment init container's resources.
-	// If omitted, the compliance Snapshotter Deployment will use its default value for this init container's resources.
+	// If specified, this overrides the named compliance snapshotter Deployment init container's resources.
+	// If omitted, the compliance snapshotter Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *SnapshotterDeployment) GetMetadata() *Metadata {
+func (c *ComplianceSnapshotterDeployment) GetMetadata() *Metadata {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetMinReadySeconds() *int32 {
+func (c *ComplianceSnapshotterDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetPodTemplateMetadata() *Metadata {
+func (c *ComplianceSnapshotterDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetInitContainers() []v1.Container {
+func (c *ComplianceSnapshotterDeployment) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
@@ -120,7 +120,7 @@ func (c *SnapshotterDeployment) GetInitContainers() []v1.Container {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetContainers() []v1.Container {
+func (c *ComplianceSnapshotterDeployment) GetContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
@@ -142,30 +142,30 @@ func (c *SnapshotterDeployment) GetContainers() []v1.Container {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetAffinity() *v1.Affinity {
+func (c *ComplianceSnapshotterDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+func (c *ComplianceSnapshotterDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetNodeSelector() map[string]string {
+func (c *ComplianceSnapshotterDeployment) GetNodeSelector() map[string]string {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetTolerations() []v1.Toleration {
+func (c *ComplianceSnapshotterDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetTerminationGracePeriodSeconds() *int64 {
+func (c *ComplianceSnapshotterDeployment) GetTerminationGracePeriodSeconds() *int64 {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+func (c *ComplianceSnapshotterDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 
-func (c *SnapshotterDeployment) GetPriorityClassName() string {
+func (c *ComplianceSnapshotterDeployment) GetPriorityClassName() string {
 	return ""
 }

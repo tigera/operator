@@ -36,9 +36,9 @@ spec:
             description: Specification of the desired state for Tigera compliance
               reporting.
             properties:
-              benchmarkerDaemonSet:
-                description: BenchmarkerDeployment configures the Compliance Benchmarker
-                  DaemonSet.
+              complianceBenchmarkerDaemonSet:
+                description: ComplianceBenchmarkerDaemonSet configures the Compliance
+                  Benchmarker DaemonSet.
                 properties:
                   spec:
                     description: Spec is the specification of the Compliance Benchmarker
@@ -59,8 +59,8 @@ spec:
                                   omitted, the Compliance Benchmarker DaemonSet will
                                   use its default values for its containers.
                                 items:
-                                  description: BenchmarkerDaemonSetContainer is a
-                                    Compliance Benchmarker DaemonSet container.
+                                  description: ComplianceBenchmarkerDaemonSetContainer
+                                    is a Compliance Benchmarker DaemonSet container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
@@ -144,8 +144,8 @@ spec:
                                   DaemonSet will use its default values for its init
                                   containers.
                                 items:
-                                  description: BenchmarkerDaemonSetInitContainer is
-                                    a Compliance Benchmarker DaemonSet init container.
+                                  description: ComplianceBenchmarkerDaemonSetInitContainer
+                                    is a Compliance Benchmarker DaemonSet init container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
@@ -162,6 +162,195 @@ spec:
                                         DaemonSet init container's resources. If omitted,
                                         the Compliance Benchmarker DaemonSet will
                                         use its default value for this init container's
+                                        resources.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                            type: object
+                        type: object
+                    type: object
+                type: object
+              complianceControllerDeployment:
+                description: ComplianceControllerDeployment configures the Compliance
+                  Controller Deployment.
+                properties:
+                  spec:
+                    description: Spec is the specification of the compliance controller
+                      Deployment.
+                    properties:
+                      template:
+                        description: Template describes the compliance controller
+                          Deployment pod that will be created.
+                        properties:
+                          spec:
+                            description: Spec is the compliance controller Deployment's
+                              PodSpec.
+                            properties:
+                              containers:
+                                description: Containers is a list of compliance controller
+                                  containers. If specified, this overrides the specified
+                                  compliance controller Deployment containers. If
+                                  omitted, the compliance controller Deployment will
+                                  use its default values for its containers.
+                                items:
+                                  description: ComplianceControllerDeploymentContainer
+                                    is a compliance controller Deployment container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the compliance controller Deployment container
+                                        by name.
+                                      enum:
+                                      - compliance-controller
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named compliance controller
+                                        Deployment container's resources. If omitted,
+                                        the compliance controller Deployment will
+                                        use its default value for this container's
+                                        resources.
+                                      properties:
+                                        claims:
+                                          description: "Claims lists the names of
+                                            resources, defined in spec.resourceClaims,
+                                            that are used by this container. \n This
+                                            is an alpha field and requires enabling
+                                            the DynamicResourceAllocation feature
+                                            gate. \n This field is immutable. It can
+                                            only be set for containers."
+                                          items:
+                                            description: ResourceClaim references
+                                              one entry in PodSpec.ResourceClaims.
+                                            properties:
+                                              name:
+                                                description: Name must match the name
+                                                  of one entry in pod.spec.resourceClaims
+                                                  of the Pod where this field is used.
+                                                  It makes that resource available
+                                                  inside a container.
+                                                type: string
+                                            required:
+                                            - name
+                                            type: object
+                                          type: array
+                                          x-kubernetes-list-map-keys:
+                                          - name
+                                          x-kubernetes-list-type: map
+                                        limits:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Limits describes the maximum
+                                            amount of compute resources allowed. More
+                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                        requests:
+                                          additionalProperties:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          description: 'Requests describes the minimum
+                                            amount of compute resources required.
+                                            If Requests is omitted for a container,
+                                            it defaults to Limits if that is explicitly
+                                            specified, otherwise to an implementation-defined
+                                            value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                              initContainers:
+                                description: InitContainers is a list of compliance
+                                  controller init containers. If specified, this overrides
+                                  the specified compliance controller Deployment init
+                                  containers. If omitted, the compliance controller
+                                  Deployment will use its default values for its init
+                                  containers.
+                                items:
+                                  description: ComplianceControllerDeploymentInitContainer
+                                    is a compliance controller Deployment init container.
+                                  properties:
+                                    name:
+                                      description: Name is an enum which identifies
+                                        the compliance controller Deployment init
+                                        container by name.
+                                      enum:
+                                      - tigera-compliance-controller-tls-key-cert-provisioner
+                                      type: string
+                                    resources:
+                                      description: Resources allows customization
+                                        of limits and requests for compute resources
+                                        such as cpu and memory. If specified, this
+                                        overrides the named compliance controller
+                                        Deployment init container's resources. If
+                                        omitted, the compliance controller Deployment
+                                        will use its default value for this init container's
                                         resources.
                                       properties:
                                         claims:
@@ -582,224 +771,35 @@ spec:
                         type: object
                     type: object
                 type: object
-              controllerDeployment:
-                description: ControllerDeployment configures the Compliance Controller
-                  Deployment.
+              complianceSnapshotterDeployment:
+                description: ComplianceSnapshotterDeployment configures the Compliance
+                  Snapshotter Deployment.
                 properties:
                   spec:
-                    description: Spec is the specification of the compliance controller
+                    description: Spec is the specification of the compliance snapshotter
                       Deployment.
                     properties:
                       template:
-                        description: Template describes the compliance controller
+                        description: Template describes the compliance snapshotter
                           Deployment pod that will be created.
                         properties:
                           spec:
-                            description: Spec is the compliance controller Deployment's
+                            description: Spec is the compliance snapshotter Deployment's
                               PodSpec.
                             properties:
                               containers:
-                                description: Containers is a list of compliance controller
+                                description: Containers is a list of compliance snapshotter
                                   containers. If specified, this overrides the specified
-                                  compliance controller Deployment containers. If
-                                  omitted, the compliance controller Deployment will
+                                  compliance snapshotter Deployment containers. If
+                                  omitted, the compliance snapshotter Deployment will
                                   use its default values for its containers.
                                 items:
-                                  description: ControllerDeploymentContainer is a
-                                    compliance controller Deployment container.
+                                  description: ComplianceSnapshotterDeploymentContainer
+                                    is a compliance snapshotter Deployment container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the compliance controller Deployment container
-                                        by name.
-                                      enum:
-                                      - compliance-controller
-                                      type: string
-                                    resources:
-                                      description: Resources allows customization
-                                        of limits and requests for compute resources
-                                        such as cpu and memory. If specified, this
-                                        overrides the named compliance controller
-                                        Deployment container's resources. If omitted,
-                                        the compliance controller Deployment will
-                                        use its default value for this container's
-                                        resources.
-                                      properties:
-                                        claims:
-                                          description: "Claims lists the names of
-                                            resources, defined in spec.resourceClaims,
-                                            that are used by this container. \n This
-                                            is an alpha field and requires enabling
-                                            the DynamicResourceAllocation feature
-                                            gate. \n This field is immutable. It can
-                                            only be set for containers."
-                                          items:
-                                            description: ResourceClaim references
-                                              one entry in PodSpec.ResourceClaims.
-                                            properties:
-                                              name:
-                                                description: Name must match the name
-                                                  of one entry in pod.spec.resourceClaims
-                                                  of the Pod where this field is used.
-                                                  It makes that resource available
-                                                  inside a container.
-                                                type: string
-                                            required:
-                                            - name
-                                            type: object
-                                          type: array
-                                          x-kubernetes-list-map-keys:
-                                          - name
-                                          x-kubernetes-list-type: map
-                                        limits:
-                                          additionalProperties:
-                                            anyOf:
-                                            - type: integer
-                                            - type: string
-                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                            x-kubernetes-int-or-string: true
-                                          description: 'Limits describes the maximum
-                                            amount of compute resources allowed. More
-                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
-                                          type: object
-                                        requests:
-                                          additionalProperties:
-                                            anyOf:
-                                            - type: integer
-                                            - type: string
-                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                            x-kubernetes-int-or-string: true
-                                          description: 'Requests describes the minimum
-                                            amount of compute resources required.
-                                            If Requests is omitted for a container,
-                                            it defaults to Limits if that is explicitly
-                                            specified, otherwise to an implementation-defined
-                                            value. Requests cannot exceed Limits.
-                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
-                                          type: object
-                                      type: object
-                                  required:
-                                  - name
-                                  type: object
-                                type: array
-                              initContainers:
-                                description: InitContainers is a list of compliance
-                                  controller init containers. If specified, this overrides
-                                  the specified compliance controller Deployment init
-                                  containers. If omitted, the compliance controller
-                                  Deployment will use its default values for its init
-                                  containers.
-                                items:
-                                  description: ControllerDeploymentInitContainer is
-                                    a compliance controller Deployment init container.
-                                  properties:
-                                    name:
-                                      description: Name is an enum which identifies
-                                        the compliance controller Deployment init
-                                        container by name.
-                                      enum:
-                                      - tigera-compliance-controller-tls-key-cert-provisioner
-                                      type: string
-                                    resources:
-                                      description: Resources allows customization
-                                        of limits and requests for compute resources
-                                        such as cpu and memory. If specified, this
-                                        overrides the named compliance controller
-                                        Deployment init container's resources. If
-                                        omitted, the compliance controller Deployment
-                                        will use its default value for this init container's
-                                        resources.
-                                      properties:
-                                        claims:
-                                          description: "Claims lists the names of
-                                            resources, defined in spec.resourceClaims,
-                                            that are used by this container. \n This
-                                            is an alpha field and requires enabling
-                                            the DynamicResourceAllocation feature
-                                            gate. \n This field is immutable. It can
-                                            only be set for containers."
-                                          items:
-                                            description: ResourceClaim references
-                                              one entry in PodSpec.ResourceClaims.
-                                            properties:
-                                              name:
-                                                description: Name must match the name
-                                                  of one entry in pod.spec.resourceClaims
-                                                  of the Pod where this field is used.
-                                                  It makes that resource available
-                                                  inside a container.
-                                                type: string
-                                            required:
-                                            - name
-                                            type: object
-                                          type: array
-                                          x-kubernetes-list-map-keys:
-                                          - name
-                                          x-kubernetes-list-type: map
-                                        limits:
-                                          additionalProperties:
-                                            anyOf:
-                                            - type: integer
-                                            - type: string
-                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                            x-kubernetes-int-or-string: true
-                                          description: 'Limits describes the maximum
-                                            amount of compute resources allowed. More
-                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
-                                          type: object
-                                        requests:
-                                          additionalProperties:
-                                            anyOf:
-                                            - type: integer
-                                            - type: string
-                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                            x-kubernetes-int-or-string: true
-                                          description: 'Requests describes the minimum
-                                            amount of compute resources required.
-                                            If Requests is omitted for a container,
-                                            it defaults to Limits if that is explicitly
-                                            specified, otherwise to an implementation-defined
-                                            value. Requests cannot exceed Limits.
-                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
-                                          type: object
-                                      type: object
-                                  required:
-                                  - name
-                                  type: object
-                                type: array
-                            type: object
-                        type: object
-                    type: object
-                type: object
-              snapshotterDeployment:
-                description: SnapshotterDeployment configures the Compliance Snapshotter
-                  Deployment.
-                properties:
-                  spec:
-                    description: Spec is the specification of the compliance Snapshotter
-                      Deployment.
-                    properties:
-                      template:
-                        description: Template describes the compliance Snapshotter
-                          Deployment pod that will be created.
-                        properties:
-                          spec:
-                            description: Spec is the compliance Snapshotter Deployment's
-                              PodSpec.
-                            properties:
-                              containers:
-                                description: Containers is a list of compliance Snapshotter
-                                  containers. If specified, this overrides the specified
-                                  compliance Snapshotter Deployment containers. If
-                                  omitted, the compliance Snapshotter Deployment will
-                                  use its default values for its containers.
-                                items:
-                                  description: SnapshotterDeploymentContainer is a
-                                    compliance Snapshotter Deployment container.
-                                  properties:
-                                    name:
-                                      description: Name is an enum which identifies
-                                        the compliance Snapshotter Deployment container
+                                        the compliance snapshotter Deployment container
                                         by name.
                                       enum:
                                       - compliance-snapshotter
@@ -808,9 +808,9 @@ spec:
                                       description: Resources allows customization
                                         of limits and requests for compute resources
                                         such as cpu and memory. If specified, this
-                                        overrides the named compliance Snapshotter
+                                        overrides the named compliance snapshotter
                                         Deployment container's resources. If omitted,
-                                        the compliance Snapshotter Deployment will
+                                        the compliance snapshotter Deployment will
                                         use its default value for this container's
                                         resources.
                                       properties:
@@ -873,18 +873,18 @@ spec:
                                 type: array
                               initContainers:
                                 description: InitContainers is a list of compliance
-                                  Snapshotter init containers. If specified, this
-                                  overrides the specified compliance Snapshotter Deployment
-                                  init containers. If omitted, the compliance Snapshotter
+                                  snapshotter init containers. If specified, this
+                                  overrides the specified compliance snapshotter Deployment
+                                  init containers. If omitted, the compliance snapshotter
                                   Deployment will use its default values for its init
                                   containers.
                                 items:
-                                  description: SnapshotterDeploymentInitContainer
-                                    is a compliance Snapshotter Deployment init container.
+                                  description: ComplianceSnapshotterDeploymentInitContainer
+                                    is a compliance snapshotter Deployment init container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the compliance Snapshotter Deployment init
+                                        the compliance snapshotter Deployment init
                                         container by name.
                                       enum:
                                       - tigera-compliance-snapshotter-tls-key-cert-provisioner
@@ -893,9 +893,9 @@ spec:
                                       description: Resources allows customization
                                         of limits and requests for compute resources
                                         such as cpu and memory. If specified, this
-                                        overrides the named compliance Snapshotter
+                                        overrides the named compliance snapshotter
                                         Deployment init container's resources. If
-                                        omitted, the compliance Snapshotter Deployment
+                                        omitted, the compliance snapshotter Deployment
                                         will use its default value for this init container's
                                         resources.
                                       properties:

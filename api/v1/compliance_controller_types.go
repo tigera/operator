@@ -21,47 +21,47 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// ControllerDeployment is the configuration for the compliance controller Deployment.
-type ControllerDeployment struct {
+// ComplianceControllerDeployment is the configuration for the compliance controller Deployment.
+type ComplianceControllerDeployment struct {
 
 	// Spec is the specification of the compliance controller Deployment.
 	// +optional
-	Spec *ControllerDeploymentSpec `json:"spec,omitempty"`
+	Spec *ComplianceControllerDeploymentSpec `json:"spec,omitempty"`
 }
 
-// ControllerDeploymentSpec defines configuration for the compliance controller Deployment.
-type ControllerDeploymentSpec struct {
+// ComplianceControllerDeploymentSpec defines configuration for the compliance controller Deployment.
+type ComplianceControllerDeploymentSpec struct {
 
 	// Template describes the compliance controller Deployment pod that will be created.
 	// +optional
-	Template *ControllerDeploymentPodTemplateSpec `json:"template,omitempty"`
+	Template *ComplianceControllerDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-// ControllerDeploymentPodTemplateSpec is the compliance controller Deployment's PodTemplateSpec
-type ControllerDeploymentPodTemplateSpec struct {
+// ComplianceControllerDeploymentPodTemplateSpec is the compliance controller Deployment's PodTemplateSpec
+type ComplianceControllerDeploymentPodTemplateSpec struct {
 
 	// Spec is the compliance controller Deployment's PodSpec.
 	// +optional
-	Spec *ControllerDeploymentPodSpec `json:"spec,omitempty"`
+	Spec *ComplianceControllerDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-// ControllerDeploymentPodSpec is the compliance controller Deployment's PodSpec.
-type ControllerDeploymentPodSpec struct {
+// ComplianceControllerDeploymentPodSpec is the compliance controller Deployment's PodSpec.
+type ComplianceControllerDeploymentPodSpec struct {
 	// InitContainers is a list of compliance controller init containers.
 	// If specified, this overrides the specified compliance controller Deployment init containers.
 	// If omitted, the compliance controller Deployment will use its default values for its init containers.
 	// +optional
-	InitContainers []ControllerDeploymentInitContainer `json:"initContainers,omitempty"`
+	InitContainers []ComplianceControllerDeploymentInitContainer `json:"initContainers,omitempty"`
 
 	// Containers is a list of compliance controller containers.
 	// If specified, this overrides the specified compliance controller Deployment containers.
 	// If omitted, the compliance controller Deployment will use its default values for its containers.
 	// +optional
-	Containers []ControllerDeploymentContainer `json:"containers,omitempty"`
+	Containers []ComplianceControllerDeploymentContainer `json:"containers,omitempty"`
 }
 
-// ControllerDeploymentContainer is a compliance controller Deployment container.
-type ControllerDeploymentContainer struct {
+// ComplianceControllerDeploymentContainer is a compliance controller Deployment container.
+type ComplianceControllerDeploymentContainer struct {
 	// Name is an enum which identifies the compliance controller Deployment container by name.
 	// +kubebuilder:validation:Enum=compliance-controller
 	Name string `json:"name"`
@@ -73,8 +73,8 @@ type ControllerDeploymentContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// ControllerDeploymentInitContainer is a compliance controller Deployment init container.
-type ControllerDeploymentInitContainer struct {
+// ComplianceControllerDeploymentInitContainer is a compliance controller Deployment init container.
+type ComplianceControllerDeploymentInitContainer struct {
 	// Name is an enum which identifies the compliance controller Deployment init container by name.
 	// +kubebuilder:validation:Enum=tigera-compliance-controller-tls-key-cert-provisioner
 	Name string `json:"name"`
@@ -86,19 +86,19 @@ type ControllerDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ControllerDeployment) GetMetadata() *Metadata {
+func (c *ComplianceControllerDeployment) GetMetadata() *Metadata {
 	return nil
 }
 
-func (c *ControllerDeployment) GetMinReadySeconds() *int32 {
+func (c *ComplianceControllerDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }
 
-func (c *ControllerDeployment) GetPodTemplateMetadata() *Metadata {
+func (c *ComplianceControllerDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }
 
-func (c *ControllerDeployment) GetInitContainers() []v1.Container {
+func (c *ComplianceControllerDeployment) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
@@ -120,7 +120,7 @@ func (c *ControllerDeployment) GetInitContainers() []v1.Container {
 	return nil
 }
 
-func (c *ControllerDeployment) GetContainers() []v1.Container {
+func (c *ComplianceControllerDeployment) GetContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
@@ -142,30 +142,30 @@ func (c *ControllerDeployment) GetContainers() []v1.Container {
 	return nil
 }
 
-func (c *ControllerDeployment) GetAffinity() *v1.Affinity {
+func (c *ComplianceControllerDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }
 
-func (c *ControllerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+func (c *ComplianceControllerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }
 
-func (c *ControllerDeployment) GetNodeSelector() map[string]string {
+func (c *ComplianceControllerDeployment) GetNodeSelector() map[string]string {
 	return nil
 }
 
-func (c *ControllerDeployment) GetTolerations() []v1.Toleration {
+func (c *ComplianceControllerDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *ControllerDeployment) GetTerminationGracePeriodSeconds() *int64 {
+func (c *ComplianceControllerDeployment) GetTerminationGracePeriodSeconds() *int64 {
 	return nil
 }
 
-func (c *ControllerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+func (c *ComplianceControllerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 
-func (c *ControllerDeployment) GetPriorityClassName() string {
+func (c *ComplianceControllerDeployment) GetPriorityClassName() string {
 	return ""
 }

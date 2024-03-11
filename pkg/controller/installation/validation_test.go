@@ -92,7 +92,9 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(BeNil())
 	})
 
-	It("should not allow dual stack (both IPv4 and IPv6) if BPF is enabled", func() {
+	It("should allow dual stack (both IPv4 and IPv6) if BPF is enabled", func() {
+		var enabled operator.BGPOption = operator.BGPEnabled
+		instance.Spec.CalicoNetwork.BGP = &enabled
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -116,7 +118,7 @@ var _ = Describe("Installation validation tests", func() {
 			CanReach: "8.8.8.8",
 		}
 		err := validateCustomResource(instance)
-		Expect(err).To(MatchError("bpf dataplane does not support dual stack"))
+		Expect(err).To(BeNil())
 	})
 
 	It("should allow IPv6 VXLAN", func() {

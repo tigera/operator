@@ -763,8 +763,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	installationDeleted := (instance.DeletionTimestamp != nil)
-	if installationDeleted {
+	installationMarkedForDeletion := (instance.DeletionTimestamp != nil)
+	if installationMarkedForDeletion {
 		reqLogger.Info("Installation object is terminating")
 	}
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
@@ -826,7 +826,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// See the section 'Use of Finalizers for graceful termination' at the top of this file for details.
-	if installationDeleted {
+	if installationMarkedForDeletion {
 		// This controller manages a finalizer to track whether its own pods have been properly torn down. Only remove it
 		// when all pod-networked Pods managed by this controller have been torn down. For now, this is just calico-kube-controllers.
 		l := &appsv1.Deployment{}
@@ -1225,7 +1225,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Render namespaces for Calico.
 	components = append(components, render.Namespaces(namespaceCfg))
 
-	if newActiveCM != nil && !installationDeleted {
+	if newActiveCM != nil && !installationMarkedForDeletion {
 		log.Info("adding active configmap")
 		components = append(components, render.NewPassthrough(newActiveCM))
 	}
@@ -1288,7 +1288,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// See the section 'Use of Finalizers for graceful termination' at the top of this file for terminating details.
 	canRemoveCNI := false
-	if installationDeleted {
+	if installationMarkedForDeletion {
 		// Wait for other controllers to complete their finalizer teardown before removing the CNI plugin.
 		canRemoveCNI = true
 		for _, f := range instance.Finalizers {
@@ -1331,7 +1331,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
-		Terminating:  installationDeleted,
+		Terminating:  installationMarkedForDeletion,
 		UsePSP:       r.usePSP,
 		OpenShift:    instance.Spec.KubernetesProvider == operator.ProviderOpenShift,
 	}
@@ -1345,7 +1345,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagementClusterConnection: managementClusterConnection,
 		ClusterDomain:               r.clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
-		Terminating:                 installationDeleted,
+		Terminating:                 installationMarkedForDeletion,
 		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
@@ -1465,7 +1465,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
 	})
-
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err

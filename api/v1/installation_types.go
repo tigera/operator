@@ -700,6 +700,7 @@ func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
 // crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
 // and should be updated with every new field added to the IP pool structure.
 func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
+	p.Name = crd.Name
 	p.CIDR = crd.Spec.CIDR
 
 	// Set encap.

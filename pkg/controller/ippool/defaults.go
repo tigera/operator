@@ -31,6 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	defaultPoolName   = "default-ipv4-ippool"
+	defaultV6PoolName = "default-ipv6-ippool"
+)
+
 // cidrToName returns a valid Kubernetes resource name given a CIDR. Kubernetes names must be valid DNS
 // names. We do the following:
 // - Expand the CIDR so that we get consistent results and remove IPv6 shorthand "::".
@@ -115,7 +120,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 				// and also use VXLAN encap by default.
 				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 					{
-						Name:          "default-ipv4-ippool",
+						Name:          defaultPoolName,
 						CIDR:          "172.16.0.0/16",
 						Encapsulation: operator.EncapsulationVXLAN,
 					},
@@ -123,7 +128,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 			default:
 				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 					{
-						Name: "default-ipv4-ippool",
+						Name: defaultPoolName,
 						CIDR: "192.168.0.0/16",
 					},
 				}
@@ -278,7 +283,7 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 				i.Spec.CalicoNetwork.IPPools = append(i.Spec.CalicoNetwork.IPPools, operator.IPPool{Name: name, CIDR: c})
 			} else {
 				// Treat the first IPv4 CIDR as the default. Subsequent CIDRs will be named based on their CIDR.
-				name := "default-ipv4-ippool"
+				name := defaultPoolName
 				if v4found {
 					name = ""
 				}

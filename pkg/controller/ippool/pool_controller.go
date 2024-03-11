@@ -123,14 +123,13 @@ type Reconciler struct {
 const (
 	// This label is used to track which IP pools are managed by this controller. Any IP pool
 	// with this label key/value pair is assumed to be solely managed and reconciled by this controller.
-	// We can't use OwnerReferences until this issue is resolved: https://github.com/projectcalico/calico/issues/5715
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "tigera-operator"
 )
 
 // hasOwner returns true if the given IP pool is owned by the given Installation object, and
 // false otherwise.
-func hasOwner(pool *crdv1.IPPool, installation *operator.Installation) bool {
+func hasOwner(pool *crdv1.IPPool) bool {
 	// Check for the managed-by label. Once OwnerReferences are supported on projectcalico.org/v3
 	// resources, we can remove this shortcut. Ideally, we would be comparing the OwnerReference to the UID
 	// on the Installation here instead.
@@ -227,14 +226,38 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will ignore any IP pools that it itself did not create.
 	ourPools := map[string]crdv1.IPPool{}
+	notOurs := map[string]bool{}
 	for _, p := range currentPools.Items {
-		if hasOwner(&p, installation) {
+		if hasOwner(&p) {
 			// This pool is owned by the Installation object, so consider it ours.
 			ourPools[p.Spec.CIDR] = p
-		} else if p.Name == "default-ipv4-ippool" || p.Name == "default-ipv6-ippool" {
-			// For legacy installs prior to the existence of this controller, IP pools created by
-			// the operator would have these names. Assume they are ours.
-			ourPools[p.Spec.CIDR] = p
+		} else {
+			// The IP pool may have been created by the operator, but it may not have the managed-by label set if it was created
+			// before the operator started setting the label. The following logic allows opt-in ownership of IP pools created prior to
+			// this controller, or via external tools like calicoctl.
+			//
+			// Compare this pool to the pools in the Installation object and there is a match, consider it ours.
+			// Without this logic, this controller would consider these pools as not owned by itself, resulting in errors
+			// when it attempts to create overlappin IP pools.
+			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
+				v1p := v1.IPPool{}
+				v1p.FromProjectCalicoV1(p)
+				if !reflect.DeepEqual(cnp, v1p) {
+					// The IP pool in the cluster doesn't match the IP pool
+					// in the Installation - ignore it.
+					reqLogger.V(1).Info("IP pool doesn't match", "cluster", v1p, "installation", cnp)
+					continue
+				}
+
+				// Consider this IP pool to be owned by the operator.
+				reqLogger.V(1).Info("Assuming ownership of IP pool", "name", p.Name, "cidr", p.Spec.CIDR)
+				ourPools[p.Spec.CIDR] = p
+			}
+			if _, ok := ourPools[p.Spec.CIDR]; !ok {
+				// This IP pool exists in the cluster, but is not owned by us - mark it down so that
+				// we can refuse to update any pool with this CIDR if it exists in the Installation.
+				notOurs[p.Spec.CIDR] = true
+			}
 		}
 	}
 	reqLogger.V(1).Info("Found IP pools owned by us", "count", len(ourPools))
@@ -252,6 +275,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, err
 		}
 		v1res.Labels[managedByLabel] = managedByValue
+
+		// If there is an existing IP pool in the cluster with the same CIDR, but it is not owned by us, then we cannot
+		// take action on it.
+		if _, ok := notOurs[p.CIDR]; ok {
+			r.status.SetDegraded(operator.ResourceValidationError, "Cannot update an IP pool not owned by the operator", nil, reqLogger)
+			continue
+		}
 
 		// Consider sending an update if:
 		//
@@ -314,17 +344,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				}
 				toDelete = append(toDelete, v3res)
 			} else {
-				// v3 API is not available. Just mark the pool as disabled so that new allocations
-				// don't come from this pool. We'll delete it once the API server is available.
-				v1res.Spec.Disabled = true
-				toCreateOrUpdate = append(toCreateOrUpdate, &v1res)
+				// The v3 API is not available, so we can't delete the pool. Mark degraded and return. We'll delete the pool
+				// when the API server become available.
+				r.status.SetDegraded(operator.ResourceNotReady, "Unable to delete IP pools while Calico API server is unavailable", nil, reqLogger)
+				return reconcile.Result{}, nil
 			}
 		}
 	}
 
-	// OwnerReferences are not working with Calico v3 resources per this issue: https://github.com/projectcalico/calico/issues/5715
-	// For now, we leave the IP pools without an owner reference and instead use a label to indicate that these pools are owned by
-	// the operator. Once the linked issue is fixed, we can switch to using an OwnerReference instead.
+	// We don't apply an OwnerReference to IP pools created by this controller. This means that when the Installation is deleted, IP pools
+	// will remain even though all other Calico resources will be deleted. This is intentional - deleting IP pools requires the Calico API server to be
+	// running, and we don't want to block the deletion of the Installation on the API server being available, as it introduces too many ways for
+	// things to go wrong upon deleting the Installation API. Users can manually delete the IP pools if they are no longer needed.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 
 	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)

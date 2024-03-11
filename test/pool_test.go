@@ -192,7 +192,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
 	})
 
-	It("should assume ownership of legacy IP pools", func() {
+	It("should assume ownership of legacy default IP pools", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
 		ipPool := crdv1.IPPool{
@@ -216,13 +216,21 @@ var _ = Describe("IPPool FV tests", func() {
 				IPPools: []operator.IPPool{
 					{
 						CIDR:          "192.168.0.0/24",
-						Encapsulation: operator.EncapsulationNone,
+						Encapsulation: operator.EncapsulationIPIP,
 					},
 				},
 			},
 		}
 		operatorDone = createInstallation(c, mgr, shutdownContext, &spec)
 		verifyCalicoHasDeployed(c)
+
+		// Query the Installation and verify the IP pool name has been defaulted.
+		instance := &operator.Installation{}
+		Eventually(func() error {
+			return c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
 
 		// In order to modify IP pools, the operator needs the API server. We can assert the IP pool has not yet
 		// been controlled by the operator at this point.
@@ -249,6 +257,10 @@ var _ = Describe("IPPool FV tests", func() {
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
 		Expect(len(v3Pools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
+		// This proves that the operator has assumed ownership of the legacy IP pool.
+		Expect(v3Pools.Items[0].Labels).To(HaveLen(1))
+		Expect(v3Pools.Items[0].Labels).To(HaveKey("app.kubernetes.io/managed-by"))
+
 		// Verify that the default IPv4 pool has been subsumed by the operator.
 		Expect(v3Pools.Items[0].Name).To(Equal("default-ipv4-ippool"))
 		Expect(v3Pools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/24"))
@@ -256,11 +268,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(v3Pools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(v3Pools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(v3Pools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPModeNever))
-		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANModeNever))
-
-		// This proves that the operator has assumed ownership of the legacy IP pool.
-		Expect(v3Pools.Items[0].Labels).To(HaveLen(1))
-		Expect(v3Pools.Items[0].Labels).To(HaveKey("app.kubernetes.io/managed-by"))
+		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPMode(v3.IPIPModeAlways)))
+		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANMode(v3.VXLANModeNever)))
 	})
 })

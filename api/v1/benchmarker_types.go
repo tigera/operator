@@ -21,47 +21,47 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// BenchmarkerDaemonSet is the configuration for the Compliance Benchmarker DaemonSet.
-type BenchmarkerDaemonSet struct {
+// ComplianceBenchmarkerDaemonSet is the configuration for the Compliance Benchmarker DaemonSet.
+type ComplianceBenchmarkerDaemonSet struct {
 
 	// Spec is the specification of the Compliance Benchmarker DaemonSet.
 	// +optional
-	Spec *BenchmarkerDaemonSetSpec `json:"spec,omitempty"`
+	Spec *ComplianceBenchmarkerDaemonSetSpec `json:"spec,omitempty"`
 }
 
-// BenchmarkerDaemonSetSpec defines configuration for the Compliance Benchmarker DaemonSet.
-type BenchmarkerDaemonSetSpec struct {
+// ComplianceBenchmarkerDaemonSetSpec defines configuration for the Compliance Benchmarker DaemonSet.
+type ComplianceBenchmarkerDaemonSetSpec struct {
 
 	// Template describes the Compliance Benchmarker DaemonSet pod that will be created.
 	// +optional
-	Template *BenchmarkerDaemonSetPodTemplateSpec `json:"template,omitempty"`
+	Template *ComplianceBenchmarkerDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-// BenchmarkerDaemonSetPodTemplateSpec is the Compliance Benchmarker DaemonSet's PodTemplateSpec
-type BenchmarkerDaemonSetPodTemplateSpec struct {
+// ComplianceBenchmarkerDaemonSetPodTemplateSpec is the Compliance Benchmarker DaemonSet's PodTemplateSpec
+type ComplianceBenchmarkerDaemonSetPodTemplateSpec struct {
 
 	// Spec is the Compliance Benchmarker DaemonSet's PodSpec.
 	// +optional
-	Spec *BenchmarkerDaemonSetPodSpec `json:"spec,omitempty"`
+	Spec *ComplianceBenchmarkerDaemonSetPodSpec `json:"spec,omitempty"`
 }
 
-// BenchmarkerDaemonSetPodSpec is the Compliance Benchmarker DaemonSet's PodSpec.
-type BenchmarkerDaemonSetPodSpec struct {
+// ComplianceBenchmarkerDaemonSetPodSpec is the Compliance Benchmarker DaemonSet's PodSpec.
+type ComplianceBenchmarkerDaemonSetPodSpec struct {
 	// InitContainers is a list of Compliance benchmark init containers.
 	// If specified, this overrides the specified Compliance Benchmarker DaemonSet init containers.
 	// If omitted, the Compliance Benchmarker DaemonSet will use its default values for its init containers.
 	// +optional
-	InitContainers []BenchmarkerDaemonSetInitContainer `json:"initContainers,omitempty"`
+	InitContainers []ComplianceBenchmarkerDaemonSetInitContainer `json:"initContainers,omitempty"`
 
 	// Containers is a list of Compliance benchmark containers.
 	// If specified, this overrides the specified Compliance Benchmarker DaemonSet containers.
 	// If omitted, the Compliance Benchmarker DaemonSet will use its default values for its containers.
 	// +optional
-	Containers []BenchmarkerDaemonSetContainer `json:"containers,omitempty"`
+	Containers []ComplianceBenchmarkerDaemonSetContainer `json:"containers,omitempty"`
 }
 
-// BenchmarkerDaemonSetContainer is a Compliance Benchmarker DaemonSet container.
-type BenchmarkerDaemonSetContainer struct {
+// ComplianceBenchmarkerDaemonSetContainer is a Compliance Benchmarker DaemonSet container.
+type ComplianceBenchmarkerDaemonSetContainer struct {
 	// Name is an enum which identifies the Compliance Benchmarker DaemonSet container by name.
 	// +kubebuilder:validation:Enum=compliance-benchmarker
 	Name string `json:"name"`
@@ -73,8 +73,8 @@ type BenchmarkerDaemonSetContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// BenchmarkerDaemonSetInitContainer is a Compliance Benchmarker DaemonSet init container.
-type BenchmarkerDaemonSetInitContainer struct {
+// ComplianceBenchmarkerDaemonSetInitContainer is a Compliance Benchmarker DaemonSet init container.
+type ComplianceBenchmarkerDaemonSetInitContainer struct {
 	// Name is an enum which identifies the Compliance Benchmarker DaemonSet init container by name.
 	// +kubebuilder:validation:Enum=tigera-compliance-benchmarker-tls-key-cert-provisioner
 	Name string `json:"name"`
@@ -86,19 +86,19 @@ type BenchmarkerDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *BenchmarkerDaemonSet) GetMetadata() *Metadata {
+func (c *ComplianceBenchmarkerDaemonSet) GetMetadata() *Metadata {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetMinReadySeconds() *int32 {
+func (c *ComplianceBenchmarkerDaemonSet) GetMinReadySeconds() *int32 {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetPodTemplateMetadata() *Metadata {
+func (c *ComplianceBenchmarkerDaemonSet) GetPodTemplateMetadata() *Metadata {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetInitContainers() []v1.Container {
+func (c *ComplianceBenchmarkerDaemonSet) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
@@ -120,7 +120,7 @@ func (c *BenchmarkerDaemonSet) GetInitContainers() []v1.Container {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetContainers() []v1.Container {
+func (c *ComplianceBenchmarkerDaemonSet) GetContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
@@ -142,30 +142,30 @@ func (c *BenchmarkerDaemonSet) GetContainers() []v1.Container {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetAffinity() *v1.Affinity {
+func (c *ComplianceBenchmarkerDaemonSet) GetAffinity() *v1.Affinity {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+func (c *ComplianceBenchmarkerDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetNodeSelector() map[string]string {
+func (c *ComplianceBenchmarkerDaemonSet) GetNodeSelector() map[string]string {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetTolerations() []v1.Toleration {
+func (c *ComplianceBenchmarkerDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
+func (c *ComplianceBenchmarkerDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+func (c *ComplianceBenchmarkerDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 
-func (c *BenchmarkerDaemonSet) GetPriorityClassName() string {
+func (c *ComplianceBenchmarkerDaemonSet) GetPriorityClassName() string {
 	return ""
 }

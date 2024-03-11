@@ -499,7 +499,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 	}
 
 	if c.cfg.Compliance != nil {
-		if overrides := c.cfg.Compliance.Spec.ControllerDeployment; overrides != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceControllerDeployment; overrides != nil {
 			rcomponents.ApplyDeploymentOverrides(d, overrides)
 		}
 	}
@@ -1108,7 +1108,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 	}
 
 	if c.cfg.Compliance != nil {
-		if overrides := c.cfg.Compliance.Spec.SnapshotterDeployment; overrides != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceSnapshotterDeployment; overrides != nil {
 			rcomponents.ApplyDeploymentOverrides(d, overrides)
 		}
 	}
@@ -1311,7 +1311,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 	}
 
 	if c.cfg.Compliance != nil {
-		if overrides := c.cfg.Compliance.Spec.BenchmarkerDaemonSet; overrides != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceBenchmarkerDaemonSet; overrides != nil {
 			rcomponents.ApplyDaemonSetOverrides(ds, overrides)
 		}
 	}

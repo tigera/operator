@@ -272,7 +272,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	}
 
 	if e.cfg.LogStorage != nil {
-		if overrides := e.cfg.LogStorage.Spec.ESMetricsDeployment; overrides != nil {
+		if overrides := e.cfg.LogStorage.Spec.ElasticsearchMetricsDeployment; overrides != nil {
 			rcomponents.ApplyDeploymentOverrides(d, overrides)
 		}
 	}

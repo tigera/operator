@@ -270,15 +270,15 @@ var _ = Describe("Elasticsearch metrics", func() {
 			}
 			logStorageCfg := operatorv1.LogStorage{
 				Spec: operatorv1.LogStorageSpec{
-					ESMetricsDeployment: &operatorv1.ESMetricsDeployment{
-						Spec: &operatorv1.ESMetricsDeploymentSpec{
-							Template: &operatorv1.ESMetricsDeploymentPodTemplateSpec{
-								Spec: &operatorv1.ESMetricsDeploymentPodSpec{
-									InitContainers: []operatorv1.ESMetricsDeploymentInitContainer{{
+					ElasticsearchMetricsDeployment: &operatorv1.ElasticsearchMetricsDeployment{
+						Spec: &operatorv1.ElasticsearchMetricsDeploymentSpec{
+							Template: &operatorv1.ElasticsearchMetricsDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ElasticsearchMetricsDeploymentPodSpec{
+									InitContainers: []operatorv1.ElasticsearchMetricsDeploymentInitContainer{{
 										Name:      "tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner",
 										Resources: &esMetricsResources,
 									}},
-									Containers: []operatorv1.ESMetricsDeploymentContainer{{
+									Containers: []operatorv1.ElasticsearchMetricsDeploymentContainer{{
 										Name:      "tigera-elasticsearch-metrics",
 										Resources: &esMetricsResources,
 									}},

@@ -96,12 +96,15 @@ type TLSTerminatedRouteSpec struct {
 	// +required
 	CABundle *v1.ConfigMapKeySelector `json:"caBundle,omitempty"`
 
-	// MTLS settings, and if both are specified MTLs is used.
+	// ForwardingMTLSCert is the certificate used for mTLS between voltron and the destination. Either both ForwardingMTLSCert
+	// and ForwardingMTLSKey must be specified, or neither can be specified.
 	// +optional
-	MTLSCert *v1.SecretKeySelector `json:"mtlsCert,omitempty"`
+	ForwardingMTLSCert *v1.SecretKeySelector `json:"mtlsCert,omitempty"`
 
+	// ForwardingMTLSKey is the key used for mTLS between voltron and the destination. Either both ForwardingMTLSCert
+	// and ForwardingMTLSKey must be specified, or neither can be specified.
 	// +optional
-	MTLSKey *v1.SecretKeySelector `json:"mtlsKey,omitempty"`
+	ForwardingMTLSKey *v1.SecretKeySelector `json:"mtlsKey,omitempty"`
 
 	// Unauthenticated says whether the request should go through authentication. This is only applicable if the Target
 	// is UI.

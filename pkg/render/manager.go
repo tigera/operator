@@ -304,8 +304,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 	annotations := c.tlsAnnotations
 	if c.cfg.VoltronRouteConfig != nil {
-		key, value := c.cfg.VoltronRouteConfig.Annotation()
-		annotations[key] = value
+		for key, value := range c.cfg.VoltronRouteConfig.Annotations() {
+			annotations[key] = value
+		}
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

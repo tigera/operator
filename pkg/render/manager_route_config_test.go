@@ -17,6 +17,7 @@ package render_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo"
@@ -193,15 +194,16 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				config, err := builder.Build()
 				Expect(err).ShouldNot(HaveOccurred())
 
-				key, value := config.Annotation()
-				Expect(key).Should(Equal("hash.operator.tigera.io/route-configuration"))
-				Expect(value).ShouldNot(BeEmpty())
+				Expect(config.Annotations()).Should(Equal(map[string]string{
+					"hash.operator.tigera.io/route-configuration/configmap-ca-bundle-bundle":                         "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
+					fmt.Sprintf("hash.operator.tigera.io/route-configuration/configmap-voltron-routes-%s", fileName): "ca2304ee9ca1739c7efdb1b2fc30a348041576c7",
+				}))
 				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, routesConfigMapVolumeMount}))
 
 				Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, routesConfigMapVolume}))
 
 				cm := config.RoutesConfigMap("tigera-manager")
-				cm.Data[fileName] = compactJsonString(cm.Data[fileName])
+				cm.Data[fileName] = compactJSONString(cm.Data[fileName])
 
 				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/"}]`
 				Expect(cm).Should(Equal(routesConfigMap))
@@ -261,15 +263,18 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				config, err := builder.Build()
 				Expect(err).ShouldNot(HaveOccurred())
 
-				key, value := config.Annotation()
-				Expect(key).Should(Equal("hash.operator.tigera.io/route-configuration"))
-				Expect(value).ShouldNot(BeEmpty())
+				Expect(config.Annotations()).Should(Equal(map[string]string{
+					"hash.operator.tigera.io/route-configuration/configmap-ca-bundle-bundle":                         "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
+					"hash.operator.tigera.io/route-configuration/secret-mtls-cert-cert.pem":                          "e50bc7ce05be499174194858aaf077b556de4d4a",
+					"hash.operator.tigera.io/route-configuration/secret-mtls-key-key.pem":                            "6b519c7eea53167b5fe03c86b7650ada4e7a4784",
+					fmt.Sprintf("hash.operator.tigera.io/route-configuration/configmap-voltron-routes-%s", fileName): "907bc0d66a81235ae423c36bda0ed50fa73f7f51",
+				}))
 				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, mtlsCertVolumeMount, mtlsKeyVolumeMount, routesConfigMapVolumeMount}))
 
 				Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}), cmp.Diff(config.Volumes(), []corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}))
 
 				cm := config.RoutesConfigMap("tigera-manager")
-				cm.Data[fileName] = compactJsonString(cm.Data[fileName])
+				cm.Data[fileName] = compactJSONString(cm.Data[fileName])
 
 				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/","clientCertPath":"/config_maps/mtls-cert/cert.pem","clientKeyPath":"/config_maps/mtls-key/key.pem"}]`
 				Expect(cm).Should(Equal(routesConfigMap))
@@ -281,7 +286,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 	})
 })
 
-func compactJsonString(jsonStr string) string {
+func compactJSONString(jsonStr string) string {
 	buffer := new(bytes.Buffer)
 	Expect(json.Compact(buffer, []byte(jsonStr))).ShouldNot(HaveOccurred())
 	return buffer.String()

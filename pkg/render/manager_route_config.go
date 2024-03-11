@@ -36,9 +36,11 @@ const (
 	upstreamTunnelTLSTerminatedRoutesKey  = "upstreamTunnelTLSTerminatedRoutes.json"
 	upstreamTunnelTLSPassThroughRoutesKey = "upstreamTunnelTLSPassThroughRoutes.json"
 
-	routesAnnotationKey = "hash.operator.tigera.io/route-configuration"
+	routesAnnotationPrefix = "hash.operator.tigera.io/route-configuration"
 )
 
+// tlsTerminatedRoute is need for the json translation from the TLSTerminatedRoute CR to the json voltron expects to
+// see for a route.
 type tlsTerminatedRoute struct {
 	// Destination is the destination URL
 	Destination string `json:"destination"`
@@ -61,6 +63,8 @@ type tlsTerminatedRoute struct {
 	Unauthenticated bool `json:"unauthenticated,omitempty"`
 }
 
+// tlsPassThroughRoute is need for the json translation from the TLSPassThroughRoute CR to the json voltron expects to
+// see for a route.
 type tlsPassThroughRoute struct {
 	// Destination is the destination URL
 	Destination string `json:"destination"`
@@ -83,7 +87,7 @@ type VoltronRouteConfigBuilder interface {
 	// those values must be added through AddConfigMap or AddSecret. This is so we can track when these values change.
 	AddTLSTerminatedRoute(routes operatorv1.TLSTerminatedRoute)
 
-	// AddTLSPassThroughRoute adds TLSTerminatedRoutes to the config builder. When Build is called, the route is parsed
+	// AddTLSPassThroughRoute adds AddTLSPassThroughRoutes to the config builder. When Build is called, the route is parsed
 	// and validated and the route is added to the ConfigMap mounted to voltron to configure the tls pass through routes.
 	AddTLSPassThroughRoute(routes operatorv1.TLSPassThroughRoute)
 
@@ -101,9 +105,9 @@ type voltronRouteConfigBuilder struct {
 	mountedConfigMaps map[string]struct{}
 	mountedSecrets    map[string]struct{}
 
-	volumeMounts    []corev1.VolumeMount
-	volumes         []corev1.Volume
-	hashableContent []interface{}
+	volumeMounts []corev1.VolumeMount
+	volumes      []corev1.Volume
+	annotations  map[string]string
 
 	configMaps map[string]*corev1.ConfigMap
 	secrets    map[string]*corev1.Secret
@@ -118,6 +122,7 @@ func NewVoltronRouteConfigBuilder() VoltronRouteConfigBuilder {
 		secrets:           map[string]*corev1.Secret{},
 		mountedConfigMaps: map[string]struct{}{},
 		mountedSecrets:    map[string]struct{}{},
+		annotations:       map[string]string{},
 	}
 }
 
@@ -253,7 +258,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 		routesData:   routesData,
 		volumeMounts: builder.volumeMounts,
 		volumes:      builder.volumes,
-		annotation:   rmeta.AnnotationHash(builder.hashableContent),
+		annotations:  builder.annotations,
 	}, nil
 }
 
@@ -262,7 +267,7 @@ func (builder *voltronRouteConfigBuilder) mountConfigMapReference(name, key stri
 
 	configMap := builder.configMaps[name]
 	if configMap == nil {
-		return "", fmt.Errorf("the contents for ConfigMap '%s' wasn't provided, and is needed to generate annotations", name)
+		return "", fmt.Errorf("the contents for ConfigMap '%s' weren't provided, and are needed to generate annotations", name)
 	}
 
 	if _, ok := builder.mountedConfigMaps[name]; !ok {
@@ -288,7 +293,10 @@ func (builder *voltronRouteConfigBuilder) mountConfigMapReference(name, key stri
 
 		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
 		// map ordering differences.
-		builder.hashableContent = append(builder.hashableContent, mapToSortedArray(configMap.Data))
+		for k, value := range configMap.Data {
+			builder.annotations[fmt.Sprintf("%s/configmap-%s-%s", routesAnnotationPrefix, configMap.Name, k)] = rmeta.AnnotationHash(value)
+		}
+
 		builder.mountedConfigMaps[name] = struct{}{}
 	}
 
@@ -301,7 +309,7 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 	secret := builder.secrets[name]
 
 	if secret == nil {
-		return "", fmt.Errorf("the contents for Secret '%s' wasn't provided, and is needed to generate annotations", name)
+		return "", fmt.Errorf("the contents for Secret '%s' weren't provided, and are needed to generate annotations", name)
 	}
 
 	if _, ok := builder.mountedSecrets[name]; !ok {
@@ -327,7 +335,10 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 
 		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
 		// map ordering differences.
-		builder.hashableContent = append(builder.hashableContent, mapToSortedArray(secret.Data))
+		for k, value := range secret.Data {
+			builder.annotations[fmt.Sprintf("%s/secret-%s-%s", routesAnnotationPrefix, secret.Name, k)] = rmeta.AnnotationHash(value)
+		}
+
 		builder.mountedSecrets[name] = struct{}{}
 	}
 
@@ -366,7 +377,7 @@ type VoltronRouteConfig struct {
 	routesData   map[string]string
 	volumeMounts []corev1.VolumeMount
 	volumes      []corev1.Volume
-	annotation   string
+	annotations  map[string]string
 }
 
 // Volumes returns the volumes that Voltron needs to be configured with (references to ConfigMaps and Secrets in the
@@ -411,6 +422,6 @@ func (cfg *VoltronRouteConfig) EnvVars() []corev1.EnvVar {
 	return envVars
 }
 
-func (cfg *VoltronRouteConfig) Annotation() (string, string) {
-	return routesAnnotationKey, cfg.annotation
+func (cfg *VoltronRouteConfig) Annotations() map[string]string {
+	return cfg.annotations
 }

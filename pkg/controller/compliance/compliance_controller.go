@@ -479,6 +479,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		UsePSP:                      r.usePSP,
 		Namespace:                   helper.InstallNamespace(),
 		Tenant:                      tenant,
+		Compliance:                  instance,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

@@ -346,26 +346,17 @@ var _ = Describe("IP Pool controller tests", func() {
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{}
 		Expect(c.Update(ctx, instance)).ShouldNot(HaveOccurred())
 
+		// Assert SetDegraded is called as expected.
+		mockStatus.On("SetDegraded", operator.ResourceNotReady, "Unable to delete IP pools while Calico API server is unavailable", nil, mock.Anything)
 		_, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
 
-		// Expect the IP pool to now be marked as disabled, but not deleted.
+		// Expect the IP pool to still exist.
 		ipPools := crdv1.IPPoolList{}
 		err = c.List(ctx, &ipPools)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ipPools.Items).To(HaveLen(1))
-		Expect(ipPools.Items[0].Spec.Disabled).To(BeTrue())
-
-		// Re-add the IP pool to the Installation.
-		Expect(c.Get(ctx, utils.DefaultInstanceKey, instance)).ShouldNot(HaveOccurred())
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{{CIDR: "192.168.0.0/16", NATOutgoing: "Disabled"}}
-		Expect(c.Update(ctx, instance)).ShouldNot(HaveOccurred())
-
-		// We don't allow modification, so it will still be disabled.
-		mockStatus.On("SetDegraded", operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, mock.Anything)
-		_, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-		mockStatus.AssertExpectations(GinkgoT())
 	})
 })
 

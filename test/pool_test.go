@@ -256,14 +256,22 @@ var _ = Describe("IPPool FV tests", func() {
 		verifyAPIServerHasDeployed(c)
 
 		// We can now query using the v3 API!
+		// This proves that the operator has assumed ownership of the legacy IP pool.
 		v3Pools := &v3.IPPoolList{}
 		Eventually(func() error {
-			return c.List(context.Background(), v3Pools)
+			err := c.List(context.Background(), v3Pools)
+			if err != nil {
+				return err
+			}
+			if len(v3Pools.Items) != 1 {
+				return fmt.Errorf("Expected 1 IP pool, but got: %+v", v3Pools.Items)
+			}
+			if len(v3Pools.Items[0].Labels) != 1 {
+				return fmt.Errorf("Expected 1 label on IP pool, but got: %+v", v3Pools.Items[0].Labels)
+			}
+			return nil
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
-		Expect(len(v3Pools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
-		// This proves that the operator has assumed ownership of the legacy IP pool.
-		Expect(v3Pools.Items[0].Labels).To(HaveLen(1))
 		Expect(v3Pools.Items[0].Labels).To(HaveKey("app.kubernetes.io/managed-by"))
 
 		// Verify that the default IPv4 pool has been subsumed by the operator.

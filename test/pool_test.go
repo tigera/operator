@@ -198,12 +198,17 @@ var _ = Describe("IPPool FV tests", func() {
 		ipPool := crdv1.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
 			Spec: crdv1.IPPoolSpec{
-				CIDR:         "192.168.0.0/24",
-				IPIPMode:     crdv1.IPIPModeAlways,
-				VXLANMode:    crdv1.VXLANModeNever,
-				BlockSize:    26,
-				NATOutgoing:  true,
-				NodeSelector: "all()",
+				CIDR:             "192.168.0.0/24",
+				IPIPMode:         crdv1.IPIPModeAlways,
+				VXLANMode:        crdv1.VXLANModeNever,
+				BlockSize:        26,
+				NATOutgoing:      true,
+				NodeSelector:     "all()",
+				DisableBGPExport: false,
+				AllowedUses: []crdv1.IPPoolAllowedUse{
+					crdv1.IPPoolAllowedUseWorkload,
+					crdv1.IPPoolAllowedUseTunnel,
+				},
 			},
 		}
 		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())

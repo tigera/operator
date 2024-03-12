@@ -125,6 +125,8 @@ type Config struct {
 
 	ElasticHost string
 	ElasticPort string
+
+	LogStorage *operatorv1.LogStorage
 }
 
 func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
@@ -508,6 +510,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	if l.cfg.Tenant.MultiTenant() {
 		if overrides := l.cfg.Tenant.Spec.LinseedDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(&d, overrides)
+		}
+	} else if l.cfg.LogStorage != nil {
+		if overrides := l.cfg.LogStorage.Spec.LinseedDeployment; overrides != nil {
 			rcomponents.ApplyDeploymentOverrides(&d, overrides)
 		}
 	}

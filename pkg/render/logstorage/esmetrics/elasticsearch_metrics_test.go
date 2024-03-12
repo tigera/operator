@@ -19,13 +19,17 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/tls"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -37,15 +41,19 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Elasticsearch metrics", func() {
 	Context("Rendering resources", func() {
 		var esConfig *relasticsearch.ClusterConfig
 		var cfg *Config
+		var cli client.Client
+		clusterDomain := dns.DefaultClusterDomain
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-metrics.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-metrics_ocp.json")
 
@@ -58,7 +66,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			esConfig = relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			certificateManager, err := certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
@@ -233,6 +241,72 @@ var _ = Describe("Elasticsearch metrics", func() {
 				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
+		})
+
+		It("should renders the Elasticsearch metrics with resource requests and limits", func() {
+
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			esMetricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ServerTLS = esMetricsSecret
+
+			esMetricsResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			logStorageCfg := operatorv1.LogStorage{
+				Spec: operatorv1.LogStorageSpec{
+					ElasticsearchMetricsDeployment: &operatorv1.ElasticsearchMetricsDeployment{
+						Spec: &operatorv1.ElasticsearchMetricsDeploymentSpec{
+							Template: &operatorv1.ElasticsearchMetricsDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ElasticsearchMetricsDeploymentPodSpec{
+									InitContainers: []operatorv1.ElasticsearchMetricsDeploymentInitContainer{{
+										Name:      "tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner",
+										Resources: &esMetricsResources,
+									}},
+									Containers: []operatorv1.ElasticsearchMetricsDeploymentContainer{{
+										Name:      "tigera-elasticsearch-metrics",
+										Resources: &esMetricsResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			cfg.LogStorage = &logStorageCfg
+			component := ElasticsearchMetrics(cfg)
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "tigera-elasticsearch-metrics", render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-elasticsearch-metrics")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(esMetricsResources))
+
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer := test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(esMetricsResources))
+
 		})
 
 		It("should render properly when PSP is not supported by the cluster", func() {

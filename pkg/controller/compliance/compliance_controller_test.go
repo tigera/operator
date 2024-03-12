@@ -421,7 +421,7 @@ var _ = Describe("Compliance controller tests", func() {
 			}
 			Expect(test.GetResource(c, &pt)).To(BeNil())
 			Expect(pt.Template.Spec.Containers).To(HaveLen(1))
-			reporter := test.GetContainer(pt.Template.Spec.Containers, "reporter")
+			reporter := test.GetContainer(pt.Template.Spec.Containers, "compliance-reporter")
 			Expect(reporter).ToNot(BeNil())
 			Expect(reporter.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -519,7 +519,7 @@ var _ = Describe("Compliance controller tests", func() {
 			}
 			Expect(test.GetResource(c, &pt)).To(BeNil())
 			Expect(pt.Template.Spec.Containers).To(HaveLen(1))
-			reporter := test.GetContainer(pt.Template.Spec.Containers, "reporter")
+			reporter := test.GetContainer(pt.Template.Spec.Containers, "compliance-reporter")
 			Expect(reporter).ToNot(BeNil())
 			Expect(reporter.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

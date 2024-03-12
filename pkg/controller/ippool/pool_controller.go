@@ -230,6 +230,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, p := range currentPools.Items {
 		if hasOwner(&p) {
 			// This pool is owned by the Installation object, so consider it ours.
+			reqLogger.V(1).Info("IP pool is owned by operator", "name", p.Name, "cidr", p.Spec.CIDR)
 			ourPools[p.Spec.CIDR] = p
 		} else {
 			// The IP pool may have been created by the operator, but it may not have the managed-by label set if it was created
@@ -242,10 +243,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
 				v1p := v1.IPPool{}
 				v1p.FromProjectCalicoV1(p)
+				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
 				if !reflect.DeepEqual(cnp, v1p) {
 					// The IP pool in the cluster doesn't match the IP pool
 					// in the Installation - ignore it.
-					reqLogger.V(1).Info("IP pool doesn't match", "cluster", v1p, "installation", cnp)
+					reqLogger.V(1).Info("IP pool doesn't match", "clusterPool", v1p, "installationPool", cnp)
 					continue
 				}
 

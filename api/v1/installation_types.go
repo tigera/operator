@@ -733,6 +733,9 @@ func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
 	if crd.Spec.DisableBGPExport {
 		t := true
 		p.DisableBGPExport = &t
+	} else {
+		f := false
+		p.DisableBGPExport = &f
 	}
 
 	for _, use := range crd.Spec.AllowedUses {

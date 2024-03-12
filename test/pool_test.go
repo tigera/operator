@@ -284,4 +284,103 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPMode(v3.IPIPModeAlways)))
 		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANMode(v3.VXLANModeNever)))
 	})
+
+	// This test verifies that the IP pool controller doesn't assume ownership of IP pools that may exist in the
+	// Installation spec, but that do not match exactly. This ensures that we don't accidentally reconcile away changes
+	// that a user made to an IP pool created by the operator but prior to this controller existing.
+	It("should NOT assume ownership of modified IP pools on upgrade", func() {
+		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
+		// the operator supporting direct IP pool management.
+		ipPool := crdv1.IPPool{
+			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
+			Spec: crdv1.IPPoolSpec{
+				CIDR:             "192.168.0.0/24",
+				IPIPMode:         crdv1.IPIPModeAlways,
+				VXLANMode:        crdv1.VXLANModeNever,
+				BlockSize:        26,
+				NATOutgoing:      true,
+				DisableBGPExport: false,
+				AllowedUses: []crdv1.IPPoolAllowedUse{
+					crdv1.IPPoolAllowedUseWorkload,
+					crdv1.IPPoolAllowedUseTunnel,
+				},
+				// Use a non-default selector. This mimics a user modifying the IP pool after it was created,
+				// since we will use the default selector in the Installation spec.
+				NodeSelector: "has(kubernetes.io/os)",
+			},
+		}
+		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())
+
+		// Create an Installation referencing the IP pool by CIDR, mimicing the upgrade case. We expect
+		// the operator to default the IP pool, filling in any missing fields. But it won't
+		// update IP pool in the cluster since it doesn't match exactly.
+		spec := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/24",
+						Encapsulation: operator.EncapsulationIPIP,
+					},
+				},
+			},
+		}
+		operatorDone = createInstallation(c, mgr, shutdownContext, &spec)
+		verifyCalicoHasDeployed(c)
+
+		// Query the Installation and verify the IP pool name has been defaulted.
+		instance := &operator.Installation{}
+		Eventually(func() error {
+			return c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].NodeSelector).To(Equal("all()"))
+
+		// In order to modify IP pools, the operator needs the API server. We can assert the IP pool has not yet
+		// been controlled by the operator at this point.
+
+		// Get IP pools installed in the cluster.
+		ipPools := &crdv1.IPPoolList{}
+		Eventually(func() error {
+			return c.List(context.Background(), ipPools)
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+
+		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
+
+		// This proves the operator has not assumed control.
+		Expect(ipPools.Items[0].Labels).To(HaveLen(0))
+
+		// Now, install the API server.
+		createAPIServer(c, mgr, shutdownContext, nil)
+		verifyAPIServerHasDeployed(c)
+
+		// We can now query using the v3 API!
+		// Verify that the IP pool has not been modified by the operator.
+		v3Pools := &v3.IPPoolList{}
+		Consistently(func() error {
+			err := c.List(context.Background(), v3Pools)
+			if err != nil {
+				return err
+			}
+			if len(v3Pools.Items) != 1 {
+				return fmt.Errorf("Expected 1 IP pool, but got: %+v", v3Pools.Items)
+			}
+			if len(v3Pools.Items[0].Labels) != 0 {
+				return fmt.Errorf("Expected no labels on IP pool, but got: %+v", v3Pools.Items[0].Labels)
+			}
+			return nil
+		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+
+		Expect(v3Pools.Items[0].Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
+
+		// Verify that the default IPv4 pool has NOT been modified by the operator.
+		Expect(v3Pools.Items[0].Name).To(Equal("default-ipv4-ippool"))
+		Expect(v3Pools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/24"))
+		Expect(v3Pools.Items[0].Spec.NATOutgoing).To(Equal(true))
+		Expect(v3Pools.Items[0].Spec.Disabled).To(Equal(false))
+		Expect(v3Pools.Items[0].Spec.BlockSize).To(Equal(26))
+		Expect(v3Pools.Items[0].Spec.NodeSelector).To(Equal("has(kubernetes.io/os)"))
+		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPMode(v3.IPIPModeAlways)))
+		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANMode(v3.VXLANModeNever)))
+	})
 })

@@ -155,10 +155,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
-		if bpfDataplane && v4pool != nil && v6pool != nil {
-			return fmt.Errorf("bpf dataplane does not support dual stack")
-		}
-
 		if v4pool != nil {
 			_, cidr, err := net.ParseCIDR(v4pool.CIDR)
 			if err != nil {

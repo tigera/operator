@@ -414,26 +414,27 @@ spec:
                         type: object
                     type: object
                 type: object
-              complianceReportPodTemplate:
-                description: ComplianceReportPodTemplate configures the Compliance
-                  Report PodTemplate.
+              complianceReporterPodTemplate:
+                description: ComplianceReporterPodTemplate configures the Compliance
+                  Reporter PodTemplate.
                 properties:
                   spec:
-                    description: Spec is the specification of the ComplianceReport
+                    description: Spec is the specification of the ComplianceReporter
                       PodTemplateSpec.
                     properties:
                       spec:
-                        description: Spec is the ComplianceReport PodTemplate's PodSpec.
+                        description: Spec is the ComplianceReporter PodTemplate's
+                          PodSpec.
                         properties:
                           containers:
                             description: Containers is a list of ComplianceServer
                               containers. If specified, this overrides the specified
-                              ComplianceReport PodSpec containers. If omitted, the
+                              ComplianceReporter PodSpec containers. If omitted, the
                               ComplianceServer Deployment will use its default values
                               for its containers.
                             items:
-                              description: ComplianceReportPodTemplateContainer is
-                                a ComplianceServer Deployment container.
+                              description: ComplianceReporterPodTemplateContainer
+                                is a ComplianceServer Deployment container.
                               properties:
                                 name:
                                   description: Name is an enum which identifies the
@@ -504,18 +505,18 @@ spec:
                               type: object
                             type: array
                           initContainers:
-                            description: InitContainers is a list of ComplianceReport
+                            description: InitContainers is a list of ComplianceReporter
                               PodSpec init containers. If specified, this overrides
-                              the specified ComplianceReport PodSpec init containers.
+                              the specified ComplianceReporter PodSpec init containers.
                               If omitted, the ComplianceServer Deployment will use
                               its default values for its init containers.
                             items:
-                              description: ComplianceReportPodTemplateInitContainer
+                              description: ComplianceReporterPodTemplateInitContainer
                                 is a ComplianceServer Deployment init container.
                               properties:
                                 name:
                                   description: Name is an enum which identifies the
-                                    ComplianceReport PodSpec init container by name.
+                                    ComplianceReporter PodSpec init container by name.
                                   enum:
                                   - tigera-compliance-reporter-tls-key-cert-provisioner
                                   type: string
@@ -523,7 +524,7 @@ spec:
                                   description: Resources allows customization of limits
                                     and requests for compute resources such as cpu
                                     and memory. If specified, this overrides the named
-                                    ComplianceReport PodSpec init container's resources.
+                                    ComplianceReporter PodSpec init container's resources.
                                     If omitted, the ComplianceServer Deployment will
                                     use its default value for this init container's
                                     resources.

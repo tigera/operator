@@ -121,8 +121,20 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 	if err != nil {
 		return nil, err
 	}
+
+	// We must disable keep alive since we create a new client instead of persisting the client and reusing it.
+	// If we don't do this, the connections are, by default, kept around in an established state. If we don't do this,
+	// we end up leaking memory as the connections hold references to certs and other http resources.
+	//
+	// This is probably better than reusing the client (even though that's normally recommended) for a couple of
+	// reasons:
+	// - We should not actually be reconciling this logic often, this, for the most part, is initial setup logic. We might
+	//   want to look into how we can avoid creating Elasticsearch resources on every reconcile (possibly by hashing the
+	//   contents of what we created already and comparing that hash to what we want to create).
+	// - Reusing the client across the controllers / recreating the client only when credentials or root cert changes
+	//   could be little more difficult and possibly error-prone, leading to a regression where we leak resources again.
 	h := &http.Client{
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
+		Transport: &http.Transport{DisableKeepAlives: true, TLSClientConfig: &tls.Config{RootCAs: root}},
 	}
 
 	options := []elastic.ClientOptionFunc{

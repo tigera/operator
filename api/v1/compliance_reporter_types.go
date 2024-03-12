@@ -55,7 +55,7 @@ type ComplianceReporterPodSpec struct {
 // ComplianceReporterPodTemplateContainer is a ComplianceServer Deployment container.
 type ComplianceReporterPodTemplateContainer struct {
 	// Name is an enum which identifies the ComplianceServer Deployment container by name.
-	// +kubebuilder:validation:Enum=reporter
+	// +kubebuilder:validation:Enum=compliance-reporter
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

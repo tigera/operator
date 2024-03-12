@@ -440,7 +440,7 @@ spec:
                                   description: Name is an enum which identifies the
                                     ComplianceServer Deployment container by name.
                                   enum:
-                                  - reporter
+                                  - compliance-reporter
                                   type: string
                                 resources:
                                   description: Resources allows customization of limits

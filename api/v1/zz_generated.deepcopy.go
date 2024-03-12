@@ -4154,7 +4154,6 @@ func (in *LogStorageSpec) DeepCopyInto(out *LogStorageSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-
 	if in.ECKOperatorStatefulSet != nil {
 		in, out := &in.ECKOperatorStatefulSet, &out.ECKOperatorStatefulSet
 		*out = new(ECKOperatorStatefulSet)
@@ -4163,6 +4162,16 @@ func (in *LogStorageSpec) DeepCopyInto(out *LogStorageSpec) {
 	if in.Kibana != nil {
 		in, out := &in.Kibana, &out.Kibana
 		*out = new(Kibana)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.LinseedDeployment != nil {
+		in, out := &in.LinseedDeployment, &out.LinseedDeployment
+		*out = new(LinseedDeployment)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.ElasticsearchMetricsDeployment != nil {
+		in, out := &in.ElasticsearchMetricsDeployment, &out.ElasticsearchMetricsDeployment
+		*out = new(ElasticsearchMetricsDeployment)
 		(*in).DeepCopyInto(*out)
 	}
 }

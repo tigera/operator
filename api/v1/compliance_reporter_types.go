@@ -26,7 +26,7 @@ type ComplianceReporterPodTemplate struct {
 
 	// Spec is the specification of the ComplianceReporter PodTemplateSpec.
 	// +optional
-	Template *ComplianceReporterPodTemplateSpec `json:"spec,omitempty"`
+	Template *ComplianceReporterPodTemplateSpec `json:"template,omitempty"`
 }
 
 // ComplianceReporterPodTemplateSpec is the ComplianceReporter PodTemplateSpec.

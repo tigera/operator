@@ -418,7 +418,7 @@ spec:
                 description: ComplianceReporterPodTemplate configures the Compliance
                   Reporter PodTemplate.
                 properties:
-                  spec:
+                  template:
                     description: Spec is the specification of the ComplianceReporter
                       PodTemplateSpec.
                     properties:

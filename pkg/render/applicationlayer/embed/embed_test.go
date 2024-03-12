@@ -24,7 +24,6 @@ func TestEmbed(t *testing.T) {
 	for _, fileName := range []string{
 		// bare FS embed as sub. coreruleset prefix stripped
 		"tigera.conf",
-		"unicode.mapping",
 	} {
 		_, err := FS.Open(fileName)
 		require.NoError(t, err)
@@ -35,7 +34,6 @@ func TestEmbedAsMap(t *testing.T) {
 	fileMap, err := AsMap()
 	require.NoError(t, err)
 	for _, fileName := range []string{
-		"unicode.mapping",
 		"tigera.conf",
 	} {
 		_, ok := fileMap[fileName]

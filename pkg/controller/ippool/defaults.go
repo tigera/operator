@@ -275,7 +275,7 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 
 			if addr.To4() == nil {
 				// Treat the first IPv6 CIDR as the default. Subsequent CIDRs will be named based on their CIDR.
-				name := "default-ipv6-ippool"
+				name := defaultV6PoolName
 				if v6found {
 					name = ""
 				}

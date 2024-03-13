@@ -180,7 +180,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 							pool.Encapsulation, strings.Join(operatorv1.EncapsulationTypesString, ","))
 					}
 				case operatorv1.IPAMPluginHostLocal:
-					// The host-local IPAM plugin doens't support VXLAN.
+					// The host-local IPAM plugin doesn't support VXLAN.
 					switch pool.Encapsulation {
 					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
 						return fmt.Errorf("%s is invalid for ipPool.encapsulation with %s CNI and %s IPAM",

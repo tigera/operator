@@ -1321,7 +1321,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BGPLayouts:              bgpLayout,
 		NodeAppArmorProfile:     nodeAppArmorProfile,
 		MigrateNamespaces:       needNsMigration,
-		CanRemoveCNI:            canRemoveCNI,
+		CanRemoveCNIFinalizer:   canRemoveCNI,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
 		BindMode:                bgpConfiguration.Spec.BindMode,

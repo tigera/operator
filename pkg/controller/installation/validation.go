@@ -138,12 +138,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.CalicoNetwork != nil {
 		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 
-		if bpfDataplane &&
-			render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools) != nil &&
-			render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools) != nil {
-			return fmt.Errorf("BPF dataplane does not support dual stack")
-		}
-
 		// Perform validation on non-IPPool fields that rely on IP pool configuration. Validation of the IP pools themselves
 		// happens in the IP pool controller.
 		for _, pool := range instance.Spec.CalicoNetwork.IPPools {

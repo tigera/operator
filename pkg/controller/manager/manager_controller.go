@@ -447,21 +447,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
-	var clusterConfig *relasticsearch.ClusterConfig
-	// We only require Elastic cluster configuration when Kibana is enabled.
-	if render.KibanaEnabled(tenant, installation) {
-		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
-			return reconcile.Result{}, err
-		}
-		trustedSecretNames = append(trustedSecretNames, render.TigeraKibanaCertSecret)
-	}
-
 	bundleMaker := certificateManager.CreateTrustedBundle()
 	for _, secret := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secret, helper.TruthNamespace())
@@ -495,6 +480,20 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		log.Error(err, "Error with Pull secrets")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, logc)
 		return reconcile.Result{}, err
+	}
+
+	var clusterConfig *relasticsearch.ClusterConfig
+	// We only require Elastic cluster configuration when Kibana is enabled.
+	if render.KibanaEnabled(tenant, installation) {
+		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
+			return reconcile.Result{}, err
+		}
 	}
 
 	var esSecrets []*corev1.Secret

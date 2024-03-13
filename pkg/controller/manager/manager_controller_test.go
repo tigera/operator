@@ -21,9 +21,8 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	kerror "k8s.io/apimachinery/pkg/api/errors"
-
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	kerror "k8s.io/apimachinery/pkg/api/errors"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -42,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -232,10 +230,6 @@ var _ = Describe("Manager controller tests", func() {
 			internalKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), expectedDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, internalKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-			kbKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, kbKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -540,10 +534,6 @@ var _ = Describe("Manager controller tests", func() {
 			internalCertKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, internalCertKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-			kbKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, kbKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 

@@ -18,8 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -158,6 +160,14 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 		}
 	}
 
+	// Watch for the namespace(s) managed by this controller.
+	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(operatorv1.Calico)}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
+	}
+	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
+	}
+
 	for _, secretName := range []string{
 		"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureServerCert,
 		certificatemanagement.CASecretName, render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName,
@@ -211,7 +221,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if errors.IsNotFound(err) {
 			reqLogger.Info("APIServer config not found")
 			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
+			return reconcile.Result{}, maintainInstallationFinalizer(ctx, r.client, nil)
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("An error occurred when querying the APIServer resource: %s", msg), err, reqLogger)
 		return reconcile.Result{}, err
@@ -243,7 +253,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query for the installation object.
-	variant, network, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -258,15 +268,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	ns := rmeta.APIServerNamespace(variant)
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// We need separate certificates for OSS vs Enterprise.
-	secretName := render.ProjectCalicoAPIServerTLSSecretName(network.Variant)
-	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.clusterDomain))
+	secretName := render.ProjectCalicoAPIServerTLSSecretName(installationSpec.Variant)
+	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(installationSpec.Variant), rmeta.APIServerNamespace(installationSpec.Variant), r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
 		return reconcile.Result{}, err
@@ -274,7 +284,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	certificateManager.AddToStatusManager(r.status, ns)
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -367,6 +377,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// API server exists and configuration is valid - maintain a Finalizer on the installation.
+	if err := maintainInstallationFinalizer(ctx, r.client, instance); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -375,7 +392,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	apiServerCfg := render.APIServerConfiguration{
 		K8SServiceEndpoint:          k8sapi.Endpoint,
-		Installation:                network,
+		Installation:                installationSpec,
 		APIServer:                   &instance.Spec,
 		ForceHostNetwork:            false,
 		ManagementCluster:           managementCluster,
@@ -447,7 +464,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:                 pullSecrets,
 			Openshift:                   r.provider == operatorv1.ProviderOpenShift,
-			Installation:                network,
+			Installation:                installationSpec,
 			KeyValidatorConfig:          keyValidatorConfig,
 			ServerCertSecret:            packetCaptureCertSecret,
 			ClusterDomain:               r.clusterDomain,
@@ -491,6 +508,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
@@ -516,4 +534,46 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		}
 	}
 	return nil
+}
+
+// maintainInstallationFinalizer manages this controller's finalizer on the Installation resource.
+// We add a finalizer to the Installation when the API server has been installed, and only remove that finalizer when
+// the API server has been deleted and its pods have stopped running. This allows for a graceful cleanup of API server resources
+// prior to the CNI plugin being removed.
+func maintainInstallationFinalizer(ctx context.Context, c client.Client, apiserver *operatorv1.APIServer) error {
+	// Get the Installation.
+	installation := &operatorv1.Installation{}
+	if err := c.Get(ctx, utils.DefaultInstanceKey, installation); err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Installation config not found")
+			return nil
+		}
+		log.Error(err, "An error occurred when querying the Installation resource")
+		return err
+	}
+	patchFrom := client.MergeFrom(installation.DeepCopy())
+
+	// Determine the correct finalizers to apply to the Installation. If the APIServer exists, we should apply
+	// a finalizer. Otherwise, if the API server namespace doesn't exist we should remove it. This ensures the finalizer
+	// is always present so long as the resources managed by this controller exist in the cluster.
+	if apiserver != nil {
+		// Add a finalizer indicating that the API server is still running.
+		utils.SetInstallationFinalizer(installation, render.APIServerFinalizer)
+	} else {
+		// Check if the API server namespace exists, and remove the finalizer if not. Gating this on Namespace removal
+		// in the best way to approximate that all API server related resources have been removed.
+		l := &corev1.Namespace{}
+		err := c.Get(ctx, types.NamespacedName{Name: rmeta.APIServerNamespace(installation.Spec.Variant)}, l)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		} else if errors.IsNotFound(err) {
+			log.Info("API server Namespace does not exist, removing finalizer", "finalizer", render.APIServerFinalizer)
+			utils.RemoveInstallationFinalizer(installation, render.APIServerFinalizer)
+		} else {
+			log.Info("API server Namespace is still present, waiting for termination")
+		}
+	}
+
+	// Update the installation with any finalizer changes.
+	return c.Patch(ctx, installation, patchFrom)
 }

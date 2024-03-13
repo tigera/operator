@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package ippool
 
 import (
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/onsi/ginkgo/reporters"
 	uzap "go.uber.org/zap"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestFeatureVerification(t *testing.T) {
+func TestPoolController(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../report/fv/fv_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "FV test Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/pool_controller_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/ippool Suite", []Reporter{junitReporter})
 }

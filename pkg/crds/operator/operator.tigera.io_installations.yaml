@@ -1345,6 +1345,13 @@ spec:
                       specified. If omitted, a single pool will be configured if needed.
                     items:
                       properties:
+                        allowedUses:
+                          description: AllowedUse controls what the IP pool will be
+                            used for.  If not specified or empty, defaults to ["Tunnel",
+                            "Workload"] for back-compatibility
+                          items:
+                            type: string
+                          type: array
                         blockSize:
                           description: 'BlockSize specifies the CIDR prefex length
                             to use when allocating per-node IP blocks from the main
@@ -1371,6 +1378,10 @@ spec:
                           - VXLANCrossSubnet
                           - None
                           type: string
+                        name:
+                          description: Name is the name of the IP pool. If omitted,
+                            this will be generated.
+                          type: string
                         natOutgoing:
                           description: 'NATOutgoing specifies if NAT will be enabled
                             or disabled for outgoing traffic. Default: Enabled'
@@ -1385,6 +1396,7 @@ spec:
                       required:
                       - cidr
                       type: object
+                    maxItems: 25
                     type: array
                   linuxDataplane:
                     description: 'LinuxDataplane is used to select the dataplane used
@@ -10485,6 +10497,13 @@ spec:
                           if needed.
                         items:
                           properties:
+                            allowedUses:
+                              description: AllowedUse controls what the IP pool will
+                                be used for.  If not specified or empty, defaults
+                                to ["Tunnel", "Workload"] for back-compatibility
+                              items:
+                                type: string
+                              type: array
                             blockSize:
                               description: 'BlockSize specifies the CIDR prefex length
                                 to use when allocating per-node IP blocks from the
@@ -10512,6 +10531,10 @@ spec:
                               - VXLANCrossSubnet
                               - None
                               type: string
+                            name:
+                              description: Name is the name of the IP pool. If omitted,
+                                this will be generated.
+                              type: string
                             natOutgoing:
                               description: 'NATOutgoing specifies if NAT will be enabled
                                 or disabled for outgoing traffic. Default: Enabled'
@@ -10526,6 +10549,7 @@ spec:
                           required:
                           - cidr
                           type: object
+                        maxItems: 25
                         type: array
                       linuxDataplane:
                         description: 'LinuxDataplane is used to select the dataplane
